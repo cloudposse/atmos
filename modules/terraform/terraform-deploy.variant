@@ -1,0 +1,55 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "terraform deploy" {
+  concurrency = 1
+  description = "Deploy a terraform project by running 'terraform plan' and then `terraform apply` for the project"
+
+  parameter "project" {
+    type        = string
+    description = "Terraform project"
+  }
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to `terraform deploy`"
+    type        = string
+  }
+
+  step "deploy plan" {
+    run "terraform plan" {
+      project     = param.project
+      command     = opt.command
+      environment = opt.environment
+      stage       = opt.stage
+    }
+  }
+
+  step "deploy apply" {
+    run "terraform apply" {
+      project     = param.project
+      command     = opt.command
+      environment = opt.environment
+      stage       = opt.stage
+    }
+  }
+}

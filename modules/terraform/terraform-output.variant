@@ -1,0 +1,68 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "terraform output" {
+  concurrency = 1
+  description = "Run 'terraform output' for a project"
+
+  parameter "project" {
+    description = "Terraform project"
+    type        = string
+  }
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  step "write varfile" {
+    run "terraform write varfile" {
+      project     = param.project
+      environment = opt.environment
+      stage       = opt.stage
+    }
+  }
+
+  step "output init" {
+    run "terraform init" {
+      project     = param.project
+      command     = opt.command
+      environment = opt.environment
+      stage       = opt.stage
+    }
+  }
+
+  step "output workspace" {
+    run "terraform workspace" {
+      project     = param.project
+      command     = opt.command
+      environment = opt.environment
+      stage       = opt.stage
+    }
+  }
+
+  step "output cmd" {
+    run "terraform subcommand" {
+      project     = param.project
+      command     = opt.command
+      subcommand  = "output"
+      environment = opt.environment
+      stage       = opt.stage
+      args        = []
+    }
+  }
+}

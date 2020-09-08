@@ -1,0 +1,338 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "terraform clean" {
+  description = "Clean a project's terraform planfiles and the .terraform folder"
+
+  parameter "project" {
+    description = "Terraform project"
+    type        = string
+  }
+
+  step "clean shell" {
+    run "terraform shell" {
+      project = param.project
+
+      commands = [
+        "rm -rf .terraform *.planfile"
+      ]
+    }
+  }
+
+  step "clean log" {
+    run "echo" {
+      message = "Removed .terraform and all .planfile's"
+    }
+  }
+}
+
+job "terraform init" {
+  description = "Run `terraform init` for a project"
+
+  parameter "project" {
+    description = "Terraform project"
+    type        = string
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  run "terraform subcommand" {
+    project     = param.project
+    command     = opt.command
+    subcommand  = "init"
+    environment = opt.environment
+    stage       = opt.stage
+    args        = []
+  }
+}
+
+job "terraform workspace" {
+  description = "Select or create a terraform workspace for a project"
+
+  parameter "project" {
+    type        = string
+    description = "Project"
+  }
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  # Find project settings
+  config "env-config" {
+    source job {
+      name = "terraform config"
+      args = {
+        project     = param.project
+        environment = opt.environment
+        stage       = opt.stage
+        format      = "json"
+        merge       = true
+      }
+    }
+  }
+
+  # Find Terraform binary to execute
+  config "terraform-command" {
+    source job {
+      name = "terraform-command"
+      args = {
+        project     = param.project
+        command     = opt.command
+        environment = opt.environment
+        stage       = opt.stage
+      }
+    }
+  }
+
+  run "terraform shell" {
+    project = param.project
+    commands = [
+      "${conf.terraform-command.command} workspace select ${conf.env-config.environment}-${conf.env-config.stage} || ${conf.terraform-command.command} workspace new ${conf.env-config.environment}-${conf.env-config.stage}"
+    ]
+  }
+}
+
+job "terraform subcommand" {
+  description = "Execute a terraform subcommand"
+  private     = true
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  option "subcommand" {
+    type        = string
+    description = "A terraform subcommand to execute"
+  }
+
+  parameter "project" {
+    description = "Terraform project"
+    type        = string
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "args" {
+    default     = []
+    description = "args to pass to the subcommand"
+    type        = list(string)
+  }
+
+  option "env" {
+    default     = {}
+    description = "Environment variables for the subcommand"
+    type        = map(string)
+  }
+
+  # Find Terraform binary to execute
+  config "terraform-command" {
+    source job {
+      name = "terraform-command"
+      args = {
+        project     = param.project
+        command     = opt.command
+        environment = opt.environment
+        stage       = opt.stage
+      }
+    }
+  }
+
+  variable "exec-cmd" {
+    value = opt.dry-run ? "echo" : conf.terraform-command.command
+    type  = string
+  }
+
+  variable "exec-args" {
+    value = compact(concat(list(opt.dry-run ? conf.terraform-command.command : ""), list(opt.subcommand), opt.args))
+  }
+
+  exec {
+    command = var.exec-cmd
+    args    = var.exec-args
+    dir     = "${opt.project-dir}/${param.project}"
+    env     = opt.env
+  }
+}
+
+job "terraform shell" {
+  description = "Run a terraform subcommand in a shell"
+  private     = true
+
+  parameter "project" {
+    description = "Project"
+    type        = string
+  }
+
+  option "commands" {
+    description = "List of commands to execute"
+    type        = list(string)
+  }
+
+  run "shell" {
+    command = "bash"
+
+    args = [
+      "-c",
+      join(" ", opt.commands)
+    ]
+
+    dir = "${opt.project-dir}/${param.project}"
+  }
+}
+
+job "terraform write varfile" {
+  description = "Write varfile for a specific project, environment and stage"
+  private     = true
+
+  parameter "project" {
+    type        = string
+    description = "Project"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  config "env-config" {
+    source job {
+      name = "terraform config"
+      args = {
+        project     = param.project
+        environment = opt.environment
+        stage       = opt.stage
+        format      = "json"
+        merge       = true
+      }
+    }
+  }
+
+  exec {
+    command = "echo"
+
+    args = [
+      jsonencode(conf.env-config)
+    ]
+  }
+
+  log {
+    collect {
+      condition = event.type == "exec"
+      format    = event.exec.args[0]
+    }
+
+    file = "${opt.project-dir}/${param.project}/${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json"
+  }
+}
+job "terraform provider-override" {
+  option "role" {
+    type = string
+  }
+
+  exec {
+    command = "echo"
+    args = [
+      <<-EOS
+      provider:
+        aws:
+          - region: "${opt.region}"
+            assume_role:
+              role_arn: "${opt.role}"
+      EOS
+    ,
+    ]
+  }
+}
+
+job "terraform write override" {
+  description = "Write override file for a specific project"
+
+  parameter "project" {
+    type        = string
+    description = "Project"
+  }
+
+  option "role" {
+    type        = string
+    description = "Role to run import under"
+  }
+
+  config "override-contents" {
+    source job {
+      name = "terraform provider-override"
+      args = {
+        role = opt.role
+      }
+    }
+  }
+
+  exec {
+    command = "echo"
+    args = [
+      jsonencode(conf.override-contents)
+    ]
+  }
+
+  log {
+    collect {
+      condition = event.type == "exec"
+      format    = event.exec.args[0]
+    }
+
+    file = "${opt.project-dir}/${param.project}/override.tf.json"
+  }
+}

@@ -1,0 +1,53 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+option "region" {
+  default = "us-east-2"
+  description = "AWS region"
+  type = string
+}
+
+option "dry-run" {
+  default = false
+  description = "Disable execution of any commands and echo the commands instead"
+  type = bool
+}
+
+option "kubeconfig-path" {
+  default = "/dev/shm"
+  description = "folder to save kubeconfig"
+  type = string
+}
+
+option "kubeconfig-profile-pattern" {
+  default = "$$namespace-$$environment-$$stage-helm"
+  description = "AWS profile pattern for kubeconfig"
+  type = string
+}
+
+option "cluster-name-pattern" {
+  default = "$$namespace-$$environment-$$stage-eks-cluster"
+  description = "Cluster name pattern"
+  type = string
+}
+
+option "config-dir" {
+  # The default works from geodesic shell `projects` folder
+  default = "../config"
+  description = "Config directory"
+  type = string
+}
+
+option "helmfile-dir" {
+  # The default works from geodesic shell `projects` folder
+  default = "./helmfiles"
+  description = "Helmfile projects directory"
+  type = string
+}
+
+option "project-dir" {
+  # The default works from geodesic shell `projects` folder
+  default = "./"
+  description = "Terraform projects directory"
+  type = string
+}

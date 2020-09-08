@@ -1,0 +1,85 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "terraform apply" {
+  concurrency = 1
+  description = "Run 'terraform apply' for a project"
+
+  parameter "project" {
+    type        = string
+    description = "Terraform project"
+  }
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to `terraform apply`"
+    type        = string
+  }
+
+  config "env-config" {
+    source job {
+      name = "terraform config"
+      args = {
+        project     = param.project
+        environment = opt.environment
+        stage       = opt.stage
+        format      = "json"
+        merge       = true
+      }
+    }
+  }
+
+  step "terraform workspace" {
+    run "terraform workspace" {
+      project     = param.project
+      command     = opt.command
+      environment = opt.environment
+      stage       = opt.stage
+    }
+  }
+
+  step "apply cmd" {
+    run "terraform subcommand" {
+      project     = param.project
+      command     = opt.command
+      subcommand  = "apply"
+      environment = opt.environment
+      stage       = opt.stage
+
+      args = [
+        "${conf.env-config.environment}-${conf.env-config.stage}.planfile"
+      ]
+    }
+  }
+
+  step "apply clean" {
+    run "terraform shell" {
+      project = param.project
+
+      commands = [
+        "rm",
+        "${conf.env-config.environment}-${conf.env-config.stage}.planfile",
+        "${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json"
+      ]
+    }
+  }
+}

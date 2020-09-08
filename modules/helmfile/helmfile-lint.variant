@@ -1,0 +1,74 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "helmfile lint" {
+  description = "Lint the helmfile with the cluster"
+
+  parameter "project" {
+    type        = string
+    description = "Project"
+  }
+
+  option "command" {
+    default     = "helmfile"
+    type        = string
+    description = "Command to execute, e.g. 'helmfile', or path to the command, e.g. '/usr/local/bin/helmfile'"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to the helmfile command"
+    type        = string
+  }
+
+  option "vault" {
+    default     = false
+    description = "Pull secrets from vault"
+    type        = bool
+  }
+
+  option "namespace" {
+    default     = ""
+    description = "kube namespace"
+    short       = "n"
+    type        = string
+  }
+
+  option "service" {
+    default     = ""
+    description = "Service name which will be getting deployed"
+    type        = string
+  }
+
+  option "image-tag" {
+    default     = ""
+    description = "Image tag to set for helmfile subcommand"
+    type        = string
+  }
+
+  run "helmfile subcommand" {
+    command     = opt.command
+    subcommand  = "lint"
+    project     = param.project
+    environment = opt.environment
+    stage       = opt.stage
+    args        = opt.args
+    vault       = opt.vault
+    namespace   = opt.namespace
+    service     = opt.service
+    image-tag   = opt.image-tag
+  }
+}
