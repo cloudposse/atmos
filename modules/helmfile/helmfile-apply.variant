@@ -34,10 +34,10 @@ job "helmfile apply" {
     type        = string
   }
 
-  option "vault" {
-    default     = false
-    description = "Pull secrets from vault"
-    type        = bool
+  option "sub-args" {
+    default     = ""
+    description = "A string of arguments to supply to the helmfile subcommand"
+    type        = string
   }
 
   option "namespace" {
@@ -47,24 +47,6 @@ job "helmfile apply" {
     type        = string
   }
 
-  option "service" {
-    default     = ""
-    description = "Service name which will be getting deployed"
-    type        = string
-  }
-
-  option "image-tag" {
-    default     = ""
-    description = "Image tag to set for helmfile subcommand"
-    type        = string
-  }
-
-  option "istio-inject" {
-    default     = false
-    description = "Add istio inject sidecar label to namespace"
-    type        = bool
-  }
-
   run "helmfile subcommand" {
     command      = opt.command
     subcommand   = "apply"
@@ -72,10 +54,7 @@ job "helmfile apply" {
     environment  = opt.environment
     stage        = opt.stage
     args         = opt.args
-    vault        = opt.vault
+    sub-args     = opt.sub-args
     namespace    = opt.namespace
-    service      = opt.service
-    image-tag    = opt.image-tag
-    istio-inject = opt.istio-inject
   }
 }

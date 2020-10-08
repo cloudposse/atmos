@@ -3,40 +3,40 @@
 
 option "region" {
   description = "AWS region"
-  type = string
+  type        = string
 }
 
 option "dry-run" {
   description = "Disable execution of any commands and echo the commands instead"
-  type = bool
+  type        = bool
 }
 
 option "kubeconfig-path" {
   description = "folder to save kubeconfig"
-  type = string
+  type        = string
 }
 
 option "kubeconfig-profile-pattern" {
   description = "AWS profile pattern for kubeconfig"
-  type = string
+  type        = string
 }
 
 option "cluster-name-pattern" {
   description = "Cluster name pattern"
-  type = string
+  type        = string
 }
 
 option "config-dir" {
   description = "Config directory"
-  type = string
+  type        = string
 }
 
 option "helmfile-dir" {
   description = "Helmfile projects directory"
-  type = string
+  type        = string
 }
 
 option "project-dir" {
   description = "Terraform projects directory"
-  type = string
+  type        = string
 }

@@ -9,12 +9,12 @@ job "terraform import" {
 
   parameter "addr" {
     type        = string
-    description = "addr specified is the address to import the resource to"
+    description = "addr specifies the address to import the resource to"
   }
 
   parameter "resid" {
     type        = string
-    description = "resid specified is the id of the resource to import"
+    description = "resid specifies the ID of the resource to import"
   }
 
   option "command" {
@@ -38,7 +38,7 @@ job "terraform import" {
 
   option "role" {
     default     = ""
-    description = "The Role ARN to use for the terraform import (Can be specified in global config file)"
+    description = "The Role ARN to use for 'terraform import'"
     type        = string
   }
 
@@ -94,7 +94,7 @@ job "terraform import" {
   step "write provider override" {
     run "terraform write override" {
       project = param.project
-      role = opt.role
+      role    = opt.role
     }
   }
 
@@ -111,8 +111,7 @@ job "terraform import" {
 
   step "apply clean" {
     run "terraform shell" {
-      project = param.project
-
+      project  = param.project
       commands = ["rm", "override.tf.json"]
     }
   }

@@ -34,6 +34,12 @@ job "helmfile destroy" {
     type        = string
   }
 
+  option "sub-args" {
+    default     = ""
+    description = "A string of arguments to supply to the helmfile subcommand"
+    type        = string
+  }
+
   option "namespace" {
     default     = ""
     description = "kube namespace"
@@ -48,6 +54,7 @@ job "helmfile destroy" {
     environment = opt.environment
     stage       = opt.stage
     args        = opt.args
+    sub-args     = opt.sub-args
     namespace   = opt.namespace
   }
 }

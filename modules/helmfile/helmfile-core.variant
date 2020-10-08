@@ -37,7 +37,7 @@ job "helmfile subcommand" {
 
   option "args" {
     default     = ""
-    description = "A string of global arguments to supply to the helmfile"
+    description = "A string of global arguments to supply to the helmfile command"
     type        = string
   }
 
@@ -53,35 +53,11 @@ job "helmfile subcommand" {
     type        = map(string)
   }
 
-  option "vault" {
-    default     = false
-    description = "Pull secrets from vault"
-    type        = bool
-  }
-
   option "namespace" {
     default     = ""
     description = "kube namespace"
     short       = "n"
     type        = string
-  }
-
-  option "service" {
-    default     = ""
-    description = "Service name which will be getting deployed"
-    type        = string
-  }
-
-  option "image-tag" {
-    default     = ""
-    description = "Image tag to set for helmfile subcommand"
-    type        = string
-  }
-
-  option "istio-inject" {
-    default     = false
-    description = "Add istio inject sidecar label to namespace"
-    type        = bool
   }
 
   # Find project settings
@@ -111,29 +87,6 @@ job "helmfile subcommand" {
     }
   }
 
-  config "service_secrets" {
-    source job {
-      name = "vault get service secrets as env"
-      args = {
-        stage       = opt.stage
-        svc         = opt.service
-        namespace   = opt.namespace
-        environment = opt.environment
-        no-execute  = !opt.vault
-      }
-    }
-  }
-
-  variable "sub-args" {
-    type  = list(string)
-    value = split(" ", opt.sub-args)
-  }
-
-  variable "image-tag-arg" {
-    type = list(string)
-    value = opt.image-tag != "" ? ["--set", "image.tag=${opt.image-tag}"] : []
-  }
-
   variable "namespace-arg" {
     type = list(string)
     value = opt.namespace != "" ? ["--namespace", opt.namespace] : []
@@ -145,23 +98,16 @@ job "helmfile subcommand" {
       var.namespace-arg,
       split(" ", opt.args),
       [
-        "--environment",
-        "default",
         "--state-values-file",
         "./${conf.env-config.environment}-${conf.env-config.stage}.helmfile.vars.yaml",
         opt.subcommand
       ],
-      var.sub-args,
-      var.image-tag-arg
+      split(" ", opt.sub-args)
     ))
   }
 
   variable "aws-profile" {
     value = can(conf.env-config.aws_profile) ? { AWS_PROFILE = conf.env-config.aws_profile} : {}
-  }
-
-  variable "service-name-env" {
-    value = can(opt.service) ? { SERVICE_NAME = opt.service } : {}
   }
 
   step "helmfile kubeconfig" {
@@ -179,21 +125,6 @@ job "helmfile subcommand" {
     }
   }
 
-  step "create namespace" {
-    run "create-namespace" {
-      env-config = merge(
-        opt.env,
-        {
-          KUBECONFIG  = "${opt.kubeconfig-path}/${conf.env-config.environment}-${conf.env-config.stage}-kubecfg",
-        },
-        var.aws-profile,
-      )
-
-      namespace    = opt.namespace
-      istio-inject = opt.istio-inject
-    }
-  }
-
   step "helmfile exec" {
     run "shell" {
       command = conf.helmfile-command.command
@@ -208,9 +139,7 @@ job "helmfile subcommand" {
           STAGE       = opt.stage,
           CLUSTER_ID  = opt.stage,
         },
-        var.aws-profile,
-        var.service-name-env,
-        conf.service_secrets
+        var.aws-profile
       )
     }
   }
