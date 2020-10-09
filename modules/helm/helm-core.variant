@@ -42,9 +42,22 @@ job "helm subcommand" {
     type        = map(string)
   }
 
+  option "namespace" {
+    default     = ""
+    description = "kube namespace"
+    short       = "n"
+    type        = string
+  }
+
+  variable "namespace-arg" {
+    type = list(string)
+    value = opt.namespace != "" ? ["--namespace", opt.namespace] : []
+  }
+
   variable "args" {
     type  = list(string)
     value = compact(concat(
+        var.namespace-arg,
         [
           opt.subcommand
         ],
