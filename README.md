@@ -13,8 +13,12 @@ It includes commands for:
   - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfiles](https://github.com/roboll/helmfile)
   - Executing [helm](https://helm.sh/) commands on Kubernetes clusters
   - Provisioning [istio](https://istio.io/) on Kubernetes clusters using [istio operator](https://istio.io/latest/blog/2019/introducing-istio-operator/) and helmfile
+  - Executing [kubectl](https://kubernetes.io/docs/reference/kubectl/overview/) commands on Kubernetes clusters
+  - Executing [AWS SDK](https://aws.amazon.com/tools/) commands to orchestrate cloud infrastructure
+  - Running [AWS CDK](https://aws.amazon.com/cdk/) constructs to define cloud resources
+  - Executing commands for the [serverless](https://www.serverless.com/) framework
   - Executing shell commands
-  - Combining commands into workflows to execute many commands sequentially in just one step
+  - Combining various commands into workflows to execute many commands sequentially in just one step
   - ... and many more
 
 The CLI is built with [variant2](https://github.com/mumoshu/variant2) using [HCL syntax](https://www.terraform.io/docs/configuration/index.html).
