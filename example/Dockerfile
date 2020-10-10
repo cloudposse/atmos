@@ -1,3 +1,5 @@
+ARG CLI_NAME=opsctl
+
 ARG VARIANT_VERSION=0.34.1
 
 FROM golang:alpine3.11 as cli
@@ -6,14 +8,14 @@ RUN apk add -u make
 RUN apk add -u git
 
 # Install variant
+ARG CLI_NAME
 ARG VARIANT_VERSION
 RUN wget https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
  tar -zvxf variant*.tar.gz variant && \
  mv variant /usr/local/bin/variant2 && \
  rm -f variant*.tar.gz
 
-# Build a minimal variant binary in order to download all the required
-# support libraries and save them in a Docker layer cache.
+# Build a minimal variant binary in order to download all the required libraries and save them in a Docker layer cache
 COPY cli/build-cache /tmp
 WORKDIR /tmp/build-cache
 RUN variant2 export binary $PWD variant-echo
@@ -22,10 +24,10 @@ RUN variant2 export binary $PWD variant-echo
 WORKDIR /usr/cli
 COPY cli/ .
 ARG CGO_ENABLED=1
-RUN make build
+RUN variant2 export binary $PWD $CLI_NAME
 
-# Sanity check to verify the CLI
-RUN ./opsctl help
+# Verify the CLI
+#RUN ./"$CLI_NAME" help
 
 FROM cloudposse/geodesic:0.136.1
 
@@ -71,7 +73,8 @@ RUN update-alternatives --set variant /usr/share/variant/2/bin/variant
 COPY --from=cli /usr/local/bin/variant2 /usr/local/bin/variant2
 
 # Install CLI
-COPY --from=cli /usr/cli/opsctl /usr/local/bin
+ARG CLI_NAME
+COPY --from=cli /usr/cli/$CLI_NAME /usr/local/bin
 
 COPY projects/ /projects/
 COPY config/ /config/
