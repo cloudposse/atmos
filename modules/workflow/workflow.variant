@@ -7,7 +7,7 @@ job "workflow" {
 
   parameter "workflow" {
     type        = string
-    description = "Workflow"
+    description = "Workflow to execute"
   }
 
   option "environment" {
@@ -24,39 +24,16 @@ job "workflow" {
     default     = ""
   }
 
-  option "group" {
+  option "file" {
     type        = string
-    description = "Workflow Group, defaults to workflows in env-stage config"
-    short       = "g"
+    description = "Workflow file. If not provided, the CLI will look for the workflow in env-stage config"
+    short       = "f"
     default     = ""
   }
 
-  # Allow workflows to be defined outside of the env-stage config file
   config "env_config" {
     source file {
-      path = format("%s/%s.yaml", opt.config-dir, opt.group == "" ? "${opt.environment}-${opt.stage}" : "workflows-${opt.group}")
-    }
-  }
-
-  depends_on "workflow validate-options" {
-    args = {
-      environment  = opt.environment
-      stage        = opt.stage
-      group        = opt.group
-      config_file  = format("%s/%s.yaml", opt.config-dir, opt.group == "" ? "${opt.environment}-${opt.stage}" : "workflows-${opt.group}")
-      workflow_config_exists = lookup(lookup(conf.env_config, "workflows", {}), param.workflow, "") != "" ? true : false
-    }
-  }
-
-  depends_on "workflow validate-job-options" {
-    items = conf.env_config.workflows[param.workflow].steps
-
-    args = {
-      environment  = opt.environment
-      stage        = opt.stage
-      item_env     = try(item.env, "")
-      item_stage   = try(item.stage, "")
-      group_set    = opt.group != ""
+      path = format("%s/%s.yaml", opt.config-dir, (opt.file == "" ? "${opt.environment}-${opt.stage}" : opt.file))
     }
   }
 
@@ -72,88 +49,9 @@ job "workflow" {
     args = {
       job          = item.job
       job-args     = try(item.args, "")
-      environment  = try(item.env, opt.environment) # Allow jobs to override their Environment if a group is defined
-      stage        = try(item.stage, opt.stage)     # Allow jobs to override their Stage if a group is defined
+      environment  = try(item.environment, opt.environment)
+      stage        = try(item.stage, opt.stage)
     }
-  }
-}
-
-job "workflow validate-options" {
-  private = true
-  description = "Validate the input options and parameters of workflow job"
-
-  option "environment" {
-    type        = string
-    description = "Environment"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-  }
-
-  option "group" {
-    type        = string
-    description = "Workflow Group, defaults to workflows in env-stage config"
-  }
-
-  option "config_file" {
-    type = string
-    description = "path to config file to test existence"
-  }
-
-  option "workflow_config_exists" {
-    type = bool
-    description = "Does the workflow config exist"
-  }
-
-  assert "group or (stage and env) defined" {
-    condition = opt.group != "" || ((opt.stage != "") && (opt.environment != ""))
-  }
-
-  assert "config file exists" {
-    condition = fileexists(opt.config_file)
-  }
-
-  assert "workflow config exists" {
-    condition = opt.workflow_config_exists
-  }
-}
-
-job "workflow validate-job-options" {
-  private = true
-  description = "Validate job options within a workflow"
-
-  option "environment" {
-    type = string
-  }
-
-  option "item_env" {
-    type = string
-  }
-
-  option "stage" {
-    type = string
-  }
-
-  option "item_stage" {
-    type = string
-  }
-
-  option "group_set" {
-    type = bool
-  }
-
-  assert "Can't override stage or environment inside env-stage config file" {
-    condition = opt.group_set || (opt.item_env == "" && opt.item_stage == "")
-  }
-
-  assert "A environment must be set either global or at job level" {
-    condition = opt.item_env != "" || opt.environment != ""
-  }
-
-  assert "A stage must be set either global or at job level" {
-    condition = opt.item_stage != "" || opt.stage != ""
   }
 }
 

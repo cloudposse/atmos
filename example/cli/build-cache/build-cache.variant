@@ -1,0 +1,19 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+# Minimal variant project for creating a build cache to speed up Docker build
+
+job "echo" {
+  description = "Echoes message to the console"
+  private     = true
+
+  parameter "message" {
+    description = "A message to output"
+    type        = string
+  }
+
+  exec {
+    command = "echo"
+    args    = [param.message]
+  }
+}

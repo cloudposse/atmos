@@ -1,0 +1,53 @@
+projects:
+  globals:
+    stage: prod
+
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.102.0.0/18"
+
+    eks:
+      command: "/usr/bin/terraform-0.13"
+      vars:
+        cluster_kubernetes_version: "1.17"
+        node_groups:
+          main: &standard_node_group
+            # availability_zones = null will create 1 auto scaling group in each availability zone of region
+            availability_zones: null
+
+            desired_group_size: 3 # number of instances to start with, must be >= number of AZs
+            max_group_size: 12
+            min_group_size: 3
+
+            kubernetes_version: null   # use cluster Kubernetes version
+            ami_release_version: null  # use latest AMI for Kubernetes version
+
+            attributes: null
+            create_before_destroy: null
+            disk_size: null
+            enable_cluster_autoscaler: null
+            instance_types: null
+            ami_type: null
+            kubernetes_labels: null
+            kubernetes_taints: null
+            resources_to_tag: null
+            tags: null
+          gpu:
+            <<: *standard_node_group
+            instance_types: [ "g4dn.xlarge" ]
+            ami_type: "AL2_x86_64_GPU"
+            kubernetes_labels:
+              example.net/instance-class: GPU
+
+  helmfile:
+    ingress-nginx:
+      vars:
+        installed: true
+
+    istio:
+      vars:
+        installed: true
+        public_ingressgateway:
+          serviceAnnotations:
+            service.beta.kubernetes.io/aws-load-balancer-internal: "true"

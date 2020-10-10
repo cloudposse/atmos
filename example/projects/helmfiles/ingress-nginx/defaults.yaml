@@ -1,0 +1,62 @@
+# These default values can be overridden per environment in /config/<env>.yaml files
+
+chart_version: 2.13.0
+
+support_email_template: "aws+%v@example.com"
+
+ingress_hostname_template: "ingress.%v.%v.example.net"
+
+limit_cpu: "200m"
+
+limit_memory: "1Gi"
+
+request_cpu: "100m"
+
+request_memory: "256Mi"
+
+service_account_name: "nginx-ingress"
+
+replica_count: 1
+
+kind: "DaemonSet"
+
+ingress_class: "nginx"
+
+# Use external_traffic_policy: "Cluster" when using ELB
+# Use external_traffic_policy: "Local" when using NLB and DaemonSet to preserve source IP
+external_traffic_policy: "Local"
+
+nlb_enabled: true
+
+# Proxy protocol not needed with NLB and "Local" traffic policy
+use_proxy_protocol: false
+
+# Gatekeeper does not have full support for HTTP2
+use_http2: true
+
+metrics_enabled: false
+
+prometheus_rule_enabled: false
+
+metrics_controller_error_alert: 100000
+
+default_client_errors:
+- "418"
+
+default_server_errors:
+- "599"
+
+default_backend_installed: true
+
+default_backend_chart_version: 0.5.0
+
+default_backend_replica_count: 2
+
+default_backend_limit_cpu: "50m"
+
+default_backend_limit_memory: "24Mi"
+
+default_backend_request_cpu: "1m"
+
+default_backend_request_memory: "8Mi"
+

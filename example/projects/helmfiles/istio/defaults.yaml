@@ -1,0 +1,47 @@
+# These default values can be overridden per environment in conf/<env>.yaml files
+
+chart_version: "0.2.3"
+
+installed: true
+
+istio_profile: "default"
+
+root_domain: "example.net"
+
+egressgateway:
+  hpaSpec:
+    minReplicas: 1
+    maxReplicas: 3
+
+internal_ingressgateway:
+  serviceAnnotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+  hpaSpec:
+    minReplicas: 1
+    maxReplicas: 3
+
+public_ingressgateway:
+  serviceAnnotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+  hpaSpec:
+    minReplicas: 1
+    maxReplicas: 3
+
+callback_ingressgateway:
+  serviceAnnotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+  hpaSpec:
+    minReplicas: 1
+    maxReplicas: 3
+
+pilot:
+  replicaCount: 2
+
+prometheus:
+  replicaCount: 2
+
+kiali:
+  replicaCount: 2
+
+grafana:
+  replicaCount: 2
