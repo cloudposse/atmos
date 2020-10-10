@@ -13,8 +13,8 @@ It includes commands for:
   - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfiles](https://github.com/roboll/helmfile)
   - Executing [helm](https://helm.sh/) commands on Kubernetes clusters
   - Provisioning [istio](https://istio.io/) on Kubernetes clusters using [istio operator](https://istio.io/latest/blog/2019/introducing-istio-operator/) and helmfile
-  - Combining commands into workflows to execute many commands sequentially in just one step
   - Executing shell commands
+  - Combining commands into workflows to execute many commands sequentially in just one step
   - ... and many more
 
 The CLI is built with [variant2](https://github.com/mumoshu/variant2) using [HCL syntax](https://www.terraform.io/docs/configuration/index.html).
