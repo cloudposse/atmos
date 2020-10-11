@@ -106,9 +106,8 @@ In the example we have the following:
     }
   ```
 
-__NOTE:_ The container starts in the [projects](example/projects) directory (see [Dockerfile](example/Dockerfile)).
+__NOTE:__ The container starts in the [projects](example/projects) directory (see [Dockerfile](example/Dockerfile)).
 All paths are relative to the [projects](example/projects) directory, but can be easily changed (in the Dockerfile and in the CLI options) as needed.
-
 
 [main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `variants` repo.
 
@@ -127,6 +126,9 @@ imports = [
 ```
 
 __NOTE:__ `imports` statement supports `https`, `http`, and `ssh` protocols.
+
+__NOTE:__ The global options from [main.variant](example/cli/main.variant) are propagated to all the downloaded modules,
+so they need to be specified only in one place - in the top-level module.
 
 When we build the Docker image, all the modules from the `imports` statement are downloaded, combined with the top-level module [main.variant](example/cli/main.variant), 
 and compiled into a binary, which then included in the container.
