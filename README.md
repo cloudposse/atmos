@@ -69,10 +69,46 @@ In the example, we show how to create and provision (using the CLI) the followin
   - `ingress-nginx` helmfile to be deployed on all the EKS clusters
   - `istio` helmfile and workflow to deploy `istio` on the EKS clusters using `istio-operator`
 
+
 ### Configure the CLI
 
-The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI (including the location of the terraform projects,
-helmfiles, and configurations - it's configured for that particular example project, but can be changed to reflect your desired project structure).
+The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI, including the location of the terraform projects,
+helmfiles, and configurations.
+
+It's configured for that particular example project, but can be changed to reflect the desired project structure.
+
+In the example we have the following:
+
+  - The terraform projects are in the [projects](example/projects) folder - and we set that global option in [main.variant](example/cli/main.variant)
+  ```hcl
+    option "project-dir" {
+      default     = "./"
+      description = "Terraform projects directory"
+      type        = string
+    }
+  ```
+
+  - The helmfiles are in the [projects/helmfiles](example/projects/helmfiles) folder - we set that global option in [main.variant](example/cli/main.variant)
+  ```hcl
+    option "helmfile-dir" {
+      default     = "./helmfiles"
+      description = "Helmfile projects directory"
+      type        = string
+    }
+  ```
+
+  - The configurations (Terraform and helmfile variables) are in the [config](example/config) folder - we set that global option in [main.variant](example/cli/main.variant)
+  ```hcl
+    option "config-dir" {
+      default     = "../config"
+      description = "Config directory"
+      type        = string
+    }
+  ```
+
+__NOTE:_ The container starts in the [projects](example/projects) directory (see [Dockerfile](example/Dockerfile)).
+All paths are relative to the [projects](example/projects) directory, but can be easily changed (in the Dockerfile and in the CLI options) as needed.
+
 
 [main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `variants` repo.
 

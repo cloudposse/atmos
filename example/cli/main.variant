@@ -31,9 +31,9 @@ option "cluster-name-pattern" {
   type        = string
 }
 
-option "config-dir" {
-  default     = "../config"
-  description = "Config directory"
+option "project-dir" {
+  default     = "./"
+  description = "Terraform projects directory"
   type        = string
 }
 
@@ -43,9 +43,9 @@ option "helmfile-dir" {
   type        = string
 }
 
-option "project-dir" {
-  default     = "./"
-  description = "Terraform projects directory"
+option "config-dir" {
+  default     = "../config"
+  description = "Config directory"
   type        = string
 }
 
