@@ -6,7 +6,7 @@ workflows:
       - job: helmfile deploy istio
 
   istio-destroy:
-    description: Destroys 'istio' helmfile and remove 'istioctl' operator from specified environment and stage (provided as command-line arguments)
+    description: Destroy 'istio' helmfile and remove 'istioctl' operator from specified environment and stage (provided as command-line arguments)
     steps:
       - job: helmfile destroy istio
       - job: istioctl operator-remove

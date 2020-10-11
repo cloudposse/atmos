@@ -155,3 +155,80 @@ To execute `diff` and `apply` in one step, use `helmfile deploy` command:
 ```bash
 opsctl helmfile deploy ingress-nginx -e ue2 -s dev
 ```
+
+### Deploy istio
+
+To deploy `istio` into a Kubernetes cluster, run the following commands:
+
+```bash
+opsctl istioctl operator-init -e ue2 -s dev
+opsctl helmfile deploy istio -e ue2 -s dev
+```
+
+This will install the `istio` operator first, then provision `istio` using the helmfile.
+ 
+
+### Run Workflows
+
+Workflows are a way of combining multiple commands into one executable unit of work.
+
+In the CLI, workflows can be defined using two different methods:
+
+  - In the configuration file for an environment/stage (see [workflows in ue2-dev.yaml](example/config/ue2-dev.yaml) for an example)
+  - In a separate file (see [workflows-all.yaml](example/config/workflows-all.yaml) and [workflows-istio.yaml](example/config/workflows-istio.yaml))
+
+In the first case, we define workflows in the configuration file for the environment and stage (which we specify on the command line).
+To execute the workflows from [workflows in ue2-dev.yaml](example/config/ue2-dev.yaml), run the following commands:
+
+```bash
+opsctl workflow deploy-all -e ue2 -s dev
+opsctl workflow istio-init -e ue2 -s dev
+```
+
+Note that workflows defined in the environment/stage config files can be executed only for the particular environment and stage.
+It's not possible to provision resources for multiple environments and stages this way.
+
+In the second case (defining workflows in a separate file), a single workflow can be created to provision resources into different environments/stages.
+The environments/stages for the workflow steps can be specified in the workflow config.
+
+For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile projects in the example, execute the following command:
+
+```bash
+opsctl workflow plan-all -f workflows-all
+```
+
+where the command-line option `-f` (`--file` for long version) instructs the `opsctl` CLI to look for the `plan-all` workflow in the file [workflows-all](example/config/workflows-all.yaml).
+
+As we can see, in multi-environment workflows, each workflow job specifies the environment and stage it's operating on:
+
+```yaml
+workflows:
+  plan-all:
+    description: Run 'terraform plan' and `helmfile diff` on all projects for all environments/stages
+    steps:
+      - job: terraform plan vpc
+        environment: ue2
+        stage: dev
+      - job: terraform plan eks
+        environment: ue2
+        stage: dev
+      - job: helmfile diff ingress-nginx
+        environment: ue2
+        stage: dev
+      - job: terraform plan vpc
+        environment: ue2
+        stage: staging
+      - job: terraform plan eks
+        environment: ue2
+        stage: staging
+```
+
+You can also define a workflow in a separate file without specifying the environment and stage in the workflow's job config.
+In this case, the environment and stage need to be provided on the command line.
+
+For example, to run the `deploy-all` workflow from the [workflows-all](example/config/workflows-all.yaml) file for the environment `ue2` and stage`dev`,
+execute the following command:
+
+```bash
+opsctl workflow deploy-all -f workflows-all -e ue2 -s dev
+```

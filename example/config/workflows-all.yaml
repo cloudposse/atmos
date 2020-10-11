@@ -1,13 +1,13 @@
 workflows:
-  eks-deploy:
-    description: Deploy 'eks' terraform project and helmfiles to specified environment and stage (provided as command-line arguments)
+  deploy-all:
+    description: Deploy terraform project and helmfiles to specified environment and stage (provided as command-line arguments)
     steps:
       - job: terraform deploy vpc
       - job: terraform deploy eks
       - job: helmfile deploy ingress-nginx
 
-  eks-terraform-plan-all:
-    description: Run 'terraform plan' on all `eks` projects for all environments/stages
+  plan-all:
+    description: Run 'terraform plan' and `helmfile diff` on all projects for all environments/stages
     steps:
       - job: terraform plan vpc
         environment: ue2

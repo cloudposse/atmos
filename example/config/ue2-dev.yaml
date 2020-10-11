@@ -53,3 +53,23 @@ projects:
         public_ingressgateway:
           serviceAnnotations:
             service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+
+workflows:
+  deploy-all:
+    description: Deploy 'eks' terraform project and helmfiles
+    steps:
+      - job: terraform deploy vpc
+      - job: terraform deploy eks
+      - job: helmfile deploy ingress-nginx
+
+  istio-init:
+    description: Run 'istioctl operator init' and then install 'istio' helmfile
+    steps:
+      - job: istioctl operator-init
+      - job: helmfile deploy istio
+
+  istio-destroy:
+    description: Destroy 'istio' helmfile and remove 'istioctl' operator
+    steps:
+      - job: helmfile destroy istio
+      - job: istioctl operator-remove
