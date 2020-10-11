@@ -78,6 +78,20 @@ helmfiles, and configurations - it's configured for that particular example proj
 
 __NOTE:__ For the example, we import all the CLI modules, but they could be included selectively depending on a particular usage.
 
+```hcl
+imports = [
+  "git::https://git@github.com/cloudposse/variants@modules/shell?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/kubeconfig?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/terraform?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/helmfile?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/helm?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/workflow?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/istio?ref=master"
+]
+```
+
+__NOTE:__ `imports` statement supports `https`, `http`, and `ssh` protocols.
+
 When we build the Docker image, all the modules from the `imports` statement are downloaded, combined with the top-level module [main.variant](example/cli/main.variant), 
 and compiled into a binary, which then included in the container.
 
