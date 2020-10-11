@@ -21,7 +21,9 @@ It includes commands for:
   - Combining various commands into workflows to execute many commands sequentially in just one step
   - ... and many more
 
-`variants` is not only a command-line tool for managing clouds and clusters. It provides many useful patterns and best practices, such as:
+In essence, it's a tool that orchestrates the other CLI tools using a clean and consistent syntax.
+
+Moreover, `variants` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
 
   - Enforces Terraform and helmfile projects' structure (so everybody knows where things are)
   - Provides separation of configuration and code (so the same code could be easily deployed to different regions, environments and stages)
