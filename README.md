@@ -35,9 +35,19 @@ It includes commands for:
 
 The CLI is built with [variant2](https://github.com/mumoshu/variant2) using [HCL syntax](https://www.terraform.io/docs/configuration/index.html).
 
-`*.variant` files are combined like Terraform files.  Separating the files into [modules](modules) is done for cleanliness. 
+`*.variant` files are combined like Terraform files. 
 
 See `variant` docs for more information on [writing commands](https://github.com/mumoshu/variant2#writing-commands).
+
+The CLI code consists of self-documenting [modules](modules) (separating the files into modules is done for cleanliness):
+
+  - shell - `shell` commands and helpers for the other modules
+  - terraform - `terraform` commands (`plan`, `apply`, `deploy`, `destroy`, `import`, etc.)
+  - helm - `helm` commands (e.g. `list`)
+  - helmfile - `helmfile` commands (`diff`, `apply`, `deploy`, `destroy`, `sync`, `lint`, etc.)
+  - kubeconfig - commands to download and manage `kubeconfig` from EKS clusters
+  - istio - commands to manage `istio` using `istio-operator` and `helmfile`
+  - workflow - commands to construct and execute cloud automation workflows 
 
 
 ## Usage
