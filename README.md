@@ -27,6 +27,15 @@ The CLI is built with [variant2](https://github.com/mumoshu/variant2) using [HCL
 
 See `variant` docs for more information on [writing commands](https://github.com/mumoshu/variant2#writing-commands).
 
+`variants` is not only a command-line tool for managing clouds and clusters. It provides many useful patterns and best practices, such as:
+
+  - Enforces Terraform and helmfile projects' structure (so everybody knows where things are)
+  - Provides separation of configuration and code (so the same code could be easily deployed to different regions, environments and stages)
+  - It can be easily extended to include new features, commands, and workflows
+  - The commands have a consistent and easy to understand syntax
+  - The CLI code is modular and self-documenting
+  - The CLI can be compiled into a binary and included in other tools and containers for DevOps, cloud automation and CI/CD
+
 
 ## Usage
 
