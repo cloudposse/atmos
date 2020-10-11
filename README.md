@@ -218,7 +218,7 @@ As we can see, in multi-environment workflows, each workflow job specifies the e
 ```yaml
 workflows:
   plan-all:
-    description: Run 'terraform plan' and `helmfile diff` on all projects for all environments/stages
+    description: Run 'terraform plan' and 'helmfile diff' on all projects for all environments/stages
     steps:
       - job: terraform plan vpc
         environment: ue2
