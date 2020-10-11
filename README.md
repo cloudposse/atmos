@@ -54,7 +54,51 @@ The CLI code consists of self-documenting [modules](modules) (separating the fil
 
 ## Usage
 
-Run `opsctl help` to see the available commands and available flags.
+The [example](example) folder contains a complete solution that shows how to:
+
+  - Structure the terraform and helmfile projects
+  - Configure the CLI top-level module [main.variant](example/cli/main.variant)
+  - Add [configurations](example/config) (variables) for the terraform and helmfile projects (to provision them to different environments and stages)
+  - Create a [Dockerfile](example/Dockerfile) with commands to build and include the CLI into the container
+  - Combine many CLI commands into workflows and run the workflows to provision resources
+
+In the example, we show how to create and provision (using the CLI) the following resources for three different environments/stages:
+
+  - VPCs for `dev`, `staging` and `prod` stages in the `us-east-2` region (which we refer to as `ue2` environment)
+  - EKS clusters in the `ue2` environment for `dev`, `staging` and `prod`
+  - `ingress-nginx` helmfile to be deployed on all the EKS clusters
+  - `istio` helmfile and workflow to deploy `istio` on the EKS clusters using `istio-operator`
+
+### Configure the CLI
+
+The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI (including the location of the terraform projects,
+helmfiles, and configurations - it's configured for that particular example project, but can be changed to reflect your desired project structure).
+
+[main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `variants` repo.
+
+__NOTE:__ For the example, we import all the CLI modules, but they could be included selectively depending on a particular usage.
+
+When we build the Docker image, all the modules from the `imports` statement are downloaded, combined with the top-level module [main.variant](example/cli/main.variant), 
+and compiled into a binary, which then included in the container.
+
+
+### Run the Example
+
+To run the example, execute the following commands in a terminal:
+
+  - `cd example`
+  - `make all` - it will build the Docker image, build the `variants` CLI tool inside the image, and then start the container
+
+Note that the name of the CLI executable is configurable.
+
+In the [Dockerfile](example/Dockerfile) for the example, we've chosen the name `opsctl`, but it could be any name you want, for example
+`ops`, `cli`, `ops-exe`, etc. The name of the CLI executable is configured using `ARG CLI_NAME=opsctl` in the Dockerfile.
+
+After the container starts, run `opsctl help` to see the available commands and available flags.
+
+__NOTE:__ We use Cloud Posse [geodesic](https://github.com/cloudposse/geodesic) as the base image for the container.
+`geodesic` is the fastest way to get up and running with a rock solid, production grade cloud platform built entirely from Open Source technologies.
+
 
 ### Provision Terraform Project
 
@@ -111,9 +155,3 @@ To execute `diff` and `apply` in one step, use `helmfile deploy` command:
 ```bash
 opsctl helmfile deploy ingress-nginx -e ue2 -s dev
 ```
-
-### Docker Access
-
-The geodesic `infrastructure` image builds the CLI through the normal build process. Build and run the image as normal to access the `opsctl` cli.
-
-
