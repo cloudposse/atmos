@@ -4,7 +4,6 @@ bases:
 ---
 
 repositories:
-# Kubernetes incubator repo of helm charts
 - name: "kubernetes-incubator"
   url: "https://kubernetes-charts-incubator.storage.googleapis.com"
 
@@ -12,13 +11,5 @@ releases:
 
 - name: 'istio'
   chart: "kubernetes-incubator/raw"
-  namespace: "istio-system"
-  version: {{ .Values.chart_version | quote }}
-  wait: true
-  timeout: 60
-  atomic: true
-  cleanupOnFail: true
-  installed: {{ .Values.installed }}
-  createNamespace: true
-  values:
-    - istio-operator.yaml.gotmpl
+
+# ...

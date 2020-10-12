@@ -6,8 +6,4 @@ terraform {
     template = ">= 2.0"
     local    = ">= 1.3"
   }
-
-  backend "local" {
-    path = "${terraform.workspace}-terraform.tfstate"
-  }
 }

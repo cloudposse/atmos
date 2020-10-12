@@ -15,8 +15,4 @@ terraform {
       version = "~> 1.3"
     }
   }
-
-  backend "local" {
-    path = "${terraform.workspace}-terraform.tfstate"
-  }
 }
