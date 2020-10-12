@@ -5,7 +5,7 @@ Universal CLI for DevOps and Cloud Automation.
 
 ## Introduction
 
-`variants` is a command-line tool for provisioning, managing and orchestrating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
+`variants` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains. We use it extensively for automating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
 
 It includes workflows for dealing with:
 
