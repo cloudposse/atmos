@@ -31,7 +31,39 @@ Moreover, `variants` is not only a command-line interface for managing clouds an
   - The commands have a clean, consistent and easy to understand syntax
   - The CLI can be compiled into a binary and included in other tools and containers for DevOps, cloud automation and CI/CD
   - The CLI code is modular and self-documenting
+## Recommended Layout
 
+Our recommended filesystem layout looks like this:
+
+~~~
+└── cli/
+    │   # Centralized configuration
+    ├── config/
+    │   │
+    │   └── $env-$stage.yml  
+    │    
+    │   # Projects are broken down by tool
+    ├── projects/
+    │   │
+    │   ├── terraform/   # root modules in here
+    │   │   ├── vpc/
+    │   │   ├── eks/
+    │   │   ├── rds/
+    │   │   ├── iam/
+    │   │   ├── dns/
+    │   │   └── sso/
+    │   │
+    │   └── helmfiles/  # helmfiles are organized by chart
+    │       ├── cert-manager/helmfile.yaml
+    │       └── external-dns/helmfile.yaml
+    │   
+    │   # Makefile for building the cli
+    ├── Makefile
+    │   
+    │   # Docker image for shipping the cli and all dependencies
+    └── Dockerfile (optional)
+
+~~~
 
 ## CLI Structure
 
