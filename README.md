@@ -21,7 +21,7 @@ It includes workflows for dealing with:
   - Combining various commands into workflows to execute many commands sequentially in just one step
   - ... and many more
 
-In essence, it's a tool that orchestrates the other CLI tools in a consistent and self-explaining manner.
+In essence, it's a tool that orchestrates the other CLI tools in a consistent and self-explaining manner. It's a superset of all other tools and task runners (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc) and intended to be used to tie everything together so you can provide a simple CLI interface for your organization. 
 
 Moreover, `variants` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
 
