@@ -4,8 +4,7 @@ ARG VARIANT_VERSION=0.34.1
 
 FROM golang:alpine3.11 as cli
 
-RUN apk add -u make
-RUN apk add -u git
+RUN apk add -u make git
 
 # Install variant
 ARG CLI_NAME
