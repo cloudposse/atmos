@@ -102,6 +102,11 @@ In the example, we show how to create and provision (using the CLI) the followin
   - `istio` helmfile and workflow to deploy `istio` on the EKS clusters using `istio-operator`
 
 
+## Developing Your Own CLI
+
+One way to use this project is by writing your own custom cli that leverages our variants. This is ideal when you have your own workflows that you want to develop in addition to using the ones we've developed for you.
+For example, maybe you have your own existing cli tools (e.g. using `terragrunt`). In this case, you may want to start by developing your own cli. 
+
 ### Configure the CLI
 
 The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI, including the location of the terraform projects,
