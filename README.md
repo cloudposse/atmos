@@ -7,7 +7,7 @@ Universal CLI for DevOps and Cloud Automation.
 
 `variants` is a command-line tool for provisioning, managing and orchestrating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
 
-It includes commands for:
+It includes workflows for dealing with:
 
   - Provisioning [Terraform](https://www.terraform.io/) projects
   - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfiles](https://github.com/roboll/helmfile)
