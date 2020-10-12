@@ -85,7 +85,10 @@ The CLI code consists of self-documenting [modules](modules) (separating the fil
 
 
 ## Usage
-
+There are a number of ways you can leverage this project.
+1. As a **standalone cli** - you can use our cli without any modification and get immediate gratification
+2. As a **library** - you can import our `variant` modules into your own cli and expand the workflows for your needs
+3. As a **docker image** - you can use our docker image the way you would the `cli` and run the workflows
 The [example](example) folder contains a complete solution that shows how to:
 
   - Structure the terraform and helmfile projects
