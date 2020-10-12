@@ -6,41 +6,13 @@ projects:
     vpc:
       vars:
         cidr_block: "10.100.0.0/18"
-        nat_gateway_enabled: false
-        nat_instance_enabled: true
-        nat_instance_type: "t3.micro"
+        # ...
 
     eks:
       command: "/usr/bin/terraform-0.13"
       vars:
         cluster_kubernetes_version: "1.17"
-        node_groups:
-          main: &standard_node_group
-            availability_zones: [ "us-east-2a","us-east-2b" ]
-
-            desired_group_size: 2 # number of instances to start with, must be >= number of AZs
-            max_group_size: 4
-            min_group_size: 2
-
-            kubernetes_version: null   # use cluster Kubernetes version
-            ami_release_version: null  # use latest AMI for Kubernetes version
-
-            attributes: null
-            create_before_destroy: null
-            disk_size: null
-            enable_cluster_autoscaler: null
-            instance_types: null
-            ami_type: null
-            kubernetes_labels: null
-            kubernetes_taints: null
-            resources_to_tag: null
-            tags: null
-          gpu:
-            <<: *standard_node_group
-            instance_types: [ "g4dn.2xlarge" ]
-            ami_type: "AL2_x86_64_GPU"
-            kubernetes_labels:
-              example.net/instance-class: GPU
+        # ...
 
   helmfile:
     ingress-nginx:
@@ -50,9 +22,7 @@ projects:
     istio:
       vars:
         installed: true
-        public_ingressgateway:
-          serviceAnnotations:
-            service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+        # ...
 
 workflows:
   deploy-all:
