@@ -41,7 +41,6 @@ ENV DIRENV_ENABLED=false
 
 ENV DOCKER_IMAGE="cloudposse/variants"
 ENV DOCKER_TAG="latest"
-ENV NAMESPACE="eg"
 
 # Geodesic banner
 ENV BANNER="infrastructure"
