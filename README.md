@@ -323,7 +323,7 @@ In the [Dockerfile](example/Dockerfile) for the example, we've chosen the name `
 
 After the container starts, run `opsctl help` to see the available commands and available flags.
 
-__NOTE:__ We use Cloud Posse [geodesic](https://github.com/cloudposse/geodesic) as the base image for the container.
+__NOTE:__ We use the Cloud Posse [geodesic](https://github.com/cloudposse/geodesic) image as the base image for the container. This is not strictly a requirement, but our base image ships with all the standard tools for cloud automation that we depend on (e.g. `terraform`, `helm`, `helmfile`, etc)
 `geodesic` is the fastest way to get up and running with a rock solid, production grade cloud platform built entirely from Open Source technologies.
 
 
