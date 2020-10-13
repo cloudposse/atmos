@@ -1,0 +1,19 @@
+name: auto-release
+
+on:
+  push:
+    branches:
+    - master
+
+jobs:
+  semver:
+    runs-on: ubuntu-latest
+    steps:
+    # Drafts your next Release notes as Pull Requests are merged into "master"
+    - uses: release-drafter/release-drafter@v5
+      with:
+        publish: true
+        prerelease: false
+        config-name: auto-release.yml
+      env:
+        GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_ACCESS_TOKEN }}
