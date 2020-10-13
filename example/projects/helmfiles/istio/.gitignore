@@ -1,0 +1,20 @@
+# Compiled files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+**/planfile
+**/*.planfile
+**/*.kubeconfig
+**/terraform.tfvars.json
+**/*.terraform.tfvars.json
+**/*.helmfile.vars.yaml
+
+# Module directory
+.terraform
+**/.idea
+**/*.iml
+
+**/.build-harness
+**/build-harness
+**/.helmfile/
+.DS_Store
