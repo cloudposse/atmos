@@ -99,10 +99,10 @@ Our recommended filesystem layout looks like this:
     │       ├── cert-manager/helmfile.yaml
     │       └── external-dns/helmfile.yaml
     │   
-    │   # Makefile for building the cli
+    │   # Makefile for building the CLI
     ├── Makefile
     │   
-    │   # Docker image for shipping the cli and all dependencies
+    │   # Docker image for shipping the CLI and all dependencies
     └── Dockerfile (optional)
 
 ~~~
@@ -212,7 +212,7 @@ In the example, we defined a few config files:
   - [ue2-prod.yaml](example/config/ue2-prod.yaml) - configurations (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
   - [ue2-globals.yaml](example/config/ue2-globals.yaml) - global settings for the environment `ue2` (e.g. `namespace`, `region`, `environment`)
 
-Each configuration file for environment/stage has a predefined format:
+Each configuration file for an environment/stage has a predefined format:
 
 ```yaml
 projects:
@@ -250,9 +250,9 @@ The `projects` section consists of the following:
   `environment: ue2`, whereas in [ue2-dev.yaml](example/config/ue2-dev.yaml) we defined `stage: dev`. These values will be available as variables in the Terraform
   and helmfile projects
 
-  - `terraform` - defines variables for each Terraform project. Terraform project names correspond to the Terraform projects in the [projects](example/projects) folder) 
+  - `terraform` - defines variables for each Terraform project. Terraform project names correspond to the Terraform projects in the [projects](example/projects) folder
 
-  - `helmfile` - defines variables for each helmfile project. Helmfile project names correspond to the helmfile projects in the [helmfiles](example/projects/helmfiles) folder) 
+  - `helmfile` - defines variables for each helmfile project. Helmfile project names correspond to the helmfile projects in the [helmfiles](example/projects/helmfiles) folder
 
 
 ## Run the Example
