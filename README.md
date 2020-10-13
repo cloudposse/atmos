@@ -1,6 +1,6 @@
 # variants
 
-Universal CLI for DevOps and Cloud Automation.
+Universal Tool for DevOps and Cloud Automation.
 
 
 ## Introduction
@@ -36,6 +36,43 @@ Moreover, `variants` is not only a command-line interface for managing clouds an
   - The CLI code is modular and self-documenting
 
 
+## CLI Structure
+
+The CLI is built with [variant2](https://github.com/mumoshu/variant2) using [HCL syntax](https://www.terraform.io/docs/configuration/index.html).
+
+`*.variant` files are combined like Terraform files. 
+
+See `variant` docs for more information on [writing commands](https://github.com/mumoshu/variant2#writing-commands).
+
+The CLI code consists of self-documenting [modules](modules) (separating the files into modules is done for cleanliness):
+
+  - shell - `shell` commands and helpers for the other modules
+  - terraform - `terraform` commands (`plan`, `apply`, `deploy`, `destroy`, `import`, etc.)
+  - helm - `helm` commands (e.g. `list`)
+  - helmfile - `helmfile` commands (`diff`, `apply`, `deploy`, `destroy`, `sync`, `lint`, etc.)
+  - kubeconfig - commands to download and manage `kubeconfig` from EKS clusters
+  - istio - commands to manage `istio` using `istio-operator` and `helmfile`
+  - workflow - commands to construct and execute cloud automation workflows 
+
+
+## Developing Your Own CLI
+
+One way to use this project is by writing your own custom CLI that leverages our variants.
+
+This is ideal when you have your own workflows that you want to develop in addition to using the ones we've developed for you.
+
+For example, maybe you have your own existing CLI tools (e.g. using `terragrunt`). In this case, you may want to start by developing your own CLI. 
+
+
+## Usage
+
+There are a number of ways you can leverage this project:
+
+1. As a **standalone CLI** - you can use our CLI without any modification and get immediate gratification
+2. As a **library** - you can import our `variant` modules into your own CLI and expand the workflows for your needs
+3. As a **Docker image** - you can use our [Docker image](example/Dockerfile) the way you would the `cli` and run the workflows
+
+
 ## Recommended Layout
 
 Our recommended filesystem layout looks like this:
@@ -45,7 +82,7 @@ Our recommended filesystem layout looks like this:
     │   # Centralized configuration
     ├── config/
     │   │
-    │   └── $env-$stage.yml  
+    │   └── $environment-$stage.yaml  
     │    
     │   # Projects are broken down by tool
     ├── projects/
@@ -70,33 +107,6 @@ Our recommended filesystem layout looks like this:
 
 ~~~
 
-## CLI Structure
-
-The CLI is built with [variant2](https://github.com/mumoshu/variant2) using [HCL syntax](https://www.terraform.io/docs/configuration/index.html).
-
-`*.variant` files are combined like Terraform files. 
-
-See `variant` docs for more information on [writing commands](https://github.com/mumoshu/variant2#writing-commands).
-
-The CLI code consists of self-documenting [modules](modules) (separating the files into modules is done for cleanliness):
-
-  - shell - `shell` commands and helpers for the other modules
-  - terraform - `terraform` commands (`plan`, `apply`, `deploy`, `destroy`, `import`, etc.)
-  - helm - `helm` commands (e.g. `list`)
-  - helmfile - `helmfile` commands (`diff`, `apply`, `deploy`, `destroy`, `sync`, `lint`, etc.)
-  - kubeconfig - commands to download and manage `kubeconfig` from EKS clusters
-  - istio - commands to manage `istio` using `istio-operator` and `helmfile`
-  - workflow - commands to construct and execute cloud automation workflows 
-
-
-## Usage
-
-There are a number of ways you can leverage this project:
-
-1. As a **standalone cli** - you can use our cli without any modification and get immediate gratification
-2. As a **library** - you can import our `variant` modules into your own cli and expand the workflows for your needs
-3. As a **docker image** - you can use our docker image the way you would the `cli` and run the workflows
-
 
 ## Example
 
@@ -116,14 +126,7 @@ In the example, we show how to create and provision (using the CLI) the followin
   - `istio` helmfile and workflow to deploy `istio` on the EKS clusters using `istio-operator`
 
 
-## Developing Your Own CLI
-
-One way to use this project is by writing your own custom cli that leverages our variants. 
-This is ideal when you have your own workflows that you want to develop in addition to using the ones we've developed for you.
-For example, maybe you have your own existing cli tools (e.g. using `terragrunt`). In this case, you may want to start by developing your own cli. 
-
-
-## Configure CLI
+## CLI Configuration
 
 The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI, including the location of the terraform projects,
 helmfiles, and configurations.
@@ -132,7 +135,7 @@ It's configured for that particular example project, but can be changed to refle
 
 In the example we have the following:
 
-  - The terraform projects are in the [projects](example/projects) folder - and we set that global option in [main.variant](example/cli/main.variant)
+  - The terraform projects are in the [projects](example/projects) folder - we set that global option in [main.variant](example/cli/main.variant)
   ```hcl
     option "project-dir" {
       default     = "./"
@@ -185,6 +188,71 @@ so they need to be specified only in one place - in the top-level module.
 
 When we build the Docker image, all the modules from the `imports` statement are downloaded, combined with the top-level module [main.variant](example/cli/main.variant), 
 and compiled into a binary, which then included in the container.
+
+
+## Centralized Project Configuration
+
+`variants` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
+
+In our example, all the code (Terraform and helmfiles) is in the [projects](example/projects) folder.
+
+The centralized configuration (variables for the Terraform and helmfile projects) is in the [config](example/config) folder.
+
+All configuration files are broken down by environments and stages and use the predefined format `$environment-$stage.yaml`.
+
+Environments are abbreviations of AWS regions, e.g. `ue2` stands for `us-east-2`, whereas `uw2` would stand for `us-west-2`.
+
+`$environment-globals.yaml` is where you define the global values for all stages for a particular environment.
+The global values get merged with the `$environment-$stage.yaml` configuration for a specific environment/stage by the CLI.
+
+In the example, we defined a few config files:
+
+  - [ue2-dev.yaml](example/config/ue2-dev.yaml) - configuration (Terraform and helmfile variables) for the environment `ue2` and stage `dev`
+  - [ue2-staging.yaml](example/config/ue2-staging.yaml) - configurations (Terraform and helmfile variables) for the environment `ue2` and stage `staging`
+  - [ue2-prod.yaml](example/config/ue2-prod.yaml) - configurations (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
+  - [ue2-globals.yaml](example/config/ue2-globals.yaml) - global settings for the environment `ue2` (e.g. `namespace`, `region`, `environment`)
+
+Each configuration file for environment/stage has a predefined format:
+
+```yaml
+projects:
+  globals:
+    stage: dev
+
+  terraform:
+    vpc:
+      vars:
+
+    eks:
+      vars:
+
+  helmfile:
+    ingress-nginx:
+      vars:
+
+workflows:
+  deploy-all:
+
+  istio-init:
+
+  istio-destroy:
+```
+
+It has the following main sections:
+
+  - `projects` - (required) configuration for the Terraform and helmfile projects for the environment/stage
+  - `workflows` - (optional) workflow definitions for the environment/stage (see [Workflows](#Workflows) section below for the more detailed description of workflows)
+
+The `projects` section consists of the following:
+
+  - `globals` - global variables for the stage. Note that globals for the environment (in `$environment-globals.yaml` file) are merged with the globals for the stage 
+  and finally with the Terraform and helmfile variables for the environment/stage. For example, in [ue2-globals.yaml](example/config/ue2-globals.yaml) we defined 
+  `environment: ue2`, whereas in [ue2-dev.yaml](example/config/ue2-dev.yaml) we defined `stage: dev`. These values will be available as variables in the Terraform
+  and helmfile projects
+
+  - `terraform` - defines variables for each Terraform project. Terraform project names correspond to the Terraform projects in the [projects](example/projects) folder) 
+
+  - `helmfile` - defines variables for each helmfile project. Helmfile project names correspond to the helmfile projects in the [helmfiles](example/projects/helmfiles) folder) 
 
 
 ## Run the Example
