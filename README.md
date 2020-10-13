@@ -5,9 +5,10 @@ Universal CLI for DevOps and Cloud Automation.
 
 ## Introduction
 
-`variants` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains. We use it extensively for automating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
+`variants` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains. 
+We use it extensively for automating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
 
-It includes workflows for dealing with:
+`variants` includes workflows for dealing with:
 
   - Provisioning [Terraform](https://www.terraform.io/) projects
   - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfiles](https://github.com/roboll/helmfile)
@@ -21,7 +22,9 @@ It includes workflows for dealing with:
   - Combining various commands into workflows to execute many commands sequentially in just one step
   - ... and many more
 
-In essence, it's a tool that orchestrates the other CLI tools in a consistent and self-explaining manner. It's a superset of all other tools and task runners (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc) and intended to be used to tie everything together so you can provide a simple CLI interface for your organization. 
+In essence, it's a tool that orchestrates the other CLI tools in a consistent and self-explaining manner. 
+It's a superset of all other tools and task runners (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc) 
+and intended to be used to tie everything together, so you can provide a simple CLI interface for your organization. 
 
 Moreover, `variants` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
 
@@ -31,6 +34,8 @@ Moreover, `variants` is not only a command-line interface for managing clouds an
   - The commands have a clean, consistent and easy to understand syntax
   - The CLI can be compiled into a binary and included in other tools and containers for DevOps, cloud automation and CI/CD
   - The CLI code is modular and self-documenting
+
+
 ## Recommended Layout
 
 Our recommended filesystem layout looks like this:
@@ -85,10 +90,16 @@ The CLI code consists of self-documenting [modules](modules) (separating the fil
 
 
 ## Usage
-There are a number of ways you can leverage this project.
+
+There are a number of ways you can leverage this project:
+
 1. As a **standalone cli** - you can use our cli without any modification and get immediate gratification
 2. As a **library** - you can import our `variant` modules into your own cli and expand the workflows for your needs
 3. As a **docker image** - you can use our docker image the way you would the `cli` and run the workflows
+
+
+## Example
+
 The [example](example) folder contains a complete solution that shows how to:
 
   - Structure the terraform and helmfile projects
@@ -107,10 +118,12 @@ In the example, we show how to create and provision (using the CLI) the followin
 
 ## Developing Your Own CLI
 
-One way to use this project is by writing your own custom cli that leverages our variants. This is ideal when you have your own workflows that you want to develop in addition to using the ones we've developed for you.
+One way to use this project is by writing your own custom cli that leverages our variants. 
+This is ideal when you have your own workflows that you want to develop in addition to using the ones we've developed for you.
 For example, maybe you have your own existing cli tools (e.g. using `terragrunt`). In this case, you may want to start by developing your own cli. 
 
-### Configure the CLI
+
+## Configure CLI
 
 The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI, including the location of the terraform projects,
 helmfiles, and configurations.
@@ -174,7 +187,7 @@ When we build the Docker image, all the modules from the `imports` statement are
 and compiled into a binary, which then included in the container.
 
 
-### Run the Example
+## Run the Example
 
 To run the example, execute the following commands in a terminal:
 
@@ -192,7 +205,7 @@ __NOTE:__ We use Cloud Posse [geodesic](https://github.com/cloudposse/geodesic) 
 `geodesic` is the fastest way to get up and running with a rock solid, production grade cloud platform built entirely from Open Source technologies.
 
 
-### Provision Terraform Project
+## Provision Terraform Project
 
 To provision a Terraform project using the `opsctl` CLI, run the following commands in the container shell:
 
@@ -220,7 +233,7 @@ To execute `plan` and `apply` in one step, use `terrafrom deploy` command:
 opsctl terraform deploy eks -e ue2 -s dev
 ```
 
-### Provision Helmfile Project
+## Provision Helmfile Project
 
 To provision a helmfile project using the `opsctl` CLI, run the following commands in the container shell:
 
@@ -248,7 +261,7 @@ To execute `diff` and `apply` in one step, use `helmfile deploy` command:
 opsctl helmfile deploy ingress-nginx -e ue2 -s dev
 ```
 
-### Deploy istio
+## Deploy istio
 
 To deploy `istio` into a Kubernetes cluster, run the following commands:
 
@@ -260,7 +273,7 @@ opsctl helmfile deploy istio -e ue2 -s dev
 This will install the `istio` operator first, then provision `istio` using the helmfile.
  
 
-### Run Workflows
+## Workflows
 
 Workflows are a way of combining multiple commands into one executable unit of work.
 

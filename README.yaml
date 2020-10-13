@@ -1,0 +1,30 @@
+name: variants
+
+license: APACHE2
+
+github_repo: cloudposse/variants
+
+badges:
+  - name: Latest Release
+    image: https://img.shields.io/github/release/cloudposse/variants.svg
+    url: https://github.com/cloudposse/variants/releases/latest
+  - name: Slack Community
+    image: https://slack.cloudposse.com/badge.svg
+    url: https://slack.cloudposse.com
+
+related:
+
+description: |-
+  `variants` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains.
+  We use it extensively for automating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
+
+introduction: |-
+
+usage: |2-
+
+
+contributors:
+  - name: Erik Osterman
+    github: osterman
+  - name: Andriy Knysh
+    github: aknysh
