@@ -101,6 +101,7 @@ introduction: |-
     ~~~
        │   # CLI configuration
        └── cli/
+       │  
        │   # Centralized project configuration
        ├── config/
        │   │

@@ -132,6 +132,7 @@ Our recommended filesystem layout looks like this:
   ~~~
      │   # CLI configuration
      └── cli/
+     │  
      │   # Centralized project configuration
      ├── config/
      │   │
