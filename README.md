@@ -130,8 +130,9 @@ There are a number of ways you can leverage this project:
 Our recommended filesystem layout looks like this:
 
   ~~~
-  └── cli/
-     │   # Centralized configuration
+     │   # CLI configuration
+     └── cli/
+     │   # Centralized project configuration
      ├── config/
      │   │
      │   └── $environment-$stage.yaml

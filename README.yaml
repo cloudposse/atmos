@@ -99,8 +99,9 @@ introduction: |-
   Our recommended filesystem layout looks like this:
 
     ~~~
-    └── cli/
-       │   # Centralized configuration
+       │   # CLI configuration
+       └── cli/
+       │   # Centralized project configuration
        ├── config/
        │   │
        │   └── $environment-$stage.yaml
