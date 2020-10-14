@@ -1,0 +1,23 @@
+[*]
+insert_final_newline = true
+
+# Override for Makefile
+[{Makefile,makefile,GNUmakefile}]
+indent_style = tab
+indent_size = 4
+
+[Makefile.*]
+indent_style = tab
+indent_size = 4
+
+[*.yaml]
+intent_style = space
+indent_size = 2
+
+[*.sh]
+indent_style = tab
+indent_size = 2
+
+[*.{tf,tfvars,tpl}]
+indent_style = space
+indent_size = 2

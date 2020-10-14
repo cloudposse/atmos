@@ -1,0 +1,60 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+option "region" {
+  default     = "us-east-2"
+  description = "AWS region"
+  type        = string
+}
+
+option "dry-run" {
+  default     = false
+  description = "Disable execution of any commands and echo the commands instead"
+  type        = bool
+}
+
+option "kubeconfig-path" {
+  default     = "/dev/shm"
+  description = "folder to save kubeconfig"
+  type        = string
+}
+
+option "kubeconfig-profile-pattern" {
+  default     = "eg-gbl-$$stage-helm"
+  description = "AWS profile pattern for kubeconfig"
+  type        = string
+}
+
+option "cluster-name-pattern" {
+  default     = "eg-$$environment-$$stage-eks-cluster"
+  description = "Cluster name pattern"
+  type        = string
+}
+
+option "project-dir" {
+  default     = "./"
+  description = "Terraform projects directory"
+  type        = string
+}
+
+option "helmfile-dir" {
+  default     = "./helmfiles"
+  description = "Helmfile projects directory"
+  type        = string
+}
+
+option "config-dir" {
+  default     = "../config"
+  description = "Config directory"
+  type        = string
+}
+
+imports = [
+  "git::https://git@github.com/cloudposse/variants@modules/shell?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/kubeconfig?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/terraform?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/helmfile?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/helm?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/workflow?ref=master",
+  "git::https://git@github.com/cloudposse/variants@modules/istio?ref=master"
+]

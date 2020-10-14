@@ -1,0 +1,60 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "helmfile apply" {
+  description = "Apply the helmfile with the cluster"
+
+  parameter "project" {
+    type        = string
+    description = "Project"
+  }
+
+  option "command" {
+    default     = "helmfile"
+    type        = string
+    description = "Command to execute, e.g. 'helmfile', or path to the command, e.g. '/usr/local/bin/helmfile'"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to the helmfile command"
+    type        = string
+  }
+
+  option "sub-args" {
+    default     = ""
+    description = "A string of arguments to supply to the helmfile subcommand"
+    type        = string
+  }
+
+  option "namespace" {
+    default     = ""
+    description = "kube namespace"
+    short       = "n"
+    type        = string
+  }
+
+  run "helmfile subcommand" {
+    command      = opt.command
+    subcommand   = "apply"
+    project      = param.project
+    environment  = opt.environment
+    stage        = opt.stage
+    args         = opt.args
+    sub-args     = opt.sub-args
+    namespace    = opt.namespace
+  }
+}

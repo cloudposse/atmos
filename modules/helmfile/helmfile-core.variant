@@ -1,0 +1,206 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "helmfile subcommand" {
+  concurrency = 1
+  description = "Run a helmfile subcommand"
+  private     = true
+
+  parameter "project" {
+    description = "helmfile project"
+    type        = string
+  }
+
+  option "command" {
+    default     = "helmfile"
+    type        = string
+    description = "Binary to execute, e.g. 'helmfile', or path to the binary, e.g. '/usr/local/bin/helmfile'"
+  }
+
+  option "subcommand" {
+    description = "helmfile subcommand to run"
+    type        = string
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of global arguments to supply to the helmfile command"
+    type        = string
+  }
+
+  option "sub-args" {
+    default     = ""
+    description = "A string of arguments to supply to the helmfile subcommand"
+    type        = string
+  }
+
+  option "env" {
+    default     = {}
+    description = "Environment variables for the helmfile subcommand"
+    type        = map(string)
+  }
+
+  option "namespace" {
+    default     = ""
+    description = "kube namespace"
+    short       = "n"
+    type        = string
+  }
+
+  # Find project settings
+  config "env-config" {
+    source job {
+      name = "helmfile config"
+      args = {
+        project     = param.project
+        environment = opt.environment
+        stage       = opt.stage
+        format      = "json"
+        merge       = true
+      }
+    }
+  }
+
+  # Find helmfile binary to execute
+  config "helmfile-command" {
+    source job {
+      name = "helmfile-command"
+      args = {
+        project     = param.project
+        command     = opt.command
+        environment = opt.environment
+        stage       = opt.stage
+      }
+    }
+  }
+
+  variable "namespace-arg" {
+    type = list(string)
+    value = opt.namespace != "" ? ["--namespace", opt.namespace] : []
+  }
+
+  variable "args" {
+    type  = list(string)
+    value = compact(concat(
+      var.namespace-arg,
+      split(" ", opt.args),
+      [
+        "--state-values-file",
+        "./${conf.env-config.environment}-${conf.env-config.stage}.helmfile.vars.yaml",
+        opt.subcommand
+      ],
+      split(" ", opt.sub-args)
+    ))
+  }
+
+  variable "aws-profile" {
+    value = can(conf.env-config.aws_profile) ? { AWS_PROFILE = conf.env-config.aws_profile} : {}
+  }
+
+  step "helmfile kubeconfig" {
+    run "aws eks kubeconfig" {
+      environment  = opt.environment
+      stage        = opt.stage
+    }
+  }
+
+  step "helmfile write varfile" {
+    run "helmfile write varfile" {
+      project     = param.project
+      environment = opt.environment
+      stage       = opt.stage
+    }
+  }
+
+  step "helmfile exec" {
+    run "shell" {
+      command = conf.helmfile-command.command
+      args    = var.args
+      dir     = "${opt.helmfile-dir}/${param.project}"
+      env     = merge(
+        opt.env,
+        {
+          KUBECONFIG  = "${opt.kubeconfig-path}/${conf.env-config.environment}-${conf.env-config.stage}-kubecfg",
+          ENVIRONMENT = opt.environment,
+          REGION      = opt.environment,
+          STAGE       = opt.stage,
+          CLUSTER_ID  = opt.stage,
+        },
+        var.aws-profile
+      )
+    }
+  }
+
+  step "helmfile clean" {
+    run "shell" {
+      command = "rm"
+      args    = ["${opt.helmfile-dir}/${param.project}/${conf.env-config.environment}-${conf.env-config.stage}.helmfile.vars.yaml"]
+    }
+  }
+}
+
+job "helmfile write varfile" {
+  description = "Write varfile for a specific project, environment and stage"
+  private     = true
+
+  parameter "project" {
+    type        = string
+    description = "Project"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  config "env-config" {
+    source job {
+      name = "helmfile config"
+      args = {
+        project     = param.project
+        environment = opt.environment
+        stage       = opt.stage
+        format      = "yaml"
+        merge       = true
+      }
+    }
+  }
+
+  exec {
+    command = "echo"
+
+    args = [
+      yamlencode(conf.env-config)
+    ]
+  }
+
+  log {
+    collect {
+      condition = event.type == "exec"
+      format    = event.exec.args[0]
+    }
+
+    file = "${opt.helmfile-dir}/${param.project}/${conf.env-config.environment}-${conf.env-config.stage}.helmfile.vars.yaml"
+  }
+}

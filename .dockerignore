@@ -1,0 +1,20 @@
+.git
+.gitignore
+.editorconfig
+
+# Compiled files
+**/.terraform/*
+**/.terragrunt-cache/*
+*.tfstate
+*.tfstate.*
+**/terraform.tfvars.json
+**/*.terraform.tfvars.json
+**/*.helmfile.vars.yaml
+
+# Module directory
+.terraform
+**/.idea
+**/*.iml
+
+**/.build-harness
+**/build-harness

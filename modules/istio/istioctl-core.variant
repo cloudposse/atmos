@@ -1,0 +1,67 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "istioctl subcommand" {
+  concurrency = 1
+  description = "Run an istioctl subcommand"
+  private     = true
+
+  option "subcommand" {
+    description = "The istioctl subcommand to run"
+    type        = string
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to the istioctl subcommand"
+    type        = string
+  }
+
+  option "env" {
+    default     = {}
+    description = "Environment variables for the istioctl subcommand"
+    type        = map(string)
+  }
+
+  variable "args" {
+    type  = list(string)
+    value = compact(concat(
+        split(" ", opt.subcommand),
+        split(" ", opt.args)
+      )
+    )
+  }
+
+  step "istioctl kubeconfig" {
+    run "aws eks kubeconfig" {
+      environment  = opt.environment
+      stage        = opt.stage
+    }
+  }
+
+  step "istioctl exec" {
+    run "shell" {
+      command = "istioctl"
+      args    = var.args
+      env     = merge(
+        opt.env,
+        {
+          KUBECONFIG = "${opt.kubeconfig-path}/${opt.environment}-${opt.stage}-kubecfg"
+        }
+      )
+    }
+  }
+}

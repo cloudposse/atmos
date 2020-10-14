@@ -1,0 +1,142 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "workflow" {
+  concurrency = 1
+  description = "Run a workflow"
+
+  parameter "workflow" {
+    type        = string
+    description = "Workflow to execute"
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+    default     = ""
+  }
+
+  option "file" {
+    type        = string
+    description = "Workflow file. If not provided, the CLI will look for the workflow in env-stage config"
+    short       = "f"
+    default     = ""
+  }
+
+  config "env_config" {
+    source file {
+      path = format("%s/%s.yaml", opt.config-dir, (opt.file == "" ? "${opt.environment}-${opt.stage}" : opt.file))
+    }
+  }
+
+  depends_on "echo" {
+    args = {
+      message = format("Executing workflow: %s", conf.env_config.workflows[param.workflow].description)
+    }
+  }
+
+  depends_on "workflow exec" {
+    items = conf.env_config.workflows[param.workflow].steps
+
+    args = {
+      job          = item.job
+      job-args     = try(item.args, "")
+      environment  = try(item.environment, opt.environment)
+      stage        = try(item.stage, opt.stage)
+    }
+  }
+}
+
+job "workflow exec" {
+  concurrency = 1
+  description = "Execute a workflow step"
+  private     = true
+
+  option "job" {
+    description = "A config param to deploy in the format: [command] [subcommand] [project]; e.g. terraform deploy eks; helmfile deploy reloader"
+    type        = string
+  }
+
+  option "job-args" {
+    description = "Custom arguments to pass to the run"
+    type        = string
+    default     = ""
+  }
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  variable "job-split" {
+    type  = list(string)
+    value = compact(split(" ", opt.job))
+  }
+
+  variable "job-name" {
+    type  = string
+    value = format("%s %s", var.job-split[0], var.job-split[1])
+  }
+
+  variable "project" {
+    type  = string
+    value = var.job-split[length(var.job-split) - 1]
+  }
+
+  variable "echo-args" {
+    value = {
+      message = opt.job
+    }
+  }
+
+  variable "job-args" {
+    value = {
+      project      = var.project
+      environment  = opt.environment
+      stage        = opt.stage
+      args         = opt.job-args
+    }
+  }
+
+  variable "subcommand" {
+    type  = string
+    value = opt.dry-run ? "echo" : var.job-name
+  }
+
+  variable "subcommand-args" {
+    type  = map(string)
+    value = opt.dry-run ? var.echo-args : var.job-args
+  }
+
+  depends_on "echo" {
+    args = {
+      message = trimspace(<<-EOS
+      -----------------------------------------------------------------------------------------------------
+      Executing: ${opt.job} --environment=${opt.environment} --stage=${opt.stage}
+      -----------------------------------------------------------------------------------------------------
+      EOS
+      )
+    }
+  }
+
+  run {
+    job  = var.subcommand
+    with = var.subcommand-args
+  }
+}

@@ -1,0 +1,33 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+# https://istio.io/latest/docs/setup/install/standalone-operator/
+job "istioctl operator-remove" {
+  description = "Run 'istioctl operator remove' command"
+
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "Environment"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to the istioctl command"
+    type        = string
+  }
+
+  run "istioctl subcommand" {
+    subcommand   = "operator remove"
+    environment  = opt.environment
+    stage        = opt.stage
+    args         = opt.args
+  }
+}

@@ -1,0 +1,45 @@
+projects:
+  globals:
+    stage: dev
+
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.100.0.0/18"
+        # ...
+
+    eks:
+      command: "/usr/bin/terraform-0.13"
+      vars:
+        cluster_kubernetes_version: "1.17"
+        # ...
+
+  helmfile:
+    ingress-nginx:
+      vars:
+        installed: true
+
+    istio:
+      vars:
+        installed: true
+        # ...
+
+workflows:
+  deploy-all:
+    description: Deploy 'eks' terraform project and helmfiles
+    steps:
+      - job: terraform deploy vpc
+      - job: terraform deploy eks
+      - job: helmfile deploy ingress-nginx
+
+  istio-init:
+    description: Run 'istioctl operator init' and then install 'istio' helmfile
+    steps:
+      - job: istioctl operator-init
+      - job: helmfile deploy istio
+
+  istio-destroy:
+    description: Destroy 'istio' helmfile and remove 'istioctl' operator
+    steps:
+      - job: helmfile destroy istio
+      - job: istioctl operator-remove

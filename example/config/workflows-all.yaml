@@ -1,0 +1,38 @@
+workflows:
+  deploy-all:
+    description: Deploy terraform project and helmfiles to specified environment and stage (provided as command-line arguments)
+    steps:
+      - job: terraform deploy vpc
+      - job: terraform deploy eks
+      - job: helmfile deploy ingress-nginx
+
+  plan-all:
+    description: Run 'terraform plan' and 'helmfile diff' on all projects for all environments/stages
+    steps:
+      - job: terraform plan vpc
+        environment: ue2
+        stage: dev
+      - job: terraform plan eks
+        environment: ue2
+        stage: dev
+      - job: helmfile diff ingress-nginx
+        environment: ue2
+        stage: dev
+      - job: terraform plan vpc
+        environment: ue2
+        stage: staging
+      - job: terraform plan eks
+        environment: ue2
+        stage: staging
+      - job: helmfile diff ingress-nginx
+        environment: ue2
+        stage: staging
+      - job: terraform plan vpc
+        environment: ue2
+        stage: prod
+      - job: terraform plan eks
+        environment: ue2
+        stage: prod
+      - job: helmfile diff ingress-nginx
+        environment: ue2
+        stage: prod
