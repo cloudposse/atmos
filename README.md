@@ -1,4 +1,4 @@
-# variants [![Latest Release](https://img.shields.io/github/release/cloudposse/variants.svg)](https://github.com/cloudposse/variants/releases/latest) [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
+# atmos [![Latest Release](https://img.shields.io/github/release/cloudposse/atmos.svg)](https://github.com/cloudposse/atmos/releases/latest) [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
 
 [![README Header][readme_header_img]][readme_header_link]
 
@@ -57,10 +57,10 @@ It's 100% Open Source and licensed under the [APACHE2](LICENSE).
 ## Introduction
 
 
-`variants` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains.
+`atmos` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains.
 We use it extensively for automating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
 
-`variants` includes workflows for dealing with:
+`atmos` includes workflows for dealing with:
 
    - Provisioning [Terraform](https://www.terraform.io/) projects
    - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfiles](https://github.com/roboll/helmfile)
@@ -78,7 +78,7 @@ In essence, it's a tool that orchestrates the other CLI tools in a consistent an
 It's a superset of all other tools and task runners (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc)
 and intended to be used to tie everything together, so you can provide a simple CLI interface for your organization.
 
-Moreover, `variants` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
+Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
 
 - Enforces Terraform and helmfile projects' structure (so everybody knows where things are)
 - Provides separation of configuration and code (so the same code could be easily deployed to different regions, environments and stages)
@@ -109,7 +109,7 @@ The CLI code consists of self-documenting [modules](modules) (separating the fil
 
 ## Developing Your Own CLI
 
-One way to use this project is by writing your own custom CLI that leverages our variants.
+One way to use this project is by writing your own custom CLI that leverages our atmos.
 
 This is ideal when you have your own workflows that you want to develop in addition to using the ones we've developed for you.
 
@@ -219,19 +219,19 @@ In the example we have the following:
 __NOTE:__ The container starts in the [projects](example/projects) directory (see [Dockerfile](example/Dockerfile)).
 All paths are relative to the [projects](example/projects) directory, but can be easily changed (in the Dockerfile and in the CLI options) as needed.
 
-[main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `variants` repo.
+[main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `atmos` repo.
 
 __NOTE:__ For the example, we import all the CLI modules, but they could be included selectively depending on a particular usage.
 
   ```hcl
       imports = [
-      "git::https://git@github.com/cloudposse/variants@modules/shell?ref=master",
-      "git::https://git@github.com/cloudposse/variants@modules/kubeconfig?ref=master",
-      "git::https://git@github.com/cloudposse/variants@modules/terraform?ref=master",
-      "git::https://git@github.com/cloudposse/variants@modules/helmfile?ref=master",
-      "git::https://git@github.com/cloudposse/variants@modules/helm?ref=master",
-      "git::https://git@github.com/cloudposse/variants@modules/workflow?ref=master",
-      "git::https://git@github.com/cloudposse/variants@modules/istio?ref=master"
+      "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
+      "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
+      "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
+      "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
+      "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
+      "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
+      "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master"
     ]
   ```
 
@@ -246,7 +246,7 @@ and compiled into a binary, which then included in the container.
 
 ## Centralized Project Configuration
 
-`variants` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
+`atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
 In our example, all the code (Terraform and helmfiles) is in the [projects](example/projects) folder.
 
@@ -314,7 +314,7 @@ The `projects` section consists of the following:
 To run the example, execute the following commands in a terminal:
 
   - `cd example`
-  - `make all` - it will build the Docker image, build the `variants` CLI tool inside the image, and then start the container
+  - `make all` - it will build the Docker image, build the `atmos` CLI tool inside the image, and then start the container
 
 Note that the name of the CLI executable is configurable.
 
@@ -470,7 +470,7 @@ execute the following command:
 
 ## Share the Love
 
-Like this project? Please give it a ★ on [our GitHub](https://github.com/cloudposse/variants)! (it helps us **a lot**)
+Like this project? Please give it a ★ on [our GitHub](https://github.com/cloudposse/atmos)! (it helps us **a lot**)
 
 Are you using this project or any of our other projects? Consider [leaving a testimonial][testimonial]. =)
 
@@ -487,7 +487,7 @@ Check out these related projects.
 
 **Got a question?** We got answers.
 
-File a GitHub [issue](https://github.com/cloudposse/variants/issues), send us an [email][email] or join our [Slack Community][slack].
+File a GitHub [issue](https://github.com/cloudposse/atmos/issues), send us an [email][email] or join our [Slack Community][slack].
 
 [![README Commercial Support][readme_commercial_support_img]][readme_commercial_support_link]
 
@@ -535,7 +535,7 @@ Sign up for [our newsletter][newsletter] that covers everything on our technolog
 
 ### Bug Reports & Feature Requests
 
-Please use the [issue tracker](https://github.com/cloudposse/variants/issues) to report any bugs or file feature requests.
+Please use the [issue tracker](https://github.com/cloudposse/atmos/issues) to report any bugs or file feature requests.
 
 ### Developing
 
@@ -623,32 +623,32 @@ Check out [our other projects][github], [follow us on twitter][twitter], [apply 
 [![Beacon][beacon]][website]
 
   [logo]: https://cloudposse.com/logo-300x69.svg
-  [docs]: https://cpco.io/docs?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=docs
-  [website]: https://cpco.io/homepage?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=website
-  [github]: https://cpco.io/github?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=github
-  [jobs]: https://cpco.io/jobs?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=jobs
-  [hire]: https://cpco.io/hire?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=hire
-  [slack]: https://cpco.io/slack?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=slack
-  [linkedin]: https://cpco.io/linkedin?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=linkedin
-  [twitter]: https://cpco.io/twitter?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=twitter
-  [testimonial]: https://cpco.io/leave-testimonial?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=testimonial
-  [office_hours]: https://cloudposse.com/office-hours?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=office_hours
-  [newsletter]: https://cpco.io/newsletter?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=newsletter
-  [discourse]: https://ask.sweetops.com/?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=discourse
-  [email]: https://cpco.io/email?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=email
-  [commercial_support]: https://cpco.io/commercial-support?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=commercial_support
-  [we_love_open_source]: https://cpco.io/we-love-open-source?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=we_love_open_source
-  [terraform_modules]: https://cpco.io/terraform-modules?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=terraform_modules
+  [docs]: https://cpco.io/docs?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=docs
+  [website]: https://cpco.io/homepage?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=website
+  [github]: https://cpco.io/github?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=github
+  [jobs]: https://cpco.io/jobs?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=jobs
+  [hire]: https://cpco.io/hire?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=hire
+  [slack]: https://cpco.io/slack?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=slack
+  [linkedin]: https://cpco.io/linkedin?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=linkedin
+  [twitter]: https://cpco.io/twitter?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=twitter
+  [testimonial]: https://cpco.io/leave-testimonial?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=testimonial
+  [office_hours]: https://cloudposse.com/office-hours?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=office_hours
+  [newsletter]: https://cpco.io/newsletter?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=newsletter
+  [discourse]: https://ask.sweetops.com/?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=discourse
+  [email]: https://cpco.io/email?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=email
+  [commercial_support]: https://cpco.io/commercial-support?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=commercial_support
+  [we_love_open_source]: https://cpco.io/we-love-open-source?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=we_love_open_source
+  [terraform_modules]: https://cpco.io/terraform-modules?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=terraform_modules
   [readme_header_img]: https://cloudposse.com/readme/header/img
-  [readme_header_link]: https://cloudposse.com/readme/header/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=readme_header_link
+  [readme_header_link]: https://cloudposse.com/readme/header/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=readme_header_link
   [readme_footer_img]: https://cloudposse.com/readme/footer/img
-  [readme_footer_link]: https://cloudposse.com/readme/footer/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=readme_footer_link
+  [readme_footer_link]: https://cloudposse.com/readme/footer/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=readme_footer_link
   [readme_commercial_support_img]: https://cloudposse.com/readme/commercial-support/img
-  [readme_commercial_support_link]: https://cloudposse.com/readme/commercial-support/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/variants&utm_content=readme_commercial_support_link
-  [share_twitter]: https://twitter.com/intent/tweet/?text=variants&url=https://github.com/cloudposse/variants
-  [share_linkedin]: https://www.linkedin.com/shareArticle?mini=true&title=variants&url=https://github.com/cloudposse/variants
-  [share_reddit]: https://reddit.com/submit/?url=https://github.com/cloudposse/variants
-  [share_facebook]: https://facebook.com/sharer/sharer.php?u=https://github.com/cloudposse/variants
-  [share_googleplus]: https://plus.google.com/share?url=https://github.com/cloudposse/variants
-  [share_email]: mailto:?subject=variants&body=https://github.com/cloudposse/variants
-  [beacon]: https://ga-beacon.cloudposse.com/UA-76589703-4/cloudposse/variants?pixel&cs=github&cm=readme&an=variants
+  [readme_commercial_support_link]: https://cloudposse.com/readme/commercial-support/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=readme_commercial_support_link
+  [share_twitter]: https://twitter.com/intent/tweet/?text=atmos&url=https://github.com/cloudposse/atmos
+  [share_linkedin]: https://www.linkedin.com/shareArticle?mini=true&title=atmos&url=https://github.com/cloudposse/atmos
+  [share_reddit]: https://reddit.com/submit/?url=https://github.com/cloudposse/atmos
+  [share_facebook]: https://facebook.com/sharer/sharer.php?u=https://github.com/cloudposse/atmos
+  [share_googleplus]: https://plus.google.com/share?url=https://github.com/cloudposse/atmos
+  [share_email]: mailto:?subject=atmos&body=https://github.com/cloudposse/atmos
+  [beacon]: https://ga-beacon.cloudposse.com/UA-76589703-4/cloudposse/atmos?pixel&cs=github&cm=readme&an=atmos

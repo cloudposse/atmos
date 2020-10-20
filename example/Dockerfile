@@ -26,7 +26,7 @@ ARG CGO_ENABLED=1
 RUN variant2 export binary $PWD $CLI_NAME
 
 # Verify the CLI
-#RUN ./"$CLI_NAME" help
+RUN ./"$CLI_NAME" help
 
 FROM cloudposse/geodesic:0.136.1
 
@@ -39,7 +39,7 @@ ENV AWS_VAULT_ENABLED=false
 ENV GEODESIC_TF_PROMPT_ACTIVE=false
 ENV DIRENV_ENABLED=false
 
-ENV DOCKER_IMAGE="cloudposse/variants"
+ENV DOCKER_IMAGE="cloudposse/atmos"
 ENV DOCKER_TAG="latest"
 
 # Geodesic banner
