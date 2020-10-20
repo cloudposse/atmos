@@ -1,13 +1,13 @@
-name: variants
+name: atmos
 
 license: APACHE2
 
-github_repo: cloudposse/variants
+github_repo: cloudposse/atmos
 
 badges:
   - name: Latest Release
-    image: https://img.shields.io/github/release/cloudposse/variants.svg
-    url: https://github.com/cloudposse/variants/releases/latest
+    image: https://img.shields.io/github/release/cloudposse/atmos.svg
+    url: https://github.com/cloudposse/atmos/releases/latest
   - name: Slack Community
     image: https://slack.cloudposse.com/badge.svg
     url: https://slack.cloudposse.com
@@ -26,10 +26,10 @@ description: Universal Tool for DevOps and Cloud Automation.
 
 introduction: |-
 
-  `variants` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains.
+  `atmos` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains.
   We use it extensively for automating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
 
-  `variants` includes workflows for dealing with:
+  `atmos` includes workflows for dealing with:
 
      - Provisioning [Terraform](https://www.terraform.io/) projects
      - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfiles](https://github.com/roboll/helmfile)
@@ -47,7 +47,7 @@ introduction: |-
   It's a superset of all other tools and task runners (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc)
   and intended to be used to tie everything together, so you can provide a simple CLI interface for your organization.
 
-  Moreover, `variants` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
+  Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
 
   - Enforces Terraform and helmfile projects' structure (so everybody knows where things are)
   - Provides separation of configuration and code (so the same code could be easily deployed to different regions, environments and stages)
@@ -78,7 +78,7 @@ introduction: |-
 
   ## Developing Your Own CLI
 
-  One way to use this project is by writing your own custom CLI that leverages our variants.
+  One way to use this project is by writing your own custom CLI that leverages our atmos.
 
   This is ideal when you have your own workflows that you want to develop in addition to using the ones we've developed for you.
 
@@ -188,19 +188,19 @@ introduction: |-
   __NOTE:__ The container starts in the [projects](example/projects) directory (see [Dockerfile](example/Dockerfile)).
   All paths are relative to the [projects](example/projects) directory, but can be easily changed (in the Dockerfile and in the CLI options) as needed.
 
-  [main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `variants` repo.
+  [main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `atmos` repo.
 
   __NOTE:__ For the example, we import all the CLI modules, but they could be included selectively depending on a particular usage.
 
     ```hcl
         imports = [
-        "git::https://git@github.com/cloudposse/variants@modules/shell?ref=master",
-        "git::https://git@github.com/cloudposse/variants@modules/kubeconfig?ref=master",
-        "git::https://git@github.com/cloudposse/variants@modules/terraform?ref=master",
-        "git::https://git@github.com/cloudposse/variants@modules/helmfile?ref=master",
-        "git::https://git@github.com/cloudposse/variants@modules/helm?ref=master",
-        "git::https://git@github.com/cloudposse/variants@modules/workflow?ref=master",
-        "git::https://git@github.com/cloudposse/variants@modules/istio?ref=master"
+        "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master"
       ]
     ```
 
@@ -215,7 +215,7 @@ introduction: |-
 
   ## Centralized Project Configuration
 
-  `variants` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
+  `atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
   In our example, all the code (Terraform and helmfiles) is in the [projects](example/projects) folder.
 
@@ -283,7 +283,7 @@ introduction: |-
   To run the example, execute the following commands in a terminal:
 
     - `cd example`
-    - `make all` - it will build the Docker image, build the `variants` CLI tool inside the image, and then start the container
+    - `make all` - it will build the Docker image, build the CLI tool inside the image, and then start the container
 
   Note that the name of the CLI executable is configurable.
 

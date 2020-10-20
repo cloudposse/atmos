@@ -1,8 +1,8 @@
 export DOCKER_ORG ?= cloudposse
-export DOCKER_IMAGE ?= $(DOCKER_ORG)/variants
+export DOCKER_IMAGE ?= $(DOCKER_ORG)/atmos
 export DOCKER_TAG ?= latest
 export DOCKER_IMAGE_NAME ?= $(DOCKER_IMAGE):$(DOCKER_TAG)
-export APP_NAME = variants
+export APP_NAME = atmos
 GEODESIC_INSTALL_PATH ?= /usr/local/bin
 export INSTALL_PATH ?= $(GEODESIC_INSTALL_PATH)
 export SCRIPT = $(INSTALL_PATH)/$(APP_NAME)

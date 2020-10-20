@@ -50,11 +50,11 @@ option "config-dir" {
 }
 
 imports = [
-  "git::https://git@github.com/cloudposse/variants@modules/shell?ref=master",
-  "git::https://git@github.com/cloudposse/variants@modules/kubeconfig?ref=master",
-  "git::https://git@github.com/cloudposse/variants@modules/terraform?ref=master",
-  "git::https://git@github.com/cloudposse/variants@modules/helmfile?ref=master",
-  "git::https://git@github.com/cloudposse/variants@modules/helm?ref=master",
-  "git::https://git@github.com/cloudposse/variants@modules/workflow?ref=master",
-  "git::https://git@github.com/cloudposse/variants@modules/istio?ref=master"
+  "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master"
 ]
