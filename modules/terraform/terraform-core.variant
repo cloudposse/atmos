@@ -9,6 +9,19 @@ job "terraform clean" {
     type        = string
   }
 
+  option "environment" {
+    default     = ""
+    type        = string
+    description = "(ignored, provided for compatibility with other commands)"
+    short       = "e"
+  }
+
+  option "stage" {
+    type        = string
+    description = "(ignored, provided for compatibility with other commands)"
+    short       = "s"
+  }
+
   step "clean shell" {
     run "terraform shell" {
       project = param.project
