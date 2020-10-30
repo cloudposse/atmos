@@ -1,6 +1,6 @@
 ARG CLI_NAME=opsctl
 
-ARG VARIANT_VERSION=0.34.1
+ARG VARIANT_VERSION=0.35.0
 
 FROM golang:alpine3.11 as cli
 
