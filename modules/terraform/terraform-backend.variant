@@ -2,16 +2,16 @@
 # vim: filetype=hcl
 
 job "terraform backend generate" {
+  variable "project-list" {
+    value = distinct([for file in fileset("${opt.project-dir}/", "*/*.tf") : basename(dirname(file))])
+  }
+
   depends_on "terraform backend generate project" {
     items = var.project-list
 
     args  = {
       project = item
     }
-  }
-
-  variable "project-list" {
-    value = distinct([for file in fileset("${opt.project-dir}/", "*/*.tf") : basename(dirname(file))])
   }
 }
 
@@ -53,6 +53,9 @@ job "terraform backend generate project" {
 }
 
 job "terraform backend config global" {
+  concurrency = 1
+  private     = true
+
   option "section" {
     type    = string
     default = "terraform"
@@ -71,6 +74,9 @@ job "terraform backend config global" {
 }
 
 job "terraform backend config project defaults" {
+  concurrency = 1
+  private     = true
+
   option "project" {
     type = string
     default = ""
@@ -93,6 +99,9 @@ job "terraform backend config project defaults" {
 }
 
 job "terraform backend config project raw" {
+  concurrency = 1
+  private     = true
+
   option "project" {
     type    = string
     default = ""
@@ -114,6 +123,8 @@ job "terraform backend config project raw" {
 }
 
 job "terraform backend config project" {
+  concurrency = 1
+  private     = true
 
   option "project" {
     type    = string
