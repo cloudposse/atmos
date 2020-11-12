@@ -31,7 +31,7 @@ option "cluster-name-pattern" {
   type        = string
 }
 
-option "project-dir" {
+option "terraform-dir" {
   default     = "./"
   description = "Terraform projects directory"
   type        = string

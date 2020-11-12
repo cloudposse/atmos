@@ -18,10 +18,3 @@ projects:
     ingress-nginx:
       vars:
         installed: true
-
-    istio:
-      vars:
-        installed: true
-        public_ingressgateway:
-          serviceAnnotations:
-            service.beta.kubernetes.io/aws-load-balancer-internal: "true"

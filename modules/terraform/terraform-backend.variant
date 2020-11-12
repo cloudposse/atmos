@@ -3,7 +3,7 @@
 
 job "terraform backend generate" {
   variable "project-list" {
-    value = distinct([for file in fileset("${opt.project-dir}/", "*/*.tf") : basename(dirname(file))])
+    value = distinct([for file in fileset("${opt.terraform-dir}/", "*/*.tf") : basename(dirname(file))])
   }
 
   depends_on "terraform backend generate project" {
@@ -48,7 +48,7 @@ job "terraform backend generate project" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.project-dir}/${opt.project}/backend.tf.json"
+    file = "${opt.terraform-dir}/${opt.project}/backend.tf.json"
   }
 }
 

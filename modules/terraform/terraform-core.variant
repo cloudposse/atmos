@@ -208,7 +208,7 @@ job "terraform subcommand" {
   exec {
     command = var.exec-cmd
     args    = var.exec-args
-    dir     = "${opt.project-dir}/${param.project}"
+    dir     = "${opt.terraform-dir}/${param.project}"
     env     = opt.env
   }
 }
@@ -235,7 +235,7 @@ job "terraform shell" {
       join(" ", opt.commands)
     ]
 
-    dir = "${opt.project-dir}/${param.project}"
+    dir = "${opt.terraform-dir}/${param.project}"
   }
 }
 
@@ -288,9 +288,10 @@ job "terraform write varfile" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.project-dir}/${param.project}/${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json"
+    file = "${opt.terraform-dir}/${param.project}/${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json"
   }
 }
+
 job "terraform provider-override" {
   option "role" {
     type = string
@@ -346,6 +347,6 @@ job "terraform write override" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.project-dir}/${param.project}/override.tf.json"
+    file = "${opt.terraform-dir}/${param.project}/override.tf.json"
   }
 }

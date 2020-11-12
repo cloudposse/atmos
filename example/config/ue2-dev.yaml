@@ -19,10 +19,6 @@ projects:
       vars:
         installed: true
 
-    istio:
-      vars:
-        installed: true
-        # ...
 
 workflows:
   deploy-all:
@@ -31,15 +27,3 @@ workflows:
       - job: terraform deploy vpc
       - job: terraform deploy eks
       - job: helmfile deploy ingress-nginx
-
-  istio-init:
-    description: Run 'istioctl operator init' and then install 'istio' helmfile
-    steps:
-      - job: istioctl operator-init
-      - job: helmfile deploy istio
-
-  istio-destroy:
-    description: Destroy 'istio' helmfile and remove 'istioctl' operator
-    steps:
-      - job: helmfile destroy istio
-      - job: istioctl operator-remove

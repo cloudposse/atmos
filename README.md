@@ -177,7 +177,6 @@ In the example, we show how to create and provision (using the CLI) the followin
   - VPCs for `dev`, `staging` and `prod` stages in the `us-east-2` region (which we refer to as `ue2` environment)
   - EKS clusters in the `ue2` environment for `dev`, `staging` and `prod`
   - `ingress-nginx` helmfile to be deployed on all the EKS clusters
-  - `istio` helmfile and workflow to deploy `istio` on the EKS clusters using `istio-operator`
 
 
 ## CLI Configuration
@@ -191,7 +190,7 @@ In the example we have the following:
 
   - The terraform projects are in the [projects](example/projects) folder - we set that global option in [main.variant](example/cli/main.variant)
   ```hcl
-    option "project-dir" {
+    option "terraform-dir" {
       default     = "./"
       description = "Terraform projects directory"
       type        = string
@@ -286,10 +285,6 @@ Each configuration file for an environment/stage has a predefined format:
 
     workflows:
       deploy-all:
-
-      istio-init:
-
-      istio-destroy:
   ```
 
 It has the following main sections:
@@ -314,7 +309,7 @@ The `projects` section consists of the following:
 To run the example, execute the following commands in a terminal:
 
   - `cd example`
-  - `make all` - it will build the Docker image, build the `atmos` CLI tool inside the image, and then start the container
+  - `make all` - it will build the Docker image, build the CLI tool inside the image, and then start the container
 
 Note that the name of the CLI executable is configurable.
 
@@ -383,17 +378,6 @@ To execute `diff` and `apply` in one step, use `helmfile deploy` command:
     opsctl helmfile deploy ingress-nginx -e ue2 -s dev
   ```
 
-## Deploy istio
-
-To deploy `istio` into a Kubernetes cluster, run the following commands:
-
-  ```bash
-    opsctl istioctl operator-init -e ue2 -s dev
-    opsctl helmfile deploy istio -e ue2 -s dev
-  ```
-
-This will install the `istio` operator first, then provision `istio` using the helmfile.
-
 
 ## Workflows
 
@@ -402,14 +386,13 @@ Workflows are a way of combining multiple commands into one executable unit of w
 In the CLI, workflows can be defined using two different methods:
 
   - In the configuration file for an environment/stage (see [workflows in ue2-dev.yaml](example/config/ue2-dev.yaml) for an example)
-  - In a separate file (see [workflows-all.yaml](example/config/workflows-all.yaml) and [workflows-istio.yaml](example/config/workflows-istio.yaml))
+  - In a separate file (see [workflows.yaml](example/config/workflows.yaml)
 
 In the first case, we define workflows in the configuration file for the environment and stage (which we specify on the command line).
 To execute the workflows from [workflows in ue2-dev.yaml](example/config/ue2-dev.yaml), run the following commands:
 
   ```bash
     opsctl workflow deploy-all -e ue2 -s dev
-    opsctl workflow istio-init -e ue2 -s dev
   ```
 
 Note that workflows defined in the environment/stage config files can be executed only for the particular environment and stage.
@@ -421,10 +404,10 @@ The environments/stages for the workflow steps can be specified in the workflow 
 For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile projects in the example, execute the following command:
 
   ```bash
-    opsctl workflow plan-all -f workflows-all
+    opsctl workflow plan-all -f workflows
   ```
 
-where the command-line option `-f` (`--file` for long version) instructs the `opsctl` CLI to look for the `plan-all` workflow in the file [workflows-all](example/config/workflows-all.yaml).
+where the command-line option `-f` (`--file` for long version) instructs the `opsctl` CLI to look for the `plan-all` workflow in the file [workflows](example/config/workflows.yaml).
 
 As we can see, in multi-environment workflows, each workflow job specifies the environment and stage it's operating on:
 
@@ -453,11 +436,11 @@ As we can see, in multi-environment workflows, each workflow job specifies the e
 You can also define a workflow in a separate file without specifying the environment and stage in the workflow's job config.
 In this case, the environment and stage need to be provided on the command line.
 
-For example, to run the `deploy-all` workflow from the [workflows-all](example/config/workflows-all.yaml) file for the environment `ue2` and stage`dev`,
+For example, to run the `deploy-all` workflow from the [workflows](example/config/workflows.yaml) file for the environment `ue2` and stage`dev`,
 execute the following command:
 
   ```bash
-    opsctl workflow deploy-all -f workflows-all -e ue2 -s dev
+    opsctl workflow deploy-all -f workflows -e ue2 -s dev
   ```
 
 
