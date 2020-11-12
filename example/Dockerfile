@@ -1,18 +1,13 @@
-ARG CLI_NAME=opsctl
+ARG CLI_NAME=atmos
 
-ARG VARIANT_VERSION=0.34.1
+FROM cloudposse/geodesic:0.137.0 as cli
 
-FROM golang:alpine3.11 as cli
+RUN apk add -u go variant2@cloudposse
 
-RUN apk add -u make git
-
-# Install variant
-ARG CLI_NAME
-ARG VARIANT_VERSION
-RUN wget https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
- tar -zvxf variant*.tar.gz variant && \
- mv variant /usr/local/bin/variant2 && \
- rm -f variant*.tar.gz
+# Configure Go
+ENV GOROOT /usr/lib/go
+ENV GOPATH /go
+ENV PATH /go/bin:$PATH
 
 # Build a minimal variant binary in order to download all the required libraries and save them in a Docker layer cache
 COPY cli/build-cache /tmp
@@ -23,12 +18,14 @@ RUN variant2 export binary $PWD variant-echo
 WORKDIR /usr/cli
 COPY cli/ .
 ARG CGO_ENABLED=1
+ARG CLI_NAME
 RUN variant2 export binary $PWD $CLI_NAME
 
 # Verify the CLI
 RUN ./"$CLI_NAME" help
 
-FROM cloudposse/geodesic:0.136.1
+
+FROM cloudposse/geodesic:0.137.0
 
 # Geodesic message of the Day
 ENV MOTD_URL="https://geodesic.sh/motd"
@@ -67,8 +64,8 @@ RUN apk add saml2aws@cloudposse
 RUN apk add assume-role@cloudposse
 
 # Install variant2
+RUN apk add variant2@cloudposse
 RUN update-alternatives --set variant /usr/share/variant/2/bin/variant
-COPY --from=cli /usr/local/bin/variant2 /usr/local/bin/variant2
 
 # Install CLI
 ARG CLI_NAME

@@ -138,8 +138,8 @@ Our recommended filesystem layout looks like this:
      │   │
      │   └── $environment-$stage.yaml
      │  
-     │   # Projects are broken down by tool
-     ├── projects/
+     │   # Components are broken down by tool
+     ├── components/
      │   │
      │   ├── terraform/   # root modules in here
      │   │   ├── vpc/
@@ -177,7 +177,6 @@ In the example, we show how to create and provision (using the CLI) the followin
   - VPCs for `dev`, `staging` and `prod` stages in the `us-east-2` region (which we refer to as `ue2` environment)
   - EKS clusters in the `ue2` environment for `dev`, `staging` and `prod`
   - `ingress-nginx` helmfile to be deployed on all the EKS clusters
-  - `istio` helmfile and workflow to deploy `istio` on the EKS clusters using `istio-operator`
 
 
 ## CLI Configuration
@@ -189,16 +188,16 @@ In the example, we show how to create and provision (using the CLI) the followin
 
 In the example we have the following:
 
-  - The terraform projects are in the [projects](example/projects) folder - we set that global option in [main.variant](example/cli/main.variant)
+  - The terraform projects are in the [components](example/components) folder - we set that global option in [main.variant](example/cli/main.variant)
   ```hcl
-    option "project-dir" {
+    option "terraform-dir" {
       default     = "./"
       description = "Terraform projects directory"
       type        = string
     }
   ```
 
-  - The helmfiles are in the [projects/helmfiles](example/projects/helmfiles) folder - we set that global option in [main.variant](example/cli/main.variant)
+  - The helmfiles are in the [components/helmfiles](example/components/helmfiles) folder - we set that global option in [main.variant](example/cli/main.variant)
   ```hcl
     option "helmfile-dir" {
       default     = "./helmfiles"
@@ -216,8 +215,8 @@ In the example we have the following:
     }
   ```
 
-__NOTE:__ The container starts in the [projects](example/projects) directory (see [Dockerfile](example/Dockerfile)).
-All paths are relative to the [projects](example/projects) directory, but can be easily changed (in the Dockerfile and in the CLI options) as needed.
+__NOTE:__ The container starts in the [components](example/components) directory (see [Dockerfile](example/Dockerfile)).
+All paths are relative to the [components](example/components) directory, but can be easily changed (in the Dockerfile and in the CLI options) as needed.
 
 [main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `atmos` repo.
 
@@ -231,7 +230,8 @@ __NOTE:__ For the example, we import all the CLI modules, but they could be incl
       "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
       "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
       "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master"
+      "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
+      "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
     ]
   ```
 
@@ -248,9 +248,9 @@ and compiled into a binary, which then included in the container.
 
 `atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
-In our example, all the code (Terraform and helmfiles) is in the [projects](example/projects) folder.
+In our example, all the code (Terraform and helmfiles) is in the [components](example/components) folder.
 
-The centralized configuration (variables for the Terraform and helmfile projects) is in the [config](example/config) folder.
+The centralized configuration (variables for the Terraform and helmfile components) is in the [config](example/config) folder.
 
 All configuration files are broken down by environments and stages and use the predefined format `$environment-$stage.yaml`.
 
@@ -286,10 +286,6 @@ Each configuration file for an environment/stage has a predefined format:
 
     workflows:
       deploy-all:
-
-      istio-init:
-
-      istio-destroy:
   ```
 
 It has the following main sections:
@@ -304,9 +300,9 @@ The `projects` section consists of the following:
   `environment: ue2`, whereas in [ue2-dev.yaml](example/config/ue2-dev.yaml) we defined `stage: dev`. These values will be available as variables in the Terraform
   and helmfile projects
 
-   - `terraform` - defines variables for each Terraform project. Terraform project names correspond to the Terraform projects in the [projects](example/projects) folder
+   - `terraform` - defines variables for each Terraform project. Terraform project names correspond to the Terraform components in the [components](example/components) folder
 
-   - `helmfile` - defines variables for each helmfile project. Helmfile project names correspond to the helmfile projects in the [helmfiles](example/projects/helmfiles) folder
+   - `helmfile` - defines variables for each helmfile project. Helmfile project names correspond to the helmfile components in the [helmfiles](example/components/helmfiles) folder
 
 
 ## Run the Example
@@ -314,14 +310,14 @@ The `projects` section consists of the following:
 To run the example, execute the following commands in a terminal:
 
   - `cd example`
-  - `make all` - it will build the Docker image, build the `atmos` CLI tool inside the image, and then start the container
+  - `make all` - it will build the Docker image, build the CLI tool inside the image, and then start the container
 
 Note that the name of the CLI executable is configurable.
 
-In the [Dockerfile](example/Dockerfile) for the example, we've chosen the name `opsctl`, but it could be any name you want, for example
-`ops`, `cli`, `ops-exe`, etc. The name of the CLI executable is configured using `ARG CLI_NAME=opsctl` in the Dockerfile.
+In the [Dockerfile](example/Dockerfile) for the example, we've chosen the name `atmos`, but it could be any name you want, for example
+`ops`, `cli`, `ops-exe`, etc. The name of the CLI executable is configured using `ARG CLI_NAME=atmos` in the Dockerfile.
 
-After the container starts, run `opsctl help` to see the available commands and available flags.
+After the container starts, run `atmos help` to see the available commands and available flags.
 
 __NOTE:__ We use the Cloud Posse [geodesic](https://github.com/cloudposse/geodesic) image as the base image for the container.
 This is not strictly a requirement, but our base image ships with all the standard tools for cloud automation that we depend on (e.g. `terraform`, `helm`, `helmfile`, etc).
@@ -329,70 +325,59 @@ This is not strictly a requirement, but our base image ships with all the standa
 
 ## Provision Terraform Project
 
-To provision a Terraform project using the `opsctl` CLI, run the following commands in the container shell:
+To provision a Terraform project using the `atmos` CLI, run the following commands in the container shell:
 
   ```bash
-    opsctl terraform plan eks --environment=ue2 --stage=dev
-    opsctl terraform apply eks --environment=ue2 --stage=dev
+    atmos terraform plan eks --environment=ue2 --stage=dev
+    atmos terraform apply eks --environment=ue2 --stage=dev
   ```
 
 where:
 
-  - `efs` is the Terraform project to provision (from the `projects` folder)
+  - `efs` is the Terraform project to provision (from the `components` folder)
   - `--environment=ue2` is the environment to provision the project into (e.g. `ue2`, `uw2`). Note: the environments we are using here are abbreviations of AWS regions
   - `--stage=dev` is the stage/account (`prod`, `staging`, `dev`)
 
 Short versions of the command-line arguments can be used:
 
   ```bash
-    opsctl terraform plan eks -e ue2 -s dev
-    opsctl terraform apply eks -e ue2 -s dev
+    atmos terraform plan eks -e ue2 -s dev
+    atmos terraform apply eks -e ue2 -s dev
   ```
 
 To execute `plan` and `apply` in one step, use `terrafrom deploy` command:
 
   ```bash
-    opsctl terraform deploy eks -e ue2 -s dev
+    atmos terraform deploy eks -e ue2 -s dev
   ```
 
 ## Provision Helmfile Project
 
-To provision a helmfile project using the `opsctl` CLI, run the following commands in the container shell:
+To provision a helmfile project using the `atmos` CLI, run the following commands in the container shell:
 
   ```bash
-    opsctl helmfile diff ingress-nginx --environment=ue2 --stage=dev
-    opsctl helmfile apply ingress-nginx --environment=ue2 --stage=dev
+    atmos helmfile diff ingress-nginx --environment=ue2 --stage=dev
+    atmos helmfile apply ingress-nginx --environment=ue2 --stage=dev
   ```
 
 where:
 
-  - `ingress-nginx` is the helmfile project to provision (from the `projects/helmfiles` folder)
+  - `ingress-nginx` is the helmfile project to provision (from the `components/helmfiles` folder)
   - `--environment=ue2` is the environment to provision the project into (e.g. `ue2`, `uw2`). Note: the environments we are using here are abbreviations of AWS regions
   - `--stage=dev` is the stage/account (`prod`, `staging`, `dev`)
 
 Short versions of the command-line arguments can be used:
 
   ```bash
-    opsctl helmfile diff ingress-nginx -e ue2 -s dev
-    opsctl helmfile apply ingress-nginx -e ue2 -s dev
+    atmos helmfile diff ingress-nginx -e ue2 -s dev
+    atmos helmfile apply ingress-nginx -e ue2 -s dev
   ```
 
 To execute `diff` and `apply` in one step, use `helmfile deploy` command:
 
   ```bash
-    opsctl helmfile deploy ingress-nginx -e ue2 -s dev
+    atmos helmfile deploy ingress-nginx -e ue2 -s dev
   ```
-
-## Deploy istio
-
-To deploy `istio` into a Kubernetes cluster, run the following commands:
-
-  ```bash
-    opsctl istioctl operator-init -e ue2 -s dev
-    opsctl helmfile deploy istio -e ue2 -s dev
-  ```
-
-This will install the `istio` operator first, then provision `istio` using the helmfile.
 
 
 ## Workflows
@@ -402,14 +387,13 @@ Workflows are a way of combining multiple commands into one executable unit of w
 In the CLI, workflows can be defined using two different methods:
 
   - In the configuration file for an environment/stage (see [workflows in ue2-dev.yaml](example/config/ue2-dev.yaml) for an example)
-  - In a separate file (see [workflows-all.yaml](example/config/workflows-all.yaml) and [workflows-istio.yaml](example/config/workflows-istio.yaml))
+  - In a separate file (see [workflows.yaml](example/config/workflows.yaml)
 
 In the first case, we define workflows in the configuration file for the environment and stage (which we specify on the command line).
 To execute the workflows from [workflows in ue2-dev.yaml](example/config/ue2-dev.yaml), run the following commands:
 
   ```bash
-    opsctl workflow deploy-all -e ue2 -s dev
-    opsctl workflow istio-init -e ue2 -s dev
+    atmos workflow deploy-all -e ue2 -s dev
   ```
 
 Note that workflows defined in the environment/stage config files can be executed only for the particular environment and stage.
@@ -418,20 +402,20 @@ It's not possible to provision resources for multiple environments and stages th
 In the second case (defining workflows in a separate file), a single workflow can be created to provision resources into different environments/stages.
 The environments/stages for the workflow steps can be specified in the workflow config.
 
-For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile projects in the example, execute the following command:
+For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile components in the example, execute the following command:
 
   ```bash
-    opsctl workflow plan-all -f workflows-all
+    atmos workflow plan-all -f workflows
   ```
 
-where the command-line option `-f` (`--file` for long version) instructs the `opsctl` CLI to look for the `plan-all` workflow in the file [workflows-all](example/config/workflows-all.yaml).
+where the command-line option `-f` (`--file` for long version) instructs the `atmos` CLI to look for the `plan-all` workflow in the file [workflows](example/config/workflows.yaml).
 
 As we can see, in multi-environment workflows, each workflow job specifies the environment and stage it's operating on:
 
   ```yaml
   workflows:
     plan-all:
-      description: Run 'terraform plan' and 'helmfile diff' on all projects for all environments/stages
+      description: Run 'terraform plan' and 'helmfile diff' on all components for all environments/stages
       steps:
         - job: terraform plan vpc
           environment: ue2
@@ -453,11 +437,11 @@ As we can see, in multi-environment workflows, each workflow job specifies the e
 You can also define a workflow in a separate file without specifying the environment and stage in the workflow's job config.
 In this case, the environment and stage need to be provided on the command line.
 
-For example, to run the `deploy-all` workflow from the [workflows-all](example/config/workflows-all.yaml) file for the environment `ue2` and stage`dev`,
+For example, to run the `deploy-all` workflow from the [workflows](example/config/workflows.yaml) file for the environment `ue2` and stage`dev`,
 execute the following command:
 
   ```bash
-    opsctl workflow deploy-all -f workflows-all -e ue2 -s dev
+    atmos workflow deploy-all -f workflows -e ue2 -s dev
   ```
 
 

@@ -31,12 +31,7 @@ option "config-dir" {
   type        = string
 }
 
-option "helmfile-dir" {
-  description = "Helmfile projects directory"
-  type        = string
-}
-
-option "project-dir" {
+option "terraform-dir" {
   description = "Terraform projects directory"
   type        = string
 }

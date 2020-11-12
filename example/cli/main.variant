@@ -31,7 +31,7 @@ option "cluster-name-pattern" {
   type        = string
 }
 
-option "project-dir" {
+option "terraform-dir" {
   default     = "./"
   description = "Terraform projects directory"
   type        = string
@@ -49,6 +49,12 @@ option "config-dir" {
   type        = string
 }
 
+option "vendor-config-path" {
+  default     = "../vendor/vendir.yml"
+  description = "Path to the vendor configuration file"
+  type        = string
+}
+
 imports = [
   "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
@@ -56,5 +62,6 @@ imports = [
   "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master"
+  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
 ]

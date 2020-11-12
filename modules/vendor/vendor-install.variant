@@ -1,0 +1,29 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "vendor install" {
+  description = "Run 'vendor install' command"
+
+  option "command" {
+    default     = "vendir"
+    type        = string
+    description = "Command to execute, e.g. 'vendir', or path to the command, e.g. '/usr/bin/vendir'"
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to the command"
+    type        = string
+  }
+
+  variable "args" {
+    type = string
+    value = opt.args != "" ? opt.args : "-f ${opt.vendor-config-path}"
+  }
+
+  run "vendor subcommand" {
+    command      = opt.command
+    subcommand   = "sync"
+    args         = var.args
+  }
+}
