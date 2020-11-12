@@ -49,6 +49,12 @@ option "config-dir" {
   type        = string
 }
 
+option "vendor-dir" {
+  default     = "../"
+  description = "Vendor config directory"
+  type        = string
+}
+
 imports = [
   "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
@@ -56,5 +62,6 @@ imports = [
   "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master"
+  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
 ]

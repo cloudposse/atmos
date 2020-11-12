@@ -230,7 +230,8 @@ __NOTE:__ For the example, we import all the CLI modules, but they could be incl
       "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
       "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
       "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master"
+      "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
+      "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
     ]
   ```
 
@@ -313,10 +314,10 @@ To run the example, execute the following commands in a terminal:
 
 Note that the name of the CLI executable is configurable.
 
-In the [Dockerfile](example/Dockerfile) for the example, we've chosen the name `opsctl`, but it could be any name you want, for example
-`ops`, `cli`, `ops-exe`, etc. The name of the CLI executable is configured using `ARG CLI_NAME=opsctl` in the Dockerfile.
+In the [Dockerfile](example/Dockerfile) for the example, we've chosen the name `atmos`, but it could be any name you want, for example
+`ops`, `cli`, `ops-exe`, etc. The name of the CLI executable is configured using `ARG CLI_NAME=atmos` in the Dockerfile.
 
-After the container starts, run `opsctl help` to see the available commands and available flags.
+After the container starts, run `atmos help` to see the available commands and available flags.
 
 __NOTE:__ We use the Cloud Posse [geodesic](https://github.com/cloudposse/geodesic) image as the base image for the container.
 This is not strictly a requirement, but our base image ships with all the standard tools for cloud automation that we depend on (e.g. `terraform`, `helm`, `helmfile`, etc).
@@ -324,11 +325,11 @@ This is not strictly a requirement, but our base image ships with all the standa
 
 ## Provision Terraform Project
 
-To provision a Terraform project using the `opsctl` CLI, run the following commands in the container shell:
+To provision a Terraform project using the `atmos` CLI, run the following commands in the container shell:
 
   ```bash
-    opsctl terraform plan eks --environment=ue2 --stage=dev
-    opsctl terraform apply eks --environment=ue2 --stage=dev
+    atmos terraform plan eks --environment=ue2 --stage=dev
+    atmos terraform apply eks --environment=ue2 --stage=dev
   ```
 
 where:
@@ -340,23 +341,23 @@ where:
 Short versions of the command-line arguments can be used:
 
   ```bash
-    opsctl terraform plan eks -e ue2 -s dev
-    opsctl terraform apply eks -e ue2 -s dev
+    atmos terraform plan eks -e ue2 -s dev
+    atmos terraform apply eks -e ue2 -s dev
   ```
 
 To execute `plan` and `apply` in one step, use `terrafrom deploy` command:
 
   ```bash
-    opsctl terraform deploy eks -e ue2 -s dev
+    atmos terraform deploy eks -e ue2 -s dev
   ```
 
 ## Provision Helmfile Project
 
-To provision a helmfile project using the `opsctl` CLI, run the following commands in the container shell:
+To provision a helmfile project using the `atmos` CLI, run the following commands in the container shell:
 
   ```bash
-    opsctl helmfile diff ingress-nginx --environment=ue2 --stage=dev
-    opsctl helmfile apply ingress-nginx --environment=ue2 --stage=dev
+    atmos helmfile diff ingress-nginx --environment=ue2 --stage=dev
+    atmos helmfile apply ingress-nginx --environment=ue2 --stage=dev
   ```
 
 where:
@@ -368,14 +369,14 @@ where:
 Short versions of the command-line arguments can be used:
 
   ```bash
-    opsctl helmfile diff ingress-nginx -e ue2 -s dev
-    opsctl helmfile apply ingress-nginx -e ue2 -s dev
+    atmos helmfile diff ingress-nginx -e ue2 -s dev
+    atmos helmfile apply ingress-nginx -e ue2 -s dev
   ```
 
 To execute `diff` and `apply` in one step, use `helmfile deploy` command:
 
   ```bash
-    opsctl helmfile deploy ingress-nginx -e ue2 -s dev
+    atmos helmfile deploy ingress-nginx -e ue2 -s dev
   ```
 
 
@@ -392,7 +393,7 @@ In the first case, we define workflows in the configuration file for the environ
 To execute the workflows from [workflows in ue2-dev.yaml](example/config/ue2-dev.yaml), run the following commands:
 
   ```bash
-    opsctl workflow deploy-all -e ue2 -s dev
+    atmos workflow deploy-all -e ue2 -s dev
   ```
 
 Note that workflows defined in the environment/stage config files can be executed only for the particular environment and stage.
@@ -404,10 +405,10 @@ The environments/stages for the workflow steps can be specified in the workflow 
 For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile projects in the example, execute the following command:
 
   ```bash
-    opsctl workflow plan-all -f workflows
+    atmos workflow plan-all -f workflows
   ```
 
-where the command-line option `-f` (`--file` for long version) instructs the `opsctl` CLI to look for the `plan-all` workflow in the file [workflows](example/config/workflows.yaml).
+where the command-line option `-f` (`--file` for long version) instructs the `atmos` CLI to look for the `plan-all` workflow in the file [workflows](example/config/workflows.yaml).
 
 As we can see, in multi-environment workflows, each workflow job specifies the environment and stage it's operating on:
 
@@ -440,7 +441,7 @@ For example, to run the `deploy-all` workflow from the [workflows](example/confi
 execute the following command:
 
   ```bash
-    opsctl workflow deploy-all -f workflows -e ue2 -s dev
+    atmos workflow deploy-all -f workflows -e ue2 -s dev
   ```
 
 

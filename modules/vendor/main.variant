@@ -1,0 +1,12 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+option "dry-run" {
+  description = "Disable execution of any commands and echo the commands instead"
+  type        = bool
+}
+
+option "vendor-dir" {
+  description = "Vendor config directory"
+  type        = string
+}
