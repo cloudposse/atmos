@@ -6,7 +6,7 @@ option "dry-run" {
   type        = bool
 }
 
-option "vendor-dir" {
-  description = "Vendor config directory"
+option "vendor-config-path" {
+  description = "Path to the vendor configuration file"
   type        = string
 }

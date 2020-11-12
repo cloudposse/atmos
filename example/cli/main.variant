@@ -49,9 +49,9 @@ option "config-dir" {
   type        = string
 }
 
-option "vendor-dir" {
-  default     = "../"
-  description = "Vendor config directory"
+option "vendor-config-path" {
+  default     = "../vendor/vendir.yml"
+  description = "Path to the vendor configuration file"
   type        = string
 }
 

@@ -3,7 +3,7 @@
 
 job "vendor subcommand" {
   concurrency = 1
-  description = "Run a vendor subcommand"
+  description = "Run vendor subcommand"
   private     = true
 
   option "command" {
@@ -14,20 +14,6 @@ job "vendor subcommand" {
   option "subcommand" {
     description = "Subcommand to execute"
     type        = string
-  }
-
-  option "environment" {
-    default     = ""
-    type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    default     = ""
-    type        = string
-    description = "Stage"
-    short       = "s"
   }
 
   option "args" {

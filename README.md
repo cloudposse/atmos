@@ -138,8 +138,8 @@ Our recommended filesystem layout looks like this:
      │   │
      │   └── $environment-$stage.yaml
      │  
-     │   # Projects are broken down by tool
-     ├── projects/
+     │   # Components are broken down by tool
+     ├── components/
      │   │
      │   ├── terraform/   # root modules in here
      │   │   ├── vpc/
@@ -188,7 +188,7 @@ In the example, we show how to create and provision (using the CLI) the followin
 
 In the example we have the following:
 
-  - The terraform projects are in the [projects](example/projects) folder - we set that global option in [main.variant](example/cli/main.variant)
+  - The terraform projects are in the [components](example/components) folder - we set that global option in [main.variant](example/cli/main.variant)
   ```hcl
     option "terraform-dir" {
       default     = "./"
@@ -197,7 +197,7 @@ In the example we have the following:
     }
   ```
 
-  - The helmfiles are in the [projects/helmfiles](example/projects/helmfiles) folder - we set that global option in [main.variant](example/cli/main.variant)
+  - The helmfiles are in the [components/helmfiles](example/components/helmfiles) folder - we set that global option in [main.variant](example/cli/main.variant)
   ```hcl
     option "helmfile-dir" {
       default     = "./helmfiles"
@@ -215,8 +215,8 @@ In the example we have the following:
     }
   ```
 
-__NOTE:__ The container starts in the [projects](example/projects) directory (see [Dockerfile](example/Dockerfile)).
-All paths are relative to the [projects](example/projects) directory, but can be easily changed (in the Dockerfile and in the CLI options) as needed.
+__NOTE:__ The container starts in the [components](example/components) directory (see [Dockerfile](example/Dockerfile)).
+All paths are relative to the [components](example/components) directory, but can be easily changed (in the Dockerfile and in the CLI options) as needed.
 
 [main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `atmos` repo.
 
@@ -248,9 +248,9 @@ and compiled into a binary, which then included in the container.
 
 `atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
-In our example, all the code (Terraform and helmfiles) is in the [projects](example/projects) folder.
+In our example, all the code (Terraform and helmfiles) is in the [components](example/components) folder.
 
-The centralized configuration (variables for the Terraform and helmfile projects) is in the [config](example/config) folder.
+The centralized configuration (variables for the Terraform and helmfile components) is in the [config](example/config) folder.
 
 All configuration files are broken down by environments and stages and use the predefined format `$environment-$stage.yaml`.
 
@@ -300,9 +300,9 @@ The `projects` section consists of the following:
   `environment: ue2`, whereas in [ue2-dev.yaml](example/config/ue2-dev.yaml) we defined `stage: dev`. These values will be available as variables in the Terraform
   and helmfile projects
 
-   - `terraform` - defines variables for each Terraform project. Terraform project names correspond to the Terraform projects in the [projects](example/projects) folder
+   - `terraform` - defines variables for each Terraform project. Terraform project names correspond to the Terraform components in the [components](example/components) folder
 
-   - `helmfile` - defines variables for each helmfile project. Helmfile project names correspond to the helmfile projects in the [helmfiles](example/projects/helmfiles) folder
+   - `helmfile` - defines variables for each helmfile project. Helmfile project names correspond to the helmfile components in the [helmfiles](example/components/helmfiles) folder
 
 
 ## Run the Example
@@ -334,7 +334,7 @@ To provision a Terraform project using the `atmos` CLI, run the following comman
 
 where:
 
-  - `efs` is the Terraform project to provision (from the `projects` folder)
+  - `efs` is the Terraform project to provision (from the `components` folder)
   - `--environment=ue2` is the environment to provision the project into (e.g. `ue2`, `uw2`). Note: the environments we are using here are abbreviations of AWS regions
   - `--stage=dev` is the stage/account (`prod`, `staging`, `dev`)
 
@@ -362,7 +362,7 @@ To provision a helmfile project using the `atmos` CLI, run the following command
 
 where:
 
-  - `ingress-nginx` is the helmfile project to provision (from the `projects/helmfiles` folder)
+  - `ingress-nginx` is the helmfile project to provision (from the `components/helmfiles` folder)
   - `--environment=ue2` is the environment to provision the project into (e.g. `ue2`, `uw2`). Note: the environments we are using here are abbreviations of AWS regions
   - `--stage=dev` is the stage/account (`prod`, `staging`, `dev`)
 
@@ -402,7 +402,7 @@ It's not possible to provision resources for multiple environments and stages th
 In the second case (defining workflows in a separate file), a single workflow can be created to provision resources into different environments/stages.
 The environments/stages for the workflow steps can be specified in the workflow config.
 
-For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile projects in the example, execute the following command:
+For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile components in the example, execute the following command:
 
   ```bash
     atmos workflow plan-all -f workflows
@@ -415,7 +415,7 @@ As we can see, in multi-environment workflows, each workflow job specifies the e
   ```yaml
   workflows:
     plan-all:
-      description: Run 'terraform plan' and 'helmfile diff' on all projects for all environments/stages
+      description: Run 'terraform plan' and 'helmfile diff' on all components for all environments/stages
       steps:
         - job: terraform plan vpc
           environment: ue2
