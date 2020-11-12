@@ -35,8 +35,3 @@ option "helmfile-dir" {
   description = "Helmfile projects directory"
   type        = string
 }
-
-option "terraform-dir" {
-  description = "Terraform projects directory"
-  type        = string
-}

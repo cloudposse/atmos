@@ -11,32 +11,7 @@ option "dry-run" {
   type        = bool
 }
 
-option "kubeconfig-path" {
-  description = "folder to save kubeconfig"
-  type        = string
-}
-
-option "kubeconfig-profile-pattern" {
-  description = "AWS profile pattern for kubeconfig"
-  type        = string
-}
-
-option "cluster-name-pattern" {
-  description = "Cluster name pattern"
-  type        = string
-}
-
 option "config-dir" {
   description = "Config directory"
-  type        = string
-}
-
-option "helmfile-dir" {
-  description = "Helmfile projects directory"
-  type        = string
-}
-
-option "terraform-dir" {
-  description = "Terraform projects directory"
   type        = string
 }
