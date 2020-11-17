@@ -53,7 +53,7 @@ job "helmfile subcommand" {
     type        = map(string)
   }
 
-  option "namespace" {
+  option "kube-namespace" {
     default     = ""
     description = "kube namespace"
     short       = "n"
@@ -87,15 +87,15 @@ job "helmfile subcommand" {
     }
   }
 
-  variable "namespace-arg" {
+  variable "kube-namespace-arg" {
     type = list(string)
-    value = opt.namespace != "" ? ["--namespace", opt.namespace] : []
+    value = opt.kube-namespace != "" ? ["--namespace", opt.kube-namespace] : []
   }
 
   variable "args" {
     type  = list(string)
     value = compact(concat(
-      var.namespace-arg,
+      var.kube-namespace-arg,
       split(" ", opt.args),
       [
         "--state-values-file",

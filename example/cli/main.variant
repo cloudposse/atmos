@@ -7,6 +7,12 @@ option "region" {
   type        = string
 }
 
+option "namespace" {
+  default     = "eg"
+  description = "Namespace"
+  type        = string
+}
+
 option "dry-run" {
   default     = false
   description = "Disable execution of any commands and echo the commands instead"
@@ -20,37 +26,37 @@ option "kubeconfig-path" {
 }
 
 option "kubeconfig-profile-pattern" {
-  default     = "eg-gbl-$$stage-helm"
+  default     = "$$stage-gbl-$$stage-helm"
   description = "AWS profile pattern for kubeconfig"
   type        = string
 }
 
 option "cluster-name-pattern" {
-  default     = "eg-$$environment-$$stage-eks-cluster"
+  default     = "$$namespace-$$environment-$$stage-eks-cluster"
   description = "Cluster name pattern"
   type        = string
 }
 
 option "terraform-dir" {
-  default     = "./"
+  default     = "./components/terraform"
   description = "Terraform projects directory"
   type        = string
 }
 
 option "helmfile-dir" {
-  default     = "./helmfiles"
+  default     = "./components/helmfiles"
   description = "Helmfile projects directory"
   type        = string
 }
 
 option "config-dir" {
-  default     = "../config"
-  description = "Config directory"
+  default     = "./stacks"
+  description = "Stacks config directory"
   type        = string
 }
 
 option "vendor-config-path" {
-  default     = "../vendor/vendir.yml"
+  default     = "./vendor/vendir.yml"
   description = "Path to the vendor configuration file"
   type        = string
 }

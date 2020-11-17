@@ -71,8 +71,8 @@ RUN update-alternatives --set variant /usr/share/variant/2/bin/variant
 ARG CLI_NAME
 COPY --from=cli /usr/cli/$CLI_NAME /usr/local/bin
 
-COPY projects/ /projects/
-COPY config/ /config/
+COPY components/ /components/
+COPY stacks/ /stacks/
 
 
-WORKDIR /projects
+WORKDIR /
