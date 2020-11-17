@@ -3,24 +3,32 @@
 
 job "terraform config" {
   concurrency = 1
-  description = "Show config in YAML or JSON format for a terraform project, environment and stage"
+  description = "Show config in YAML or JSON format for a terraform component, environment and stage"
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Project"
+    description = "Component"
   }
 
   option "environment" {
-    default     = ""
     type        = string
     description = "Environment"
     short       = "e"
+    default     = ""
   }
 
   option "stage" {
     type        = string
     description = "Stage"
     short       = "s"
+    default     = ""
+  }
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "st"
+    default     = ""
   }
 
   option "format" {
@@ -32,49 +40,32 @@ job "terraform config" {
   option "merge" {
     default     = true
     type        = bool
-    description = "Whether to merge global and project configs into a flat map"
+    description = "Whether to merge global and component configs into a flat map"
   }
 
-  config "project-global-config" {
-    source file {
-      path = "${opt.config-dir}/projects.yaml"
-      default = ""
-    }
-  }
-
-  config "global-config" {
-    source file {
-      path = "${opt.config-dir}/${opt.environment}-globals.yaml"
-    }
-  }
-
-  config "env-config" {
+  config "stack-config" {
     source file {
       path = "${opt.config-dir}/${opt.environment}-${opt.stage}.yaml"
     }
   }
 
-  variable "project-global-base" {
-    value = lookup(lookup(conf.project-global-config, param.project, {}), "terraform", {})
+  variable "component-config" {
+    value = conf.stack-config.components.terraform[param.component]
   }
 
-  variable "project-config" {
-    value = conf.env-config.projects.terraform[param.project]
-  }
-
-  variable "vars" {
-    value = lookup(var.project-config, "vars", {})
+  variable "component-vars" {
+    value = lookup(var.component-config, "vars", {})
   }
 
   exec {
     command = "echo"
     args = [
       opt.merge ?
-        (opt.format == "json" ?  jsonencode(merge(var.project-global-base, conf.global-config, conf.env-config.projects.globals, var.vars)) :
-                                 yamlencode(merge(var.project-global-base, conf.global-config, conf.env-config.projects.globals, var.vars)))
+        (opt.format == "json" ?  jsonencode(merge(conf.stack-config.components.globals, var.component-vars)) :
+                                 yamlencode(merge(conf.stack-config.components.globals, var.component-vars)))
         :
-        (opt.format == "json" ?  jsonencode(merge(var.project-global-base, conf.global-config, conf.env-config.projects.globals, var.project-config)) :
-                                 yamlencode(merge(var.project-global-base, conf.global-config, conf.env-config.projects.globals, var.project-config)))
+        (opt.format == "json" ?  jsonencode(merge(conf.stack-config.components.globals, var.component-config)) :
+                                 yamlencode(merge(conf.stack-config.components.globals, var.component-config)))
     ]
   }
 }
@@ -87,22 +78,30 @@ job "terraform-command" {
   description = "Find 'terraform' binary to execute"
   private     = true
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Project"
+    description = "Component"
   }
 
   option "environment" {
-    default     = ""
     type        = string
     description = "Environment"
     short       = "e"
+    default     = ""
   }
 
   option "stage" {
     type        = string
     description = "Stage"
     short       = "s"
+    default     = ""
+  }
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "st"
+    default     = ""
   }
 
   option "command" {
@@ -111,13 +110,14 @@ job "terraform-command" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  config "env-config" {
+  config "stack-config" {
     source job {
       name = "terraform config"
       args = {
-        project     = param.project
+        component   = param.component
         environment = opt.environment
         stage       = opt.stage
+        stack       = opt.stack
         format      = "json"
         merge       = false
       }
@@ -125,7 +125,7 @@ job "terraform-command" {
   }
 
   variable "command" {
-    value = coalesce(lookup(conf.env-config, "command", null), opt.command)
+    value = coalesce(lookup(conf.stack-config, "command", null), opt.command)
   }
 
   exec {
