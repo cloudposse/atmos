@@ -61,6 +61,15 @@ job "terraform config" {
     value = conf.stack-config.components.import
   }
 
+  dynamic config "imports" {
+    for_each = toset(var.import-config)
+    content {
+      source file {
+        path = "${opt.config-dir}/${each.value}.yaml"
+      }
+    }
+  }
+
   exec {
     command = "echo"
     args = [
