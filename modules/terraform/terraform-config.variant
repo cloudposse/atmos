@@ -45,7 +45,7 @@ job "terraform config" {
 
   config "stack-config" {
     source file {
-      path = "${opt.config-dir}/${opt.environment}-${opt.stage}.yaml"
+      path = opt.stack != "" && opt.stack != null ? "${opt.config-dir}/${opt.stack}.yaml" : "${opt.config-dir}/${opt.environment}-${opt.stage}.yaml"
     }
   }
 
