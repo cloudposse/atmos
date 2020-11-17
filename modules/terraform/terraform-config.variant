@@ -57,6 +57,10 @@ job "terraform config" {
     value = lookup(var.component-config, "vars", {})
   }
 
+  variable "import-config" {
+    value = conf.stack-config.components.import
+  }
+
   exec {
     command = "echo"
     args = [
