@@ -29,7 +29,7 @@ job "helm list" {
     type        = string
   }
 
-  option "namespace" {
+  option "kube-namespace" {
     default     = ""
     description = "kube namespace"
     short       = "n"
@@ -37,11 +37,11 @@ job "helm list" {
   }
 
   run "helm subcommand" {
-    command      = opt.command
-    subcommand   = "list"
-    environment  = opt.environment
-    stage        = opt.stage
-    namespace    = opt.namespace
-    args         = opt.args
+    command        = opt.command
+    subcommand     = "list"
+    environment    = opt.environment
+    stage          = opt.stage
+    kube-namespace = opt.kube-namespace
+    args           = opt.args
   }
 }

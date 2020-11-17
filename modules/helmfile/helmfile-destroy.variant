@@ -40,7 +40,7 @@ job "helmfile destroy" {
     type        = string
   }
 
-  option "namespace" {
+  option "kube-namespace" {
     default     = ""
     description = "kube namespace"
     short       = "n"
@@ -48,13 +48,13 @@ job "helmfile destroy" {
   }
 
   run "helmfile subcommand" {
-    command     = opt.command
-    subcommand  = "destroy"
-    project     = param.project
-    environment = opt.environment
-    stage       = opt.stage
-    args        = opt.args
-    sub-args     = opt.sub-args
-    namespace   = opt.namespace
+    command        = opt.command
+    subcommand     = "destroy"
+    project        = param.project
+    environment    = opt.environment
+    stage          = opt.stage
+    args           = opt.args
+    sub-args       = opt.sub-args
+    kube-namespace = opt.kube-namespace
   }
 }

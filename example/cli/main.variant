@@ -62,12 +62,12 @@ option "vendor-config-path" {
 }
 
 imports = [
-  "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
+  "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=update-to-stacks",
+  "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=update-to-stacks",
+  "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=update-to-stacks",
+  "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=update-to-stacks",
+  "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=update-to-stacks",
+  "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=update-to-stacks",
+  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=update-to-stacks",
+  "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=update-to-stacks"
 ]
