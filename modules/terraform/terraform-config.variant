@@ -3,7 +3,7 @@
 
 job "terraform config" {
   concurrency = 1
-  description = "Show config in YAML or JSON format"
+  description = "Generate config in YAML or JSON format"
 
   parameter "component" {
     type        = string

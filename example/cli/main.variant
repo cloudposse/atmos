@@ -1,21 +1,9 @@
 #!/usr/bin/env variant
 # vim: filetype=hcl
 
-option "region" {
-  default     = "us-east-2"
-  description = "AWS region"
-  type        = string
-}
-
-option "namespace" {
-  default     = "eg"
-  description = "Namespace"
-  type        = string
-}
-
 option "dry-run" {
   default     = false
-  description = "Disable execution of any commands and echo the commands instead"
+  description = "Disable execution of any commands and echo the command instead"
   type        = bool
 }
 
