@@ -109,7 +109,7 @@ job "terraform write varfile" {
     short       = "s"
   }
 
-  config "env-config" {
+  config "stack-config" {
     source job {
       name = "terraform config"
       args = {
@@ -125,7 +125,7 @@ job "terraform write varfile" {
     command = "echo"
 
     args = [
-      jsonencode(conf.env-config)
+      jsonencode(conf.stack-config)
     ]
   }
 
@@ -135,7 +135,7 @@ job "terraform write varfile" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.terraform-dir}/${param.component}/${opt.stack}.terraform.tfvars.json"
+    file = "${opt.terraform-dir}/${param.component}/${opt.stack}-${param.component}.terraform.tfvars.json"
   }
 }
 

@@ -10,7 +10,6 @@ job "terraform clean" {
     type        = string
     description = "Stack"
     short       = "s"
-    default     = ""
   }
 
   step "clean shell" {

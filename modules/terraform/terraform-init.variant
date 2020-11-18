@@ -6,27 +6,10 @@ job "terraform init" {
     description = "Component"
   }
 
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
-  option "environment" {
-    type        = string
-    description = "Environment"
-    short       = "e"
-    default     = ""
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-    short       = "s"
-    default     = ""
-  }
-
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "stack" {
     type        = string
     description = "Stack"
-    short       = "st"
-    default     = ""
+    short       = "s"
   }
 
   option "command" {
@@ -37,8 +20,6 @@ job "terraform init" {
 
   run "terraform subcommand" {
     component   = param.component
-    environment = opt.environment
-    stage       = opt.stage
     stack       = opt.stack
     command     = opt.command
     subcommand  = "init"

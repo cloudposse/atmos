@@ -35,23 +35,11 @@ job "terraform import" {
     type        = string
   }
 
-  config "env-config" {
-    source job {
-      name = "terraform config"
-      args = {
-        component   = param.component
-        stack       = opt.stack
-        format      = "json"
-        merge       = true
-      }
-    }
-  }
-
   variable "args" {
     type  = list(string)
     value = [
       "-var-file",
-      "${opt.stack}.terraform.tfvars.json",
+      "${opt.stack}-${param.component}.terraform.tfvars.json",
       param.addr,
       param.resid
     ]
