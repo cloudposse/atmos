@@ -34,42 +34,47 @@ job "terraform config" {
     }
   }
 
-  variable "component-config" {
+  variable "component-all-config" {
     value = conf.stack-config.components.terraform[param.component]
   }
 
   variable "component-vars" {
-    value = lookup(var.component-config, "vars", {})
+    value = lookup(var.component-all-config, "vars", {})
   }
 
-  variable "import-config" {
+  variable "stack-globals" {
+    value = lookup(var.stack-config, "globals", {})
+  }
+
+  variable "import-paths" {
     value = try(conf.stack-config.import, null) != null ? conf.stack-config.import : []
   }
 
-  dynamic config "imports" {
-    for_each = toset(var.import-config)
-    content {
-      source file {
-        path = "${opt.config-dir}/${each.value}.yaml"
-      }
-    }
+  variable "imports" {
+    value = merge(
+      [
+        for p in var.import-paths : {
+          for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+        }
+      ]
+      ...)
   }
 
-  variable "imports-globals-vars" {
-    value = merge(conf.imports, conf.stack-config.components.globals, var.component-vars)
+  variable "imports-stack-globals-component-vars" {
+    value = merge(var.imports, var.stack-globals, var.component-vars)
   }
 
-  variable "imports-globals-config" {
-    value = merge(conf.imports, conf.stack-config.components.globals, var.component-config)
+  variable "imports-stack-globals-component-all-config" {
+    value = merge(var.imports, var.stack-globals, var.component-all-config)
   }
 
   exec {
     command = "echo"
     args = [
       opt.merge ?
-        (opt.format == "json" ? jsonencode(var.imports-globals-vars) : yamlencode(var.imports-globals-vars))
+        (opt.format == "json" ? jsonencode(var.imports-stack-globals-component-vars) : yamlencode(var.imports-stack-globals-component-vars))
         :
-        (opt.format == "json" ? jsonencode(var.imports-globals-config) : yamlencode(var.imports-globals-config))
+        (opt.format == "json" ? jsonencode(var.imports-stack-globals-component-all-config) : yamlencode(var.imports-stack-globals-component-all-config))
     ]
   }
 }
