@@ -1,10 +1,10 @@
 job "terraform import" {
   concurrency = 1
-  description = "Run 'terraform import' for a project"
+  description = "Run 'terraform import'"
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Terraform project"
+    description = "Component"
   }
 
   parameter "addr" {
@@ -23,17 +23,27 @@ job "terraform import" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
+  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "environment" {
-    default     = ""
     type        = string
     description = "Environment"
     short       = "e"
+    default     = ""
   }
 
   option "stage" {
     type        = string
     description = "Stage"
     short       = "s"
+    default     = ""
+  }
+
+  # Use either `environment-stage` or `stack` to specify the configuration file for the component
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "st"
+    default     = ""
   }
 
   option "role" {
@@ -46,9 +56,10 @@ job "terraform import" {
     source job {
       name = "terraform config"
       args = {
-        project     = param.project
+        component   = param.component
         environment = opt.environment
         stage       = opt.stage
+        stack       = opt.stack
         format      = "json"
         merge       = true
       }
@@ -67,52 +78,56 @@ job "terraform import" {
 
   step "write varfile" {
     run "terraform write varfile" {
-      project     = param.project
+      component   = param.component
       environment = opt.environment
       stage       = opt.stage
+      stack       = opt.stack
     }
   }
 
   step "import init" {
     run "terraform init" {
-      project     = param.project
-      command     = opt.command
+      component   = param.component
       environment = opt.environment
       stage       = opt.stage
+      stack       = opt.stack
+      command     = opt.command
     }
   }
 
   step "import workspace" {
     run "terraform workspace" {
-      project     = param.project
-      command     = opt.command
+      component   = param.component
       environment = opt.environment
       stage       = opt.stage
+      stack       = opt.stack
+      command     = opt.command
     }
   }
 
   step "write provider override" {
     run "terraform write override" {
-      project = param.project
-      role    = opt.role
+      component = param.component
+      role      = opt.role
     }
   }
 
   step "import cmd" {
     run "terraform subcommand" {
-      project     = param.project
-      command     = opt.command
-      subcommand  = "import"
+      component   = param.component
       environment = opt.environment
       stage       = opt.stage
+      stack       = opt.stack
+      command     = opt.command
+      subcommand  = "import"
       args        = var.args
     }
   }
 
   step "apply clean" {
     run "terraform shell" {
-      project  = param.project
-      commands = ["rm", "override.tf.json"]
+      component = param.component
+      commands  = ["rm", "override.tf.json"]
     }
   }
 }

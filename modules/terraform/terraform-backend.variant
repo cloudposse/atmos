@@ -17,18 +17,18 @@ job "terraform backend generate" {
 
 job "terraform backend generate project" {
   concurrency = 1
-  description = "Generate tfstate config for project"
+  description = "Generate tfstate config"
 
-  option "project" {
+  parameter "component" {
     type        = string
-    description = "Project"
+    description = "Component"
   }
 
   config "config-project" {
     source job {
       name = "terraform backend config project"
       args = {
-        project = opt.project
+        project = param.component
       }
     }
   }
@@ -48,7 +48,7 @@ job "terraform backend generate project" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.terraform-dir}/${opt.project}/backend.tf.json"
+    file = "${opt.terraform-dir}/${param.component}/backend.tf.json"
   }
 }
 
@@ -77,16 +77,16 @@ job "terraform backend config project defaults" {
   concurrency = 1
   private     = true
 
-  option "project" {
-    type = string
-    default = ""
+  parameter "component" {
+    type        = string
+    description = "Component"
   }
 
   variable "conf" {
     value = {
       "backend" = {
         "s3": {
-          "workspace_key_prefix" = opt.project
+          "workspace_key_prefix" = param.component
         }
       }
     }
@@ -102,9 +102,9 @@ job "terraform backend config project raw" {
   concurrency = 1
   private     = true
 
-  option "project" {
-    type    = string
-    default = ""
+  parameter "component" {
+    type        = string
+    description = "Component"
   }
 
   config "projects" {
@@ -117,7 +117,7 @@ job "terraform backend config project raw" {
     command = "echo"
 
     args = [
-      try(yamlencode(conf.projects["projects"]["terraform"][opt.project]), "")
+      try(yamlencode(conf.projects["components"]["terraform"][param.component]), "")
     ]
   }
 }
@@ -126,8 +126,9 @@ job "terraform backend config project" {
   concurrency = 1
   private     = true
 
-  option "project" {
-    type    = string
+  parameter "component" {
+    type        = string
+    description = "Component"
   }
 
   config "project" {
@@ -141,14 +142,14 @@ job "terraform backend config project" {
     source job {
       name = "terraform backend config project defaults"
       args = {
-        project = opt.project
+        project = param.component
       }
     }
 
     source job {
       name = "terraform backend config project raw"
       args = {
-        project = opt.project
+        project = param.component
       }
     }
   }
