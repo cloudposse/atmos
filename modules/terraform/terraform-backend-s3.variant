@@ -67,7 +67,7 @@ job "terraform backend S3 generate component" {
           var.stack-config.terraform_backend_role_environment,
           var.stack-config.terraform_backend_role_stage
       )
-    ) : null
+    ) : ""
   }
 
   variable "template-file" {
