@@ -82,7 +82,7 @@ job "terraform backend S3 generate component" {
     command = "echo"
     args = [
       # var.rendered_template
-      jsondecode(var.stack-config)
+      jsonencode(var.stack-config)
     ]
   }
 
