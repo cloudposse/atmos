@@ -17,16 +17,9 @@ job "helm subcommand" {
     type        = string
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -68,8 +61,7 @@ job "helm subcommand" {
 
   step "helm kubeconfig" {
     run "aws eks kubeconfig" {
-      environment  = opt.environment
-      stage        = opt.stage
+      stack        = opt.stack
     }
   }
 
@@ -80,7 +72,7 @@ job "helm subcommand" {
       env     = merge(
         opt.env,
         {
-          KUBECONFIG = "${opt.kubeconfig-path}/${opt.environment}-${opt.stage}-kubecfg"
+          KUBECONFIG = "${opt.kubeconfig-path}/${opt.stack}-kubecfg"
         }
       )
     }
