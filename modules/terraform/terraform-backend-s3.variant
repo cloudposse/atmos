@@ -51,26 +51,30 @@ job "terraform backend S3 generate component" {
     }
   }
 
+  variable "stack-config" {
+    value = jsondecode(conf.stack-config)
+  }
+
   variable "terraform_backend_assume_role" {
-    value = coalesce(lookup(conf.stack-config, "terraform_backend_assume_role", null), true)
+    value = coalesce(lookup(var.stack-config, "terraform_backend_assume_role", null), true)
   }
 
   variable "assume_role_arn" {
     value = var.terraform_backend_assume_role ? (
       format("arn:aws:iam::%s:role/%s-%s-%s-terraform",
-              conf.stack-config.account_id,
-              conf.stack-config.namespace,
-              conf.stack-config.terraform_backend_role_environment,
-              conf.stack-config.terraform_backend_role_stage
+          var.stack-config.account_id,
+          var.stack-config.namespace,
+          var.stack-config.terraform_backend_role_environment,
+          var.stack-config.terraform_backend_role_stage
       )
     ) : null
   }
 
   variable "params" {
     value = {
-      namespace            = conf.stack-config.namespace
-      environment          = conf.stack-config.terraform_backend_environment
-      stage                = conf.stack-config.terraform_backend_stage
+      namespace            = var.stack-config.namespace
+      environment          = var.stack-config.terraform_backend_environment
+      stage                = var.stack-config.terraform_backend_stage
       role_arn             = var.assume_role_arn
       workspace_key_prefix = param.component
     }
@@ -81,7 +85,7 @@ job "terraform backend S3 generate component" {
   }
 
   variable "rendered_template" {
-    value = replace(var.template_file, "${namespace}", var.params.namespace)
+    value = replace(var.template_file, "${namespace}", var.stack-config.namespace)
   }
 
   exec {
