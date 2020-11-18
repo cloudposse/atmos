@@ -53,9 +53,9 @@ RUN apk add kubectl-1.17@cloudposse
 # Install terraform.
 # Install the latest 0.12 and 0.13 versions of terraform
 RUN apk add -u terraform-0.12@cloudposse terraform-0.13@cloudposse~=0.13.3
-# Set Terraform 0.12.x as the default `terraform`. You can still use
+# Set Terraform 0.13.x as the default `terraform`. You can still use
 # `terraform-0.12` or `terraform-0.13` to be explicit when needed.
-RUN update-alternatives --set terraform /usr/share/terraform/0.12/bin/terraform
+RUN update-alternatives --set terraform /usr/share/terraform/0.13/bin/terraform
 
 # https://github.com/Versent/saml2aws#linux
 RUN apk add saml2aws@cloudposse
