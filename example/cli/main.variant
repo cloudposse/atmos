@@ -14,13 +14,13 @@ option "kubeconfig-path" {
 }
 
 option "kubeconfig-profile-pattern" {
-  default     = "$$namespace-$$environment-$$stage-helm"
+  default     = "{namespace}-{environment}-{stage}-helm"
   description = "AWS profile pattern for kubeconfig"
   type        = string
 }
 
 option "cluster-name-pattern" {
-  default     = "$$namespace-$$environment-$$stage-eks-cluster"
+  default     = "{namespace}-{environment}-{stage}-eks-cluster"
   description = "Cluster name pattern"
   type        = string
 }

@@ -8,6 +8,7 @@ job "terraform config" {
   parameter "component" {
     type        = string
     description = "Component"
+    default     = ""
   }
 
   option "stack" {
@@ -57,7 +58,7 @@ job "terraform config" {
   }
 
   variable "component-config" {
-    value = var.components-config.terraform[param.component]
+    value = try(var.components-config.terraform[param.component], {})
   }
 
   variable "component-vars" {

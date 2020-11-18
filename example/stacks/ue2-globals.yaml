@@ -11,3 +11,5 @@ terraform_backend_stage: root
 terraform_backend_role_environment: gbl
 
 terraform_backend_role_stage: root
+
+kubeconfig_profile_environment: gbl
