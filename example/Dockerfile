@@ -71,8 +71,7 @@ RUN update-alternatives --set variant /usr/share/variant/2/bin/variant
 ARG CLI_NAME
 COPY --from=cli /usr/cli/$CLI_NAME /usr/local/bin
 
-COPY components/ /components/
 COPY stacks/ /stacks/
-
+COPY vendir.yml /vendir.yml
 
 WORKDIR /

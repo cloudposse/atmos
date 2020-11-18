@@ -19,6 +19,6 @@ components:
         # ...
 
   helmfile:
-    ingress-nginx:
+    nginx-ingress:
       vars:
         installed: true

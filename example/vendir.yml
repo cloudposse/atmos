@@ -1,0 +1,28 @@
+apiVersion: vendir.k14s.io/v1alpha1
+kind: Config
+
+directories:
+
+  # Terraform components
+  - path: components/terraform
+    contents:
+
+      - path: vpc
+        git:
+          url: https://github.com/cloudposse/terraform-aws-components
+          ref: 0.137.0
+        newRootPath: modules/vpc
+        includePaths:
+          - modules/vpc/**/*
+
+  # Helmfile components
+  - path: components/helmfiles
+    contents:
+
+      - path: nginx-ingress
+        git:
+          url: https://github.com/cloudposse/helmfiles
+          ref: 0.121.0
+        newRootPath: releases/nginx-ingress
+        includePaths:
+          - releases/nginx-ingress/**/*
