@@ -2,33 +2,35 @@
 # vim: filetype=hcl
 
 job "terraform backend generate" {
-  variable "project-list" {
+  description = "Generate tfstate config for all components"
+
+  variable "component-list" {
     value = distinct([for file in fileset("${opt.terraform-dir}/", "*/*.tf") : basename(dirname(file))])
   }
 
-  depends_on "terraform backend generate project" {
-    items = var.project-list
+  depends_on "terraform backend generate component" {
+    items = var.component-list
 
     args  = {
-      project = item
+      component = item
     }
   }
 }
 
-job "terraform backend generate project" {
+job "terraform backend generate component" {
   concurrency = 1
-  description = "Generate tfstate config"
+  description = "Generate tfstate config for a component"
 
   parameter "component" {
     type        = string
     description = "Component"
   }
 
-  config "config-project" {
+  config "config-component" {
     source job {
-      name = "terraform backend config project"
+      name = "terraform backend config component"
       args = {
-        project = param.component
+        component = param.component
       }
     }
   }
@@ -36,9 +38,7 @@ job "terraform backend generate project" {
   exec {
     command = "echo"
     args = [
-      jsonencode(
-      { "terraform": conf.config-project }
-      )
+      jsonencode({ "terraform": conf.config-component })
     ]
   }
 
@@ -52,28 +52,34 @@ job "terraform backend generate project" {
   }
 }
 
-job "terraform backend config global" {
+job "terraform backend config component" {
   concurrency = 1
   private     = true
 
-  option "section" {
-    type    = string
-    default = "terraform"
+  parameter "component" {
+    type        = string
+    description = "Component"
   }
 
-  config "globals" {
-    source file {
-      path = "${opt.config-dir}/globals.yaml"
+  config "component" {
+    source job {
+      name = "terraform backend config component defaults"
+      args = {
+        component = param.component
+      }
     }
   }
 
   exec {
     command = "echo"
-    args = [ yamlencode(conf.globals[opt.section]) ]
+
+    args = [
+      yamlencode(conf.component)
+    ]
   }
 }
 
-job "terraform backend config project defaults" {
+job "terraform backend config component defaults" {
   concurrency = 1
   private     = true
 
@@ -95,70 +101,5 @@ job "terraform backend config project defaults" {
   exec {
     command = "echo"
     args = [ yamlencode(var.conf) ]
-  }
-}
-
-job "terraform backend config project raw" {
-  concurrency = 1
-  private     = true
-
-  parameter "component" {
-    type        = string
-    description = "Component"
-  }
-
-  config "projects" {
-    source file {
-      path = "${opt.config-dir}/globals.yaml"
-    }
-  }
-
-  exec {
-    command = "echo"
-
-    args = [
-      try(yamlencode(conf.projects["components"]["terraform"][param.component]), "")
-    ]
-  }
-}
-
-job "terraform backend config project" {
-  concurrency = 1
-  private     = true
-
-  parameter "component" {
-    type        = string
-    description = "Component"
-  }
-
-  config "project" {
-    source job {
-      name = "terraform backend config global"
-      args = {
-        section = "terraform"
-      }
-    }
-
-    source job {
-      name = "terraform backend config project defaults"
-      args = {
-        project = param.component
-      }
-    }
-
-    source job {
-      name = "terraform backend config project raw"
-      args = {
-        project = param.component
-      }
-    }
-  }
-
-  exec {
-    command = "echo"
-
-    args = [
-      yamlencode(conf.project)
-    ]
   }
 }
