@@ -34,7 +34,7 @@ job "terraform clean" {
 
   step "clean shell" {
     run "terraform shell" {
-      project = param.component
+      component = param.component
 
       commands = [
         "rm -rf .terraform *.planfile"
@@ -50,7 +50,7 @@ job "terraform clean" {
 }
 
 job "terraform init" {
-  description = "Run `terraform init` for a project"
+  description = "Run `terraform init`"
 
   parameter "component" {
     type        = string
@@ -98,7 +98,7 @@ job "terraform init" {
 }
 
 job "terraform workspace" {
-  description = "Select or create a terraform workspace for a project"
+  description = "Select or create a terraform workspace"
 
   parameter "component" {
     type        = string
@@ -134,7 +134,7 @@ job "terraform workspace" {
     default     = ""
   }
 
-  # Find project settings
+  # Find settings
   config "env-config" {
     source job {
       name = "terraform config"
@@ -284,7 +284,7 @@ job "terraform shell" {
 }
 
 job "terraform write varfile" {
-  description = "Write varfile for a specific project, environment and stage"
+  description = "Write varfile for a component"
   private     = true
 
   parameter "component" {
@@ -347,9 +347,13 @@ job "terraform write varfile" {
   }
 }
 
-job "terraform provider-override" {
+job "terraform provider override" {
+  description = "Override aws provider"
+  private     = true
+
   option "role" {
     type = string
+    description = "Role to assume"
   }
 
   exec {
@@ -368,7 +372,8 @@ job "terraform provider-override" {
 }
 
 job "terraform write override" {
-  description = "Write override file for a specific project"
+  description = "Write override file for a component"
+  private     = true
 
   parameter "component" {
     type        = string
@@ -377,12 +382,12 @@ job "terraform write override" {
 
   option "role" {
     type        = string
-    description = "Role to run import under"
+    description = "Role to assume"
   }
 
   config "override-contents" {
     source job {
-      name = "terraform provider-override"
+      name = "terraform provider override"
       args = {
         role = opt.role
       }
@@ -403,5 +408,69 @@ job "terraform write override" {
     }
 
     file = "${opt.terraform-dir}/${param.component}/override.tf.json"
+  }
+}
+
+# Find 'terraform' binary to execute.
+# It could come from the config file 'command' attribute, or from the '--command=' command line argument.
+# Otherwise, the default 'terraform' binary will be used (from the PATH)
+job "terraform-command" {
+  concurrency = 1
+  description = "Find 'terraform' binary to execute"
+  private     = true
+
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
+  option "environment" {
+    type        = string
+    description = "Environment"
+    short       = "e"
+    default     = ""
+  }
+
+  option "stage" {
+    type        = string
+    description = "Stage"
+    short       = "s"
+    default     = ""
+  }
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "st"
+    default     = ""
+  }
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  config "stack-config" {
+    source job {
+      name = "terraform config"
+      args = {
+        component   = param.component
+        environment = opt.environment
+        stage       = opt.stage
+        stack       = opt.stack
+        format      = "json"
+        merge       = false
+      }
+    }
+  }
+
+  variable "command" {
+    value = coalesce(lookup(conf.stack-config, "command", null), opt.command)
+  }
+
+  exec {
+    command = "echo"
+    args    = list("command: ${var.command}")
   }
 }
