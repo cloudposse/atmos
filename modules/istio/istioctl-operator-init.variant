@@ -5,16 +5,9 @@
 job "istioctl operator-init" {
   description = "Run 'istioctl operator init' command"
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -25,9 +18,8 @@ job "istioctl operator-init" {
   }
 
   run "istioctl subcommand" {
-    subcommand    = "operator init"
-    environment  = opt.environment
-    stage        = opt.stage
-    args         = opt.args
+    subcommand = "operator init"
+    stack      = opt.stack
+    args       = opt.args
   }
 }

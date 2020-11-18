@@ -5,16 +5,9 @@
 job "istioctl operator-remove" {
   description = "Run 'istioctl operator remove' command"
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -25,9 +18,8 @@ job "istioctl operator-remove" {
   }
 
   run "istioctl subcommand" {
-    subcommand   = "operator remove"
-    environment  = opt.environment
-    stage        = opt.stage
-    args         = opt.args
+    subcommand = "operator remove"
+    stack      = opt.stack
+    args       = opt.args
   }
 }

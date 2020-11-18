@@ -10,30 +10,22 @@ job "workflow" {
     description = "Workflow to execute"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
-    default     = ""
   }
 
   option "file" {
     type        = string
-    description = "Workflow file. If not provided, the CLI will look for the workflow in env-stage config"
+    description = "Workflow file. If not provided, the CLI will look for the workflow in the stack configuration file"
     short       = "f"
     default     = ""
   }
 
   config "env_config" {
     source file {
-      path = format("%s/%s.yaml", opt.config-dir, (opt.file == "" ? "${opt.environment}-${opt.stage}" : opt.file))
+      path = format("%s/%s.yaml", opt.config-dir, (opt.file == "" ? "${opt.stack}" : opt.file))
     }
   }
 
@@ -49,8 +41,7 @@ job "workflow" {
     args = {
       job          = item.job
       job-args     = try(item.args, "")
-      environment  = try(item.environment, opt.environment)
-      stage        = try(item.stage, opt.stage)
+      stack        = try(item.stack, opt.stack)
     }
   }
 }
@@ -61,7 +52,7 @@ job "workflow exec" {
   private     = true
 
   option "job" {
-    description = "A config param to deploy in the format: [command] [subcommand] [project]; e.g. terraform deploy eks; helmfile deploy reloader"
+    description = "A config param to deploy in the format: [command] [subcommand] [component]; e.g. terraform deploy eks; helmfile deploy reloader"
     type        = string
   }
 
@@ -71,16 +62,9 @@ job "workflow exec" {
     default     = ""
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -94,7 +78,7 @@ job "workflow exec" {
     value = format("%s %s", var.job-split[0], var.job-split[1])
   }
 
-  variable "project" {
+  variable "component" {
     type  = string
     value = var.job-split[length(var.job-split) - 1]
   }
@@ -107,10 +91,9 @@ job "workflow exec" {
 
   variable "job-args" {
     value = {
-      project      = var.project
-      environment  = opt.environment
-      stage        = opt.stage
-      args         = opt.job-args
+      component = var.component
+      stack     = opt.stack
+      args      = opt.job-args
     }
   }
 
@@ -128,7 +111,7 @@ job "workflow exec" {
     args = {
       message = trimspace(<<-EOS
       -----------------------------------------------------------------------------------------------------
-      Executing: ${opt.job} --environment=${opt.environment} --stage=${opt.stage}
+      Executing: ${opt.job} --stack=${opt.stack}
       -----------------------------------------------------------------------------------------------------
       EOS
       )
