@@ -55,12 +55,12 @@ job "terraform backend S3 generate component" {
     value = conf.stack-config
   }
 
-  variable "terraform_backend_assume_role" {
+  variable "terraform-backend-assume-role" {
     value = coalesce(lookup(var.stack-config, "terraform_backend_assume_role", null), true)
   }
 
-  variable "assume_role_arn" {
-    value = var.terraform_backend_assume_role ? (
+  variable "assume-role-arn" {
+    value = var.terraform-backend-assume-role ? (
       format("arn:aws:iam::%s:role/%s-%s-%s-terraform",
           var.stack-config.account_id,
           var.stack-config.namespace,
@@ -75,7 +75,7 @@ job "terraform backend S3 generate component" {
   }
 
   variable "rendered-template" {
-    value = replace(var.template-file, "${namespace}", lookup(var.stack-config, "namespace"))
+    value = replace(var.template-file, "$${namespace}", var.stack-config.namespace)
   }
 
   exec {
