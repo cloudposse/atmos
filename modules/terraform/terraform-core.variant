@@ -2,7 +2,7 @@
 # vim: filetype=hcl
 
 job "terraform clean" {
-  description = "Clean a project's terraform planfiles and the .terraform folder"
+  description = "Clean terraform planfiles and the .terraform folder"
 
   parameter "component" {
     type        = string
@@ -44,7 +44,7 @@ job "terraform clean" {
 
   step "clean log" {
     run "echo" {
-      message = "Removed .terraform and all .planfile's"
+      message = "Removed .terraform and all planfiles"
     }
   }
 }
