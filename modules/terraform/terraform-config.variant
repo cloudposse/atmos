@@ -10,6 +10,7 @@ job "terraform config" {
     description = "Component"
   }
 
+  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "environment" {
     type        = string
     description = "Environment"
@@ -24,6 +25,7 @@ job "terraform config" {
     default     = ""
   }
 
+  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "stack" {
     type        = string
     description = "Stack"
@@ -58,7 +60,7 @@ job "terraform config" {
   }
 
   variable "import-config" {
-    value = conf.stack-config.components.import
+    value = try(conf.stack-config.import, null) != null ? conf.stack-config.import : []
   }
 
   dynamic config "imports" {
@@ -74,11 +76,11 @@ job "terraform config" {
     command = "echo"
     args = [
       opt.merge ?
-        (opt.format == "json" ?  jsonencode(merge(conf.stack-config.components.globals, var.component-vars)) :
-                                 yamlencode(merge(conf.stack-config.components.globals, var.component-vars)))
+        (opt.format == "json" ?  jsonencode(merge(conf.imports, conf.stack-config.components.globals, var.component-vars)) :
+                                 yamlencode(merge(conf.imports, conf.stack-config.components.globals, var.component-vars)))
         :
-        (opt.format == "json" ?  jsonencode(merge(conf.stack-config.components.globals, var.component-config)) :
-                                 yamlencode(merge(conf.stack-config.components.globals, var.component-config)))
+        (opt.format == "json" ?  jsonencode(merge(conf.imports, conf.stack-config.components.globals, var.component-config)) :
+                                 yamlencode(merge(conf.imports, conf.stack-config.components.globals, var.component-config)))
     ]
   }
 }
