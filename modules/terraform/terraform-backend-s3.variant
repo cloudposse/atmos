@@ -2,7 +2,7 @@
 # vim: filetype=hcl
 
 job "terraform backend S3 generate" {
-  description = "Generate Terraform backend S3 config for all components"
+  description = "Generate Terraform backend S3 config for all components in a stack"
 
   option "stack" {
     type        = string
@@ -26,7 +26,7 @@ job "terraform backend S3 generate" {
 
 job "terraform backend S3 generate component" {
   concurrency = 1
-  description = "Generate Terraform backend S3 config for a component"
+  description = "Generate Terraform backend S3 config for a component in a stack"
 
   parameter "component" {
     type        = string
@@ -76,10 +76,14 @@ job "terraform backend S3 generate component" {
     }
   }
 
+  variable "rendered_template" {
+    value = templatefile("${opt.config-dir}/terraform-backend-s3-template.json", var.params)
+  }
+
   exec {
     command = "echo"
     args = [
-      templatefile("${opt.config-dir}/terraform-backend-s3-template.json", var.params)
+      var.rendered_template
     ]
   }
 
