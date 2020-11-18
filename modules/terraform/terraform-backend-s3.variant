@@ -1,0 +1,94 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "terraform backend S3 generate" {
+  description = "Generate Terraform backend S3 config for all components"
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
+  variable "component-list" {
+    value = distinct([for file in fileset("${opt.terraform-dir}/", "*/*.tf") : basename(dirname(file))])
+  }
+
+  depends_on "terraform backend generate component" {
+    items = var.component-list
+
+    args  = {
+      component = item
+      stack     = opt.stack
+    }
+  }
+}
+
+job "terraform backend S3 generate component" {
+  concurrency = 1
+  description = "Generate Terraform backend S3 config for a component"
+
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
+  config "stack-config" {
+    source job {
+      name = "terraform config"
+      args = {
+        component   = param.component
+        stack       = opt.stack
+        format      = "json"
+        merge       = false
+      }
+    }
+  }
+
+  variable "terraform_backend_assume_role" {
+    value = coalesce(lookup(conf.stack-config, "terraform_backend_assume_role", null), true)
+  }
+
+  variable "assume_role_arn" {
+    value = var.terraform_backend_assume_role ? (
+      format("arn:aws:iam::%s:role/%s-%s-%s-terraform",
+              conf.stack-config.account_id,
+              conf.stack-config.namespace,
+              conf.stack-config.terraform_backend_role_environment,
+              conf.stack-config.terraform_backend_role_stage
+      )
+    ) : null
+  }
+
+  variable "params" {
+    value = {
+      namespace            = conf.stack-config.namespace
+      environment          = conf.stack-config.terraform_backend_environment
+      stage                = conf.stack-config.terraform_backend_stage
+      role_arn             = var.assume_role_arn
+      workspace_key_prefix = param.component
+    }
+  }
+
+  exec {
+    command = "echo"
+    args = [
+      templatefile("${opt.config-dir}/terraform-backend-s3-template.json", var.params)
+    ]
+  }
+
+  log {
+    collect {
+      condition = event.type == "exec"
+      format    = event.exec.args[0]
+    }
+
+    file = "${opt.terraform-dir}/${param.component}/backend.s3.tf.json"
+  }
+}
