@@ -34,47 +34,51 @@ job "terraform config" {
     }
   }
 
-  variable "component-all-config" {
-    value = conf.stack-config.components.terraform[param.component]
-  }
-
-  variable "component-vars" {
-    value = lookup(var.component-all-config, "vars", {})
-  }
-
-  variable "stack-globals" {
-    value = lookup(conf.stack-config, "globals", {})
-  }
-
   variable "import-paths" {
     value = try(conf.stack-config.import, null) != null ? conf.stack-config.import : []
   }
 
   variable "imports" {
     value = merge(
-      [
-        for p in var.import-paths : {
-          for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
-        }
-      ]
-      ...)
+    [
+      for p in var.import-paths : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
   }
 
-  variable "imports-stack-globals-component-vars" {
-    value = merge(var.imports, var.stack-globals, var.component-vars)
+  variable "components-config" {
+    value = conf.stack-config.components
   }
 
-  variable "imports-stack-globals-component-all-config" {
-    value = merge(var.imports, var.stack-globals, var.component-all-config)
+  variable "components-globals" {
+    value = lookup(var.components-config, "globals", {})
+  }
+
+  variable "component-config" {
+    value = var.components-config.terraform[param.component]
+  }
+
+  variable "component-vars" {
+    value = lookup(var.component-config, "vars", {})
+  }
+
+  variable "imports-components-globals-component-vars" {
+    value = merge(var.imports, var.components-globals, var.component-vars)
+  }
+
+  variable "imports-components-globals-component-config" {
+    value = merge(var.imports, var.components-globals, var.component-config)
   }
 
   exec {
     command = "echo"
     args = [
       opt.merge ?
-        (opt.format == "json" ? jsonencode(var.imports-stack-globals-component-vars) : yamlencode(var.imports-stack-globals-component-vars))
+        (opt.format == "json" ? jsonencode(var.imports-components-globals-component-vars) : yamlencode(var.imports-components-globals-component-vars))
         :
-        (opt.format == "json" ? jsonencode(var.imports-stack-globals-component-all-config) : yamlencode(var.imports-stack-globals-component-all-config))
+        (opt.format == "json" ? jsonencode(var.imports-components-globals-component-config) : yamlencode(var.imports-components-globals-component-config))
     ]
   }
 }
