@@ -9,7 +9,7 @@ components:
   terraform:
     vpc:
       command: "/usr/bin/terraform-0.13"
-      terraform_backend_assume_role: true
+      terraform_backend_assume_role: false
       vars:
         cidr_block: "10.100.0.0/18"
         # ...

@@ -75,7 +75,14 @@ job "terraform backend S3 generate component" {
   }
 
   variable "rendered-template" {
-    value = replace(var.template-file, "$${namespace}", var.stack-config.namespace)
+    value = replace(replace(replace(replace(replace(replace(
+              var.template-file,
+              "{namespace}", var.stack-config.namespace),
+              "{environment}", var.stack-config.terraform_backend_environment),
+              "{stage}", var.stack-config.terraform_backend_stage),
+              "{workspace_key_prefix}", param.component),
+              "{region}", var.stack-config.region),
+              "{role_arn}", var.assume-role-arn)
   }
 
   exec {
