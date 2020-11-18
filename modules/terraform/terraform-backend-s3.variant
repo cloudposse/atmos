@@ -70,28 +70,19 @@ job "terraform backend S3 generate component" {
     ) : null
   }
 
-  variable "params" {
-    value = {
-      namespace            = var.stack-config.namespace
-      environment          = var.stack-config.terraform_backend_environment
-      stage                = var.stack-config.terraform_backend_stage
-      role_arn             = var.assume_role_arn
-      workspace_key_prefix = param.component
-    }
-  }
-
   variable "template_file" {
     value = file("${opt.config-dir}/terraform-backend-s3-template.json")
   }
 
-  variable "rendered_template" {
-    value = replace(var.template_file, "${namespace}", var.stack-config.namespace)
-  }
+  #variable "rendered_template" {
+    #value = replace(var.template_file, "${namespace}", var.stack-config.namespace)
+  #}
 
   exec {
     command = "echo"
     args = [
-      var.rendered_template
+      # var.rendered_template
+      jsondecode(var.stack-config)
     ]
   }
 
