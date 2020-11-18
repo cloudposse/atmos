@@ -30,9 +30,9 @@ job "terraform apply" {
 
   step "terraform workspace" {
     run "terraform workspace" {
-      project     = param.component
-      command     = opt.command
-      stack       = opt.stack
+      component = param.component
+      command   = opt.command
+      stack     = opt.stack
     }
   }
 
@@ -51,7 +51,7 @@ job "terraform apply" {
 
   step "apply clean" {
     run "terraform shell" {
-      project = param.component
+      component = param.component
 
       commands = [
         "rm",

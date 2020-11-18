@@ -31,8 +31,8 @@ job "terraform workspace" {
   }
 
   run "terraform shell" {
-    project = param.component
-    commands = [
+    component = param.component
+    commands  = [
       "${conf.terraform-command.command} workspace select ${opt.stack} || ${conf.terraform-command.command} workspace new ${opt.stack}"
     ]
   }
