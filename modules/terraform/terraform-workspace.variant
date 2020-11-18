@@ -12,42 +12,10 @@ job "terraform workspace" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
-  option "environment" {
-    type        = string
-    description = "Environment"
-    short       = "e"
-    default     = ""
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-    short       = "s"
-    default     = ""
-  }
-
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "stack" {
     type        = string
     description = "Stack"
-    short       = "st"
-    default     = ""
-  }
-
-  # Find settings
-  config "env-config" {
-    source job {
-      name = "terraform config"
-      args = {
-        component   = param.component
-        environment = opt.environment
-        stage       = opt.stage
-        stack       = opt.stack
-        format      = "json"
-        merge       = true
-      }
-    }
+    short       = "s"
   }
 
   # Find Terraform binary to execute
@@ -56,8 +24,6 @@ job "terraform workspace" {
       name = "terraform-command"
       args = {
         component   = param.component
-        environment = opt.environment
-        stage       = opt.stage
         stack       = opt.stack
         command     = opt.command
       }
@@ -67,7 +33,7 @@ job "terraform workspace" {
   run "terraform shell" {
     project = param.component
     commands = [
-      "${conf.terraform-command.command} workspace select ${conf.env-config.environment}-${conf.env-config.stage} || ${conf.terraform-command.command} workspace new ${conf.env-config.environment}-${conf.env-config.stage}"
+      "${conf.terraform-command.command} workspace select ${opt.stack} || ${conf.terraform-command.command} workspace new ${opt.stack}"
     ]
   }
 }

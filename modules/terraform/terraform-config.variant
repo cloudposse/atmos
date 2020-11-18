@@ -10,27 +10,10 @@ job "terraform config" {
     description = "Component"
   }
 
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
-  option "environment" {
-    type        = string
-    description = "Environment"
-    short       = "e"
-    default     = ""
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-    short       = "s"
-    default     = ""
-  }
-
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "stack" {
     type        = string
     description = "Stack"
-    short       = "st"
-    default     = ""
+    short       = "s"
   }
 
   option "format" {
@@ -47,7 +30,7 @@ job "terraform config" {
 
   config "stack-config" {
     source file {
-      path = opt.stack != "" && opt.stack != null ? "${opt.config-dir}/${opt.stack}.yaml" : "${opt.config-dir}/${opt.environment}-${opt.stage}.yaml"
+      path = "${opt.config-dir}/${opt.stack}.yaml"
     }
   }
 

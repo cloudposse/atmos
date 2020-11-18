@@ -21,27 +21,10 @@ job "terraform subcommand" {
     description = "Component"
   }
 
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
-  option "environment" {
-    type        = string
-    description = "Environment"
-    short       = "e"
-    default     = ""
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-    short       = "s"
-    default     = ""
-  }
-
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "stack" {
     type        = string
     description = "Stack"
-    short       = "st"
-    default     = ""
+    short       = "s"
   }
 
   option "args" {
@@ -62,8 +45,6 @@ job "terraform subcommand" {
       name = "terraform-command"
       args = {
         component   = param.component
-        environment = opt.environment
-        stage       = opt.stage
         stack       = opt.stack
         command     = opt.command
       }
@@ -88,7 +69,7 @@ job "terraform subcommand" {
 }
 
 job "terraform shell" {
-  description = "Run a terraform subcommand in a shell"
+  description = "Run terraform commands in a shell"
   private     = true
 
   parameter "component" {
@@ -122,27 +103,10 @@ job "terraform write varfile" {
     description = "Component"
   }
 
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
-  option "environment" {
-    type        = string
-    description = "Environment"
-    short       = "e"
-    default     = ""
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-    short       = "s"
-    default     = ""
-  }
-
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "stack" {
     type        = string
     description = "Stack"
-    short       = "st"
-    default     = ""
+    short       = "s"
   }
 
   config "env-config" {
@@ -150,8 +114,6 @@ job "terraform write varfile" {
       name = "terraform config"
       args = {
         component   = param.component
-        environment = opt.environment
-        stage       = opt.stage
         stack       = opt.stack
         format      = "json"
         merge       = true
@@ -173,7 +135,7 @@ job "terraform write varfile" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.terraform-dir}/${param.component}/${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json"
+    file = "${opt.terraform-dir}/${param.component}/${opt.stack}.terraform.tfvars.json"
   }
 }
 
@@ -182,7 +144,7 @@ job "terraform provider override" {
   private     = true
 
   option "role" {
-    type = string
+    type        = string
     description = "Role to assume"
   }
 
@@ -254,25 +216,10 @@ job "terraform-command" {
     description = "Component"
   }
 
-  option "environment" {
-    type        = string
-    description = "Environment"
-    short       = "e"
-    default     = ""
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-    short       = "s"
-    default     = ""
-  }
-
   option "stack" {
     type        = string
     description = "Stack"
-    short       = "st"
-    default     = ""
+    short       = "s"
   }
 
   option "command" {
@@ -286,8 +233,6 @@ job "terraform-command" {
       name = "terraform config"
       args = {
         component   = param.component
-        environment = opt.environment
-        stage       = opt.stage
         stack       = opt.stack
         format      = "json"
         merge       = false

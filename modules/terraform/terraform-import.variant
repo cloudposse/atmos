@@ -9,12 +9,12 @@ job "terraform import" {
 
   parameter "addr" {
     type        = string
-    description = "addr specifies the address to import the resource to"
+    description = "Specifies the address to import the resource to"
   }
 
   parameter "resid" {
     type        = string
-    description = "resid specifies the ID of the resource to import"
+    description = "Specifies the ID of the resource to import"
   }
 
   option "command" {
@@ -23,27 +23,10 @@ job "terraform import" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
-  option "environment" {
-    type        = string
-    description = "Environment"
-    short       = "e"
-    default     = ""
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-    short       = "s"
-    default     = ""
-  }
-
-  # Use either `environment-stage` or `stack` to specify the configuration file for the component
   option "stack" {
     type        = string
     description = "Stack"
-    short       = "st"
-    default     = ""
+    short       = "s"
   }
 
   option "role" {
@@ -57,8 +40,6 @@ job "terraform import" {
       name = "terraform config"
       args = {
         component   = param.component
-        environment = opt.environment
-        stage       = opt.stage
         stack       = opt.stack
         format      = "json"
         merge       = true
@@ -70,7 +51,7 @@ job "terraform import" {
     type  = list(string)
     value = [
       "-var-file",
-      "${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json",
+      "${opt.stack}.terraform.tfvars.json",
       param.addr,
       param.resid
     ]
