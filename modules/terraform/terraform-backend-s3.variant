@@ -102,6 +102,6 @@ job "terraform backend S3 generate component" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.terraform-dir}/${param.component}/backend.s3.tf.json"
+    file = "${opt.terraform-dir}/${param.component}/backend.tf.json"
   }
 }
