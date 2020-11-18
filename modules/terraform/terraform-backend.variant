@@ -2,7 +2,7 @@
 # vim: filetype=hcl
 
 job "terraform backend generate" {
-  description = "Generate tfstate config for all components"
+  description = "Generate Terraform backend config for all components"
 
   variable "component-list" {
     value = distinct([for file in fileset("${opt.terraform-dir}/", "*/*.tf") : basename(dirname(file))])
@@ -19,7 +19,7 @@ job "terraform backend generate" {
 
 job "terraform backend generate component" {
   concurrency = 1
-  description = "Generate tfstate config for a component"
+  description = "Generate Terraform backend config for a component"
 
   parameter "component" {
     type        = string
