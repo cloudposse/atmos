@@ -19,8 +19,7 @@ job "terraform deploy" {
   option "stack" {
     type        = string
     description = "Stack"
-    short       = "st"
-    default     = ""
+    short       = "s"
   }
 
   option "args" {
