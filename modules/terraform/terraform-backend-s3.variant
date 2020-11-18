@@ -52,7 +52,7 @@ job "terraform backend S3 generate component" {
   }
 
   variable "stack-config" {
-    value = jsondecode(conf.stack-config)
+    value = conf.stack-config
   }
 
   variable "terraform_backend_assume_role" {
