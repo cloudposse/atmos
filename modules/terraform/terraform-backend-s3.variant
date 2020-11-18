@@ -70,19 +70,18 @@ job "terraform backend S3 generate component" {
     ) : null
   }
 
-  variable "template_file" {
+  variable "template-file" {
     value = file("${opt.config-dir}/terraform-backend-s3-template.json")
   }
 
-  #variable "rendered_template" {
-    #value = replace(var.template_file, "${namespace}", var.stack-config.namespace)
-  #}
+  variable "rendered-template" {
+    value = replace(var.template-file, "${namespace}", lookup(var.stack-config, "namespace"))
+  }
 
   exec {
     command = "echo"
     args = [
-      # var.rendered_template
-      jsonencode(var.stack-config)
+      var.rendered-template
     ]
   }
 
