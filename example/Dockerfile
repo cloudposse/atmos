@@ -63,6 +63,9 @@ RUN apk add saml2aws@cloudposse
 # Install assume-role
 RUN apk add assume-role@cloudposse
 
+# Install vendir
+RUN apk add vendir@cloudposse
+
 # Install variant2
 RUN apk add variant2@cloudposse
 RUN update-alternatives --set variant /usr/share/variant/2/bin/variant
