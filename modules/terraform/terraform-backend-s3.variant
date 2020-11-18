@@ -14,7 +14,7 @@ job "terraform backend S3 generate" {
     value = distinct([for file in fileset("${opt.terraform-dir}/", "*/*.tf") : basename(dirname(file))])
   }
 
-  depends_on "terraform backend generate component" {
+  depends_on "terraform backend S3 generate component" {
     items = var.component-list
 
     args  = {
@@ -67,28 +67,32 @@ job "terraform backend S3 generate component" {
           var.stack-config.terraform_backend_role_environment,
           var.stack-config.terraform_backend_role_stage
       )
-    ) : ""
+    ) : null
   }
 
-  variable "template-file" {
-    value = file("${opt.config-dir}/terraform-backend-s3-template.json")
-  }
-
-  variable "rendered-template" {
-    value = replace(replace(replace(replace(replace(replace(
-              var.template-file,
-              "{namespace}", var.stack-config.namespace),
-              "{environment}", var.stack-config.terraform_backend_environment),
-              "{stage}", var.stack-config.terraform_backend_stage),
-              "{workspace_key_prefix}", param.component),
-              "{region}", var.stack-config.region),
-              "{role_arn}", var.assume-role-arn)
+  variable "backend" {
+    value = {
+      terraform = {
+        backend = {
+          s3 = {
+            acl = "bucket-owner-full-control",
+            bucket = "${var.stack-config.namespace}-${var.stack-config.terraform_backend_environment}-${var.stack-config.terraform_backend_stage}-tfstate",
+            dynamodb_table = "${var.stack-config.namespace}-${var.stack-config.terraform_backend_environment}-${var.stack-config.terraform_backend_stage}-tfstate-lock",
+            encrypt = true,
+            key = "terraform.tfstate",
+            region = "${var.stack-config.region}",
+            role_arn = "${var.assume-role-arn}",
+            workspace_key_prefix = "${param.component}"
+          }
+        }
+      }
+    }
   }
 
   exec {
     command = "echo"
     args = [
-      var.rendered-template
+      jsonencode(var.backend)
     ]
   }
 
