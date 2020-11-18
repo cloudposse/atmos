@@ -43,7 +43,7 @@ job "terraform config" {
   }
 
   variable "stack-globals" {
-    value = lookup(var.stack-config, "globals", {})
+    value = lookup(conf.stack-config, "globals", {})
   }
 
   variable "import-paths" {
