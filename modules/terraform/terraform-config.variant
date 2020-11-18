@@ -72,15 +72,21 @@ job "terraform config" {
     }
   }
 
+  variable "imports-globals-vars" {
+    value = merge(conf.imports, conf.stack-config.components.globals, var.component-vars)
+  }
+
+  variable "imports-globals-config" {
+    value = merge(conf.imports, conf.stack-config.components.globals, var.component-config)
+  }
+
   exec {
     command = "echo"
     args = [
       opt.merge ?
-        (opt.format == "json" ?  jsonencode(merge(conf.imports, conf.stack-config.components.globals, var.component-vars)) :
-                                 yamlencode(merge(conf.imports, conf.stack-config.components.globals, var.component-vars)))
+        (opt.format == "json" ? jsonencode(var.imports-globals-vars) : yamlencode(var.imports-globals-vars))
         :
-        (opt.format == "json" ?  jsonencode(merge(conf.imports, conf.stack-config.components.globals, var.component-config)) :
-                                 yamlencode(merge(conf.imports, conf.stack-config.components.globals, var.component-config)))
+        (opt.format == "json" ? jsonencode(var.imports-globals-config) : yamlencode(var.imports-globals-config))
     ]
   }
 }
