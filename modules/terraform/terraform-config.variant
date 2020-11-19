@@ -3,7 +3,7 @@
 
 job "terraform config" {
   concurrency = 1
-  description = "Generate config in YAML or JSON format"
+  description = "Generate terraform stack config in YAML or JSON format"
 
   parameter "component" {
     type        = string
@@ -29,57 +29,13 @@ job "terraform config" {
     description = "Whether to merge global and component configs into a flat map"
   }
 
-  config "stack-config" {
-    source file {
-      path = "${opt.config-dir}/${opt.stack}.yaml"
+  step "stack config" {
+    run "stack config" {
+      type      = "terraform"
+      component = param.component
+      stack     = opt.stack
+      format    = opt.format
+      merge     = opt.merge
     }
-  }
-
-  variable "import-paths" {
-    value = try(conf.stack-config.import, null) != null ? conf.stack-config.import : []
-  }
-
-  variable "imports" {
-    value = merge(
-    [
-      for p in var.import-paths : {
-        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
-      }
-    ]
-    ...)
-  }
-
-  variable "components-config" {
-    value = conf.stack-config.components
-  }
-
-  variable "components-globals" {
-    value = lookup(var.components-config, "globals", {})
-  }
-
-  variable "component-config" {
-    value = try(var.components-config.terraform[param.component], {})
-  }
-
-  variable "component-vars" {
-    value = lookup(var.component-config, "vars", {})
-  }
-
-  variable "imports-components-globals-component-vars" {
-    value = merge(var.imports, var.components-globals, var.component-vars)
-  }
-
-  variable "imports-components-globals-component-config" {
-    value = merge(var.imports, var.components-globals, var.component-config)
-  }
-
-  exec {
-    command = "echo"
-    args = [
-      opt.merge ?
-        (opt.format == "json" ? jsonencode(var.imports-components-globals-component-vars) : yamlencode(var.imports-components-globals-component-vars))
-        :
-        (opt.format == "json" ? jsonencode(var.imports-components-globals-component-config) : yamlencode(var.imports-components-globals-component-config))
-    ]
   }
 }
