@@ -30,22 +30,34 @@ job "terraform backend generate component" {
     value = yamldecode(file("${opt.config-dir}/terraform-backend.yaml"))
   }
 
-  variable "terraform-backend" {
-    value = var.backend-config.terraform
+  variable "backend-type" {
+    value = var.backend-config.type
   }
 
-  variable "component-backend-overrides" {
-    value = var.backend-config.components.terraform[opt.component]
+  variable "terraform-backend-map" {
+    value = var.backend-config.terraform.backend[var.backend-type]
   }
 
-  variable "final-backend" {
-    value = merge(var.terraform-backend, var.component-backend-overrides)
+  variable "component-backend-map" {
+    value = var.backend-config.components.terraform[opt.component].backend[var.backend-type]
+  }
+
+  variable "final-backend-map" {
+    value = merge(var.terraform-backend-map, var.component-backend-map)
   }
 
   exec {
     command = "echo"
     args = [
-      jsonencode({ "terraform": var.final-backend })
+      jsonencode(
+        {
+          "terraform": {
+            "backend": {
+              "${var.backend-type}": var.final-backend-map
+            }
+          }
+        }
+      )
     ]
   }
 

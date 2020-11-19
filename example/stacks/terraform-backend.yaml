@@ -1,3 +1,5 @@
+type: s3
+
 terraform:
   backend:
     s3:
