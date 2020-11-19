@@ -20,24 +20,40 @@ components:
     account-map:
       backend:
         s3:
+          workspace_key_prefix: "account-map"
           role_arn: null
 
     account:
       backend:
         s3:
+          workspace_key_prefix: "account"
           role_arn: null
 
     account-settings:
       backend:
         s3:
+          workspace_key_prefix: "account-settings"
           role_arn: null
 
     iam-delegated-roles:
       backend:
         s3:
+          workspace_key_prefix: "iam-delegated-roles"
           role_arn: null
 
     iam-primary-roles:
       backend:
         s3:
+          workspace_key_prefix: "iam-primary-roles"
           role_arn: null
+
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: "aaaaaaa"
+          role_arn: null
+
+    eks:
+      backend:
+        s3:
+          workspace_key_prefix: "eks"
