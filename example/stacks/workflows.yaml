@@ -4,7 +4,7 @@ workflows:
     steps:
       - job: terraform deploy vpc
       - job: terraform deploy eks
-      - job: helmfile deploy ingress-nginx
+      - job: helmfile deploy nginx-ingress
 
   plan-all:
     description: Run 'terraform plan' and 'helmfile diff' on all components
@@ -13,17 +13,17 @@ workflows:
         stack: ue2-dev
       - job: terraform plan eks
         stack: ue2-dev
-      - job: helmfile diff ingress-nginx
+      - job: helmfile diff nginx-ingress
         stack: ue2-dev
       - job: terraform plan vpc
         stack: ue2-staging
       - job: terraform plan eks
         stack: ue2-staging
-      - job: helmfile diff ingress-nginx
+      - job: helmfile diff nginx-ingress
         stack: ue2-staging
       - job: terraform plan vpc
         stack: ue2-prod
       - job: terraform plan eks
         stack: ue2-prod
-      - job: helmfile diff ingress-nginx
+      - job: helmfile diff nginx-ingress
         stack: ue2-prod

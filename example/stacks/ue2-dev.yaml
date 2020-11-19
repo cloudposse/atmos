@@ -33,4 +33,4 @@ workflows:
     steps:
       - job: terraform deploy vpc
       - job: terraform deploy eks
-      - job: helmfile deploy ingress-nginx
+      - job: helmfile deploy nginx-ingress
