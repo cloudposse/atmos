@@ -1,9 +1,10 @@
 #!/usr/bin/env variant
 # vim: filetype=hcl
 
-job "helmfile config" {
+job "stack config" {
   concurrency = 1
-  description = "Generate config in YAML or JSON format"
+  description = "Generate stack config in YAML or JSON format"
+  private     = true
 
   parameter "component" {
     type        = string
@@ -15,6 +16,11 @@ job "helmfile config" {
     type        = string
     description = "Stack"
     short       = "s"
+  }
+
+  option "type" {
+    type        = string
+    description = "Type (terraform, helmfile)"
   }
 
   option "format" {
@@ -58,7 +64,7 @@ job "helmfile config" {
   }
 
   variable "component-config" {
-    value = try(var.components-config.helmfile[param.component], {})
+    value = try(var.components-config[opt.type][param.component], {})
   }
 
   variable "component-vars" {
