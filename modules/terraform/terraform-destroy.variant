@@ -3,11 +3,11 @@
 
 job "terraform destroy" {
   concurrency = 1
-  description = "Run 'terraform destroy' for a project"
+  description = "Run 'terraform destroy'"
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Terraform project"
+    description = "Component"
   }
 
   option "command" {
@@ -16,16 +16,9 @@ job "terraform destroy" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -39,7 +32,7 @@ job "terraform destroy" {
     type  = list(string)
     value = [
       "-var-file",
-      "${opt.environment}-${opt.stage}.terraform.tfvars.json",
+      "${opt.stack}-${param.component}.terraform.tfvars.json",
       "-auto-approve"
     ]
   }
@@ -49,63 +42,46 @@ job "terraform destroy" {
     value = concat(var.default-args, compact(split(" ", opt.args)))
   }
 
-  config "env-config" {
-    source job {
-      name = "terraform config"
-      args = {
-        project     = param.project
-        environment = opt.environment
-        stage       = opt.stage
-        format      = "json"
-        merge       = true
-      }
-    }
-  }
-
   step "write varfile" {
     run "terraform write varfile" {
-      project     = param.project
-      environment = opt.environment
-      stage       = opt.stage
+      component   = param.component
+      stack       = opt.stack
     }
   }
 
   step "destroy init" {
     run "terraform init" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
     }
   }
 
   step "destroy workspace" {
     run "terraform workspace" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
     }
   }
 
   step "destroy cmd" {
     run "terraform subcommand" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
       subcommand  = "destroy"
-      environment = opt.environment
-      stage       = opt.stage
       args        = var.args
     }
   }
 
   step "destroy clean" {
     run "terraform shell" {
-      project = param.project
+      component = param.component
 
       commands = [
         "rm",
-        "${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json"
+        "${opt.stack}-${param.component}.terraform.tfvars.json"
       ]
     }
   }

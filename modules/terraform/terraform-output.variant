@@ -3,11 +3,11 @@
 
 job "terraform output" {
   concurrency = 1
-  description = "Run 'terraform output' for a project"
+  description = "Run 'terraform output'"
 
-  parameter "project" {
-    description = "Terraform project"
+  parameter "component" {
     type        = string
+    description = "Component"
   }
 
   option "command" {
@@ -16,52 +16,41 @@ job "terraform output" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
   step "write varfile" {
     run "terraform write varfile" {
-      project     = param.project
-      environment = opt.environment
-      stage       = opt.stage
+      component   = param.component
+      stack       = opt.stack
     }
   }
 
   step "output init" {
     run "terraform init" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
     }
   }
 
   step "output workspace" {
     run "terraform workspace" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
     }
   }
 
   step "output cmd" {
     run "terraform subcommand" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
       subcommand  = "output"
-      environment = opt.environment
-      stage       = opt.stage
       args        = []
     }
   }

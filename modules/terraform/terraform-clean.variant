@@ -1,0 +1,30 @@
+job "terraform clean" {
+  description = "Remove terraform planfiles and .terraform folder"
+
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
+  step "clean shell" {
+    run "terraform shell" {
+      component = param.component
+
+      commands = [
+        "rm -rf .terraform *.planfile"
+      ]
+    }
+  }
+
+  step "clean log" {
+    run "echo" {
+      message = "Removed .terraform folder and all planfiles"
+    }
+  }
+}

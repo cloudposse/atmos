@@ -53,15 +53,18 @@ RUN apk add kubectl-1.17@cloudposse
 # Install terraform.
 # Install the latest 0.12 and 0.13 versions of terraform
 RUN apk add -u terraform-0.12@cloudposse terraform-0.13@cloudposse~=0.13.3
-# Set Terraform 0.12.x as the default `terraform`. You can still use
+# Set Terraform 0.13.x as the default `terraform`. You can still use
 # `terraform-0.12` or `terraform-0.13` to be explicit when needed.
-RUN update-alternatives --set terraform /usr/share/terraform/0.12/bin/terraform
+RUN update-alternatives --set terraform /usr/share/terraform/0.13/bin/terraform
 
 # https://github.com/Versent/saml2aws#linux
 RUN apk add saml2aws@cloudposse
 
 # Install assume-role
 RUN apk add assume-role@cloudposse
+
+# Install vendir
+RUN apk add vendir@cloudposse
 
 # Install variant2
 RUN apk add variant2@cloudposse
@@ -71,8 +74,7 @@ RUN update-alternatives --set variant /usr/share/variant/2/bin/variant
 ARG CLI_NAME
 COPY --from=cli /usr/cli/$CLI_NAME /usr/local/bin
 
-COPY projects/ /projects/
-COPY config/ /config/
+COPY stacks/ /stacks/
+COPY vendir.yml /vendir.yml
 
-
-WORKDIR /projects
+WORKDIR /

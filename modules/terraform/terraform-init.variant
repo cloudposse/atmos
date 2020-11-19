@@ -1,0 +1,28 @@
+job "terraform init" {
+  description = "Run `terraform init`"
+
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  run "terraform subcommand" {
+    component   = param.component
+    stack       = opt.stack
+    command     = opt.command
+    subcommand  = "init"
+    args        = []
+  }
+}

@@ -1,0 +1,39 @@
+job "terraform workspace" {
+  description = "Select or create a terraform workspace"
+
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
+  option "command" {
+    default     = "terraform"
+    type        = string
+    description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
+  }
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
+  # Find Terraform binary to execute
+  config "terraform-command" {
+    source job {
+      name = "terraform-command"
+      args = {
+        component   = param.component
+        stack       = opt.stack
+        command     = opt.command
+      }
+    }
+  }
+
+  run "terraform shell" {
+    component = param.component
+    commands  = [
+      "${conf.terraform-command.command} workspace select ${opt.stack} || ${conf.terraform-command.command} workspace new ${opt.stack}"
+    ]
+  }
+}

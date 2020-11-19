@@ -3,23 +3,17 @@
 
 job "helmfile config" {
   concurrency = 1
-  description = "Show config in YAML or JSON format for a helmfile project, environment and stage"
+  description = "Generate helmfile stack config in YAML or JSON format"
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Project"
-  }
-
-  option "environment" {
+    description = "Component"
     default     = ""
-    type        = string
-    description = "Environment"
-    short       = "e"
   }
 
-  option "stage" {
+  option "stack" {
     type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -32,93 +26,16 @@ job "helmfile config" {
   option "merge" {
     default     = true
     type        = bool
-    description = "Whether to merge global and project configs into a flat map"
+    description = "Whether to merge global and component configs into a flat map"
   }
 
-  config "global-config" {
-    source file {
-      path = "${opt.config-dir}/${opt.environment}-globals.yaml"
+  step "stack config" {
+    run "stack config" {
+      type      = "helmfile"
+      component = param.component
+      stack     = opt.stack
+      format    = opt.format
+      merge     = opt.merge
     }
-  }
-
-  config "env-config" {
-    source file {
-      path = "${opt.config-dir}/${opt.environment}-${opt.stage}.yaml"
-    }
-  }
-
-  variable "project-config" {
-    value = conf.env-config.projects.helmfile[param.project]
-  }
-
-  variable "vars" {
-    value = lookup(var.project-config, "vars", {})
-  }
-
-  exec {
-    command = "echo"
-    args = [
-      opt.merge ?
-      (opt.format == "json" ?  jsonencode(merge(conf.global-config, conf.env-config.projects.globals, var.vars)) :
-      yamlencode(merge(conf.global-config, conf.env-config.projects.globals, var.vars)))
-      :
-      (opt.format == "json" ?  jsonencode(merge(conf.global-config, conf.env-config.projects.globals, var.project-config)) :
-      yamlencode(merge(conf.global-config, conf.env-config.projects.globals, var.project-config)))
-    ]
-  }
-}
-
-# Find 'helmfile' binary to execute.
-# It could come from the config file 'command' attribute, or from the '--command=' command line argument.
-# Otherwise, the default 'helmfile' binary will be used (from the PATH)
-job "helmfile-command" {
-  concurrency = 1
-  description = "Find 'helmfile' binary to execute"
-  private     = true
-
-  parameter "project" {
-    type        = string
-    description = "Project"
-  }
-
-  option "environment" {
-    default     = ""
-    type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
-    short       = "s"
-  }
-
-  option "command" {
-    default     = "helmfile"
-    type        = string
-    description = "Command to execute, e.g. 'helmfile', or path to the command, e.g. '/usr/local/bin/helmfile'"
-  }
-
-  config "env-config" {
-    source job {
-      name = "helmfile config"
-      args = {
-        project     = param.project
-        environment = opt.environment
-        stage       = opt.stage
-        format      = "json"
-        merge       = false
-      }
-    }
-  }
-
-  variable "command" {
-    value = coalesce(lookup(conf.env-config, "command", null), opt.command)
-  }
-
-  exec {
-    command = "echo"
-    args    = list("command: ${var.command}")
   }
 }

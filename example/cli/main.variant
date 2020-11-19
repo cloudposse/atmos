@@ -1,15 +1,9 @@
 #!/usr/bin/env variant
 # vim: filetype=hcl
 
-option "region" {
-  default     = "us-east-2"
-  description = "AWS region"
-  type        = string
-}
-
 option "dry-run" {
   default     = false
-  description = "Disable execution of any commands and echo the commands instead"
+  description = "Disable execution of any commands and echo the command instead"
   type        = bool
 }
 
@@ -20,42 +14,43 @@ option "kubeconfig-path" {
 }
 
 option "kubeconfig-profile-pattern" {
-  default     = "eg-gbl-$$stage-helm"
+  default     = "{namespace}-{environment}-{stage}-helm"
   description = "AWS profile pattern for kubeconfig"
   type        = string
 }
 
 option "cluster-name-pattern" {
-  default     = "eg-$$environment-$$stage-eks-cluster"
+  default     = "{namespace}-{environment}-{stage}-eks-cluster"
   description = "Cluster name pattern"
   type        = string
 }
 
 option "terraform-dir" {
-  default     = "./"
-  description = "Terraform projects directory"
+  default     = "./components/terraform"
+  description = "Terraform components directory"
   type        = string
 }
 
 option "helmfile-dir" {
-  default     = "./helmfiles"
-  description = "Helmfile projects directory"
+  default     = "./components/helmfiles"
+  description = "Helmfile components directory"
   type        = string
 }
 
 option "config-dir" {
-  default     = "../config"
-  description = "Config directory"
+  default     = "./stacks"
+  description = "Stacks config directory"
   type        = string
 }
 
 option "vendor-config-path" {
-  default     = "../vendor/vendir.yml"
+  default     = "./vendir.yml"
   description = "Path to the vendor configuration file"
   type        = string
 }
 
 imports = [
+  "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
   "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",

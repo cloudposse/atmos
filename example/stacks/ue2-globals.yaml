@@ -1,3 +1,5 @@
-namespace: eg
 region: us-east-2
+
 environment: ue2
+
+account_id: ""

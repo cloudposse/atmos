@@ -3,11 +3,11 @@
 
 job "terraform plan" {
   concurrency = 1
-  description = "Run 'terraform plan' for a project"
+  description = "Run 'terraform plan'"
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Terraform project"
+    description = "Component"
   }
 
   option "command" {
@@ -16,16 +16,9 @@ job "terraform plan" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -35,26 +28,13 @@ job "terraform plan" {
     type        = string
   }
 
-  config "env-config" {
-    source job {
-      name = "terraform config"
-      args = {
-        project     = param.project
-        environment = opt.environment
-        stage       = opt.stage
-        format      = "json"
-        merge       = true
-      }
-    }
-  }
-
   variable "default-args" {
     type  = list(string)
     value = [
       "-out",
-      "${conf.env-config.environment}-${conf.env-config.stage}.planfile",
+      "${opt.stack}-${param.component}.planfile",
       "-var-file",
-      "${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json"
+      "${opt.stack}-${param.component}.terraform.tfvars.json"
     ]
   }
 
@@ -65,37 +45,33 @@ job "terraform plan" {
 
   step "write varfile" {
     run "terraform write varfile" {
-      project     = param.project
-      environment = opt.environment
-      stage       = opt.stage
+      component   = param.component
+      stack       = opt.stack
     }
   }
 
   step "plan init" {
     run "terraform init" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
     }
   }
 
   step "plan workspace" {
     run "terraform workspace" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
     }
   }
 
   step "plan cmd" {
     run "terraform subcommand" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
       subcommand  = "plan"
-      environment = opt.environment
-      stage       = opt.stage
       args        = var.args
     }
   }

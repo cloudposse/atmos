@@ -3,11 +3,11 @@
 
 job "terraform deploy" {
   concurrency = 1
-  description = "Deploy a terraform project by running 'terraform plan' and then `terraform apply` for the project"
+  description = "Deploy a terraform component by running 'terraform plan' and `terraform apply`"
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Terraform project"
+    description = "Component"
   }
 
   option "command" {
@@ -16,16 +16,9 @@ job "terraform deploy" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -37,19 +30,17 @@ job "terraform deploy" {
 
   step "deploy plan" {
     run "terraform plan" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
     }
   }
 
   step "deploy apply" {
     run "terraform apply" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
     }
   }
 }

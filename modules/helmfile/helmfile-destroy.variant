@@ -4,9 +4,9 @@
 job "helmfile destroy" {
   description = "Destroy the helmfile with the cluster"
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Project"
+    description = "Component"
   }
 
   option "command" {
@@ -15,16 +15,9 @@ job "helmfile destroy" {
     description = "Command to execute, e.g. 'helmfile', or path to the command, e.g. '/usr/local/bin/helmfile'"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -40,7 +33,7 @@ job "helmfile destroy" {
     type        = string
   }
 
-  option "namespace" {
+  option "kube-namespace" {
     default     = ""
     description = "kube namespace"
     short       = "n"
@@ -48,13 +41,12 @@ job "helmfile destroy" {
   }
 
   run "helmfile subcommand" {
-    command     = opt.command
-    subcommand  = "destroy"
-    project     = param.project
-    environment = opt.environment
-    stage       = opt.stage
-    args        = opt.args
-    sub-args     = opt.sub-args
-    namespace   = opt.namespace
+    command        = opt.command
+    subcommand     = "destroy"
+    component      = param.component
+    stack          = opt.stack
+    args           = opt.args
+    sub-args       = opt.sub-args
+    kube-namespace = opt.kube-namespace
   }
 }

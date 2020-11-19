@@ -10,16 +10,9 @@ job "helm list" {
     description = "Command to execute, e.g. 'helm', or path to the command, e.g. '/usr/bin/helm'"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -29,7 +22,7 @@ job "helm list" {
     type        = string
   }
 
-  option "namespace" {
+  option "kube-namespace" {
     default     = ""
     description = "kube namespace"
     short       = "n"
@@ -37,11 +30,10 @@ job "helm list" {
   }
 
   run "helm subcommand" {
-    command      = opt.command
-    subcommand   = "list"
-    environment  = opt.environment
-    stage        = opt.stage
-    namespace    = opt.namespace
-    args         = opt.args
+    command        = opt.command
+    subcommand     = "list"
+    stack          = opt.stack
+    kube-namespace = opt.kube-namespace
+    args           = opt.args
   }
 }

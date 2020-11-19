@@ -2,7 +2,7 @@
 # vim: filetype=hcl
 
 job "echo" {
-  description = "Echoes the param.message to the console"
+  description = "Echoes the message to the console"
   private     = true
 
   parameter "message" {
@@ -17,7 +17,7 @@ job "echo" {
 }
 
 job "shell" {
-  description = "Run a command in bash"
+  description = "Run a command in shell"
   private     = true
 
   option "dir" {

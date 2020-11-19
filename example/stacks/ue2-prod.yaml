@@ -1,20 +1,26 @@
-projects:
+import:
+  - globals
+  - ue2-globals
+
+components:
   globals:
     stage: prod
 
   terraform:
     vpc:
+      terraform_backend_assume_role: true
       vars:
         cidr_block: "10.102.0.0/18"
         # ...
 
     eks:
+      terraform_backend_assume_role: true
       command: "/usr/bin/terraform-0.13"
       vars:
         cluster_kubernetes_version: "1.17"
         # ...
 
   helmfile:
-    ingress-nginx:
+    nginx-ingress:
       vars:
         installed: true

@@ -6,9 +6,9 @@ job "helmfile subcommand" {
   description = "Run a helmfile subcommand"
   private     = true
 
-  parameter "project" {
-    description = "helmfile project"
+  parameter "component" {
     type        = string
+    description = "Component"
   }
 
   option "command" {
@@ -22,16 +22,9 @@ job "helmfile subcommand" {
     type        = string
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -53,23 +46,21 @@ job "helmfile subcommand" {
     type        = map(string)
   }
 
-  option "namespace" {
+  option "kube-namespace" {
     default     = ""
     description = "kube namespace"
     short       = "n"
     type        = string
   }
 
-  # Find project settings
-  config "env-config" {
+  config "stack-config" {
     source job {
       name = "helmfile config"
       args = {
-        project     = param.project
-        environment = opt.environment
-        stage       = opt.stage
-        format      = "json"
-        merge       = true
+        component = param.component
+        stack     = opt.stack
+        format    = "json"
+        merge     = true
       }
     }
   }
@@ -79,27 +70,26 @@ job "helmfile subcommand" {
     source job {
       name = "helmfile-command"
       args = {
-        project     = param.project
-        command     = opt.command
-        environment = opt.environment
-        stage       = opt.stage
+        component = param.component
+        command   = opt.command
+        stack     = opt.stack
       }
     }
   }
 
-  variable "namespace-arg" {
+  variable "kube-namespace-arg" {
     type = list(string)
-    value = opt.namespace != "" ? ["--namespace", opt.namespace] : []
+    value = opt.kube-namespace != "" ? ["--namespace", opt.kube-namespace] : []
   }
 
   variable "args" {
     type  = list(string)
     value = compact(concat(
-      var.namespace-arg,
+      var.kube-namespace-arg,
       split(" ", opt.args),
       [
         "--state-values-file",
-        "./${conf.env-config.environment}-${conf.env-config.stage}.helmfile.vars.yaml",
+        "./${opt.stack}.helmfile.vars.yaml",
         opt.subcommand
       ],
       split(" ", opt.sub-args)
@@ -107,21 +97,19 @@ job "helmfile subcommand" {
   }
 
   variable "aws-profile" {
-    value = can(conf.env-config.aws_profile) ? { AWS_PROFILE = conf.env-config.aws_profile} : {}
+    value = can(conf.stack-config.aws_profile) ? { AWS_PROFILE = conf.stack-config.aws_profile} : {}
   }
 
   step "helmfile kubeconfig" {
     run "aws eks kubeconfig" {
-      environment  = opt.environment
-      stage        = opt.stage
+      stack = opt.stack
     }
   }
 
   step "helmfile write varfile" {
     run "helmfile write varfile" {
-      project     = param.project
-      environment = opt.environment
-      stage       = opt.stage
+      component = param.component
+      stack     = opt.stack
     }
   }
 
@@ -129,15 +117,15 @@ job "helmfile subcommand" {
     run "shell" {
       command = conf.helmfile-command.command
       args    = var.args
-      dir     = "${opt.helmfile-dir}/${param.project}"
+      dir     = "${opt.helmfile-dir}/${param.component}"
       env     = merge(
         opt.env,
         {
-          KUBECONFIG  = "${opt.kubeconfig-path}/${conf.env-config.environment}-${conf.env-config.stage}-kubecfg",
-          ENVIRONMENT = opt.environment,
-          REGION      = opt.environment,
-          STAGE       = opt.stage,
-          CLUSTER_ID  = opt.stage,
+          KUBECONFIG  = "${opt.kubeconfig-path}/${opt.stack}-kubecfg",
+          STACK       = opt.stack
+          ENVIRONMENT = conf.stack-config.environment,
+          REGION      = conf.stack-config.region,
+          STAGE       = conf.stack-config.stage
         },
         var.aws-profile
       )
@@ -147,42 +135,34 @@ job "helmfile subcommand" {
   step "helmfile clean" {
     run "shell" {
       command = "rm"
-      args    = ["${opt.helmfile-dir}/${param.project}/${conf.env-config.environment}-${conf.env-config.stage}.helmfile.vars.yaml"]
+      args    = ["${opt.helmfile-dir}/${param.component}/${opt.stack}.helmfile.vars.yaml"]
     }
   }
 }
 
 job "helmfile write varfile" {
-  description = "Write varfile for a specific project, environment and stage"
+  description = "Write varfile for a component in a stack"
   private     = true
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Project"
+    description = "Component"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
-  config "env-config" {
+  config "stack-config" {
     source job {
       name = "helmfile config"
       args = {
-        project     = param.project
-        environment = opt.environment
-        stage       = opt.stage
-        format      = "yaml"
-        merge       = true
+        component = param.component
+        stack     = opt.stack
+        format    = "yaml"
+        merge     = true
       }
     }
   }
@@ -191,7 +171,7 @@ job "helmfile write varfile" {
     command = "echo"
 
     args = [
-      yamlencode(conf.env-config)
+      yamlencode(conf.stack-config)
     ]
   }
 
@@ -201,6 +181,6 @@ job "helmfile write varfile" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.helmfile-dir}/${param.project}/${conf.env-config.environment}-${conf.env-config.stage}.helmfile.vars.yaml"
+    file = "${opt.helmfile-dir}/${param.component}/${opt.stack}.helmfile.vars.yaml"
   }
 }

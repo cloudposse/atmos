@@ -3,11 +3,11 @@
 
 job "terraform apply" {
   concurrency = 1
-  description = "Run 'terraform apply' for a project"
+  description = "Run 'terraform apply'"
 
-  parameter "project" {
+  parameter "component" {
     type        = string
-    description = "Terraform project"
+    description = "Component"
   }
 
   option "command" {
@@ -16,16 +16,9 @@ job "terraform apply" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  option "environment" {
-    default     = ""
+  option "stack" {
     type        = string
-    description = "Environment"
-    short       = "e"
-  }
-
-  option "stage" {
-    type        = string
-    description = "Stage"
+    description = "Stack"
     short       = "s"
   }
 
@@ -35,50 +28,35 @@ job "terraform apply" {
     type        = string
   }
 
-  config "env-config" {
-    source job {
-      name = "terraform config"
-      args = {
-        project     = param.project
-        environment = opt.environment
-        stage       = opt.stage
-        format      = "json"
-        merge       = true
-      }
-    }
-  }
-
   step "terraform workspace" {
     run "terraform workspace" {
-      project     = param.project
-      command     = opt.command
-      environment = opt.environment
-      stage       = opt.stage
+      component = param.component
+      command   = opt.command
+      stack     = opt.stack
     }
   }
 
   step "apply cmd" {
     run "terraform subcommand" {
-      project     = param.project
+      component   = param.component
+      stack       = opt.stack
       command     = opt.command
       subcommand  = "apply"
-      environment = opt.environment
-      stage       = opt.stage
 
       args = [
-        "${conf.env-config.environment}-${conf.env-config.stage}.planfile"
+        "${opt.stack}-${param.component}.planfile"
       ]
     }
   }
 
   step "apply clean" {
     run "terraform shell" {
-      project = param.project
+      component = param.component
 
       commands = [
         "rm",
-        "${conf.env-config.environment}-${conf.env-config.stage}.planfile",
-        "${conf.env-config.environment}-${conf.env-config.stage}.terraform.tfvars.json"
+        "${opt.stack}-${param.component}.planfile",
+        "${opt.stack}-${param.component}.terraform.tfvars.json"
       ]
     }
   }
