@@ -1,0 +1,72 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "terraform backend generate" {
+  description = "Generate Terraform backend config for all components"
+
+  variable "component-list" {
+    value = distinct([for file in fileset("${opt.terraform-dir}/", "*/*.tf") : basename(dirname(file))])
+  }
+
+  depends_on "terraform backend generate component" {
+    items = var.component-list
+
+    args  = {
+      component = item
+    }
+  }
+}
+
+job "terraform backend generate component" {
+  concurrency = 1
+  description = "Generate Terraform backend config for a component"
+
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
+  variable "backend-config" {
+    value = yamldecode(file("${opt.config-dir}/terraform-backend.yaml"))
+  }
+
+  variable "backend-type" {
+    value = var.backend-config.type
+  }
+
+  variable "terraform-backend-map" {
+    value = var.backend-config.terraform.backend[var.backend-type]
+  }
+
+  variable "component-backend-map" {
+    value = var.backend-config.components.terraform[param.component].backend[var.backend-type]
+  }
+
+  variable "final-backend-map" {
+    value = merge(var.terraform-backend-map, var.component-backend-map)
+  }
+
+  exec {
+    command = "echo"
+    args = [
+      jsonencode(
+        {
+          "terraform": {
+            "backend": {
+              "${var.backend-type}": var.final-backend-map
+            }
+          }
+        }
+      )
+    ]
+  }
+
+  log {
+    collect {
+      condition = event.type == "exec"
+      format    = event.exec.args[0]
+    }
+
+    file = "${opt.terraform-dir}/${param.component}/backend.tf.json"
+  }
+}
