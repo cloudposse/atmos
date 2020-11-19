@@ -35,7 +35,7 @@ job "terraform backend generate component" {
   }
 
   variable "component-backend-overrides" {
-    value = try(var.backend-config.components.terraform[opt.component], {})
+    value = var.backend-config.components.terraform[opt.component]
   }
 
   variable "final-backend" {
