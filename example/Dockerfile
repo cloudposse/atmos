@@ -1,6 +1,8 @@
+ARG VERSION=0.139.0
+ARG OS=alpine
 ARG CLI_NAME=atmos
 
-FROM cloudposse/geodesic:0.137.0 as cli
+FROM cloudposse/geodesic:$VERSION-$OS as cli
 
 RUN apk add -u go variant2@cloudposse
 
@@ -25,7 +27,7 @@ RUN variant2 export binary $PWD $CLI_NAME
 RUN ./"$CLI_NAME" help
 
 
-FROM cloudposse/geodesic:0.137.0
+FROM cloudposse/geodesic:$VERSION-$OS
 
 # Geodesic message of the Day
 ENV MOTD_URL="https://geodesic.sh/motd"

@@ -1,0 +1,60 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "terraform backend generate" {
+  description = "Generate Terraform backend config for all components"
+
+  variable "component-list" {
+    value = distinct([for file in fileset("${opt.terraform-dir}/", "*/*.tf") : basename(dirname(file))])
+  }
+
+  depends_on "terraform backend generate component" {
+    items = var.component-list
+
+    args  = {
+      component = item
+    }
+  }
+}
+
+job "terraform backend generate component" {
+  concurrency = 1
+  description = "Generate Terraform backend config for a component"
+
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
+  variable "backend-config" {
+    value = yamldecode(file("${opt.config-dir}/terraform-backend.yaml"))
+  }
+
+  variable "terraform-backend" {
+    value = var.backend-config.terraform
+  }
+
+  variable "component-backend-overrides" {
+    value = try(var.backend-config.components.terraform[opt.component], {})
+  }
+
+  variable "final-backend" {
+    value = merge(var.terraform-backend, var.component-backend-overrides)
+  }
+
+  exec {
+    command = "echo"
+    args = [
+      jsonencode({ "terraform": var.final-backend })
+    ]
+  }
+
+  log {
+    collect {
+      condition = event.type == "exec"
+      format    = event.exec.args[0]
+    }
+
+    file = "${opt.terraform-dir}/${param.component}/backend.tf.json"
+  }
+}
