@@ -50,7 +50,7 @@ option "vendor-config-path" {
 }
 
 imports = [
-  "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=update-to-stacks"
+  "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=update-to-stacks",
   "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=update-to-stacks",
   "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=update-to-stacks",
   "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=update-to-stacks",
