@@ -27,13 +27,13 @@ option "cluster-name-pattern" {
 
 option "terraform-dir" {
   default     = "./components/terraform"
-  description = "Terraform projects directory"
+  description = "Terraform components directory"
   type        = string
 }
 
 option "helmfile-dir" {
   default     = "./components/helmfiles"
-  description = "Helmfile projects directory"
+  description = "Helmfile components directory"
   type        = string
 }
 
@@ -50,13 +50,13 @@ option "vendor-config-path" {
 }
 
 imports = [
-  "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=update-to-stacks",
-  "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=update-to-stacks",
-  "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=update-to-stacks",
-  "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=update-to-stacks",
-  "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=update-to-stacks",
-  "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=update-to-stacks",
-  "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=update-to-stacks",
-  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=update-to-stacks",
-  "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=update-to-stacks"
+  "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
 ]
