@@ -39,7 +39,7 @@ job "terraform backend generate component" {
   }
 
   variable "component-backend-map" {
-    value = var.backend-config.components.terraform[opt.component].backend[var.backend-type]
+    value = var.backend-config.components.terraform[param.component].backend[var.backend-type]
   }
 
   variable "final-backend-map" {
