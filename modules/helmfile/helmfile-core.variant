@@ -102,7 +102,8 @@ job "helmfile subcommand" {
 
   step "helmfile kubeconfig" {
     run "aws eks kubeconfig" {
-      stack = opt.stack
+      stack  = opt.stack
+      region = conf.stack-config.region
     }
   }
 
@@ -123,6 +124,7 @@ job "helmfile subcommand" {
         {
           KUBECONFIG  = "${opt.kubeconfig-path}/${opt.stack}-kubecfg",
           STACK       = opt.stack
+          NAMESPACE   = conf.stack-config.namespace,
           ENVIRONMENT = conf.stack-config.environment,
           REGION      = conf.stack-config.region,
           STAGE       = conf.stack-config.stage
@@ -182,5 +184,52 @@ job "helmfile write varfile" {
     }
 
     file = "${opt.helmfile-dir}/${param.component}/${opt.stack}.helmfile.vars.yaml"
+  }
+}
+
+# Find 'helmfile' binary to execute.
+# It could come from the config file 'command' attribute, or from the '--command=' command line argument.
+# Otherwise, the default 'helmfile' binary will be used (from the PATH)
+job "helmfile-command" {
+  concurrency = 1
+  description = "Find 'helmfile' binary to execute"
+  private     = true
+
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
+  option "command" {
+    default     = "helmfile"
+    type        = string
+    description = "Command to execute, e.g. 'helmfile', or path to the command, e.g. '/usr/local/bin/helmfile'"
+  }
+
+  config "stack-config" {
+    source job {
+      name = "helmfile config"
+      args = {
+        component   = param.component
+        stack       = opt.stack
+        format      = "json"
+        merge       = false
+      }
+    }
+  }
+
+  variable "command" {
+    value = coalesce(lookup(conf.stack-config, "command", null), opt.command)
+  }
+
+  exec {
+    command = "echo"
+    args    = list("command: ${var.command}")
   }
 }
