@@ -38,9 +38,22 @@ job "istioctl subcommand" {
     )
   }
 
+  config "stack-config" {
+    source job {
+      name = "helmfile config"
+      args = {
+        component = param.component
+        stack     = opt.stack
+        format    = "json"
+        merge     = true
+      }
+    }
+  }
+
   step "istioctl kubeconfig" {
     run "aws eks kubeconfig" {
-      stack = opt.stack
+      stack  = opt.stack
+      region = conf.stack-config.region
     }
   }
 

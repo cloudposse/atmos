@@ -102,7 +102,8 @@ job "helmfile subcommand" {
 
   step "helmfile kubeconfig" {
     run "aws eks kubeconfig" {
-      stack = opt.stack
+      stack  = opt.stack
+      region = conf.stack-config.region
     }
   }
 
@@ -123,6 +124,7 @@ job "helmfile subcommand" {
         {
           KUBECONFIG  = "${opt.kubeconfig-path}/${opt.stack}-kubecfg",
           STACK       = opt.stack
+          NAMESPACE   = conf.stack-config.namespace,
           ENVIRONMENT = conf.stack-config.environment,
           REGION      = conf.stack-config.region,
           STAGE       = conf.stack-config.stage
