@@ -13,9 +13,9 @@ option "kubeconfig-path" {
   type        = string
 }
 
-option "aws-profile-pattern" {
+option "helm-aws-profile-pattern" {
   default     = "{namespace}-{environment}-{stage}-helm"
-  description = "AWS profile pattern for kubeconfig, helm and helmfile"
+  description = "AWS profile pattern for helm and helmfile"
   type        = string
 }
 
