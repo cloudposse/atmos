@@ -100,9 +100,9 @@ job "helmfile subcommand" {
     value = {
       AWS_PROFILE = can(conf.stack-config.aws_profile) ? conf.stack-config.aws_profile : replace(replace(replace(
         opt.helm-aws-profile-pattern,
-        "{environment}", var.stack-config.environment),
-        "{stage}", var.stack-config.stage),
-        "{namespace}", var.stack-config.namespace)
+        "{environment}", conf.stack-config.environment),
+        "{stage}", conf.stack-config.stage),
+        "{namespace}", conf.stack-config.namespace)
     }
   }
 
