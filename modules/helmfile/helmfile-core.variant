@@ -97,7 +97,13 @@ job "helmfile subcommand" {
   }
 
   variable "aws-profile" {
-    value = can(conf.stack-config.aws_profile) ? { AWS_PROFILE = conf.stack-config.aws_profile} : {}
+    value = {
+      AWS_PROFILE = can(conf.stack-config.aws_profile) ? conf.stack-config.aws_profile : replace(replace(replace(
+        opt.helm-aws-profile-pattern,
+        "{environment}", conf.stack-config.environment),
+        "{stage}", conf.stack-config.stage),
+        "{namespace}", conf.stack-config.namespace)
+    }
   }
 
   step "helmfile kubeconfig" {
