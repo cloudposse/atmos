@@ -20,13 +20,13 @@ job "stack config" {
 
   option "type" {
     type        = string
-    description = "Type (terraform, helmfile)"
+    description = "Type (`terraform`, `helmfile`)"
   }
 
   option "format" {
     default     = "yaml"
     type        = string
-    description = "Format, YAML or JSON"
+    description = "Output format (`yaml`, `json`)"
   }
 
   option "merge" {
