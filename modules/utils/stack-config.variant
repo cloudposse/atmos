@@ -41,18 +41,83 @@ job "stack config" {
     }
   }
 
-  variable "import-paths" {
+  # 1st level of imports
+  variable "import-paths-1" {
     value = try(conf.stack-config.import, null) != null ? conf.stack-config.import : []
   }
 
-  variable "imports" {
+  variable "imports-1" {
     value = merge(
     [
-      for p in var.import-paths : {
+      for p in var.import-paths-1 : {
         for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
       }
     ]
     ...)
+  }
+
+  # 2nd level of imports
+  variable "import-paths-2" {
+    value = try(var.imports-1.import, null) != null ? var.imports-1.import : []
+  }
+
+  variable "imports-2" {
+    value = merge(
+    [
+      for p in var.import-paths-2 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  # 3rd level of imports
+  variable "import-paths-3" {
+    value = try(var.imports-2.import, null) != null ? var.imports-2.import : []
+  }
+
+  variable "imports-3" {
+    value = merge(
+    [
+      for p in var.import-paths-3 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  # 4th level of imports
+  variable "import-paths-4" {
+    value = try(var.imports-3.import, null) != null ? var.imports-3.import : []
+  }
+
+  variable "imports-4" {
+    value = merge(
+    [
+      for p in var.import-paths-4 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  # 5th level of imports
+  variable "import-paths-5" {
+    value = try(var.imports-4.import, null) != null ? var.imports-4.import : []
+  }
+
+  variable "imports-5" {
+    value = merge(
+    [
+      for p in var.import-paths-5 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  variable "all-imports" {
+    value = merge(var.imports-1, var.imports-2, var.imports-3, var.imports-4, var.imports-5)
   }
 
   variable "components-config" {
@@ -72,11 +137,11 @@ job "stack config" {
   }
 
   variable "imports-components-globals-component-vars" {
-    value = merge(var.imports, var.components-globals, var.component-vars)
+    value = merge(var.all-imports, var.components-globals, var.component-vars)
   }
 
   variable "imports-components-globals-component-config" {
-    value = merge(var.imports, var.components-globals, var.component-config)
+    value = merge(var.all-imports, var.components-globals, var.component-config)
   }
 
   exec {
