@@ -1,3 +1,6 @@
+import:
+  - globals
+
 region: us-east-2
 
 environment: ue2

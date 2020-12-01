@@ -1,5 +1,4 @@
 import:
-  - globals
   - ue2-globals
 
 components:
