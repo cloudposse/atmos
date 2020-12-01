@@ -1,1 +1,22 @@
-namespace: eg
+vars:
+  namespace: eg
+
+terraform:
+  vars:
+
+helmfile:
+  vars:
+
+components:
+  terraform:
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: "vpc"
+          role_arn: null
+    eks:
+      backend:
+        s3:
+          workspace_key_prefix: "eks"
+      vars:
+        cluster_kubernetes_version: "1.18"
