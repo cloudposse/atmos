@@ -1,6 +1,8 @@
 import:
   - ue2-globals
 
+vars:
+
 terraform:
   vars:
     stage: prod

@@ -118,16 +118,22 @@ job "stack config" {
 
   variable "vars" {
     value = merge(
+      try(var.imports-5["vars"], {}),
       try(var.imports-5[opt.type]["vars"], {}),
       try(var.imports-5.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-4["vars"], {}),
       try(var.imports-4[opt.type]["vars"], {}),
       try(var.imports-4.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-3["vars"], {}),
       try(var.imports-3[opt.type]["vars"], {}),
       try(var.imports-3.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-2["vars"], {}),
       try(var.imports-2[opt.type]["vars"], {}),
       try(var.imports-2.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-1["vars"], {}),
       try(var.imports-1[opt.type]["vars"], {}),
       try(var.imports-1.components[opt.type][param.component]["vars"], {}),
+      try(conf.stack-config["vars"], {}),
       try(conf.stack-config[opt.type]["vars"], {}),
       try(conf.stack-config.components[opt.type][param.component]["vars"], {})
     )

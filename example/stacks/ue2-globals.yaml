@@ -3,10 +3,10 @@ import:
 
 vars:
   region: us-east-2
+    environment: ue2
 
 terraform:
   vars:
-    environment: ue2
   remote_backend:
     type: s3 # s3, remote, vault, etc.
     backend:
