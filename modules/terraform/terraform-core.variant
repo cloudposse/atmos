@@ -235,7 +235,6 @@ job "terraform-command" {
         component   = param.component
         stack       = opt.stack
         format      = "json"
-        merge       = false
       }
     }
   }

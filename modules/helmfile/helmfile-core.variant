@@ -225,7 +225,6 @@ job "helmfile-command" {
         component   = param.component
         stack       = opt.stack
         format      = "json"
-        merge       = false
       }
     }
   }

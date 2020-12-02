@@ -116,38 +116,79 @@ job "stack config" {
     ...)
   }
 
-  variable "data" {
+  variable "vars" {
     value = merge(
       # Merge the global vars in the order of imports
-      try(var.imports-5[opt.config-type], {}),
-      try(var.imports-4[opt.config-type], {}),
-      try(var.imports-3[opt.config-type], {}),
-      try(var.imports-2[opt.config-type], {}),
-      try(var.imports-1[opt.config-type], {}),
-      try(conf.stack-config[opt.config-type], {}),
+      try(var.imports-5["vars"], {}),
+      try(var.imports-4["vars"], {}),
+      try(var.imports-3["vars"], {}),
+      try(var.imports-2["vars"], {}),
+      try(var.imports-1["vars"], {}),
+      try(conf.stack-config["vars"], {}),
 
       # Merge the component type vars (terraform, helmfile) in the order of imports
-      try(var.imports-5[opt.component-type][opt.config-type], {}),
-      try(var.imports-4[opt.component-type][opt.config-type], {}),
-      try(var.imports-3[opt.component-type][opt.config-type], {}),
-      try(var.imports-2[opt.component-type][opt.config-type], {}),
-      try(var.imports-1[opt.component-type][opt.config-type], {}),
-      try(conf.stack-config[opt.component-type][opt.config-type], {}),
+      try(var.imports-5[opt.component-type]["vars"], {}),
+      try(var.imports-4[opt.component-type]["vars"], {}),
+      try(var.imports-3[opt.component-type]["vars"], {}),
+      try(var.imports-2[opt.component-type]["vars"], {}),
+      try(var.imports-1[opt.component-type]["vars"], {}),
+      try(conf.stack-config[opt.component-type]["vars"], {}),
 
       # Merge the component vars in the order of imports
-      try(var.imports-5.components[opt.component-type][param.component][opt.config-type], {}),
-      try(var.imports-4.components[opt.component-type][param.component][opt.config-type], {}),
-      try(var.imports-3.components[opt.component-type][param.component][opt.config-type], {}),
-      try(var.imports-2.components[opt.component-type][param.component][opt.config-type], {}),
-      try(var.imports-1.components[opt.component-type][param.component][opt.config-type], {}),
-      try(conf.stack-config.components[opt.component-type][param.component][opt.config-type], {})
+      try(var.imports-5.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-4.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-3.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-2.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-1.components[opt.component-type][param.component]["vars"], {}),
+      try(conf.stack-config.components[opt.component-type][param.component]["vars"], {})
     )
+  }
+
+  variable "command" {
+    value = { command = coalesce(
+        try(var.imports-5["command"], null),
+        try(var.imports-4["command"], null),
+        try(var.imports-3["command"], null),
+        try(var.imports-2["command"], null),
+        try(var.imports-1["command"], null),
+        try(conf.stack-config["command"], null),
+
+        try(var.imports-5[opt.component-type]["command"], null),
+        try(var.imports-4[opt.component-type]["command"], null),
+        try(var.imports-3[opt.component-type]["command"], null),
+        try(var.imports-2[opt.component-type]["command"], null),
+        try(var.imports-1[opt.component-type]["command"], null),
+        try(conf.stack-config[opt.component-type]["command"], null),
+
+        try(var.imports-5.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-4.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-3.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-2.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-1.components[opt.component-type][param.component]["command"], null),
+        try(conf.stack-config.components[opt.component-type][param.component]["command"], null),
+
+        opt.component-type
+      )
+    }
+  }
+
+  variable "backend" {
+    value = {
+    }
+  }
+
+  variable "data" {
+    value = {
+      vars = var.vars,
+      command = var.command,
+      backend = var.backend
+    }
   }
 
   exec {
     command = "echo"
     args = [
-        (opt.format == "json" ? jsonencode(var.data) : yamlencode(var.data))
+        opt.format == "json" ? jsonencode(var.data[opt.config-type]) : yamlencode(var.data[opt.config-type])
     ]
   }
 }
