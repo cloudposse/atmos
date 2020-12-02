@@ -50,13 +50,13 @@ option "vendor-config-path" {
 }
 
 imports = [
-  "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=new-stacks-config",
-  "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=new-stacks-config",
-  "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=new-stacks-config",
-  "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=new-stacks-config",
-  "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=new-stacks-config",
-  "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=new-stacks-config",
-  "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=new-stacks-config",
-  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=new-stacks-config",
-  "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=new-stacks-config"
+  "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
+  "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
 ]

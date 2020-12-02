@@ -2,10 +2,10 @@ import:
   - ue2-globals
 
 vars:
+  stage: dev
 
 terraform:
   vars:
-    stage: dev
 
 helmfile:
   vars:

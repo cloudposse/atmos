@@ -101,9 +101,9 @@ job "helmfile subcommand" {
     value = {
       AWS_PROFILE = can(conf.stack-config.aws_profile) ? conf.stack-config.aws_profile : replace(replace(replace(
         opt.helm-aws-profile-pattern,
-        "{environment}", conf.stack-config.environment),
-        "{stage}", conf.stack-config.stage),
-        "{namespace}", conf.stack-config.namespace)
+        "{environment}", try(conf.stack-config.environment, "")),
+        "{stage}", try(conf.stack-config.stage, "")),
+        "{namespace}", try(conf.stack-config.namespace, ""))
     }
   }
 
@@ -130,10 +130,10 @@ job "helmfile subcommand" {
         {
           KUBECONFIG  = "${opt.kubeconfig-path}/${opt.stack}-kubecfg",
           STACK       = opt.stack
-          NAMESPACE   = conf.stack-config.namespace,
-          ENVIRONMENT = conf.stack-config.environment,
-          REGION      = conf.stack-config.region,
-          STAGE       = conf.stack-config.stage
+          NAMESPACE   = try(conf.stack-config.namespace, ""),
+          ENVIRONMENT = try(conf.stack-config.environment, ""),
+          REGION      = try(conf.stack-config.region, ""),
+          STAGE       = try(conf.stack-config.stage, "")
         },
         var.aws-profile
       )
