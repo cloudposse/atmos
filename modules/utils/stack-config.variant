@@ -118,23 +118,28 @@ job "stack config" {
 
   variable "vars" {
     value = merge(
+      # Merge the global vars in the order of imports
       try(var.imports-5["vars"], {}),
-      try(var.imports-5[opt.type]["vars"], {}),
-      try(var.imports-5.components[opt.type][param.component]["vars"], {}),
       try(var.imports-4["vars"], {}),
-      try(var.imports-4[opt.type]["vars"], {}),
-      try(var.imports-4.components[opt.type][param.component]["vars"], {}),
       try(var.imports-3["vars"], {}),
-      try(var.imports-3[opt.type]["vars"], {}),
-      try(var.imports-3.components[opt.type][param.component]["vars"], {}),
       try(var.imports-2["vars"], {}),
-      try(var.imports-2[opt.type]["vars"], {}),
-      try(var.imports-2.components[opt.type][param.component]["vars"], {}),
       try(var.imports-1["vars"], {}),
-      try(var.imports-1[opt.type]["vars"], {}),
-      try(var.imports-1.components[opt.type][param.component]["vars"], {}),
       try(conf.stack-config["vars"], {}),
+
+      # Merge the type vars (terraform, helmfile) in the order of imports
+      try(var.imports-5[opt.type]["vars"], {}),
+      try(var.imports-4[opt.type]["vars"], {}),
+      try(var.imports-3[opt.type]["vars"], {}),
+      try(var.imports-2[opt.type]["vars"], {}),
+      try(var.imports-1[opt.type]["vars"], {}),
       try(conf.stack-config[opt.type]["vars"], {}),
+
+      # Merge the component vars in the order of imports
+      try(var.imports-5.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-4.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-3.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-2.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-1.components[opt.type][param.component]["vars"], {}),
       try(conf.stack-config.components[opt.type][param.component]["vars"], {})
     )
   }

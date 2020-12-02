@@ -3,7 +3,7 @@ import:
 
 vars:
   region: us-east-2
-    environment: ue2
+  environment: ue2
 
 terraform:
   vars:
