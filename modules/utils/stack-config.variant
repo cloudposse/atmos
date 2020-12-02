@@ -4,7 +4,6 @@
 job "stack config" {
   concurrency = 1
   description = "Generate stack config in YAML or JSON format"
-  private     = true
 
   parameter "component" {
     type        = string
@@ -18,21 +17,22 @@ job "stack config" {
     short       = "s"
   }
 
-  option "type" {
+  option "component-type" {
     type        = string
-    description = "Type (`terraform`, `helmfile`)"
+    description = "Component type (`terraform`, `helmfile`)"
+    default     = "terraform"
+  }
+
+  option "config-type" {
+    type        = string
+    description = "Config type (`vars`, `backend`, `command`)"
+    default     = "vars"
   }
 
   option "format" {
     default     = "yaml"
     type        = string
     description = "Output format (`yaml`, `json`)"
-  }
-
-  option "merge" {
-    default     = true
-    type        = bool
-    description = "Whether to merge global and component configs into a flat map"
   }
 
   config "stack-config" {
@@ -116,41 +116,38 @@ job "stack config" {
     ...)
   }
 
-  variable "vars" {
+  variable "data" {
     value = merge(
       # Merge the global vars in the order of imports
-      try(var.imports-5["vars"], {}),
-      try(var.imports-4["vars"], {}),
-      try(var.imports-3["vars"], {}),
-      try(var.imports-2["vars"], {}),
-      try(var.imports-1["vars"], {}),
-      try(conf.stack-config["vars"], {}),
+      try(var.imports-5[opt.config-type], {}),
+      try(var.imports-4[opt.config-type], {}),
+      try(var.imports-3[opt.config-type], {}),
+      try(var.imports-2[opt.config-type], {}),
+      try(var.imports-1[opt.config-type], {}),
+      try(conf.stack-config[opt.config-type], {}),
 
-      # Merge the type vars (terraform, helmfile) in the order of imports
-      try(var.imports-5[opt.type]["vars"], {}),
-      try(var.imports-4[opt.type]["vars"], {}),
-      try(var.imports-3[opt.type]["vars"], {}),
-      try(var.imports-2[opt.type]["vars"], {}),
-      try(var.imports-1[opt.type]["vars"], {}),
-      try(conf.stack-config[opt.type]["vars"], {}),
+      # Merge the component type vars (terraform, helmfile) in the order of imports
+      try(var.imports-5[opt.component-type][opt.config-type], {}),
+      try(var.imports-4[opt.component-type][opt.config-type], {}),
+      try(var.imports-3[opt.component-type][opt.config-type], {}),
+      try(var.imports-2[opt.component-type][opt.config-type], {}),
+      try(var.imports-1[opt.component-type][opt.config-type], {}),
+      try(conf.stack-config[opt.component-type][opt.config-type], {}),
 
       # Merge the component vars in the order of imports
-      try(var.imports-5.components[opt.type][param.component]["vars"], {}),
-      try(var.imports-4.components[opt.type][param.component]["vars"], {}),
-      try(var.imports-3.components[opt.type][param.component]["vars"], {}),
-      try(var.imports-2.components[opt.type][param.component]["vars"], {}),
-      try(var.imports-1.components[opt.type][param.component]["vars"], {}),
-      try(conf.stack-config.components[opt.type][param.component]["vars"], {})
+      try(var.imports-5.components[opt.component-type][param.component][opt.config-type], {}),
+      try(var.imports-4.components[opt.component-type][param.component][opt.config-type], {}),
+      try(var.imports-3.components[opt.component-type][param.component][opt.config-type], {}),
+      try(var.imports-2.components[opt.component-type][param.component][opt.config-type], {}),
+      try(var.imports-1.components[opt.component-type][param.component][opt.config-type], {}),
+      try(conf.stack-config.components[opt.component-type][param.component][opt.config-type], {})
     )
   }
 
   exec {
     command = "echo"
     args = [
-      opt.merge ?
-        (opt.format == "json" ? jsonencode(var.vars) : yamlencode(var.vars))
-        :
-        (opt.format == "json" ? jsonencode(var.vars) : yamlencode(var.vars))
+        (opt.format == "json" ? jsonencode(var.data) : yamlencode(var.data))
     ]
   }
 }

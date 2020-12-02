@@ -13,6 +13,7 @@ helmfile:
 components:
   terraform:
     vpc:
+      command: "/usr/bin/terraform-0.13"
       vars:
         cidr_block: "10.102.0.0/18"
     eks:

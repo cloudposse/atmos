@@ -15,6 +15,7 @@ components:
           workspace_key_prefix: "vpc"
           role_arn: null
     eks:
+      command: "/usr/bin/terraform-0.13"
       backend:
         s3:
           workspace_key_prefix: "eks"
