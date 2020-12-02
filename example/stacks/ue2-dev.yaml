@@ -13,7 +13,6 @@ components:
     vpc:
       vars:
         cidr_block: "10.100.0.0/18"
-
     eks:
       vars:
 

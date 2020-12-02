@@ -116,41 +116,30 @@ job "stack config" {
     ...)
   }
 
-  variable "all-imports" {
-    value = merge(var.imports-1, var.imports-2, var.imports-3, var.imports-4, var.imports-5)
-  }
-
-  variable "components-config" {
-    value = conf.stack-config.components
-  }
-
-  variable "components-globals" {
-    value = lookup(var.components-config, "globals", {})
-  }
-
-  variable "component-config" {
-    value = try(var.components-config[opt.type][param.component], {})
-  }
-
-  variable "component-vars" {
-    value = lookup(var.component-config, "vars", {})
-  }
-
-  variable "imports-components-globals-component-vars" {
-    value = merge(var.all-imports, var.components-globals, var.component-vars)
-  }
-
-  variable "imports-components-globals-component-config" {
-    value = merge(var.all-imports, var.components-globals, var.component-config)
+  variable "vars" {
+    value = merge(
+      try(var.imports-5[opt.type]["vars"], {}),
+      try(var.imports-5.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-4[opt.type]["vars"], {}),
+      try(var.imports-4.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-3[opt.type]["vars"], {}),
+      try(var.imports-3.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-2[opt.type]["vars"], {}),
+      try(var.imports-2.components[opt.type][param.component]["vars"], {}),
+      try(var.imports-1[opt.type]["vars"], {}),
+      try(var.imports-1.components[opt.type][param.component]["vars"], {}),
+      try(conf.stack-config[opt.type]["vars"], {}),
+      try(conf.stack-config.components[opt.type][param.component]["vars"], {})
+    )
   }
 
   exec {
     command = "echo"
     args = [
       opt.merge ?
-        (opt.format == "json" ? jsonencode(var.imports-components-globals-component-vars) : yamlencode(var.imports-components-globals-component-vars))
+        (opt.format == "json" ? jsonencode(var.vars) : yamlencode(var.vars))
         :
-        (opt.format == "json" ? jsonencode(var.imports-components-globals-component-config) : yamlencode(var.imports-components-globals-component-config))
+        (opt.format == "json" ? jsonencode(var.vars) : yamlencode(var.vars))
     ]
   }
 }
