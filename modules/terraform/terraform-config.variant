@@ -31,11 +31,11 @@ job "terraform config" {
 
   step "stack config" {
     run "stack config" {
-      type      = "terraform"
-      component = param.component
-      stack     = opt.stack
-      format    = opt.format
-      merge     = opt.merge
+      component-type = "helmfile"
+      config-type    = "vars"
+      component      = param.component
+      stack          = opt.stack
+      format         = opt.format
     }
   }
 }

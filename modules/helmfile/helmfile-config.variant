@@ -31,11 +31,11 @@ job "helmfile config" {
 
   step "stack config" {
     run "stack config" {
-      type      = "helmfile"
-      component = param.component
-      stack     = opt.stack
-      format    = opt.format
-      merge     = opt.merge
+      component-type = "helmfile"
+      config-type    = "vars"
+      component      = param.component
+      stack          = opt.stack
+      format         = opt.format
     }
   }
 }
