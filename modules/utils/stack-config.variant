@@ -172,9 +172,56 @@ job "stack config" {
     }
   }
 
+  variable "backend-type" {
+    value = coalesce(
+      try(var.imports-5["remote_backend"], null),
+      try(var.imports-4["remote_backend"], null),
+      try(var.imports-3["remote_backend"], null),
+      try(var.imports-2["remote_backend"], null),
+      try(var.imports-1["remote_backend"], null),
+      try(conf.stack-config["remote_backend"], null),
+
+      try(var.imports-5[opt.component-type]["remote_backend"], null),
+      try(var.imports-4[opt.component-type]["remote_backend"], null),
+      try(var.imports-3[opt.component-type]["remote_backend"], null),
+      try(var.imports-2[opt.component-type]["remote_backend"], null),
+      try(var.imports-1[opt.component-type]["remote_backend"], null),
+      try(conf.stack-config[opt.component-type]["remote_backend"], null),
+
+      try(var.imports-5.components[opt.component-type][param.component]["remote_backend"], null),
+      try(var.imports-4.components[opt.component-type][param.component]["remote_backend"], null),
+      try(var.imports-3.components[opt.component-type][param.component]["remote_backend"], null),
+      try(var.imports-2.components[opt.component-type][param.component]["remote_backend"], null),
+      try(var.imports-1.components[opt.component-type][param.component]["remote_backend"], null),
+      try(conf.stack-config.components[opt.component-type][param.component]["remote_backend"], null),
+
+      "s3"
+    )
+  }
+
   variable "backend" {
-    value = {
-    }
+    value = merge(
+    try(var.imports-5["backend"][var.backend-type], {}),
+    try(var.imports-4["backend"][var.backend-type], {}),
+    try(var.imports-3["backend"][var.backend-type], {}),
+    try(var.imports-2["backend"][var.backend-type], {}),
+    try(var.imports-1["backend"][var.backend-type], {}),
+    try(conf.stack-config["backend"][var.backend-type], {}),
+
+    try(var.imports-5[opt.component-type]["backend"][var.backend-type], {}),
+    try(var.imports-4[opt.component-type]["backend"][var.backend-type], {}),
+    try(var.imports-3[opt.component-type]["backend"][var.backend-type], {}),
+    try(var.imports-2[opt.component-type]["backend"][var.backend-type], {}),
+    try(var.imports-1[opt.component-type]["backend"][var.backend-type], {}),
+    try(conf.stack-config[opt.component-type]["backend"][var.backend-type], {}),
+
+    try(var.imports-5.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+    try(var.imports-4.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+    try(var.imports-3.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+    try(var.imports-2.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+    try(var.imports-1.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+    try(conf.stack-config.components[opt.component-type][param.component]["backend"][var.backend-type], {})
+    )
   }
 
   variable "data" {

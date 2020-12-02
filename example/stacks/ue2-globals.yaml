@@ -7,6 +7,7 @@ vars:
 
 terraform:
   vars:
+  remote_backend: s3 # s3, remote, vault, etc.
   backend:
     s3:
       encrypt: true
@@ -16,6 +17,8 @@ terraform:
       role_arn: "arn:aws:iam::xxxxxxxx:role/eg-gbl-root-terraform"
       acl: "bucket-owner-full-control"
       region: "us-east-2"
+    remote:
+    vault:
 
 helmfile:
   vars:
