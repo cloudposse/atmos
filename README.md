@@ -1,4 +1,6 @@
+<!-- markdownlint-disable -->
 # atmos [![Latest Release](https://img.shields.io/github/release/cloudposse/atmos.svg)](https://github.com/cloudposse/atmos/releases/latest) [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
+<!-- markdownlint-restore -->
 
 [![README Header][readme_header_img]][readme_header_link]
 
@@ -63,7 +65,7 @@ We use it extensively for automating cloud infrastructure and [Kubernetes](https
 `atmos` includes workflows for dealing with:
 
    - Provisioning [Terraform](https://www.terraform.io/) components
-   - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfiles](https://github.com/roboll/helmfile)
+   - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfile](https://github.com/roboll/helmfile)
    - Executing [helm](https://helm.sh/) commands on Kubernetes clusters
    - Provisioning [istio](https://istio.io/) on Kubernetes clusters using [istio operator](https://istio.io/latest/blog/2019/introducing-istio-operator/) and helmfile
    - Executing [kubectl](https://kubernetes.io/docs/reference/kubectl/overview/) commands on Kubernetes clusters
@@ -149,7 +151,7 @@ Our recommended filesystem layout looks like this:
      │   │   ├── dns/
      │   │   └── sso/
      │   │
-     │   └── helmfiles/  # helmfiles are organized by chart
+     │   └── helmfile/  # helmfiles are organized by chart
      │       ├── cert-manager/helmfile.yaml
      │       └── external-dns/helmfile.yaml
      │  
@@ -181,7 +183,7 @@ In the example, we show how to create and provision (using the CLI) the followin
 
 ## CLI Configuration
 
-  The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI, including the location of the terraform components,
+  The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI, including the location of the Terraform components,
   helmfiles, and configurations.
 
   It's configured for that particular example project, but can be changed to reflect the desired project structure.
@@ -197,10 +199,10 @@ In the example we have the following:
     }
   ```
 
-  - The helmfiles are in the `components/helmfiles` folder - we set that global option in [main.variant](example/cli/main.variant)
+  - The helmfiles are in the `components/helmfile` folder - we set that global option in [main.variant](example/cli/main.variant)
   ```hcl
     option "helmfile-dir" {
-      default     = "./components/helmfiles"
+      default     = "./components/helmfile"
       description = "Helmfile components directory"
       type        = string
     }
@@ -300,7 +302,7 @@ The `components` section consists of the following:
 
    - `terraform` - defines variables for each Terraform component. Terraform component names correspond to the Terraform components in the [components](example/components) folder
 
-   - `helmfile` - defines variables for each helmfile component. Helmfile component names correspond to the helmfile components in the [helmfiles](example/components/helmfiles) folder
+   - `helmfile` - defines variables for each helmfile component. Helmfile component names correspond to the helmfile components in the [helmfile](example/components/helmfile) folder
 
 
 ## Run the Example
@@ -359,7 +361,7 @@ To provision a helmfile component using the `atmos` CLI, run the following comma
 
 where:
 
-  - `nginx-ingress` is the helmfile component to provision (from the `components/helmfiles` folder)
+  - `nginx-ingress` is the helmfile component to provision (from the `components/helmfile` folder)
   - `--stack=ue2-dev` is the stack to provision the component into
 
 Short versions of the command-line arguments can be used:
@@ -586,8 +588,10 @@ Check out [our other projects][github], [follow us on twitter][twitter], [apply 
 
 ### Contributors
 
+<!-- markdownlint-disable -->
 |  [![Erik Osterman][osterman_avatar]][osterman_homepage]<br/>[Erik Osterman][osterman_homepage] | [![Andriy Knysh][aknysh_avatar]][aknysh_homepage]<br/>[Andriy Knysh][aknysh_homepage] |
 |---|---|
+<!-- markdownlint-restore -->
 
   [osterman_homepage]: https://github.com/osterman
   [osterman_avatar]: https://img.cloudposse.com/150x150/https://github.com/osterman.png
