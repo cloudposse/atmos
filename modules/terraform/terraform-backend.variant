@@ -4,6 +4,12 @@
 job "terraform backend generate" {
   description = "Generate Terraform backend config for all components"
 
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
   variable "component-list" {
     value = distinct([for file in fileset("${opt.terraform-dir}/", "*/*.tf") : basename(dirname(file))])
   }
@@ -13,6 +19,7 @@ job "terraform backend generate" {
 
     args  = {
       component = item
+      stack     = opt.stack
     }
   }
 }
@@ -26,24 +33,23 @@ job "terraform backend generate component" {
     description = "Component"
   }
 
-  variable "backend-config" {
-    value = yamldecode(file("${opt.config-dir}/terraform-backend.yaml"))
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
   }
 
-  variable "backend-type" {
-    value = var.backend-config.type
-  }
-
-  variable "terraform-backend-map" {
-    value = var.backend-config.terraform.backend[var.backend-type]
-  }
-
-  variable "component-backend-map" {
-    value = var.backend-config.components.terraform[param.component].backend[var.backend-type]
-  }
-
-  variable "final-backend-map" {
-    value = merge(var.terraform-backend-map, var.component-backend-map)
+  config "stack-config" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "terraform"
+        config-type    = "backend"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
   }
 
   exec {
@@ -51,10 +57,8 @@ job "terraform backend generate component" {
     args = [
       jsonencode(
         {
-          "terraform": {
-            "backend": {
-              "${var.backend-type}": var.final-backend-map
-            }
+          "terraform" = {
+            "backend" = conf.stack-config
           }
         }
       )

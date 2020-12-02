@@ -111,12 +111,13 @@ job "terraform write varfile" {
 
   config "stack-config" {
     source job {
-      name = "terraform config"
+      name = "stack config"
       args = {
-        component   = param.component
-        stack       = opt.stack
-        format      = "json"
-        merge       = true
+        component-type = "terraform"
+        config-type    = "vars"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
       }
     }
   }
@@ -230,11 +231,13 @@ job "terraform-command" {
 
   config "stack-config" {
     source job {
-      name = "terraform config"
+      name = "stack config"
       args = {
-        component   = param.component
-        stack       = opt.stack
-        format      = "json"
+        component-type = "terraform"
+        config-type    = "command"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
       }
     }
   }

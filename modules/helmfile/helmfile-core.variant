@@ -55,12 +55,13 @@ job "helmfile subcommand" {
 
   config "stack-config" {
     source job {
-      name = "helmfile config"
+      name = "stack config"
       args = {
-        component = param.component
-        stack     = opt.stack
-        format    = "json"
-        merge     = true
+        component-type = "helmfile"
+        config-type    = "vars"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
       }
     }
   }
@@ -109,7 +110,6 @@ job "helmfile subcommand" {
   step "helmfile kubeconfig" {
     run "aws eks kubeconfig" {
       stack  = opt.stack
-      region = conf.stack-config.region
     }
   }
 
@@ -165,12 +165,13 @@ job "helmfile write varfile" {
 
   config "stack-config" {
     source job {
-      name = "helmfile config"
+      name = "stack config"
       args = {
-        component = param.component
-        stack     = opt.stack
-        format    = "yaml"
-        merge     = true
+        component-type = "helmfile"
+        config-type    = "vars"
+        component      = param.component
+        stack          = opt.stack
+        format         = "yaml"
       }
     }
   }
@@ -220,11 +221,13 @@ job "helmfile-command" {
 
   config "stack-config" {
     source job {
-      name = "helmfile config"
+      name = "stack config"
       args = {
-        component   = param.component
-        stack       = opt.stack
-        format      = "json"
+        component-type = "helmfile"
+        config-type    = "command"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
       }
     }
   }

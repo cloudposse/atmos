@@ -32,7 +32,7 @@ option "terraform-dir" {
 }
 
 option "helmfile-dir" {
-  default     = "./components/helmfiles"
+  default     = "./components/helmfile"
   description = "Helmfile components directory"
   type        = string
 }

@@ -10,7 +10,7 @@ directories:
       - path: vpc
         git:
           url: https://github.com/cloudposse/terraform-aws-components
-          ref: 0.137.0
+          ref: 0.140.0
         newRootPath: modules/vpc
         includePaths:
           - modules/vpc/**/*
@@ -18,13 +18,13 @@ directories:
       - path: eks
         git:
           url: https://github.com/cloudposse/terraform-aws-components
-          ref: 0.137.0
+          ref: 0.140.0
         newRootPath: modules/eks
         includePaths:
           - modules/eks/**/*
 
   # Helmfile components
-  - path: components/helmfiles
+  - path: components/helmfile
     contents:
 
       - path: nginx-ingress
