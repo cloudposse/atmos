@@ -31,7 +31,7 @@ job "terraform config" {
 
   step "stack config" {
     run "stack config" {
-      component-type = "helmfile"
+      component-type = "terraform"
       config-type    = "vars"
       component      = param.component
       stack          = opt.stack

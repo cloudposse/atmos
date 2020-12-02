@@ -49,7 +49,6 @@ job "helm subcommand" {
         component = param.component
         stack     = opt.stack
         format    = "json"
-        merge     = true
       }
     }
   }
