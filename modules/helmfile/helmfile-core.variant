@@ -55,12 +55,13 @@ job "helmfile subcommand" {
 
   config "stack-config" {
     source job {
-      name = "helmfile config"
+      name = "stack config"
       args = {
-        component = param.component
-        stack     = opt.stack
-        format    = "json"
-        merge     = true
+        component-type = "helmfile"
+        config-type    = "vars"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
       }
     }
   }
@@ -100,16 +101,15 @@ job "helmfile subcommand" {
     value = {
       AWS_PROFILE = can(conf.stack-config.aws_profile) ? conf.stack-config.aws_profile : replace(replace(replace(
         opt.helm-aws-profile-pattern,
-        "{environment}", conf.stack-config.environment),
-        "{stage}", conf.stack-config.stage),
-        "{namespace}", conf.stack-config.namespace)
+        "{environment}", try(conf.stack-config.environment, "")),
+        "{stage}", try(conf.stack-config.stage, "")),
+        "{namespace}", try(conf.stack-config.namespace, ""))
     }
   }
 
   step "helmfile kubeconfig" {
     run "aws eks kubeconfig" {
       stack  = opt.stack
-      region = conf.stack-config.region
     }
   }
 
@@ -130,10 +130,10 @@ job "helmfile subcommand" {
         {
           KUBECONFIG  = "${opt.kubeconfig-path}/${opt.stack}-kubecfg",
           STACK       = opt.stack
-          NAMESPACE   = conf.stack-config.namespace,
-          ENVIRONMENT = conf.stack-config.environment,
-          REGION      = conf.stack-config.region,
-          STAGE       = conf.stack-config.stage
+          NAMESPACE   = try(conf.stack-config.namespace, ""),
+          ENVIRONMENT = try(conf.stack-config.environment, ""),
+          REGION      = try(conf.stack-config.region, ""),
+          STAGE       = try(conf.stack-config.stage, "")
         },
         var.aws-profile
       )
@@ -165,12 +165,13 @@ job "helmfile write varfile" {
 
   config "stack-config" {
     source job {
-      name = "helmfile config"
+      name = "stack config"
       args = {
-        component = param.component
-        stack     = opt.stack
-        format    = "yaml"
-        merge     = true
+        component-type = "helmfile"
+        config-type    = "vars"
+        component      = param.component
+        stack          = opt.stack
+        format         = "yaml"
       }
     }
   }
@@ -220,12 +221,13 @@ job "helmfile-command" {
 
   config "stack-config" {
     source job {
-      name = "helmfile config"
+      name = "stack config"
       args = {
-        component   = param.component
-        stack       = opt.stack
-        format      = "json"
-        merge       = false
+        component-type = "helmfile"
+        config-type    = "command"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
       }
     }
   }

@@ -4,7 +4,6 @@
 job "stack config" {
   concurrency = 1
   description = "Generate stack config in YAML or JSON format"
-  private     = true
 
   parameter "component" {
     type        = string
@@ -18,21 +17,22 @@ job "stack config" {
     short       = "s"
   }
 
-  option "type" {
+  option "component-type" {
     type        = string
-    description = "Type (terraform, helmfile)"
+    description = "Component type (`terraform`, `helmfile`)"
+    default     = "terraform"
+  }
+
+  option "config-type" {
+    type        = string
+    description = "Config type (`vars`, `backend`, `command`)"
+    default     = "vars"
   }
 
   option "format" {
     default     = "yaml"
     type        = string
-    description = "Format, YAML or JSON"
-  }
-
-  option "merge" {
-    default     = true
-    type        = bool
-    description = "Whether to merge global and component configs into a flat map"
+    description = "Output format (`yaml`, `json`)"
   }
 
   config "stack-config" {
@@ -41,51 +41,201 @@ job "stack config" {
     }
   }
 
-  variable "import-paths" {
+  # 1st level of imports
+  variable "import-paths-1" {
     value = try(conf.stack-config.import, null) != null ? conf.stack-config.import : []
   }
 
-  variable "imports" {
+  variable "imports-1" {
     value = merge(
     [
-      for p in var.import-paths : {
+      for p in var.import-paths-1 : {
         for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
       }
     ]
     ...)
   }
 
-  variable "components-config" {
-    value = conf.stack-config.components
+  # 2nd level of imports
+  variable "import-paths-2" {
+    value = try(var.imports-1.import, null) != null ? var.imports-1.import : []
   }
 
-  variable "components-globals" {
-    value = lookup(var.components-config, "globals", {})
+  variable "imports-2" {
+    value = merge(
+    [
+      for p in var.import-paths-2 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
   }
 
-  variable "component-config" {
-    value = try(var.components-config[opt.type][param.component], {})
+  # 3rd level of imports
+  variable "import-paths-3" {
+    value = try(var.imports-2.import, null) != null ? var.imports-2.import : []
   }
 
-  variable "component-vars" {
-    value = lookup(var.component-config, "vars", {})
+  variable "imports-3" {
+    value = merge(
+    [
+      for p in var.import-paths-3 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
   }
 
-  variable "imports-components-globals-component-vars" {
-    value = merge(var.imports, var.components-globals, var.component-vars)
+  # 4th level of imports
+  variable "import-paths-4" {
+    value = try(var.imports-3.import, null) != null ? var.imports-3.import : []
   }
 
-  variable "imports-components-globals-component-config" {
-    value = merge(var.imports, var.components-globals, var.component-config)
+  variable "imports-4" {
+    value = merge(
+    [
+      for p in var.import-paths-4 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  # 5th level of imports
+  variable "import-paths-5" {
+    value = try(var.imports-4.import, null) != null ? var.imports-4.import : []
+  }
+
+  variable "imports-5" {
+    value = merge(
+    [
+      for p in var.import-paths-5 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  variable "vars" {
+    value = merge(
+      # Merge the global vars in the order of imports
+      try(var.imports-5["vars"], {}),
+      try(var.imports-4["vars"], {}),
+      try(var.imports-3["vars"], {}),
+      try(var.imports-2["vars"], {}),
+      try(var.imports-1["vars"], {}),
+      try(conf.stack-config["vars"], {}),
+
+      # Merge the component type vars (terraform, helmfile) in the order of imports
+      try(var.imports-5[opt.component-type]["vars"], {}),
+      try(var.imports-4[opt.component-type]["vars"], {}),
+      try(var.imports-3[opt.component-type]["vars"], {}),
+      try(var.imports-2[opt.component-type]["vars"], {}),
+      try(var.imports-1[opt.component-type]["vars"], {}),
+      try(conf.stack-config[opt.component-type]["vars"], {}),
+
+      # Merge the component vars in the order of imports
+      try(var.imports-5.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-4.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-3.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-2.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-1.components[opt.component-type][param.component]["vars"], {}),
+      try(conf.stack-config.components[opt.component-type][param.component]["vars"], {})
+    )
+  }
+
+  variable "command" {
+    value = { command = coalesce(
+        try(var.imports-5["command"], null),
+        try(var.imports-4["command"], null),
+        try(var.imports-3["command"], null),
+        try(var.imports-2["command"], null),
+        try(var.imports-1["command"], null),
+        try(conf.stack-config["command"], null),
+
+        try(var.imports-5[opt.component-type]["command"], null),
+        try(var.imports-4[opt.component-type]["command"], null),
+        try(var.imports-3[opt.component-type]["command"], null),
+        try(var.imports-2[opt.component-type]["command"], null),
+        try(var.imports-1[opt.component-type]["command"], null),
+        try(conf.stack-config[opt.component-type]["command"], null),
+
+        try(var.imports-5.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-4.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-3.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-2.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-1.components[opt.component-type][param.component]["command"], null),
+        try(conf.stack-config.components[opt.component-type][param.component]["command"], null),
+
+        opt.component-type
+      )
+    }
+  }
+
+  variable "backend-type" {
+    value = coalesce(
+      try(var.imports-5["backend_type"], null),
+      try(var.imports-4["backend_type"], null),
+      try(var.imports-3["backend_type"], null),
+      try(var.imports-2["backend_type"], null),
+      try(var.imports-1["backend_type"], null),
+      try(conf.stack-config["backend_type"], null),
+
+      try(var.imports-5[opt.component-type]["backend_type"], null),
+      try(var.imports-4[opt.component-type]["backend_type"], null),
+      try(var.imports-3[opt.component-type]["backend_type"], null),
+      try(var.imports-2[opt.component-type]["backend_type"], null),
+      try(var.imports-1[opt.component-type]["backend_type"], null),
+      try(conf.stack-config[opt.component-type]["backend_type"], null),
+
+      try(var.imports-5.components[opt.component-type][param.component]["backend_type"], null),
+      try(var.imports-4.components[opt.component-type][param.component]["backend_type"], null),
+      try(var.imports-3.components[opt.component-type][param.component]["backend_type"], null),
+      try(var.imports-2.components[opt.component-type][param.component]["backend_type"], null),
+      try(var.imports-1.components[opt.component-type][param.component]["backend_type"], null),
+      try(conf.stack-config.components[opt.component-type][param.component]["backend_type"], null),
+
+      "s3"
+    )
+  }
+
+  variable "backend" {
+    value = merge(
+      try(var.imports-5["backend"][var.backend-type], {}),
+      try(var.imports-4["backend"][var.backend-type], {}),
+      try(var.imports-3["backend"][var.backend-type], {}),
+      try(var.imports-2["backend"][var.backend-type], {}),
+      try(var.imports-1["backend"][var.backend-type], {}),
+      try(conf.stack-config["backend"][var.backend-type], {}),
+
+      try(var.imports-5[opt.component-type]["backend"][var.backend-type], {}),
+      try(var.imports-4[opt.component-type]["backend"][var.backend-type], {}),
+      try(var.imports-3[opt.component-type]["backend"][var.backend-type], {}),
+      try(var.imports-2[opt.component-type]["backend"][var.backend-type], {}),
+      try(var.imports-1[opt.component-type]["backend"][var.backend-type], {}),
+      try(conf.stack-config[opt.component-type]["backend"][var.backend-type], {}),
+
+      try(var.imports-5.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(var.imports-4.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(var.imports-3.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(var.imports-2.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(var.imports-1.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(conf.stack-config.components[opt.component-type][param.component]["backend"][var.backend-type], {})
+    )
+  }
+
+  variable "output" {
+    value = {
+      vars    = var.vars,
+      command = var.command,
+      backend = { "${var.backend-type}" = var.backend }
+    }
   }
 
   exec {
     command = "echo"
     args = [
-      opt.merge ?
-        (opt.format == "json" ? jsonencode(var.imports-components-globals-component-vars) : yamlencode(var.imports-components-globals-component-vars))
-        :
-        (opt.format == "json" ? jsonencode(var.imports-components-globals-component-config) : yamlencode(var.imports-components-globals-component-config))
+        opt.format == "json" ? jsonencode(var.output[opt.config-type]) : yamlencode(var.output[opt.config-type])
     ]
   }
 }

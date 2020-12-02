@@ -44,12 +44,12 @@ job "helm subcommand" {
 
   config "stack-config" {
     source job {
-      name = "helmfile config"
+      name = "stack config"
       args = {
-        component = param.component
-        stack     = opt.stack
-        format    = "json"
-        merge     = true
+        component-type = "helmfile"
+        config-type    = "vars"
+        stack          = opt.stack
+        format         = "json"
       }
     }
   }
@@ -74,7 +74,6 @@ job "helm subcommand" {
   step "helm kubeconfig" {
     run "aws eks kubeconfig" {
       stack  = opt.stack
-      region = conf.stack-config.region
     }
   }
 
