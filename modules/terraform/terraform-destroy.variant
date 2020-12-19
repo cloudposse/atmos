@@ -28,6 +28,13 @@ job "terraform destroy" {
     type        = string
   }
 
+  option "interactive" {
+    type        = string
+    description = "Interactive"
+    short       = "i"
+    default     = false
+  }
+
   variable "default-args" {
     type  = list(string)
     value = [
@@ -72,6 +79,7 @@ job "terraform destroy" {
       command     = opt.command
       subcommand  = "destroy"
       args        = var.args
+      interactive = opt.interactive
     }
   }
 

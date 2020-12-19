@@ -35,6 +35,13 @@ job "terraform import" {
     type        = string
   }
 
+  option "interactive" {
+    type        = string
+    description = "Interactive"
+    short       = "i"
+    default     = false
+  }
+
   variable "args" {
     type  = list(string)
     value = [
@@ -82,6 +89,7 @@ job "terraform import" {
       command     = opt.command
       subcommand  = "import"
       args        = var.args
+      interactive = opt.interactive
     }
   }
 

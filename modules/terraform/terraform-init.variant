@@ -18,11 +18,19 @@ job "terraform init" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
+  option "interactive" {
+    type        = string
+    description = "Interactive"
+    short       = "i"
+    default     = false
+  }
+
   run "terraform subcommand" {
     component   = param.component
     stack       = opt.stack
     command     = opt.command
     subcommand  = "init"
     args        = []
+    interactive = opt.interactive
   }
 }

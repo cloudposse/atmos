@@ -28,6 +28,13 @@ job "terraform plan" {
     type        = string
   }
 
+  option "interactive" {
+    type        = string
+    description = "Interactive"
+    short       = "i"
+    default     = false
+  }
+
   variable "default-args" {
     type  = list(string)
     value = [
@@ -73,6 +80,7 @@ job "terraform plan" {
       command     = opt.command
       subcommand  = "plan"
       args        = var.args
+      interactive = opt.interactive
     }
   }
 }
