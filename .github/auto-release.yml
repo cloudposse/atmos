@@ -4,30 +4,35 @@ version-template: '$MAJOR.$MINOR.$PATCH'
 version-resolver:
   major:
     labels:
-      - 'major'
+    - 'major'
   minor:
     labels:
-      - 'minor'
-      - 'enhancement'
+    - 'minor'
+    - 'enhancement'
   patch:
     labels:
-      - 'patch'
-      - 'fix'
-      - 'bugfix'
-      - 'bug'
-      - 'hotfix'
+    - 'auto-update'
+    - 'patch'
+    - 'fix'
+    - 'bugfix'
+    - 'bug'
+    - 'hotfix'
   default: 'minor'
 
 categories:
-  - title: '🚀 Enhancements'
-    labels:
-      - 'enhancement'
-  - title: '🐛 Bug Fixes'
-    labels:
-      - 'fix'
-      - 'bugfix'
-      - 'bug'
-      - 'hotfix'
+- title: '🚀 Enhancements'
+  labels:
+  - 'enhancement'
+  - 'patch'
+- title: '🐛 Bug Fixes'
+  labels:
+  - 'fix'
+  - 'bugfix'
+  - 'bug'
+  - 'hotfix'
+- title: '🤖 Automatic Updates'
+  labels:
+  - 'auto-update'
 
 change-template: |
   <details>
