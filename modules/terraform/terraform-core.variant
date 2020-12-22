@@ -68,7 +68,7 @@ job "terraform subcommand" {
   }
 
   variable "interactive" {
-    value = opt.interactive
+    value = true
   }
 
   exec {
