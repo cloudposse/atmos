@@ -28,7 +28,7 @@ job "terraform deploy" {
     type        = string
   }
 
-  option "interactive" {
+  option "inter" {
     type        = bool
     description = "Interactive"
     short       = "i"
@@ -40,7 +40,7 @@ job "terraform deploy" {
       component   = param.component
       stack       = opt.stack
       command     = opt.command
-      interactive = opt.interactive
+      interactive = opt.inter
     }
   }
 
@@ -49,7 +49,7 @@ job "terraform deploy" {
       component   = param.component
       stack       = opt.stack
       command     = opt.command
-      interactive = opt.interactive
+      interactive = opt.inter
     }
   }
 }

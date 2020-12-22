@@ -35,7 +35,7 @@ job "terraform import" {
     type        = string
   }
 
-  option "interactive" {
+  option "inter" {
     type        = bool
     description = "Interactive"
     short       = "i"
@@ -89,7 +89,7 @@ job "terraform import" {
       command     = opt.command
       subcommand  = "import"
       args        = var.args
-      interactive = opt.interactive
+      interactive = opt.inter
     }
   }
 

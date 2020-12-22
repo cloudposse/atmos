@@ -28,7 +28,7 @@ job "terraform apply" {
     type        = string
   }
 
-  option "interactive" {
+  option "inter" {
     type        = bool
     description = "Interactive"
     short       = "i"
@@ -49,7 +49,7 @@ job "terraform apply" {
       stack       = opt.stack
       command     = opt.command
       subcommand  = "apply"
-      interactive = opt.interactive
+      interactive = opt.inter
 
       args = [
         "${opt.stack}-${param.component}.planfile"

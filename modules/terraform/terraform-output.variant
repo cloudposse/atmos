@@ -22,7 +22,7 @@ job "terraform output" {
     short       = "s"
   }
 
-  option "interactive" {
+  option "inter" {
     type        = bool
     description = "Interactive"
     short       = "i"
@@ -59,7 +59,7 @@ job "terraform output" {
       command     = opt.command
       subcommand  = "output"
       args        = []
-      interactive = opt.interactive
+      interactive = opt.inter
     }
   }
 }

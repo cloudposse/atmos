@@ -18,7 +18,7 @@ job "terraform init" {
     description = "Command to execute, e.g. 'terraform', or path to the command, e.g. '/usr/local/terraform/0.13/bin/terraform'"
   }
 
-  option "interactive" {
+  option "inter" {
     type        = bool
     description = "Interactive"
     short       = "i"
@@ -31,6 +31,6 @@ job "terraform init" {
     command     = opt.command
     subcommand  = "init"
     args        = []
-    interactive = opt.interactive
+    interactive = opt.inter
   }
 }
