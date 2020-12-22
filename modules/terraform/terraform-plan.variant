@@ -28,7 +28,7 @@ job "terraform plan" {
     type        = string
   }
 
-  option "inter" {
+  option "interactive" {
     type        = bool
     description = "Interactive"
     short       = "i"
@@ -80,7 +80,7 @@ job "terraform plan" {
       command     = opt.command
       subcommand  = "plan"
       args        = var.args
-      interactive = opt.inter
+      interactive = opt.interactive
     }
   }
 }
