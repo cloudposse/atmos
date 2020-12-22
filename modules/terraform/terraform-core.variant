@@ -72,7 +72,6 @@ job "terraform subcommand" {
     args        = var.exec-args
     dir         = "${opt.terraform-dir}/${param.component}"
     env         = opt.env
-    interactive = opt.inter
   }
 }
 
