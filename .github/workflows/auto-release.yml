@@ -6,7 +6,7 @@ on:
     - master
 
 jobs:
-  semver:
+  publish:
     runs-on: ubuntu-latest
     steps:
     # Drafts your next Release notes as Pull Requests are merged into "master"
