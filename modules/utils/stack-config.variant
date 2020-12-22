@@ -138,6 +138,26 @@ job "stack config" {
 
   config "all" {
     source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-10[14], "_____"))
+      default = ""
+    }
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-10[13], "_____"))
+      default = ""
+    }
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-10[12], "_____"))
+      default = ""
+    }
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-10[11], "_____"))
+      default = ""
+    }
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-10[10], "_____"))
+      default = ""
+    }
+    source file {
       path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-10[9], "_____"))
       default = ""
     }
@@ -178,6 +198,26 @@ job "stack config" {
       default = ""
     }
 
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-9[14], "_____"))
+      default = ""
+    }
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-9[13], "_____"))
+      default = ""
+    }
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-9[12], "_____"))
+      default = ""
+    }
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-9[11], "_____"))
+      default = ""
+    }
+    source file {
+      path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-9[10], "_____"))
+      default = ""
+    }
     source file {
       path    = format("%s/%s.yaml", opt.config-dir, try(var.import-paths-9[9], "_____"))
       default = ""
