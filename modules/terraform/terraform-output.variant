@@ -23,7 +23,7 @@ job "terraform output" {
   }
 
   option "interactive" {
-    type        = string
+    type        = bool
     description = "Interactive"
     short       = "i"
     default     = false
