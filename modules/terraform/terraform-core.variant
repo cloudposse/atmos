@@ -67,16 +67,12 @@ job "terraform subcommand" {
     value = compact(concat(list(opt.dry-run ? conf.terraform-command.command : ""), list(opt.subcommand), opt.args))
   }
 
-  variable "interactive" {
-    value = true
-  }
-
   exec {
     command     = var.exec-cmd
     args        = var.exec-args
     dir         = "${opt.terraform-dir}/${param.component}"
     env         = opt.env
-    interactive = var.interactive
+    interactive = true
   }
 }
 
