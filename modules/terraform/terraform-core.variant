@@ -72,7 +72,7 @@ job "terraform subcommand" {
     args        = var.exec-args
     dir         = "${opt.terraform-dir}/${param.component}"
     env         = opt.env
-    interactive = true
+    interactive = true  # currently `variant` does not support interpolation in the `interactive` attribute, so `opt.interactive` does not work
   }
 }
 
