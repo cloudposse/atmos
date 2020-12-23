@@ -1,7 +1,7 @@
 # Use this file to define individuals or teams that are responsible for code in a repository.
 # Read more: <https://help.github.com/articles/about-codeowners/>
 #
-# Order is important: the last matching pattern takes the most precedence
+# Order is important: the last matching pattern has the highest precedence
 
 # These owners will be the default owners for everything
 *             @cloudposse/engineering @cloudposse/contributors
@@ -13,5 +13,12 @@
 # Cloud Posse must review any changes to GitHub actions
 .github/*     @cloudposse/engineering
 
-# Cloud Posse must review any changes to standard context definition
-**/context.tf   @cloudposse/engineering
+# Cloud Posse must review any changes to standard context definition,
+# but some changes can be rubber-stamped.
+**/context.tf   @cloudposse/engineering @cloudposse/approvers
+README.md       @cloudposse/engineering @cloudposse/contributors @cloudposse/approvers
+docs/*.md       @cloudposse/engineering @cloudposse/contributors @cloudposse/approvers
+
+# Cloud Posse Admins must review all changes to CODEOWNERS or the mergify configuration
+.github/mergify.yml @cloudposse/admins
+.github/CODEOWNERS  @cloudposse/admins

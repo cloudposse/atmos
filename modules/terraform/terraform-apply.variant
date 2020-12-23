@@ -28,6 +28,13 @@ job "terraform apply" {
     type        = string
   }
 
+  option "interactive" {
+    type        = bool
+    description = "Interactive"
+    short       = "i"
+    default     = false
+  }
+
   step "terraform workspace" {
     run "terraform workspace" {
       component = param.component
@@ -42,6 +49,7 @@ job "terraform apply" {
       stack       = opt.stack
       command     = opt.command
       subcommand  = "apply"
+      interactive = opt.interactive
 
       args = [
         "${opt.stack}-${param.component}.planfile"

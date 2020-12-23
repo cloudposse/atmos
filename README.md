@@ -272,7 +272,7 @@ __NOTE:__ The stack configuration structure and the file names described above a
 You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire solution)
 into a stack config using the `import` directive.
 
-__NOTE:__ Currently `atmos` supports five levels of imports, e.g. you can import another config into a stack config, which in turn can import yet another config, etc.
+__NOTE:__ Currently `atmos` supports 10 levels of imports, e.g. you can import another config into a stack config, which in turn can import yet another config, etc.
 See [stacks](example/stacks) for more details.
 
 Stack configuration files have a predefined format:

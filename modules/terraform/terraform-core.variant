@@ -39,6 +39,13 @@ job "terraform subcommand" {
     type        = map(string)
   }
 
+  option "interactive" {
+    type        = bool
+    description = "Interactive"
+    short       = "i"
+    default     = false
+  }
+
   # Find Terraform binary to execute
   config "terraform-command" {
     source job {
@@ -61,10 +68,11 @@ job "terraform subcommand" {
   }
 
   exec {
-    command = var.exec-cmd
-    args    = var.exec-args
-    dir     = "${opt.terraform-dir}/${param.component}"
-    env     = opt.env
+    command     = var.exec-cmd
+    args        = var.exec-args
+    dir         = "${opt.terraform-dir}/${param.component}"
+    env         = opt.env
+    interactive = true  # currently `variant` does not support interpolation in the `interactive` attribute, so `opt.interactive` does not work
   }
 }
 

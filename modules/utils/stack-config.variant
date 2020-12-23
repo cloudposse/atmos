@@ -116,9 +116,89 @@ job "stack config" {
     ...)
   }
 
+  # 6th level of imports
+  variable "import-paths-6" {
+    value = try(var.imports-5.import, null) != null ? var.imports-5.import : []
+  }
+
+  variable "imports-6" {
+    value = merge(
+    [
+      for p in var.import-paths-6 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  # 7th level of imports
+  variable "import-paths-7" {
+    value = try(var.imports-6.import, null) != null ? var.imports-6.import : []
+  }
+
+  variable "imports-7" {
+    value = merge(
+    [
+      for p in var.import-paths-7 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  # 8th level of imports
+  variable "import-paths-8" {
+    value = try(var.imports-7.import, null) != null ? var.imports-7.import : []
+  }
+
+  variable "imports-8" {
+    value = merge(
+    [
+      for p in var.import-paths-8 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  # 9th level of imports
+  variable "import-paths-9" {
+    value = try(var.imports-8.import, null) != null ? var.imports-8.import : []
+  }
+
+  variable "imports-9" {
+    value = merge(
+    [
+      for p in var.import-paths-9 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
+  # 10th level of imports
+  variable "import-paths-10" {
+    value = try(var.imports-9.import, null) != null ? var.imports-9.import : []
+  }
+
+  variable "imports-10" {
+    value = merge(
+    [
+      for p in var.import-paths-10 : {
+        for k, v in yamldecode(file(format("%s/%s.yaml", opt.config-dir, p))) : k => v
+      }
+    ]
+    ...)
+  }
+
   variable "vars" {
     value = merge(
       # Merge the global vars in the order of imports
+      try(var.imports-10["vars"], {}),
+      try(var.imports-9["vars"], {}),
+      try(var.imports-8["vars"], {}),
+      try(var.imports-7["vars"], {}),
+      try(var.imports-6["vars"], {}),
       try(var.imports-5["vars"], {}),
       try(var.imports-4["vars"], {}),
       try(var.imports-3["vars"], {}),
@@ -127,6 +207,11 @@ job "stack config" {
       try(conf.stack-config["vars"], {}),
 
       # Merge the component type vars (terraform, helmfile) in the order of imports
+      try(var.imports-10[opt.component-type]["vars"], {}),
+      try(var.imports-9[opt.component-type]["vars"], {}),
+      try(var.imports-8[opt.component-type]["vars"], {}),
+      try(var.imports-7[opt.component-type]["vars"], {}),
+      try(var.imports-6[opt.component-type]["vars"], {}),
       try(var.imports-5[opt.component-type]["vars"], {}),
       try(var.imports-4[opt.component-type]["vars"], {}),
       try(var.imports-3[opt.component-type]["vars"], {}),
@@ -135,6 +220,11 @@ job "stack config" {
       try(conf.stack-config[opt.component-type]["vars"], {}),
 
       # Merge the component vars in the order of imports
+      try(var.imports-10.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-9.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-8.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-7.components[opt.component-type][param.component]["vars"], {}),
+      try(var.imports-6.components[opt.component-type][param.component]["vars"], {}),
       try(var.imports-5.components[opt.component-type][param.component]["vars"], {}),
       try(var.imports-4.components[opt.component-type][param.component]["vars"], {}),
       try(var.imports-3.components[opt.component-type][param.component]["vars"], {}),
@@ -146,6 +236,11 @@ job "stack config" {
 
   variable "command" {
     value = { command = coalesce(
+        try(var.imports-10["command"], null),
+        try(var.imports-9["command"], null),
+        try(var.imports-8["command"], null),
+        try(var.imports-7["command"], null),
+        try(var.imports-6["command"], null),
         try(var.imports-5["command"], null),
         try(var.imports-4["command"], null),
         try(var.imports-3["command"], null),
@@ -153,6 +248,11 @@ job "stack config" {
         try(var.imports-1["command"], null),
         try(conf.stack-config["command"], null),
 
+        try(var.imports-10[opt.component-type]["command"], null),
+        try(var.imports-9[opt.component-type]["command"], null),
+        try(var.imports-8[opt.component-type]["command"], null),
+        try(var.imports-7[opt.component-type]["command"], null),
+        try(var.imports-6[opt.component-type]["command"], null),
         try(var.imports-5[opt.component-type]["command"], null),
         try(var.imports-4[opt.component-type]["command"], null),
         try(var.imports-3[opt.component-type]["command"], null),
@@ -160,6 +260,11 @@ job "stack config" {
         try(var.imports-1[opt.component-type]["command"], null),
         try(conf.stack-config[opt.component-type]["command"], null),
 
+        try(var.imports-10.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-9.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-8.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-7.components[opt.component-type][param.component]["command"], null),
+        try(var.imports-6.components[opt.component-type][param.component]["command"], null),
         try(var.imports-5.components[opt.component-type][param.component]["command"], null),
         try(var.imports-4.components[opt.component-type][param.component]["command"], null),
         try(var.imports-3.components[opt.component-type][param.component]["command"], null),
@@ -174,6 +279,11 @@ job "stack config" {
 
   variable "backend-type" {
     value = coalesce(
+      try(var.imports-10["backend_type"], null),
+      try(var.imports-9["backend_type"], null),
+      try(var.imports-8["backend_type"], null),
+      try(var.imports-7["backend_type"], null),
+      try(var.imports-6["backend_type"], null),
       try(var.imports-5["backend_type"], null),
       try(var.imports-4["backend_type"], null),
       try(var.imports-3["backend_type"], null),
@@ -181,6 +291,11 @@ job "stack config" {
       try(var.imports-1["backend_type"], null),
       try(conf.stack-config["backend_type"], null),
 
+      try(var.imports-10[opt.component-type]["backend_type"], null),
+      try(var.imports-9[opt.component-type]["backend_type"], null),
+      try(var.imports-8[opt.component-type]["backend_type"], null),
+      try(var.imports-7[opt.component-type]["backend_type"], null),
+      try(var.imports-6[opt.component-type]["backend_type"], null),
       try(var.imports-5[opt.component-type]["backend_type"], null),
       try(var.imports-4[opt.component-type]["backend_type"], null),
       try(var.imports-3[opt.component-type]["backend_type"], null),
@@ -188,6 +303,11 @@ job "stack config" {
       try(var.imports-1[opt.component-type]["backend_type"], null),
       try(conf.stack-config[opt.component-type]["backend_type"], null),
 
+      try(var.imports-10.components[opt.component-type][param.component]["backend_type"], null),
+      try(var.imports-9.components[opt.component-type][param.component]["backend_type"], null),
+      try(var.imports-8.components[opt.component-type][param.component]["backend_type"], null),
+      try(var.imports-7.components[opt.component-type][param.component]["backend_type"], null),
+      try(var.imports-6.components[opt.component-type][param.component]["backend_type"], null),
       try(var.imports-5.components[opt.component-type][param.component]["backend_type"], null),
       try(var.imports-4.components[opt.component-type][param.component]["backend_type"], null),
       try(var.imports-3.components[opt.component-type][param.component]["backend_type"], null),
@@ -201,6 +321,11 @@ job "stack config" {
 
   variable "backend" {
     value = merge(
+      try(var.imports-10["backend"][var.backend-type], {}),
+      try(var.imports-9["backend"][var.backend-type], {}),
+      try(var.imports-8["backend"][var.backend-type], {}),
+      try(var.imports-7["backend"][var.backend-type], {}),
+      try(var.imports-6["backend"][var.backend-type], {}),
       try(var.imports-5["backend"][var.backend-type], {}),
       try(var.imports-4["backend"][var.backend-type], {}),
       try(var.imports-3["backend"][var.backend-type], {}),
@@ -208,6 +333,11 @@ job "stack config" {
       try(var.imports-1["backend"][var.backend-type], {}),
       try(conf.stack-config["backend"][var.backend-type], {}),
 
+      try(var.imports-10[opt.component-type]["backend"][var.backend-type], {}),
+      try(var.imports-9[opt.component-type]["backend"][var.backend-type], {}),
+      try(var.imports-8[opt.component-type]["backend"][var.backend-type], {}),
+      try(var.imports-7[opt.component-type]["backend"][var.backend-type], {}),
+      try(var.imports-6[opt.component-type]["backend"][var.backend-type], {}),
       try(var.imports-5[opt.component-type]["backend"][var.backend-type], {}),
       try(var.imports-4[opt.component-type]["backend"][var.backend-type], {}),
       try(var.imports-3[opt.component-type]["backend"][var.backend-type], {}),
@@ -215,6 +345,11 @@ job "stack config" {
       try(var.imports-1[opt.component-type]["backend"][var.backend-type], {}),
       try(conf.stack-config[opt.component-type]["backend"][var.backend-type], {}),
 
+      try(var.imports-10.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(var.imports-9.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(var.imports-8.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(var.imports-7.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
+      try(var.imports-6.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
       try(var.imports-5.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
       try(var.imports-4.components[opt.component-type][param.component]["backend"][var.backend-type], {}),
       try(var.imports-3.components[opt.component-type][param.component]["backend"][var.backend-type], {}),

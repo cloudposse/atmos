@@ -22,6 +22,13 @@ job "terraform output" {
     short       = "s"
   }
 
+  option "interactive" {
+    type        = bool
+    description = "Interactive"
+    short       = "i"
+    default     = false
+  }
+
   step "write varfile" {
     run "terraform write varfile" {
       component   = param.component
@@ -52,6 +59,7 @@ job "terraform output" {
       command     = opt.command
       subcommand  = "output"
       args        = []
+      interactive = opt.interactive
     }
   }
 }
