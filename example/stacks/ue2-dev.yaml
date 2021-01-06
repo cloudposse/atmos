@@ -6,9 +6,18 @@ vars:
 
 terraform:
   vars:
+    test-map:
+      a: a3
+      d: d3
+      e: e3
+      atr:
+        atr2: 2-3
+        atr4: 4
+        list:
+          - 1b
 
 helmfile:
-  vars:
+  vars: {}
 
 components:
   terraform:
@@ -17,6 +26,16 @@ components:
         cidr_block: "10.100.0.0/18"
     eks:
       vars:
+        test-map:
+          a: a4
+          d: d4
+          e: e4
+          f: f4
+          atr:
+            atr2: 2-4
+            atr5: 5
+            list:
+              - 1c
 
   helmfile:
     nginx-ingress:
