@@ -1,5 +1,6 @@
 import:
   - globals
+  - globals-2
 
 vars:
   region: us-east-2
@@ -7,18 +8,17 @@ vars:
 
 terraform:
   vars:
-  backend_type: s3 # s3, remote, vault, etc.
-  backend:
-    s3:
-      encrypt: true
-      bucket: "eg-ue2-root-tfstate"
-      key: "terraform.tfstate"
-      dynamodb_table: "eg-ue2-root-tfstate-lock"
-      role_arn: "arn:aws:iam::xxxxxxxx:role/eg-gbl-root-terraform"
-      acl: "bucket-owner-full-control"
-      region: "us-east-2"
-    remote:
-    vault:
+    test-map:
+      b: b2
+      atr:
+        atr1: 1-1
+        atr3: 3
+        list:
+          - 1a
+      list:
+        - 4
+        - 5
+        - 6
 
 helmfile:
-  vars:
+  vars: {}

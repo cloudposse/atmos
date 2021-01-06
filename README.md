@@ -224,15 +224,15 @@ __NOTE:__ For the example, we import all the CLI modules, but they could be incl
 
   ```hcl
       imports = [
-      "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
-      "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
+        "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
+        "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
     ]
   ```
 
@@ -558,7 +558,7 @@ In general, PRs are welcome. We follow the typical "fork-and-pull" Git workflow.
 
 ## Copyright
 
-Copyright © 2017-2020 [Cloud Posse, LLC](https://cpco.io/copyright)
+Copyright © 2017-2021 [Cloud Posse, LLC](https://cpco.io/copyright)
 
 
 

@@ -5,10 +5,10 @@ vars:
   stage: staging
 
 terraform:
-  vars:
+  vars: {}
 
 helmfile:
-  vars:
+  vars: {}
 
 components:
   terraform:
@@ -16,7 +16,7 @@ components:
       vars:
         cidr_block: "10.104.0.0/18"
     eks:
-      vars:
+      vars: {}
 
   helmfile:
     nginx-ingress:
