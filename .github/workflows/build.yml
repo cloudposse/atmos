@@ -13,8 +13,6 @@ jobs:
       # Checkout the repo
       - name: 'Checkout'
         uses: actions/checkout@v2
-        with:
-          path: /${{ github.repository }}
 
       # Setup Go
       - name: 'Setup Go'
