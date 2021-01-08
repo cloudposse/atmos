@@ -25,7 +25,7 @@ jobs:
       - name: 'Build CLI'
         run: |
           set -e -x
-          sudo apt-get update && apt-get install -y -u variant2
+          sudo apt-get update && sudo apt-get install -y -u variant2
           export CGO_ENABLED=1
           variant2 export binary ${{ github.workspace }}/release/${{ github.event.repository.name }}_ atmos
           ./atmos help
