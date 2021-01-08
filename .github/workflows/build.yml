@@ -32,7 +32,7 @@ jobs:
            sudo mv variant /usr/local/bin/variant2 && \
            rm -f variant*.tar.gz
           export CGO_ENABLED=1
-          variant2 export binary ./ ./atmos/atmos
+          variant2 export binary $PWD $PWD/atmos/atmos
           ./atmos help
 
       # Attach Go binaries to GitHub Release
@@ -40,4 +40,4 @@ jobs:
         uses: cloudposse/actions/github/release-assets@0.23.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_PATH: ./atmos*
+          INPUT_PATH: $PWD/atmos
