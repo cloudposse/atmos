@@ -25,8 +25,9 @@ jobs:
       - name: 'Build CLI'
         run: |
           set -e -x
-          sudo apt update
-          sudo apt install cloudposse
+          sudo apt-get update
+          sudo apt-get install software-properties-common
+          sudo add-apt-repository cloudposse
           sudo apt-get update && sudo apt-get install -y -u variant2
           export CGO_ENABLED=1
           variant2 export binary ${{ github.workspace }}/release/${{ github.event.repository.name }}_ atmos
