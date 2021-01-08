@@ -32,7 +32,7 @@ jobs:
            sudo mv variant /usr/local/bin/variant2 && \
            rm -f variant*.tar.gz
           export CGO_ENABLED=1
-          variant2 export binary ./ ./atmos
+          variant2 export binary ./ ./atmos/atmos
           ./atmos help
 
       # Attach Go binaries to GitHub Release
