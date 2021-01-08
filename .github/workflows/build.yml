@@ -40,4 +40,4 @@ jobs:
         uses: cloudposse/actions/github/release-assets@0.23.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_PATH: $PWD/atmos
+          INPUT_PATH: $PWD/atmos/*
