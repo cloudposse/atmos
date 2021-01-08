@@ -29,7 +29,7 @@ jobs:
           export VARIANT_VERSION=0.37.0
           wget -q https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
            tar -zvxf variant*.tar.gz variant && \
-           mv variant /usr/local/bin/variant2 && \
+           sudo mv variant /usr/local/bin/variant2 && \
            rm -f variant*.tar.gz
           export CGO_ENABLED=1
           variant2 export binary ${{ github.workspace }}/release/${{ github.event.repository.name }}_ atmos
