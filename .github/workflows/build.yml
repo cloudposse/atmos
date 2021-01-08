@@ -25,10 +25,12 @@ jobs:
       - name: 'Build CLI'
         run: |
           set -e -x
-          sudo apt-get update
-          sudo apt-get install software-properties-common
-          sudo add-apt-repository cloudposse
-          sudo apt-get update && sudo apt-get install -y -u variant2
+          sudo apt-get update && sudo apt-get install -y -u wget
+          export VARIANT_VERSION=0.37.0
+          wget -q https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
+           tar -zvxf variant*.tar.gz variant && \
+           mv variant /usr/local/bin/variant2 && \
+           rm -f variant*.tar.gz
           export CGO_ENABLED=1
           variant2 export binary ${{ github.workspace }}/release/${{ github.event.repository.name }}_ atmos
           ./atmos help
