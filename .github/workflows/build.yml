@@ -33,7 +33,7 @@ jobs:
            rm -f variant*.tar.gz
           export CGO_ENABLED=1
           variant2 export binary $PWD $PWD/atmos/atmos
-          ./atmos help
+          $PWD/atmos/atmos help
 
       # Attach Go binaries to GitHub Release
       - name: 'Attach CLI binary to GitHub release'
