@@ -1,4 +1,4 @@
-name: 'Build CLI and attach binary to GitHub release'
+name: 'Build CLI and attach to GitHub release'
 
 on:
   release:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    name: 'Build CLI and attach binary to GitHub release'
+    name: 'Build CLI and attach to GitHub release'
     runs-on: ubuntu-latest
 
     steps:
@@ -25,19 +25,19 @@ jobs:
       - name: 'Build CLI'
         run: |
           set -e -x
-          sudo apt-get update && sudo apt-get install -y -u wget
           export VARIANT_VERSION=0.37.0
-          wget -q https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
-           tar -zvxf variant*.tar.gz variant && \
-           sudo mv variant /usr/local/bin/variant2 && \
-           rm -f variant*.tar.gz
           export CGO_ENABLED=1
-          variant2 export binary $PWD ${{ github.workspace }}/atmos/atmos
-          $PWD/atmos/atmos help
+          sudo apt-get update && sudo apt-get install -y -u wget
+          wget -q https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
+            tar -zvxf variant*.tar.gz variant && \
+            sudo mv variant /usr/local/bin/variant2 && \
+            rm -f variant*.tar.gz
+          variant2 export binary $PWD ${{ github.workspace }}/atmos
+          ${{ github.workspace }}/atmos help
 
-      # Attach Go binaries to GitHub Release
+      # Attach CLI binary to GitHub release
       - name: 'Attach CLI binary to GitHub release'
         uses: cloudposse/actions/github/release-assets@0.23.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_PATH: ${{ github.workspace }}/atmos/atmos
+          INPUT_PATH: ${{ github.workspace }}/atmos
