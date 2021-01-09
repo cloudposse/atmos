@@ -29,10 +29,8 @@ jobs:
           export CGO_ENABLED=1
           sudo apt-get update && sudo apt-get install -y -u wget
           wget -q https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
-            tar -zvxf variant*.tar.gz variant && \
-            sudo mv variant /usr/local/bin/variant2 && \
-            rm -f variant*.tar.gz
-          variant2 export binary $PWD ${{ github.workspace }}/atmos
+            tar -zvxf variant*.tar.gz variant
+          ./variant export binary $PWD ${{ github.workspace }}/atmos
           ${{ github.workspace }}/atmos help
 
       # Attach CLI binary to GitHub release
