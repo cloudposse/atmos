@@ -24,6 +24,10 @@ components:
     vpc:
       vars:
         cidr_block: "10.100.0.0/18"
+    vpc2:
+      component: vpc
+      vars:
+        cidr_block: "10.108.0.0/18"
     eks:
       vars:
         test-map:

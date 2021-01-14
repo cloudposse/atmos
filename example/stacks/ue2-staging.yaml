@@ -15,6 +15,10 @@ components:
     vpc:
       vars:
         cidr_block: "10.104.0.0/18"
+    vpc2:
+      component: vpc
+      vars:
+        cidr_block: "10.110.0.0/18"
     eks:
       vars: {}
 

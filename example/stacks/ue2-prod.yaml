@@ -16,6 +16,11 @@ components:
       command: "/usr/bin/terraform-0.13"
       vars:
         cidr_block: "10.102.0.0/18"
+    vpc2:
+      command: "/usr/bin/terraform-0.13"
+      component: vpc
+      vars:
+        cidr_block: "10.109.0.0/18"
     eks:
       vars: {}
 
