@@ -96,6 +96,8 @@ job "terraform import" {
   step "apply clean" {
     run "terraform shell" {
       component = param.component
+      stack     = opt.stack
+
       commands  = ["rm", "override.tf.json"]
     }
   }

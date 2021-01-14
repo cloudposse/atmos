@@ -86,6 +86,7 @@ job "terraform destroy" {
   step "destroy clean" {
     run "terraform shell" {
       component = param.component
+      stack     = opt.stack
 
       commands = [
         "rm",

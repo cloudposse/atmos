@@ -60,6 +60,7 @@ job "terraform apply" {
   step "apply clean" {
     run "terraform shell" {
       component = param.component
+      stack     = opt.stack
 
       commands = [
         "rm",

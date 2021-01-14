@@ -30,10 +30,29 @@ job "terraform workspace" {
     }
   }
 
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "terraform"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "workspace" {
+    value = conf.config-component.component != null ? format("%s-%s", opt.stack, conf.config-component.component) : opt.stack
+  }
+
   run "terraform shell" {
     component = param.component
+    stack     = opt.stack
+
     commands  = [
-      "${conf.terraform-command.command} workspace select ${opt.stack} || ${conf.terraform-command.command} workspace new ${opt.stack}"
+      "${conf.terraform-command.command} workspace select ${var.workspace} || ${conf.terraform-command.command} workspace new ${var.workspace}"
     ]
   }
 }

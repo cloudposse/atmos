@@ -139,13 +139,18 @@ job "stack config" {
     }
   }
 
+  variable "component" {
+    value = try(conf.all.components[opt.component-type][param.component]["component"], null)
+  }
+
   variable "output" {
     value = {
       vars         = conf.vars,
       command      = { command = var.command },
       backend      = { "${var.backend-type}" = conf.backend },
       backend-type = var.backend-type,
-      all          = conf.all
+      all          = conf.all,
+      component    = var.component
     }
   }
 
