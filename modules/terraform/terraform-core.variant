@@ -81,7 +81,7 @@ job "terraform subcommand" {
   }
 
   variable "component" {
-    value = conf.config-component != null ? conf.config-component : param.component
+    value = coalesce(conf.config-component, param.component)
   }
 
   exec {
@@ -127,7 +127,7 @@ job "terraform shell" {
   }
 
   variable "component" {
-    value = conf.config-component != null ? conf.config-component : param.component
+    value = coalesce(conf.config-component, param.component)
   }
 
   run "shell" {
@@ -184,7 +184,7 @@ job "terraform write varfile" {
   }
 
   variable "component" {
-    value = conf.config-component != null ? conf.config-component : param.component
+    value = coalesce(conf.config-component, param.component)
   }
 
   exec {
@@ -272,7 +272,7 @@ job "terraform write override" {
   }
 
   variable "component" {
-    value = conf.config-component != null ? conf.config-component : param.component
+    value = coalesce(conf.config-component, param.component)
   }
 
   exec {
