@@ -78,6 +78,7 @@ job "terraform import" {
   step "write provider override" {
     run "terraform write override" {
       component = param.component
+      stack     = opt.stack
       role      = opt.role
     }
   }
