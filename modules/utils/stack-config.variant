@@ -150,7 +150,7 @@ job "stack config" {
       backend      = { "${var.backend-type}" = conf.backend },
       backend-type = var.backend-type,
       all          = conf.all,
-      component    = var.component
+      component    = { component = var.component }
     }
   }
 
