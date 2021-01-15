@@ -201,7 +201,7 @@ job "terraform write varfile" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.terraform-dir}/${var.component}/${opt.stack}-${var.component}.terraform.tfvars.json"
+    file = "${opt.terraform-dir}/${var.component}/${opt.stack}-${param.component}.terraform.tfvars.json"
   }
 }
 

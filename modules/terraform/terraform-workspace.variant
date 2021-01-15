@@ -44,7 +44,7 @@ job "terraform workspace" {
   }
 
   variable "workspace" {
-    value = conf.config-component.component != null ? format("%s-%s", opt.stack, conf.config-component.component) : opt.stack
+    value = conf.config-component.component != null ? format("%s-%s", opt.stack, param.component) : opt.stack
   }
 
   run "terraform shell" {
