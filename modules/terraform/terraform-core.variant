@@ -28,15 +28,15 @@ job "terraform subcommand" {
   }
 
   option "args" {
+    type        = list(string)
     default     = []
     description = "args to pass to the subcommand"
-    type        = list(string)
   }
 
   option "env" {
+    type        = map(string)
     default     = {}
     description = "Environment variables for the subcommand"
-    type        = map(string)
   }
 
   option "interactive" {
@@ -67,10 +67,27 @@ job "terraform subcommand" {
     value = compact(concat(list(opt.dry-run ? conf.terraform-command.command : ""), list(opt.subcommand), opt.args))
   }
 
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "terraform"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "component" {
+    value = coalesce(conf.config-component.component, param.component)
+  }
+
   exec {
     command     = var.exec-cmd
     args        = var.exec-args
-    dir         = "${opt.terraform-dir}/${param.component}"
+    dir         = "${opt.terraform-dir}/${var.component}"
     env         = opt.env
     interactive = true  # currently `variant` does not support interpolation in the `interactive` attribute, so `opt.interactive` does not work
   }
@@ -85,9 +102,32 @@ job "terraform shell" {
     description = "Component"
   }
 
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
   option "commands" {
     description = "List of commands to execute"
     type        = list(string)
+  }
+
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "terraform"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "component" {
+    value = coalesce(conf.config-component.component, param.component)
   }
 
   run "shell" {
@@ -98,7 +138,7 @@ job "terraform shell" {
       join(" ", opt.commands)
     ]
 
-    dir = "${opt.terraform-dir}/${param.component}"
+    dir = "${opt.terraform-dir}/${var.component}"
   }
 }
 
@@ -130,6 +170,23 @@ job "terraform write varfile" {
     }
   }
 
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "terraform"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "component" {
+    value = coalesce(conf.config-component.component, param.component)
+  }
+
   exec {
     command = "echo"
 
@@ -144,7 +201,7 @@ job "terraform write varfile" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.terraform-dir}/${param.component}/${opt.stack}-${param.component}.terraform.tfvars.json"
+    file = "${opt.terraform-dir}/${var.component}/${opt.stack}-${param.component}.terraform.tfvars.json"
   }
 }
 
@@ -181,6 +238,12 @@ job "terraform write override" {
     description = "Component"
   }
 
+  option "stack" {
+    type        = string
+    description = "Stack"
+    short       = "s"
+  }
+
   option "role" {
     type        = string
     description = "Role to assume"
@@ -193,6 +256,23 @@ job "terraform write override" {
         role = opt.role
       }
     }
+  }
+
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "terraform"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "component" {
+    value = coalesce(conf.config-component.component, param.component)
   }
 
   exec {
@@ -208,7 +288,7 @@ job "terraform write override" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.terraform-dir}/${param.component}/override.tf.json"
+    file = "${opt.terraform-dir}/${var.component}/override.tf.json"
   }
 }
 

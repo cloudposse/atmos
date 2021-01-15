@@ -78,6 +78,7 @@ job "terraform import" {
   step "write provider override" {
     run "terraform write override" {
       component = param.component
+      stack     = opt.stack
       role      = opt.role
     }
   }
@@ -96,6 +97,8 @@ job "terraform import" {
   step "apply clean" {
     run "terraform shell" {
       component = param.component
+      stack     = opt.stack
+
       commands  = ["rm", "override.tf.json"]
     }
   }

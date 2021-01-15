@@ -15,6 +15,7 @@ job "terraform clean" {
   step "clean shell" {
     run "terraform shell" {
       component = param.component
+      stack     = opt.stack
 
       commands = [
         "rm -rf .terraform *.planfile"
