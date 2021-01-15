@@ -28,15 +28,15 @@ job "terraform subcommand" {
   }
 
   option "args" {
+    type        = list(string)
     default     = []
     description = "args to pass to the subcommand"
-    type        = list(string)
   }
 
   option "env" {
+    type        = map(string)
     default     = {}
     description = "Environment variables for the subcommand"
-    type        = map(string)
   }
 
   option "interactive" {

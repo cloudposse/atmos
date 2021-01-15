@@ -77,7 +77,11 @@ job "stack config" {
     }
   }
 
-  # Deep-merge all variables in this order: global-scoped, component-type-scoped, and component-scoped
+  variable "component" {
+    value = try(conf.all.components[opt.component-type][param.component]["component"], null)
+  }
+
+  # Deep-merge all variables in this order: global-scoped, component-type-scoped, component-scoped, component-instance-scoped
   config "vars" {
     source job {
       name = "stack-config-echo"
@@ -85,12 +89,21 @@ job "stack config" {
         opt1 = yamlencode(try(conf.all["vars"], {}))
       }
     }
+    # Component type vars override global vars
     source job {
       name = "stack-config-echo"
       args = {
         opt1 = yamlencode(try(conf.all[opt.component-type]["vars"], {}))
       }
     }
+    # Component vars override component type and global vars
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all.components[opt.component-type][var.component]["vars"], {}))
+      }
+    }
+    # Component instance vars override component, component type and global vars
     source job {
       name = "stack-config-echo"
       args = {
@@ -137,10 +150,6 @@ job "stack config" {
         opt1 = yamlencode(try(conf.all.components[opt.component-type][param.component]["backend"][var.backend-type], {}))
       }
     }
-  }
-
-  variable "component" {
-    value = try(conf.all.components[opt.component-type][param.component]["component"], null)
   }
 
   variable "output" {
