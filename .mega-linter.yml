@@ -32,3 +32,6 @@ PRE_COMMANDS:
 POST_COMMANDS:
   - command: echo "This is Mega-Linter POST_COMMAND on own Mega-Linter ! :)"
     cwd: "workspace"
+GITHUB_COMMENT_REPORTER: true
+GITHUB_API_URL: https://api.github.com
+GITHUB_SERVER_URL: https://github.com
