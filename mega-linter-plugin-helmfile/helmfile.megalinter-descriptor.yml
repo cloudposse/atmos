@@ -1,0 +1,17 @@
+descriptor_id: HELMFILE
+descriptor_type: helmfile
+file_extensions:
+  - ".yml"
+  - ".yaml"
+linters:
+  # JSONLINT
+  - linter_name: helmfilelint
+    # TODO: This needs to be a link to an actual linter, not just a schema.
+    linter_url: https://json.schemastore.org/helmfile
+    examples:
+      - "jsonlint myfile.jsonc"
+    install:
+      dockerfile:
+        - |
+          RUN npm install jsonlint \
+              && echo "This is my test Mega-Linter plugin !"

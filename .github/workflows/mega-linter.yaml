@@ -1,0 +1,19 @@
+name: mega-linter-helmfile
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+
+jobs:
+  mega-linter-helmfile:
+    name: mega-linter-helmfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Commit"
+        uses: actions/checkout@v2
+      - name: "Lint All File Types, Including Helmfiles"
+        uses: cloudposse/actions/github/mega-linter@a33474f
