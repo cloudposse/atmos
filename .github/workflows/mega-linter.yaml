@@ -16,7 +16,7 @@ jobs:
       - name: "Checkout Commit"
         uses: actions/checkout@v2
       - name: "Lint All files, Including Helmfiles"
-        uses: cloudposse/actions/github/mega-linter@a33474f
+        uses: cloudposse/actions/github/mega-linter@9450f15
         env:
             GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
             PLUGINS: "https://raw.githubusercontent.com/cloudposse/actions/helmfile-mega-linter/github/mega-linter/mega-linter-plugin-helmfile/helmfile.megalinter-descriptor.yml"
