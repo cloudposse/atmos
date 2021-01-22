@@ -1,4 +1,4 @@
-name: mega-linter-helmfile
+name: mega-linter
 
 on:
   push:
@@ -9,8 +9,8 @@ on:
 
 
 jobs:
-  mega-linter-helmfile:
-    name: mega-linter-helmfile
+  mega-linter:
+    name: mega-linter
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout Commit"
