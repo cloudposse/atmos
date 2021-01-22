@@ -15,15 +15,8 @@ jobs:
     steps:
       - name: "Checkout Commit"
         uses: actions/checkout@v2
-      - name: Set SHA to be that of the present commit
-        run: |
-          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
-            echo "GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)" >> $GITHUB_ENV
-          fi
-      - name: Test SHA value
-        run: echo $GITHUB_SHA_SHORT
       - name: "Lint All files, Including Helmfiles"
-        uses: cloudposse/actions/github/mega-linter@df45ed6
+        uses: cloudposse/actions/github/mega-linter@bc2baa2
         env:
             GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
             PLUGINS: "https://raw.githubusercontent.com/cloudposse/actions/helmfile-mega-linter/github/mega-linter/mega-linter-plugin-helmfile/helmfile.megalinter-descriptor.yml"
