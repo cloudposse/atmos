@@ -1,0 +1,112 @@
+{
+    "$schema": "http://json-schema.org/schema#",
+    "type": "object",
+    "properties": {
+        "import": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "vars": {
+            "type": "object",
+            "properties": {
+                "stage": {
+                    "type": "string"
+                }
+            }
+        },
+        "terraform": {
+            "type": "object",
+            "properties": {
+                "vars": {
+                    "type": "object"
+                }
+            }
+        },
+        "helmfile": {
+            "type": "object",
+            "properties": {
+                "vars": {
+                    "type": "object"
+                }
+            }
+        },
+        "components": {
+            "type": "object",
+            "properties": {
+                "terraform": {
+                    "type": "object",
+                    "properties": {
+                        "vpc": {
+                            "type": "object",
+                            "properties": {
+                                "vars": {
+                                    "type": "object",
+                                    "properties": {
+                                        "cidr_block": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "backend": {
+                                    "type": "object",
+                                    "properties": {
+                                        "s3": {
+                                            "type": "object",
+                                            "properties": {
+                                                "workspace_key_prefix": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "eks": {
+                            "type": "object",
+                            "properties": {
+                                "backend": {
+                                    "type": "object",
+                                    "properties": {
+                                        "s3": {
+                                            "type": "object",
+                                            "properties": {
+                                                "workspace_key_prefix": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "vars": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "helmfile": {
+                    "type": "object",
+                    "properties": {
+                        "nginx-ingress": {
+                            "type": "object",
+                            "properties": {
+                                "vars": {
+                                    "type": "object",
+                                    "properties": {
+                                        "installed": {
+                                            "type": "boolean"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "additionalProperties": false
+}

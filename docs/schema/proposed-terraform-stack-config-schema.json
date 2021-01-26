@@ -1,0 +1,351 @@
+{
+    "$schema": "http://json-schema.org/schema#",
+    "type": "object",
+    "properties": {
+        "import": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "vars": {
+            "type": "object",
+            "properties": {
+                "region": {
+                    "type": "string"
+                },
+                "environment": {
+                    "type": "string"
+                },
+                "level": {
+                    "type": "integer"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "param": {
+                    "type": "string"
+                },
+                "stage": {
+                    "type": "string"
+                }
+            }
+        },
+        "terraform": {
+            "type": "object",
+            "properties": {
+                "vars": {
+                    "type": "object",
+                    "properties": {
+                        "var_1": {
+                            "type": [
+                                "integer",
+                                "string"
+                            ]
+                        },
+                        "var_2": {
+                            "type": "string"
+                        },
+                        "var_3": {
+                            "type": [
+                                "integer",
+                                "string"
+                            ]
+                        }
+                    }
+                },
+                "backend_type": {
+                    "type": "string"
+                },
+                "backend": {
+                    "type": "object",
+                    "properties": {
+                        "s3": {
+                            "type": "object",
+                            "properties": {
+                                "encrypt": {
+                                    "type": "boolean"
+                                },
+                                "dynamodb_table": {
+                                    "type": "string"
+                                },
+                                "role_arn": {
+                                    "type": "string"
+                                },
+                                "acl": {
+                                    "type": "string"
+                                },
+                                "bucket": {
+                                    "type": "string"
+                                },
+                                "key": {
+                                    "type": "string"
+                                },
+                                "region": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "acl",
+                                "bucket",
+                                "dynamodb_table",
+                                "encrypt",
+                                "key",
+                                "region",
+                                "role_arn"
+                            ]
+                        },
+                        "remote": {
+                            "type": "object",
+                            "properties": {
+                                "organization": {
+                                    "type": "string"
+                                },
+                                "workspace": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "organization",
+                                "workspace"
+                            ]
+                        },
+                        "vault": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "remote",
+                        "s3",
+                        "vault"
+                    ]
+                }
+            },
+            "required": [
+                "vars"
+            ]
+        },
+        "helmfile": {
+            "type": "object",
+            "properties": {
+                "vars": {
+                    "type": "object",
+                    "properties": {
+                        "var_1": {
+                            "type": "integer"
+                        },
+                        "var_2": {
+                            "type": "integer"
+                        }
+                    }
+                }
+            },
+            "required": [
+                "vars"
+            ]
+        },
+        "components": {
+            "type": "object",
+            "properties": {
+                "terraform": {
+                    "type": "object",
+                    "properties": {
+                        "vpc": {
+                            "type": "object",
+                            "properties": {
+                                "vars": {
+                                    "type": "object",
+                                    "properties": {
+                                        "availability_zones": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "test_map": {
+                                            "type": "object",
+                                            "properties": {
+                                                "a": {
+                                                    "type": "string"
+                                                },
+                                                "b": {
+                                                    "type": "string"
+                                                },
+                                                "c": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "integer"
+                                                    }
+                                                }
+                                            },
+                                            "required": [
+                                                "a",
+                                                "b",
+                                                "c"
+                                            ]
+                                        },
+                                        "subnet_type_tag_key": {
+                                            "type": "string"
+                                        },
+                                        "cidr_block": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "backend": {
+                                    "type": "object",
+                                    "properties": {
+                                        "s3": {
+                                            "type": "object",
+                                            "properties": {
+                                                "workspace_key_prefix": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "workspace_key_prefix"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "s3"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "vars"
+                            ]
+                        },
+                        "eks": {
+                            "type": "object",
+                            "properties": {
+                                "backend": {
+                                    "type": "object",
+                                    "properties": {
+                                        "s3": {
+                                            "type": "object",
+                                            "properties": {
+                                                "workspace_key_prefix": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "workspace_key_prefix"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "s3"
+                                    ]
+                                },
+                                "vars": {
+                                    "type": "object",
+                                    "properties": {
+                                        "cluster_kubernetes_version": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            "required": [
+                                "vars"
+                            ]
+                        },
+                        "my-vpc": {
+                            "type": "object",
+                            "properties": {
+                                "component": {
+                                    "type": "string"
+                                },
+                                "vars": {
+                                    "type": "object",
+                                    "properties": {
+                                        "cidr_block": {
+                                            "type": "string"
+                                        },
+                                        "test_map": {
+                                            "type": "object",
+                                            "properties": {
+                                                "a": {
+                                                    "type": "string"
+                                                },
+                                                "map2": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "atr1": {
+                                                            "type": "integer"
+                                                        },
+                                                        "atr2": {
+                                                            "type": "integer"
+                                                        },
+                                                        "atr3": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "atr1",
+                                                        "atr2",
+                                                        "atr3"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "a",
+                                                "map2"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "cidr_block",
+                                        "test_map"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "component",
+                                "vars"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "vpc"
+                    ]
+                },
+                "helmfile": {
+                    "type": "object",
+                    "properties": {
+                        "nginx-ingress": {
+                            "type": "object",
+                            "properties": {
+                                "vars": {
+                                    "type": "object",
+                                    "properties": {
+                                        "installed": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "installed"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "vars"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "nginx-ingress"
+                    ]
+                }
+            },
+            "required": [
+                "terraform"
+            ]
+        }
+    },
+    "additionalProperties": false
+}
