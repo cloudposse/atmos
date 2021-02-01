@@ -9,12 +9,7 @@
             }
         },
         "vars": {
-            "type": "object",
-            "properties": {
-                "stage": {
-                    "type": "string"
-                }
-            }
+            "type": "object"
         },
         "terraform": {
             "type": "object",
