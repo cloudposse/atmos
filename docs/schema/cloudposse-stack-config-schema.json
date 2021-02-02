@@ -68,7 +68,8 @@
                     },
                     "additionalProperties": false
                 }
-            }
+            },
+            "additionalProperties": false
         },
         "workflows": {
             "type": "object",
