@@ -42,10 +42,7 @@
                                 "backend": {
                                     "type": "object"
                                 }
-                            },
-                            "required": [
-                                "vars"
-                            ]
+                            }
                         }
                     },
                     "additionalProperties": false
@@ -60,10 +57,7 @@
                                     "type": "object"
                                 },
                                 "backend": false
-                            },
-                            "required": [
-                                "vars"
-                            ]
+                            }
                         }
                     },
                     "additionalProperties": false
