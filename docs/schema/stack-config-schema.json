@@ -1,0 +1,79 @@
+{
+    "$schema": "http://json-schema.org/schema#",
+    "type": "object",
+    "properties": {
+        "import": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "vars": {
+            "type": "object"
+        },
+        "terraform": {
+            "type": "object",
+            "properties": {
+                "vars": {
+                    "type": "object"
+                }
+            }
+        },
+        "helmfile": {
+            "type": "object",
+            "properties": {
+                "vars": {
+                    "type": "object"
+                }
+            }
+        },
+        "components": {
+            "type": "object",
+            "properties": {
+                "terraform": {
+                    "type": "object",
+                    "patternProperties": {
+                        "^.*$": {
+                            "type": "object",
+                            "properties": {
+                                "vars": {
+                                    "type": "object"
+                                },
+                                "backend": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "helmfile": {
+                    "type": "object",
+                    "patternProperties": {
+                        "^.*$": {
+                            "type": "object",
+                            "properties": {
+                                "vars": {
+                                    "type": "object"
+                                },
+                                "backend": false
+                            }
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        },
+        "workflows": {
+            "type": "object",
+            "patternProperties": {
+                "^.*$": {
+                    "type": "object"
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": false
+}
