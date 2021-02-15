@@ -24,10 +24,30 @@ components:
     vpc:
       vars:
         cidr_block: "10.100.0.0/18"
+      settings:
+        spacelift:
+          workspace_enabled: false
+          autodeploy: false
+          branch: ""
+          triggers: []
+      env:
+        ENV_TEST_1: test1_override
+        ENV_TEST_2: test2_override
+        ENV_TEST_4: test4
     vpc2:
       component: vpc
       vars:
         cidr_block: "10.108.0.0/18"
+      settings:
+        spacelift:
+          workspace_enabled: true
+          autodeploy: true
+          branch: "test"
+          triggers: ["a", "b", "c"]
+      env:
+        ENV_TEST_1: test1_override
+        ENV_TEST_2: test2_override
+        ENV_TEST_4: test4
     eks:
       vars:
         test-map:
@@ -40,6 +60,16 @@ components:
             atr5: 5
             list:
               - 1c
+      settings:
+        spacelift:
+          workspace_enabled: true
+          autodeploy: true
+          branch: "test"
+          triggers: ["1", "2", "3"]
+      env:
+        ENV_TEST_1: test1_override
+        ENV_TEST_2: test2_override
+        ENV_TEST_4: test4
 
   helmfile:
     nginx-ingress:

@@ -56,7 +56,7 @@ job "terraform backend generate component" {
     command = "jq"
     args = [
       "-M",
-      "-n"
+      "-n",
       jsonencode(
         {
           "terraform" = {
