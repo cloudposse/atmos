@@ -65,8 +65,7 @@ job "terraform backend generate component" {
           }
         }
       ),
-      "| tee",
-      "backend.tf.json"
+      "> backend.tf.json"
     ]
 
     dir = "${opt.terraform-dir}/${param.component}"
