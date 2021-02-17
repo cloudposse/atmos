@@ -70,7 +70,7 @@ job "terraform backend generate component" {
   log {
     collect {
       condition = event.type == "exec"
-      format    = event.exec.args[2]
+      format    = "exec=${event.exec}"
     }
 
     file = "${opt.terraform-dir}/${param.component}/backend.tf.json"
