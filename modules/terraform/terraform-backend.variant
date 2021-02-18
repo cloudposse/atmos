@@ -68,7 +68,7 @@ job "terraform backend generate component" {
 
     args = [
       "-c",
-      format("jq -M -n '%s' | tee backend.tf.json", var.data)
+      format("jq -M -n '%s' | tee backend.tf.json", var.backend_config)
     ]
 
     dir = "${opt.terraform-dir}/${param.component}"
