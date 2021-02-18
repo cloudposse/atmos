@@ -3,7 +3,7 @@ job "version" {
 
   variable "atmos_version" {
     type  = string
-    value = "0.16.0"
+    value = "%CUSTOM%"
   }
 
   exec {
