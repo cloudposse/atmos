@@ -52,7 +52,7 @@ job "terraform backend generate component" {
     }
   }
 
-  variable "data" {
+  variable "backend_config" {
     type  = string
     value = jsonencode(
       {
