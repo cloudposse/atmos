@@ -71,6 +71,6 @@ job "terraform backend generate component" {
       format("jq -M -n '%s' | tee backend.tf.json", var.data)
     ]
 
-    dir     = "${opt.terraform-dir}/${param.component}"
+    dir = "${opt.terraform-dir}/${param.component}"
   }
 }
