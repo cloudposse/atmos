@@ -38,9 +38,9 @@ job "shell" {
   }
 
   parameter "args" {
-    default = []
     description = "List of arguments for the command to execute"
     type        = list(string)
+    default     = []
   }
 
   variable "cmd-name" {
@@ -54,7 +54,7 @@ job "shell" {
   }
 
   variable "cmd-args" {
-    type = list(string)
+    type  = list(string)
     value = compact(concat(list(opt.dry-run ? var.cmd-name : ""), param.args))
   }
 

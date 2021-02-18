@@ -1,0 +1,13 @@
+job "version" {
+  description = "Shows CLI version"
+
+  variable "atmos_version" {
+    type  = string
+    value = "%CUSTOM%"
+  }
+
+  exec {
+    command = "echo"
+    args    = [var.atmos_version]
+  }
+}

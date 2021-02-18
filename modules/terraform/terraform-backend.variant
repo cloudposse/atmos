@@ -52,27 +52,25 @@ job "terraform backend generate component" {
     }
   }
 
-  exec {
-    command = "jq"
-    args = [
-      "-M",
-      "-n",
-      jsonencode(
-        {
-          "terraform" = {
-            "backend" = conf.stack-config
-          }
+  variable "backend_config" {
+    type  = string
+    value = jsonencode(
+      {
+        "terraform" = {
+          "backend" = conf.stack-config
         }
-      )
-    ]
+      }
+    )
   }
 
-  log {
-    collect {
-      condition = event.type == "exec"
-      format    = event.exec.args[0]
-    }
+  run "shell" {
+    command = "bash"
 
-    file = "${opt.terraform-dir}/${param.component}/backend.tf.json"
+    args = [
+      "-c",
+      format("jq -M -n '%s' | tee backend.tf.json", var.backend_config)
+    ]
+
+    dir = "${opt.terraform-dir}/${param.component}"
   }
 }
