@@ -15,8 +15,8 @@
 
 # Cloud Posse must review any changes to standard context definition,
 # but some changes can be rubber-stamped.
-**/*.tf       @cloudposse/engineering @cloudposse/approvers
-README.yaml   @cloudposse/engineering @cloudposse/approvers
+**/*.tf       @cloudposse/engineering @cloudposse/contributors @cloudposse/approvers
+README.yaml   @cloudposse/engineering @cloudposse/contributors @cloudposse/approvers
 README.md     @cloudposse/engineering @cloudposse/contributors @cloudposse/approvers
 docs/*.md     @cloudposse/engineering @cloudposse/contributors @cloudposse/approvers
 
