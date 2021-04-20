@@ -58,5 +58,5 @@ imports = [
   "./modules/helm",
   "./modules/workflow",
   "./modules/istio",
-  "./modules/vendor"
+  "./modules/vendor-command"
 ]

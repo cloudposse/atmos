@@ -1,0 +1,47 @@
+# Visit https://goreleaser.com for documentation on how to customize this behavior.
+before:
+  hooks:
+    # this is just an example and not a requirement
+    # - go mod tidy
+builds:
+- env:
+    # goreleaser does not work with CGO, it could also complicate
+    # usage by users in CI/CD systems like Terraform Cloud where
+    # they are unable to install libraries.
+    - CGO_ENABLED=0
+  mod_timestamp: '{{ .CommitTimestamp }}'
+  goos:
+    - darwin
+    - freebsd
+    # - windows
+    - linux
+  goarch:
+    - amd64
+    - '386'
+    - arm
+    - arm64
+  ignore:
+    # Find valid combinations at https://golang.org/doc/install/source#environment
+    - goos: darwin
+      goarch: '386'
+    - goos: darwin
+      goarch: arm
+    - goos: freebsd
+      goarch: arm64
+    - goos: windows
+      goarch: arm
+    - goos: windows
+      goarch: arm64
+  binary: atmos
+  dir: build
+archives:
+- format: zip
+  name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
+  algorithm: sha256
+release:
+  # If you want to manually examine the release before it is live, uncomment this line:
+  # draft: true
+changelog:
+  skip: true
