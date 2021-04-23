@@ -13,30 +13,37 @@ jobs:
       # Checkout the repo
       - name: 'Checkout'
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
       # Setup Go
       - name: 'Setup Go'
         uses: actions/setup-go@v2
         with:
+          # Go 1.16 is not supported by Variant yet.
+          # See https://github.com/mumoshu/variant2/issues/48
+          # When Go 1.16 is supported, enable darwin_arm64 builds
           go-version: '1.15'
       - run: go version
 
-      # Build CLI binaries
-      - name: 'Build CLI'
+      # Generate Go code
+      - name: 'Generate Go Code'
+        env:
+          VARIANT_VERSION: "0.37.1"
         run: |
           set -e -x
-          export VARIANT_VERSION=0.37.0
-          export CGO_ENABLED=1
-          sudo apt-get update && sudo apt-get install -y -u wget
           wget -q https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
             tar -zvxf variant*.tar.gz variant
-          sed -i 's/%CUSTOM%/${{ github.event.release.tag_name }}/' modules/utils/version.variant
-          ./variant export binary $PWD ${{ github.workspace }}/atmos
-          ${{ github.workspace }}/atmos help
+          sed -i 's/%CUSTOM%/${{ github.event.release.tag_name }}/' atmos/modules/utils/version.variant
+          ./variant export go atmos build
+          # Download go modules once so that parallel builds do not try to download them in parallel and clash with each other
+          cd build && go mod tidy
 
-      # Attach CLI binary to GitHub release
-      - name: 'Attach CLI binary to GitHub release'
-        uses: cloudposse/actions/github/release-assets@0.23.0
+      # Build and release
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v2
+        with:
+          version: latest
+          args: release --parallelism 2 --rm-dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_PATH: ${{ github.workspace }}/atmos
