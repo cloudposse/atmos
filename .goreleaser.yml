@@ -13,6 +13,8 @@ builds:
   goos:
     - darwin
     - freebsd
+    # Windows is not supported by Variant yet
+    # See https://github.com/mumoshu/variant2/issues/49
     # - windows
     - linux
   goarch:
@@ -35,7 +37,7 @@ builds:
   binary: atmos
   dir: build
 archives:
-- format: zip
+- format: binary
   name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'

@@ -20,6 +20,9 @@ jobs:
       - name: 'Setup Go'
         uses: actions/setup-go@v2
         with:
+          # Go 1.16 is not supported by Variant yet.
+          # See https://github.com/mumoshu/variant2/issues/48
+          # When Go 1.16 is supported, enable darwin_arm64 builds
           go-version: '1.15'
       - run: go version
 
