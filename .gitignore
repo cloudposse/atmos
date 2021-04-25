@@ -17,5 +17,7 @@
 **/.build-harness
 **/build-harness
 **/build
+**/dist
 **/.helmfile/
 .DS_Store
+/variant
