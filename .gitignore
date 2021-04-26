@@ -21,3 +21,5 @@
 **/.helmfile/
 .DS_Store
 /variant
+*.tar
+*.gz
