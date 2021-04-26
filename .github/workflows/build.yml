@@ -38,10 +38,10 @@ jobs:
           sed -i "s/%CUSTOM%/${{ github.event.release.tag_name }} ($(git log -n 1 --format=%h))/" atmos/modules/utils/version.variant
           # Convert into go code
           ./variant export go atmos build
-          # Download go modules once so that parallel builds do not try to download them in parallel and clash with each other
-          cd build && go mod tidy
           # reset the variant script so we have a clean git repo matching the tag commit SHA (required by goreleaser)
           git checkout -- atmos/modules/utils/version.variant
+          # Download go modules once so that parallel builds do not try to download them in parallel and clash with each other
+          cd build && go mod tidy
 
       # Build and release
       - name: Run GoReleaser
