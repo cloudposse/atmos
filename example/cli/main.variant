@@ -58,5 +58,5 @@ imports = [
   "git::https://git@github.com/cloudposse/atmos@atmos/modules/helm?ref=master",
   "git::https://git@github.com/cloudposse/atmos@atmos/modules/workflow?ref=master",
   "git::https://git@github.com/cloudposse/atmos@atmos/modules/istio?ref=master",
-  "git::https://git@github.com/cloudposse/atmos@atmos/modules/vendor?ref=master"
+  "git::https://git@github.com/cloudposse/atmos@atmos/modules/vendir?ref=master"
 ]
