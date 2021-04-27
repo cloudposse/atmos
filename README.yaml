@@ -72,7 +72,7 @@ introduction: |-
 
   See `variant` docs for more information on [writing commands](https://github.com/mumoshu/variant2#writing-commands).
 
-  The CLI code consists of self-documenting [modules](modules) (separating the files into modules is done for cleanliness):
+  The CLI code consists of self-documenting [modules](atmos/modules) (separating the files into modules is done for cleanliness):
 
     - utils - a collection of utilities to use in other modules
     - shell - `shell` commands and helpers for the other modules
