@@ -35,6 +35,12 @@ job "terraform import" {
     type        = string
   }
 
+  option "region" {
+    default     = ""
+    description = "AWS Region to use for 'terraform import'"
+    type        = string
+  }
+
   option "interactive" {
     type        = bool
     description = "Interactive"
@@ -80,6 +86,7 @@ job "terraform import" {
       component = param.component
       stack     = opt.stack
       role      = opt.role
+      region    = opt.region
     }
   }
 
