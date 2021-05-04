@@ -209,6 +209,11 @@ job "terraform provider override" {
   description = "Override aws provider"
   private     = true
 
+  option "region" {
+    type        = string
+    description = "AWS Region"
+  }
+
   option "role" {
     type        = string
     description = "Role to assume"
@@ -249,11 +254,17 @@ job "terraform write override" {
     description = "Role to assume"
   }
 
+  option "region" {
+    type        = string
+    description = "AWS Region"
+  }
+
   config "override-contents" {
     source job {
       name = "terraform provider override"
       args = {
-        role = opt.role
+        role   = opt.role
+        region = opt.region
       }
     }
   }
