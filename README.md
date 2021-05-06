@@ -232,7 +232,7 @@ __NOTE:__ For the example, we import all the CLI modules, but they could be incl
         "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
         "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
         "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
+        "git::https://git@github.com/cloudposse/atmos@modules/vendir?ref=master"
     ]
   ```
 
