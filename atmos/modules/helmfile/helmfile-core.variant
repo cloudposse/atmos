@@ -78,8 +78,21 @@ job "helmfile subcommand" {
     }
   }
 
-  variable "component" {
-    value = coalesce(conf.stack-config.component, param.component)
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "helmfile"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "command" {
+    value = coalesce(lookup(conf.config-component, "command", null), opt.command)
   }
 
   variable "kube-namespace-arg" {
@@ -180,8 +193,21 @@ job "helmfile write varfile" {
     }
   }
 
-  variable "component" {
-    value = coalesce(conf.stack-config.component, param.component)
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "helmfile"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "command" {
+    value = coalesce(lookup(conf.config-component, "command", null), opt.command)
   }
 
   exec {
@@ -240,8 +266,21 @@ job "helmfile-command" {
     }
   }
 
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "helmfile"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
   variable "command" {
-    value = coalesce(lookup(conf.stack-config, "command", null), opt.command)
+    value = coalesce(lookup(conf.config-component, "command", null), opt.command)
   }
 
   exec {
