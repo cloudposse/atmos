@@ -78,6 +78,10 @@ job "helmfile subcommand" {
     }
   }
 
+  variable "component" {
+    value = coalesce(conf.stack-config.component, param.component)
+  }
+
   variable "kube-namespace-arg" {
     type = list(string)
     value = opt.kube-namespace != "" ? ["--namespace", opt.kube-namespace] : []
@@ -115,7 +119,7 @@ job "helmfile subcommand" {
 
   step "helmfile write varfile" {
     run "helmfile write varfile" {
-      component = param.component
+      component = var.component
       stack     = opt.stack
     }
   }
@@ -124,7 +128,7 @@ job "helmfile subcommand" {
     run "shell" {
       command = conf.helmfile-command.command
       args    = var.args
-      dir     = "${opt.helmfile-dir}/${param.component}"
+      dir     = "${opt.helmfile-dir}/${var.component}"
       env     = merge(
         opt.env,
         {
@@ -143,7 +147,7 @@ job "helmfile subcommand" {
   step "helmfile clean" {
     run "shell" {
       command = "rm"
-      args    = ["${opt.helmfile-dir}/${param.component}/${opt.stack}.helmfile.vars.yaml"]
+      args    = ["${opt.helmfile-dir}/${var.component}/${opt.stack}.helmfile.vars.yaml"]
     }
   }
 }
@@ -176,6 +180,10 @@ job "helmfile write varfile" {
     }
   }
 
+  variable "component" {
+    value = coalesce(conf.stack-config.component, param.component)
+  }
+
   exec {
     command = "echo"
 
@@ -190,7 +198,7 @@ job "helmfile write varfile" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.helmfile-dir}/${param.component}/${opt.stack}.helmfile.vars.yaml"
+    file = "${opt.helmfile-dir}/${var.component}/${opt.stack}.helmfile.vars.yaml"
   }
 }
 
