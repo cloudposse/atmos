@@ -56,3 +56,8 @@ components:
     nginx-ingress:
       vars:
         installed: true
+
+    nginx-ingress2:
+      component: nginx-ingress
+      vars:
+        installed: true
