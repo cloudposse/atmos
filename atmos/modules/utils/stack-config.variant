@@ -143,6 +143,37 @@ job "stack config" {
     }
   }
 
+  # Deep-merge all `env` sections in this order: global-scoped, component-type-scoped, component-scoped, component-instance-scoped
+  config "env" {
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all["env"], {}))
+      }
+    }
+    # Component type env override global env
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all[opt.component-type]["env"], {}))
+      }
+    }
+    # Component env override component type and global env
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all.components[opt.component-type][var.component]["env"], {}))
+      }
+    }
+    # Component instance env override component, component type and global env
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all.components[opt.component-type][param.component]["env"], {}))
+      }
+    }
+  }
+
   variable "command" {
     value = coalesce(
       try(conf.all["command"], null),
@@ -187,6 +218,7 @@ job "stack config" {
     value = {
       vars         = conf.vars,
       settings     = conf.settings,
+      env          = conf.env,
       command      = { command = var.command },
       backend      = { "${var.backend-type}" = conf.backend },
       backend-type = var.backend-type,
