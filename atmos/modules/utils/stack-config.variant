@@ -223,7 +223,17 @@ job "stack config" {
       backend      = { "${var.backend-type}" = conf.backend },
       backend-type = var.backend-type,
       all          = conf.all,
-      component    = { component = var.component }
+      component    = { component = var.component },
+
+      describe     = {
+        vars         = conf.vars,
+        settings     = conf.settings,
+        env          = conf.env,
+        command      = var.command,
+        backend      = { "${var.backend-type}" = conf.backend },
+        backend-type = var.backend-type,
+        component    = var.component
+      }
     }
   }
 
