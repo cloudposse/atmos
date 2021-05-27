@@ -230,8 +230,8 @@ job "stack config" {
         settings     = conf.settings,
         env          = conf.env,
         command      = var.command,
-        backend      = { "${var.backend-type}" = conf.backend },
         backend-type = var.backend-type,
+        backend      = conf.backend,
         component    = var.component
       }
     }
