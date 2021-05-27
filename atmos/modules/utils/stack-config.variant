@@ -81,7 +81,7 @@ job "stack config" {
     value = try(conf.all.components[opt.component-type][param.component]["component"], null)
   }
 
-  # Deep-merge all variables in this order: global-scoped, component-type-scoped, component-scoped, component-instance-scoped
+  # Deep-merge all `vars` sections in this order: global-scoped, component-type-scoped, component-scoped, component-instance-scoped
   config "vars" {
     source job {
       name = "stack-config-echo"
@@ -108,6 +108,37 @@ job "stack config" {
       name = "stack-config-echo"
       args = {
         opt1 = yamlencode(try(conf.all.components[opt.component-type][param.component]["vars"], {}))
+      }
+    }
+  }
+
+  # Deep-merge all `settings` sections in this order: global-scoped, component-type-scoped, component-scoped, component-instance-scoped
+  config "settings" {
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all["settings"], {}))
+      }
+    }
+    # Component type settings override global settings
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all[opt.component-type]["settings"], {}))
+      }
+    }
+    # Component settings override component type and global settings
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all.components[opt.component-type][var.component]["settings"], {}))
+      }
+    }
+    # Component instance settings override component, component type and global settings
+    source job {
+      name = "stack-config-echo"
+      args = {
+        opt1 = yamlencode(try(conf.all.components[opt.component-type][param.component]["settings"], {}))
       }
     }
   }
@@ -155,6 +186,7 @@ job "stack config" {
   variable "output" {
     value = {
       vars         = conf.vars,
+      settings     = conf.settings,
       command      = { command = var.command },
       backend      = { "${var.backend-type}" = conf.backend },
       backend-type = var.backend-type,
