@@ -1,4 +1,4 @@
-ARG VERSION=0.141.6
+ARG VERSION=0.145.1
 ARG OS=alpine
 ARG CLI_NAME=atmos
 
@@ -42,7 +42,7 @@ ENV DOCKER_IMAGE="cloudposse/atmos"
 ENV DOCKER_TAG="latest"
 
 # Geodesic banner
-ENV BANNER="infrastructure"
+ENV BANNER="atmos"
 
 # Enable advanced AWS assume role chaining for tools using AWS SDK
 # https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
