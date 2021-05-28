@@ -59,12 +59,6 @@ RUN apk add -u terraform-0.12@cloudposse terraform-0.13@cloudposse~=0.13.3
 # `terraform-0.12` or `terraform-0.13` to be explicit when needed.
 RUN update-alternatives --set terraform /usr/share/terraform/0.13/bin/terraform
 
-# https://github.com/Versent/saml2aws#linux
-RUN apk add saml2aws@cloudposse
-
-# Install assume-role
-RUN apk add assume-role@cloudposse
-
 # Install vendir
 RUN apk add vendir@cloudposse
 
