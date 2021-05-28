@@ -1,3 +1,4 @@
+
 <!-- markdownlint-disable -->
 # atmos [![Latest Release](https://img.shields.io/github/release/cloudposse/atmos.svg)](https://github.com/cloudposse/atmos/releases/latest) [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
 <!-- markdownlint-restore -->
@@ -28,7 +29,6 @@
 -->
 
 Universal Tool for DevOps and Cloud Automation.
-
 
 ---
 
@@ -98,7 +98,7 @@ The CLI is built with [variant2](https://github.com/mumoshu/variant2) using [HCL
 
 See `variant` docs for more information on [writing commands](https://github.com/mumoshu/variant2#writing-commands).
 
-The CLI code consists of self-documenting [modules](modules) (separating the files into modules is done for cleanliness):
+The CLI code consists of self-documenting [modules](atmos/modules) (separating the files into modules is done for cleanliness):
 
   - utils - a collection of utilities to use in other modules
   - shell - `shell` commands and helpers for the other modules
@@ -232,7 +232,7 @@ __NOTE:__ For the example, we import all the CLI modules, but they could be incl
         "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
         "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
         "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
+        "git::https://git@github.com/cloudposse/atmos@modules/vendir?ref=master"
     ]
   ```
 
@@ -475,6 +475,7 @@ execute the following command:
 
 
 
+
 ## Share the Love
 
 Like this project? Please give it a ★ on [our GitHub](https://github.com/cloudposse/atmos)! (it helps us **a lot**)
@@ -482,13 +483,12 @@ Like this project? Please give it a ★ on [our GitHub](https://github.com/cloud
 Are you using this project or any of our other projects? Consider [leaving a testimonial][testimonial]. =)
 
 
+
 ## Related Projects
 
 Check out these related projects.
 
 - [variant2](https://github.com/mumoshu/variant2) - Turn your bash scripts into a modern, single-executable CLI app today
-
-
 
 ## Help
 

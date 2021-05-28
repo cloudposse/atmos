@@ -66,6 +66,23 @@ job "helmfile subcommand" {
     }
   }
 
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "helmfile"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "component" {
+    value = coalesce(conf.config-component.component, param.component)
+  }
+
   # Find helmfile binary to execute
   config "helmfile-command" {
     source job {
@@ -90,7 +107,7 @@ job "helmfile subcommand" {
       split(" ", opt.args),
       [
         "--state-values-file",
-        "./${opt.stack}.helmfile.vars.yaml",
+        "./${opt.stack}-${param.component}.helmfile.vars.yaml",
         opt.subcommand
       ],
       split(" ", opt.sub-args)
@@ -124,7 +141,7 @@ job "helmfile subcommand" {
     run "shell" {
       command = conf.helmfile-command.command
       args    = var.args
-      dir     = "${opt.helmfile-dir}/${param.component}"
+      dir     = "${opt.helmfile-dir}/${var.component}"
       env     = merge(
         opt.env,
         {
@@ -143,7 +160,7 @@ job "helmfile subcommand" {
   step "helmfile clean" {
     run "shell" {
       command = "rm"
-      args    = ["${opt.helmfile-dir}/${param.component}/${opt.stack}.helmfile.vars.yaml"]
+      args    = ["${opt.helmfile-dir}/${var.component}/${opt.stack}-${param.component}.helmfile.vars.yaml"]
     }
   }
 }
@@ -176,6 +193,23 @@ job "helmfile write varfile" {
     }
   }
 
+  config "config-component" {
+    source job {
+      name = "stack config"
+      args = {
+        component-type = "helmfile"
+        config-type    = "component"
+        component      = param.component
+        stack          = opt.stack
+        format         = "json"
+      }
+    }
+  }
+
+  variable "component" {
+    value = coalesce(conf.config-component.component, param.component)
+  }
+
   exec {
     command = "echo"
 
@@ -190,7 +224,7 @@ job "helmfile write varfile" {
       format    = event.exec.args[0]
     }
 
-    file = "${opt.helmfile-dir}/${param.component}/${opt.stack}.helmfile.vars.yaml"
+    file = "${opt.helmfile-dir}/${var.component}/${opt.stack}-${param.component}.helmfile.vars.yaml"
   }
 }
 

@@ -206,7 +206,7 @@ introduction: |-
           "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
           "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
           "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
-          "git::https://git@github.com/cloudposse/atmos@modules/vendor?ref=master"
+          "git::https://git@github.com/cloudposse/atmos@modules/vendir?ref=master"
       ]
     ```
 

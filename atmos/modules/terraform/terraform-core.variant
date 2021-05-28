@@ -5,6 +5,11 @@ job "terraform subcommand" {
   description = "Execute a terraform subcommand"
   private     = true
 
+  parameter "component" {
+    type        = string
+    description = "Component"
+  }
+
   option "command" {
     default     = "terraform"
     type        = string
@@ -14,11 +19,6 @@ job "terraform subcommand" {
   option "subcommand" {
     type        = string
     description = "A terraform subcommand to execute"
-  }
-
-  parameter "component" {
-    type        = string
-    description = "Component"
   }
 
   option "stack" {

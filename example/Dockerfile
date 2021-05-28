@@ -1,4 +1,4 @@
-ARG VERSION=0.141.6
+ARG VERSION=0.145.1
 ARG OS=alpine
 ARG CLI_NAME=atmos
 
@@ -42,7 +42,7 @@ ENV DOCKER_IMAGE="cloudposse/atmos"
 ENV DOCKER_TAG="latest"
 
 # Geodesic banner
-ENV BANNER="infrastructure"
+ENV BANNER="atmos"
 
 # Enable advanced AWS assume role chaining for tools using AWS SDK
 # https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
@@ -58,12 +58,6 @@ RUN apk add -u terraform-0.12@cloudposse terraform-0.13@cloudposse~=0.13.3
 # Set Terraform 0.13.x as the default `terraform`. You can still use
 # `terraform-0.12` or `terraform-0.13` to be explicit when needed.
 RUN update-alternatives --set terraform /usr/share/terraform/0.13/bin/terraform
-
-# https://github.com/Versent/saml2aws#linux
-RUN apk add saml2aws@cloudposse
-
-# Install assume-role
-RUN apk add assume-role@cloudposse
 
 # Install vendir
 RUN apk add vendir@cloudposse
