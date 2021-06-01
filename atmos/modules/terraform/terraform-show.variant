@@ -1,9 +1,9 @@
 #!/usr/bin/env variant
 # vim: filetype=hcl
 
-job "terraform apply" {
+job "terraform show" {
   concurrency = 1
-  description = "Run 'terraform apply'"
+  description = "Run 'terraform show'"
 
   parameter "component" {
     type        = string
@@ -48,27 +48,14 @@ job "terraform apply" {
     }
   }
 
-  step "apply cmd" {
+  step "show cmd" {
     run "terraform subcommand" {
       component   = param.component
       stack       = opt.stack
       command     = opt.command
-      subcommand  = "apply"
+      subcommand  = "show"
       interactive = opt.interactive
       args        = var.args
-    }
-  }
-
-  step "apply clean" {
-    run "terraform shell" {
-      component = param.component
-      stack     = opt.stack
-
-      commands = [
-        "rm",
-        "${opt.stack}-${param.component}.planfile",
-        "${opt.stack}-${param.component}.terraform.tfvars.json"
-      ]
     }
   }
 }
