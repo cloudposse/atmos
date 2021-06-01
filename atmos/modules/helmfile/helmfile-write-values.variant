@@ -1,7 +1,7 @@
 #!/usr/bin/env variant
 # vim: filetype=hcl
 
-job "helmfile write values" {
+job "helmfile write-values" {
   description = "Write values files for releases"
 
   parameter "component" {
