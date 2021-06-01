@@ -32,7 +32,7 @@ job "terraform console" {
     type        = bool
     description = "Interactive"
     short       = "i"
-    default     = false
+    default     = true
   }
 
   variable "args" {
