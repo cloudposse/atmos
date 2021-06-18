@@ -25,7 +25,7 @@ job "terraform clean" {
 
   step "clean log" {
     run "echo" {
-      message = "Removed .terraform folder and all planfiles"
+      message = "Removed .terraform folder, .terraform.lock.hcl, and all planfiles"
     }
   }
 }
