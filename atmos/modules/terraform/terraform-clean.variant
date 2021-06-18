@@ -1,5 +1,5 @@
 job "terraform clean" {
-  description = "Remove terraform planfiles and .terraform folder"
+  description = "Remove terraform planfiles, .terraform.lock.hcl, and .terraform folder"
 
   parameter "component" {
     type        = string
