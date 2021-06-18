@@ -1,5 +1,5 @@
 job "terraform clean" {
-  description = "Remove terraform planfiles and .terraform folder"
+  description = "Remove terraform planfiles, .terraform.lock.hcl, and .terraform folder"
 
   parameter "component" {
     type        = string
@@ -18,14 +18,14 @@ job "terraform clean" {
       stack     = opt.stack
 
       commands = [
-        "rm -rf .terraform *.planfile"
+        "rm -rf .terraform .terraform.lock.hcl *.planfile"
       ]
     }
   }
 
   step "clean log" {
     run "echo" {
-      message = "Removed .terraform folder and all planfiles"
+      message = "Removed .terraform folder, .terraform.lock.hcl, and all planfiles"
     }
   }
 }
