@@ -1,0 +1,164 @@
+vars:
+  namespace: eg
+
+terraform:
+  vars: {}
+
+  backend_type: s3 # s3, remote, vault, etc.
+  backend:
+    s3:
+      encrypt: true
+      bucket: "eg-uw2-root-tfstate"
+      key: "terraform.tfstate"
+      dynamodb_table: "eg-uw2-root-tfstate-lock"
+      role_arn: "arn:aws:iam::XXXXXXXXXXXX:role/eg-gbl-root-terraform"
+      acl: "bucket-owner-full-control"
+      region: "us-west-2"
+    remote: {}
+    vault: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform:
+    tfstate-backend:
+      backend:
+        s3:
+          workspace_key_prefix: "tfstate-backend"
+          role_arn: null
+
+    account:
+      backend:
+        s3:
+          workspace_key_prefix: "account"
+          role_arn: null
+
+    account-map:
+      backend:
+        s3:
+          workspace_key_prefix: "account-map"
+          role_arn: null
+
+    account-settings:
+      backend:
+        s3:
+          workspace_key_prefix: "account-settings"
+          role_arn: null
+
+    dns-delegated:
+      backend:
+        s3:
+          workspace_key_prefix: "dns-delegated"
+
+    dns-primary:
+      backend:
+        s3:
+          workspace_key_prefix: "dns-primary"
+
+    eks:
+      backend:
+        s3:
+          workspace_key_prefix: "eks"
+
+    eks-iam:
+      backend:
+        s3:
+          workspace_key_prefix: "eks-iam"
+
+    iam-delegated-roles:
+      backend:
+        s3:
+          workspace_key_prefix: "iam-delegated-roles"
+          role_arn: null
+
+    iam-primary-roles:
+      backend:
+        s3:
+          workspace_key_prefix: "iam-primary-roles"
+          role_arn: null
+
+    spotinst-integration:
+      backend:
+        s3:
+          workspace_key_prefix: "spotinst-integration"
+
+    sso:
+      backend:
+        s3:
+          workspace_key_prefix: "sso"
+          role_arn: null
+
+    config-bucket:
+      backend:
+        s3:
+          workspace_key_prefix: "config-bucket"
+
+    cloudtrail-bucket:
+      backend:
+        s3:
+          workspace_key_prefix: "cloudtrail-bucket"
+
+    cloudtrail:
+      vars:
+        cloudtrail_bucket_environment_name: "uw2"
+        cloudtrail_bucket_stage_name: "audit"
+      backend:
+        s3:
+          workspace_key_prefix: "cloudtrail"
+
+    transit-gateway:
+      backend:
+        s3:
+          workspace_key_prefix: "transit-gateway"
+
+    vpc-flow-logs-bucket:
+      backend:
+        s3:
+          workspace_key_prefix: "vpc-flow-logs-bucket"
+
+    vpc:
+      vars:
+        subnet_type_tag_key: "eg.com/subnet/type"
+        vpc_flow_logs_enabled: true
+        vpc_flow_logs_bucket_environment_name: "uw2"
+        vpc_flow_logs_bucket_stage_name: "audit"
+        vpc_flow_logs_traffic_type: "ALL"
+      backend:
+        s3:
+          workspace_key_prefix: "vpc"
+
+    ecr:
+      backend:
+        s3:
+          workspace_key_prefix: "ecr"
+
+    datadog-integration:
+      backend:
+        s3:
+          workspace_key_prefix: "datadog-integration"
+
+    datadog-monitor:
+      backend:
+        s3:
+          workspace_key_prefix: "datadog-monitor"
+
+    aurora-postgres:
+      backend:
+        s3:
+          workspace_key_prefix: "aurora-postgres"
+
+    efs:
+      backend:
+        s3:
+          workspace_key_prefix: "efs"
+
+    mq-broker:
+      backend:
+        s3:
+          workspace_key_prefix: "mq-broker"
+
+    ses:
+      backend:
+        s3:
+          workspace_key_prefix: "ses"

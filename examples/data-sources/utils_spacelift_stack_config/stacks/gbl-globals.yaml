@@ -1,0 +1,12 @@
+import:
+  - globals
+
+vars:
+  region: us-west-2
+  environment: gbl
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}

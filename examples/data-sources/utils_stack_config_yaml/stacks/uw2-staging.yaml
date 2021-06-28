@@ -1,0 +1,111 @@
+import:
+- uw2-globals
+- catalog/eks-defaults
+- catalog/s3-defaults
+- catalog/rds-defaults
+
+vars:
+  stage: staging
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars:
+    account_number: "1234567892"
+
+components:
+  terraform:
+
+    dns-delegated:
+      vars:
+        request_acm_certificate: true
+        zone_config:
+          - subdomain: staging
+            zone_name: uw2.example.com
+      settings:
+        spacelift:
+          workspace_enabled: true
+          autodeploy: false
+          branch: ""
+          triggers: []
+
+    eks:
+      vars:
+        spotinst_instance_profile: eg-gbl-staging-spotinst-worker
+        spotinst_oceans:
+          main:
+            desired_group_size: 1
+            max_group_size: 5
+            min_group_size: 1
+            kubernetes_version: null
+            ami_release_version: null
+            attributes: null
+            disk_size: 100
+            instance_types: null
+            ami_type: "AL2_x86_64"
+            tags: null
+      settings:
+        spacelift:
+          workspace_enabled: true
+          autodeploy: true
+          branch: ""
+          triggers: []
+      env:
+        ENV_TEST_1: test1_override
+        ENV_TEST_2: test2_override
+        ENV_TEST_4: test4
+
+    vpc:
+      vars:
+        cidr_block: "10.118.0.0/18"
+      settings:
+        spacelift:
+          workspace_enabled: true
+          autodeploy: false
+          branch: ""
+          triggers: []
+
+    aurora-postgres:
+      vars:
+        instance_type: db.r4.large
+        cluster_size: 2
+      env:
+        ENV_TEST_4: test4
+        ENV_TEST_5: test5
+        ENV_TEST_6: test6
+        ENV_TEST_7: test7
+
+    aurora-postgres-2:
+      component: aurora-postgres
+      vars:
+        instance_type: db.r4.xlarge
+      settings:
+        spacelift:
+          workspace_enabled: true
+          autodeploy: true
+          branch: ""
+          triggers: []
+      env:
+        ENV_TEST_1: test1_override2
+        ENV_TEST_2: test2_override2
+        ENV_TEST_8: test8
+
+    documents-bucket:
+      component: s3-bucket
+      vars:
+        name: "documents"
+
+  helmfile:
+
+    datadog:
+      vars:
+        installed: true
+        datadogTags:
+          - "env:uw2-staging"
+          - "region:us-west-2"
+          - "stage:staging"
+      env:
+        ENV_DD_TEST_1: dd1
+        ENV_DD_TEST_2: dd2
+        ENV_DD_TEST_3: dd3

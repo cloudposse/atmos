@@ -1,0 +1,25 @@
+---
+Version: "2012-10-17"
+Statement:
+  - Sid: FullAccess
+    Effect: Allow
+    Action:
+      - s3:*
+    Resource:
+      - "*"
+  - Sid: DenyCustomerBucket
+    Action:
+      - s3:*
+    Effect: Deny
+    Resource:
+      - arn:aws:s3:::customer
+      - arn:aws:s3:::customer/*
+      - foo
+    Complex:
+      ExtraComplex:
+        ExtraExtraComplex:
+          Foo: bazzz
+          SomeArray:
+            - one
+            - two
+            - three

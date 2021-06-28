@@ -1,0 +1,53 @@
+components:
+  terraform:
+
+    efs:
+      vars: {}
+
+    eks-iam:
+      vars: {}
+
+  helmfile:
+
+    alb-controller:
+      vars:
+        installed: true
+        chart_values:
+          enableCertManager: true
+
+    codefresh-account:
+      vars:
+        installed: true
+        unlimited_staging_enabled: false
+
+    echo-server:
+      vars:
+        installed: true
+
+    efs-provisioner:
+      vars:
+        installed: true
+
+    external-dns:
+      vars:
+        installed: true
+
+    idp-roles:
+      vars:
+        installed: true
+
+    metrics-server:
+      vars:
+        installed: true
+
+    cert-manager:
+      vars:
+        installed: true
+
+    ocean-controller:
+      vars:
+        installed: true
+
+    reloader:
+      vars:
+        installed: true

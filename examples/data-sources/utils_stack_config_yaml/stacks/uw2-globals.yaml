@@ -1,0 +1,44 @@
+import:
+  - globals
+
+vars:
+  region: us-west-2
+  environment: uw2
+
+terraform:
+  vars: {}
+  settings:
+    version: 0
+    spacelift:
+      workspace_enabled: false
+      autodeploy: false
+  env:
+    ENV_TEST_1: test1
+    ENV_TEST_2: test2
+    ENV_TEST_3: test3
+
+helmfile:
+  vars:
+    ssm_region: us-west-2
+
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones: ["us-west-2b", "us-west-2c", "us-west-2d"]
+
+    eks:
+      vars:
+        region_availability_zones: ["us-west-2b", "us-west-2c", "us-west-2d"]
+
+  helmfile:
+    datadog:
+      vars:
+        apm:
+          enabled: true
+        processAgent:
+          enabled: true
+        systemProbe:
+          enabled: true
+        clusterAgent:
+          enabled: true

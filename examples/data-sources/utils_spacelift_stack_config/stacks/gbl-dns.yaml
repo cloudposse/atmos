@@ -1,0 +1,21 @@
+import:
+  - gbl-globals
+
+vars:
+  stage: dns
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform:
+    dns-primary:
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        domain_names:
+          - example.com
