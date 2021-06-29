@@ -1,9 +1,9 @@
 package stack
 
 import (
-	c "github.com/cloudposse/terraform-provider-utils/internal/convert"
-	m "github.com/cloudposse/terraform-provider-utils/internal/merge"
-	u "github.com/cloudposse/terraform-provider-utils/internal/utils"
+	"atmos/internal/convert"
+	"atmos/internal/merge"
+	"atmos/internal/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -39,7 +39,7 @@ func ProcessYAMLConfigFiles(filePaths []string, processStackDeps bool, processCo
 				imports = append(imports, k)
 			}
 
-			uniqueImports := u.UniqueStrings(imports)
+			uniqueImports := utils.UniqueStrings(imports)
 			sort.Strings(uniqueImports)
 
 			componentStackMap := map[string]map[string][]string{}
@@ -98,7 +98,7 @@ func ProcessYAMLConfigFile(
 		return nil, nil, err
 	}
 
-	stackMapConfig, err := c.YAMLToMapOfInterfaces(string(stackYamlConfig))
+	stackMapConfig, err := convert.YAMLToMapOfInterfaces(string(stackYamlConfig))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -143,7 +143,7 @@ func ProcessYAMLConfigFile(
 	configs = append(configs, stackMapConfig)
 
 	// Deep-merge the config file and the imports
-	result, err := m.Merge(configs)
+	result, err := merge.Merge(configs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -216,7 +216,7 @@ func ProcessConfig(
 		terraformVars = i.(map[interface{}]interface{})
 	}
 
-	globalAndTerraformVars, err := m.Merge([]map[interface{}]interface{}{globalVarsSection, terraformVars})
+	globalAndTerraformVars, err := merge.Merge([]map[interface{}]interface{}{globalVarsSection, terraformVars})
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func ProcessConfig(
 		terraformSettings = i.(map[interface{}]interface{})
 	}
 
-	globalAndTerraformSettings, err := m.Merge([]map[interface{}]interface{}{globalSettingsSection, terraformSettings})
+	globalAndTerraformSettings, err := merge.Merge([]map[interface{}]interface{}{globalSettingsSection, terraformSettings})
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +234,7 @@ func ProcessConfig(
 		terraformEnv = i.(map[interface{}]interface{})
 	}
 
-	globalAndTerraformEnv, err := m.Merge([]map[interface{}]interface{}{globalEnvSection, terraformEnv})
+	globalAndTerraformEnv, err := merge.Merge([]map[interface{}]interface{}{globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func ProcessConfig(
 		helmfileVars = i.(map[interface{}]interface{})
 	}
 
-	globalAndHelmfileVars, err := m.Merge([]map[interface{}]interface{}{globalVarsSection, helmfileVars})
+	globalAndHelmfileVars, err := merge.Merge([]map[interface{}]interface{}{globalVarsSection, helmfileVars})
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func ProcessConfig(
 		helmfileSettings = i.(map[interface{}]interface{})
 	}
 
-	globalAndHelmfileSettings, err := m.Merge([]map[interface{}]interface{}{globalSettingsSection, helmfileSettings})
+	globalAndHelmfileSettings, err := merge.Merge([]map[interface{}]interface{}{globalSettingsSection, helmfileSettings})
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +272,7 @@ func ProcessConfig(
 		helmfileEnv = i.(map[interface{}]interface{})
 	}
 
-	globalAndHelmfileEnv, err := m.Merge([]map[interface{}]interface{}{globalEnvSection, helmfileEnv})
+	globalAndHelmfileEnv, err := merge.Merge([]map[interface{}]interface{}{globalEnvSection, helmfileEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -340,22 +340,22 @@ func ProcessConfig(
 					}
 				}
 
-				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformVars, baseComponentVars, componentVars})
+				finalComponentVars, err := merge.Merge([]map[interface{}]interface{}{globalAndTerraformVars, baseComponentVars, componentVars})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformSettings, baseComponentSettings, componentSettings})
+				finalComponentSettings, err := merge.Merge([]map[interface{}]interface{}{globalAndTerraformSettings, baseComponentSettings, componentSettings})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformEnv, baseComponentEnv, componentEnv})
+				finalComponentEnv, err := merge.Merge([]map[interface{}]interface{}{globalAndTerraformEnv, baseComponentEnv, componentEnv})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentBackend, err := m.Merge([]map[interface{}]interface{}{backend, baseComponentBackend, componentBackend})
+				finalComponentBackend, err := merge.Merge([]map[interface{}]interface{}{backend, baseComponentBackend, componentBackend})
 				if err != nil {
 					return nil, err
 				}
@@ -419,17 +419,17 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
-				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, componentVars})
+				finalComponentVars, err := merge.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, componentVars})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, componentSettings})
+				finalComponentSettings, err := merge.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, componentSettings})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, componentEnv})
+				finalComponentEnv, err := merge.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, componentEnv})
 				if err != nil {
 					return nil, err
 				}

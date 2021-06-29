@@ -1,7 +1,7 @@
 package stack
 
 import (
-	u "github.com/cloudposse/terraform-provider-utils/internal/utils"
+	"atmos/internal/utils"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,7 +30,7 @@ func FindComponentStacks(
 		}
 	}
 
-	unique := u.UniqueStrings(stacks)
+	unique := utils.UniqueStrings(stacks)
 	sort.Strings(unique)
 	return unique, nil
 }
@@ -103,7 +103,7 @@ func FindComponentDependencies(
 	}
 
 	deps = append(deps, stack)
-	unique := u.UniqueStrings(deps)
+	unique := utils.UniqueStrings(deps)
 	sort.Strings(unique)
 	return unique, nil
 }
@@ -126,12 +126,12 @@ func CreateComponentStackMap(filePath string) (map[string]map[string][]string, e
 				return err
 			}
 
-			isDirectory, err := u.IsDirectory(p)
+			isDirectory, err := utils.IsDirectory(p)
 			if err != nil {
 				return err
 			}
 
-			isYaml := u.IsYaml(p)
+			isYaml := utils.IsYaml(p)
 
 			if !isDirectory && isYaml {
 				config, _, err := ProcessYAMLConfigFile(p, map[string]map[interface{}]interface{}{})

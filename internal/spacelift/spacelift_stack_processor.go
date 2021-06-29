@@ -1,9 +1,9 @@
 package spacelift
 
 import (
+	"atmos/internal/stack"
+	"atmos/internal/utils"
 	"fmt"
-	s "github.com/cloudposse/terraform-provider-utils/internal/stack"
-	u "github.com/cloudposse/terraform-provider-utils/internal/utils"
 	"github.com/pkg/errors"
 	"strings"
 )
@@ -16,7 +16,7 @@ func CreateSpaceliftStacks(
 	processComponentDeps bool,
 	processImports bool,
 	stackConfigPathTemplate string) (map[string]interface{}, error) {
-	var _, mapResult, err = s.ProcessYAMLConfigFiles(filePaths, processStackDeps, processComponentDeps)
+	var _, mapResult, err = stack.ProcessYAMLConfigFiles(filePaths, processStackDeps, processComponentDeps)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func TransformStackConfigToSpaceliftStacks(
 			if terraformComponents, ok := componentsSection["terraform"]; ok {
 				terraformComponentsMap := terraformComponents.(map[string]interface{})
 
-				terraformComponentNamesInCurrentStack := u.StringKeysFromMap(terraformComponentsMap)
+				terraformComponentNamesInCurrentStack := utils.StringKeysFromMap(terraformComponentsMap)
 
 				for component, v := range terraformComponentsMap {
 					componentMap := v.(map[string]interface{})
@@ -193,7 +193,7 @@ func TransformStackConfigToSpaceliftStacks(
 					if stackNamePartsLen == 2 {
 						labels = append(labels, fmt.Sprintf("folder:%s/%s", stackNameParts[0], stackNameParts[1]))
 					}
-					spaceliftConfig["labels"] = u.UniqueStrings(labels)
+					spaceliftConfig["labels"] = utils.UniqueStrings(labels)
 
 					// Add Spacelift stack config to the final map
 					spaceliftStackName := fmt.Sprintf("%s-%s", stackName, component)
@@ -215,9 +215,9 @@ func buildSpaceliftDependsOnStackName(
 ) (string, error) {
 	var spaceliftStackName string
 
-	if u.SliceContainsString(allStackNames, dependsOn) {
+	if utils.SliceContainsString(allStackNames, dependsOn) {
 		spaceliftStackName = dependsOn
-	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
+	} else if utils.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
 		spaceliftStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
 	} else {
 		errorMessage := errors.New(fmt.Sprintf("Component '%[1]s' in stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+

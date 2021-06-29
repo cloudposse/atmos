@@ -1,8 +1,8 @@
 package stack
 
 import (
-	c "github.com/cloudposse/terraform-provider-utils/internal/convert"
-	u "github.com/cloudposse/terraform-provider-utils/internal/utils"
+	"atmos/internal/convert"
+	"atmos/internal/utils"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,13 +25,13 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, 4, len(listResult))
 	assert.Equal(t, 4, len(mapResult))
 
-	mapResultKeys := u.StringKeysFromMap(mapResult)
+	mapResultKeys := utils.StringKeysFromMap(mapResult)
 	assert.Equal(t, "uw2-dev", mapResultKeys[0])
 	assert.Equal(t, "uw2-prod", mapResultKeys[1])
 	assert.Equal(t, "uw2-staging", mapResultKeys[2])
 	assert.Equal(t, "uw2-uat", mapResultKeys[3])
 
-	mapConfig1, err := c.YAMLToMapOfInterfaces(listResult[0])
+	mapConfig1, err := convert.YAMLToMapOfInterfaces(listResult[0])
 	assert.Nil(t, err)
 
 	terraformComponents := mapConfig1["components"].(map[interface{}]interface{})["terraform"].(map[interface{}]interface{})
