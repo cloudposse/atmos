@@ -23,7 +23,7 @@ jobs:
           # Go 1.16 is not supported by Variant yet.
           # See https://github.com/mumoshu/variant2/issues/48
           # When Go 1.16 is supported, enable darwin_arm64 builds
-          go-version: '1.15'
+          go-version: '1.16'
       - run: go version
 
       # Generate Go code
@@ -42,6 +42,8 @@ jobs:
           git checkout -- atmos/modules/utils/version.variant
           # Download go modules once so that parallel builds do not try to download them in parallel and clash with each other
           cd build && go mod tidy
+          # PATCH FOR VARIANT 0.37.1 and go 1.16. REMOVE on next Variant release
+          printf '\nfunc (TestDeps) SetPanicOnExit0(bool) {}\n\n' >> $(go env GOPATH)/pkg/mod/github.com/mumoshu/variant2@v0.37.1/pkg/app/app.go
 
       # Build and release
       - name: Run GoReleaser
