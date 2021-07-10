@@ -167,7 +167,9 @@ Our recommended filesystem layout looks like this:
 
 ## Example
 
-The [example](example) folder contains a complete solution that shows how to:
+**NOTE**: Our recommended example of atmos is found on our documentation site: https://docs.cloudposse.com/tutorials/atmos-getting-started/
+
+However, this repo's [example](example) folder contains a complete solution that shows how to:
 
   - Structure the Terraform and helmfile components
   - Configure the CLI top-level module [main.variant](example/cli/main.variant)
@@ -338,13 +340,16 @@ To run the example, execute the following commands in a terminal:
 
   - `cd example`
   - `make all` - it will build the Docker image, build the CLI tool inside the image, and then start the container
+  - `cd /localhost/`  # this will mount your home directory inside the container
+  - `cd <to the atmos repo you cloned on your computer>`
+  - `vendir sync` # This will invoke [`vendir`](https://github.com/vmware-tanzu/carvel-vendir) which will vendor remote components into the example directory.
 
-Note that the name of the CLI executable is configurable.
+__NOTE__: that the name of the CLI executable is configurable.
 
 In the [Dockerfile](example/Dockerfile) for the example, we've chosen the name `atmos`, but it could be any name you want, for example
 `ops`, `cli`, `ops-exe`, etc. The name of the CLI executable is configured using `ARG CLI_NAME=atmos` in the Dockerfile.
 
-After the container starts, run `atmos help` to see the available commands and available flags.
+You can now run `atmos help` to see the available commands and available flags.
 
 __NOTE:__ We use the Cloud Posse [geodesic](https://github.com/cloudposse/geodesic) image as the base image for the container.
 This is not strictly a requirement, but our base image ships with all the standard tools for cloud automation that we depend on (e.g. `terraform`, `helm`, `helmfile`, etc).
