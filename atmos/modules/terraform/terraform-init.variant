@@ -25,12 +25,24 @@ job "terraform init" {
     default     = false
   }
 
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to `terraform plan`"
+    type        = string
+  }
+
+  variable "args" {
+    type  = list(string)
+    value = compact(split(" ", opt.args))
+  }
+
+
   run "terraform subcommand" {
     component   = param.component
     stack       = opt.stack
     command     = opt.command
     subcommand  = "init"
-    args        = []
+    args        = var.args
     interactive = opt.interactive
   }
 }
