@@ -20,16 +20,13 @@ jobs:
       - name: 'Setup Go'
         uses: actions/setup-go@v2
         with:
-          # Go 1.16 is not supported by Variant yet.
-          # See https://github.com/mumoshu/variant2/issues/48
-          # When Go 1.16 is supported, enable darwin_arm64 builds
-          go-version: '1.15'
+          go-version: '1.16'
       - run: go version
 
       # Generate Go code
       - name: 'Generate Go Code'
         env:
-          VARIANT_VERSION: "0.37.1"
+          VARIANT_VERSION: "0.38.0"
         run: |
           set -e -x
           wget -q https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
