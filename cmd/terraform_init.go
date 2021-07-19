@@ -6,7 +6,7 @@ import (
 	"log"
 )
 
-// terraformInitCmd represents the card command
+// terraformInitCmd calls "terraform init"
 var terraformInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Run terraform init",
