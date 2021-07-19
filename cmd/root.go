@@ -28,3 +28,8 @@ func init() {
 }
 
 func initConfig() {}
+
+// https://blog.knoldus.com/create-kubectl-like-cli-with-go-and-cobra/
+// https://pkg.go.dev/github.com/c-bata/go-prompt
+// https://pkg.go.dev/github.com/spf13/cobra
+// https://scene-si.org/2017/04/20/managing-configuration-with-viper/
