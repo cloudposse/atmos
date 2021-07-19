@@ -1,5 +1,5 @@
 job "terraform clean" {
-  description = "Remove terraform planfiles, .terraform.lock.hcl, and .terraform folder"
+  description = "Remove terraform planfiles, tfvars.json files, .terraform.lock.hcl, and .terraform folder"
 
   parameter "component" {
     type        = string
@@ -18,14 +18,14 @@ job "terraform clean" {
       stack     = opt.stack
 
       commands = [
-        "rm -rf .terraform .terraform.lock.hcl *.planfile"
+        "rm -rf .terraform .terraform.lock.hcl *.planfile *.tfvars.json"
       ]
     }
   }
 
   step "clean log" {
     run "echo" {
-      message = "Removed .terraform folder, .terraform.lock.hcl, and all planfiles"
+      message = "Removed .terraform folder, .terraform.lock.hcl, tfvars.json files and all planfiles"
     }
   }
 }
