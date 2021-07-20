@@ -10,7 +10,7 @@ import (
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
 	Use:   "terraform",
-	Short: "Terraform commands",
+	Short: "Terraform command",
 	Long:  `This command runs terraform sub-commands`,
 	// FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
