@@ -23,9 +23,9 @@ job "terraform plan" {
   }
 
   option "args" {
-    default     = ""
     description = "A string of arguments to supply to `terraform plan`"
     type        = string
+    default     = ""
   }
 
   option "interactive" {
