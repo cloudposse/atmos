@@ -1,8 +1,8 @@
 package stack
 
 import (
-	"atmos/internal/convert"
-	"atmos/internal/utils"
+	c "atmos/internal/convert"
+	u "atmos/internal/utils"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,13 +25,13 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, 4, len(listResult))
 	assert.Equal(t, 4, len(mapResult))
 
-	mapResultKeys := utils.StringKeysFromMap(mapResult)
+	mapResultKeys := u.StringKeysFromMap(mapResult)
 	assert.Equal(t, "uw2-dev", mapResultKeys[0])
 	assert.Equal(t, "uw2-prod", mapResultKeys[1])
 	assert.Equal(t, "uw2-staging", mapResultKeys[2])
 	assert.Equal(t, "uw2-uat", mapResultKeys[3])
 
-	mapConfig1, err := convert.YAMLToMapOfInterfaces(listResult[0])
+	mapConfig1, err := c.YAMLToMapOfInterfaces(listResult[0])
 	assert.Nil(t, err)
 
 	terraformComponents := mapConfig1["components"].(map[interface{}]interface{})["terraform"].(map[interface{}]interface{})
@@ -103,12 +103,15 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "dev", datadogHelmfileComponent["vars"].(map[interface{}]interface{})["stage"])
 	assert.Equal(t, true, datadogHelmfileComponent["vars"].(map[interface{}]interface{})["processAgent"].(map[interface{}]interface{})["enabled"])
 
-	assert.Equal(t, 5, len(imports))
-	assert.Equal(t, "catalog/eks-defaults", imports[0])
-	assert.Equal(t, "catalog/rds-defaults", imports[1])
-	assert.Equal(t, "catalog/s3-defaults", imports[2])
-	assert.Equal(t, "globals", imports[3])
-	assert.Equal(t, "uw2-globals", imports[4])
+	assert.Equal(t, 8, len(imports))
+	assert.Equal(t, "catalog/eks-app-defaults", imports[0])
+	assert.Equal(t, "catalog/eks-defaults", imports[1])
+	assert.Equal(t, "catalog/rds-defaults", imports[2])
+	assert.Equal(t, "catalog/s3-defaults", imports[3])
+	assert.Equal(t, "catalog/services/service-1-defaults", imports[4])
+	assert.Equal(t, "catalog/services/service-2-defaults", imports[5])
+	assert.Equal(t, "globals", imports[6])
+	assert.Equal(t, "uw2-globals", imports[7])
 
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)

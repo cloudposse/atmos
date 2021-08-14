@@ -1,7 +1,7 @@
 package stack
 
 import (
-	"atmos/internal/utils"
+	u "atmos/internal/utils"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,7 +30,7 @@ func FindComponentStacks(
 		}
 	}
 
-	unique := utils.UniqueStrings(stacks)
+	unique := u.UniqueStrings(stacks)
 	sort.Strings(unique)
 	return unique, nil
 }
@@ -103,7 +103,7 @@ func FindComponentDependencies(
 	}
 
 	deps = append(deps, stack)
-	unique := utils.UniqueStrings(deps)
+	unique := u.UniqueStrings(deps)
 	sort.Strings(unique)
 	return unique, nil
 }
@@ -126,15 +126,15 @@ func CreateComponentStackMap(filePath string) (map[string]map[string][]string, e
 				return err
 			}
 
-			isDirectory, err := utils.IsDirectory(p)
+			isDirectory, err := u.IsDirectory(p)
 			if err != nil {
 				return err
 			}
 
-			isYaml := utils.IsYaml(p)
+			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, err := ProcessYAMLConfigFile(p, map[string]map[interface{}]interface{}{})
+				config, _, err := ProcessYAMLConfigFile(dir, p, map[string]map[interface{}]interface{}{})
 				if err != nil {
 					return err
 				}

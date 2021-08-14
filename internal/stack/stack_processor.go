@@ -1,16 +1,26 @@
 package stack
 
 import (
-	"atmos/internal/convert"
-	"atmos/internal/merge"
-	"atmos/internal/utils"
+	c "atmos/internal/convert"
+	m "atmos/internal/merge"
+	u "atmos/internal/utils"
+	"fmt"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+)
+
+var (
+	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
+	processYAMLConfigFilesLock = &sync.Mutex{}
+
+	// Mutex to serialize updates of the result map of ProcessYAMLConfigFile function
+	processYAMLConfigFileLock = &sync.Mutex{}
 )
 
 // ProcessYAMLConfigFiles takes a list of paths to YAML config files, processes and deep-merges all imports,
@@ -22,13 +32,13 @@ func ProcessYAMLConfigFiles(filePaths []string, processStackDeps bool, processCo
 	var errorResult error
 	var wg sync.WaitGroup
 	wg.Add(count)
-	mu := &sync.Mutex{}
 
 	for i, filePath := range filePaths {
 		go func(i int, p string) {
 			defer wg.Done()
 
-			config, importsConfig, err := ProcessYAMLConfigFile(p, map[string]map[interface{}]interface{}{})
+			basePath := path.Dir(p)
+			config, importsConfig, err := ProcessYAMLConfigFile(basePath, p, map[string]map[interface{}]interface{}{})
 			if err != nil {
 				errorResult = err
 				return
@@ -39,7 +49,7 @@ func ProcessYAMLConfigFiles(filePaths []string, processStackDeps bool, processCo
 				imports = append(imports, k)
 			}
 
-			uniqueImports := utils.UniqueStrings(imports)
+			uniqueImports := u.UniqueStrings(imports)
 			sort.Strings(uniqueImports)
 
 			componentStackMap := map[string]map[string][]string{}
@@ -67,8 +77,8 @@ func ProcessYAMLConfigFiles(filePaths []string, processStackDeps bool, processCo
 
 			stackName := strings.TrimSuffix(strings.TrimSuffix(path.Base(p), ".yaml"), ".yml")
 
-			mu.Lock()
-			defer mu.Unlock()
+			processYAMLConfigFilesLock.Lock()
+			defer processYAMLConfigFilesLock.Unlock()
 
 			listResult[i] = string(yamlConfig)
 			mapResult[stackName] = finalConfig
@@ -87,18 +97,18 @@ func ProcessYAMLConfigFiles(filePaths []string, processStackDeps bool, processCo
 // recursively processes and deep-merges all imports,
 // and returns stack config as map[interface{}]interface{}
 func ProcessYAMLConfigFile(
+	basePath string,
 	filePath string,
 	importsConfig map[string]map[interface{}]interface{}) (map[interface{}]interface{}, map[string]map[interface{}]interface{}, error) {
 
 	var configs []map[interface{}]interface{}
-	dir := path.Dir(filePath)
 
 	stackYamlConfig, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	stackMapConfig, err := convert.YAMLToMapOfInterfaces(string(stackYamlConfig))
+	stackMapConfig, err := c.YAMLToMapOfInterfaces(string(stackYamlConfig))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -111,39 +121,76 @@ func ProcessYAMLConfigFile(
 		var errorResult error
 		var wg sync.WaitGroup
 		wg.Add(count)
-		mu := &sync.Mutex{}
 
 		for _, im := range imports {
 			imp := im.(string)
-			p := path.Join(dir, imp+".yaml")
 
-			go func(p string) {
-				defer wg.Done()
+			// If the import file is specified without extension, use `.yaml` as default
+			impWithExt := imp
+			ext := filepath.Ext(imp)
+			if ext == "" {
+				ext = ".yaml"
+				impWithExt = imp + ext
+			}
 
-				yamlConfig, _, err := ProcessYAMLConfigFile(p, importsConfig)
-				if err != nil {
-					errorResult = err
-					return
-				}
+			impWithExtPath := path.Join(basePath, impWithExt)
 
-				mu.Lock()
-				defer mu.Unlock()
-				configs = append(configs, yamlConfig)
-				importsConfig[imp] = yamlConfig
-			}(p)
+			if impWithExtPath == filePath {
+				errorMessage := fmt.Sprintf("Invalid import in config file %s. The file imports itself in import: '%s'",
+					filePath,
+					strings.Replace(impWithExt, basePath+"/", "", 1))
+				return nil, nil, errors.New(errorMessage)
+			}
+
+			// Find all matches in the glob
+			matches, err := filepath.Glob(impWithExtPath)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			if matches == nil {
+				errorMessage := fmt.Sprintf("Invalid import in config file %s. No matches found for import: '%s'",
+					filePath,
+					strings.Replace(impWithExt, basePath+"/", "", 1))
+				return nil, nil, errors.New(errorMessage)
+			}
+
+			// If we import a glob with more than 1 file, add the difference to the WaitGroup
+			if len(matches) > 1 {
+				wg.Add(len(matches) - 1)
+			}
+
+			for _, importFile := range matches {
+				go func(p string) {
+					defer wg.Done()
+
+					yamlConfig, _, err := ProcessYAMLConfigFile(basePath, p, importsConfig)
+					if err != nil {
+						errorResult = err
+						return
+					}
+
+					processYAMLConfigFileLock.Lock()
+					defer processYAMLConfigFileLock.Unlock()
+					configs = append(configs, yamlConfig)
+					importRelativePathWithExt := strings.Replace(p, basePath+"/", "", 1)
+					importRelativePathWithoutExt := strings.Replace(importRelativePathWithExt, ext, "", 1)
+					importsConfig[importRelativePathWithoutExt] = yamlConfig
+				}(importFile)
+			}
 		}
 
 		wg.Wait()
 
 		if errorResult != nil {
-			return nil, nil, err
+			return nil, nil, errorResult
 		}
 	}
 
 	configs = append(configs, stackMapConfig)
 
 	// Deep-merge the config file and the imports
-	result, err := merge.Merge(configs)
+	result, err := m.Merge(configs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -216,7 +263,7 @@ func ProcessConfig(
 		terraformVars = i.(map[interface{}]interface{})
 	}
 
-	globalAndTerraformVars, err := merge.Merge([]map[interface{}]interface{}{globalVarsSection, terraformVars})
+	globalAndTerraformVars, err := m.Merge([]map[interface{}]interface{}{globalVarsSection, terraformVars})
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +272,7 @@ func ProcessConfig(
 		terraformSettings = i.(map[interface{}]interface{})
 	}
 
-	globalAndTerraformSettings, err := merge.Merge([]map[interface{}]interface{}{globalSettingsSection, terraformSettings})
+	globalAndTerraformSettings, err := m.Merge([]map[interface{}]interface{}{globalSettingsSection, terraformSettings})
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +281,7 @@ func ProcessConfig(
 		terraformEnv = i.(map[interface{}]interface{})
 	}
 
-	globalAndTerraformEnv, err := merge.Merge([]map[interface{}]interface{}{globalEnvSection, terraformEnv})
+	globalAndTerraformEnv, err := m.Merge([]map[interface{}]interface{}{globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +301,7 @@ func ProcessConfig(
 		helmfileVars = i.(map[interface{}]interface{})
 	}
 
-	globalAndHelmfileVars, err := merge.Merge([]map[interface{}]interface{}{globalVarsSection, helmfileVars})
+	globalAndHelmfileVars, err := m.Merge([]map[interface{}]interface{}{globalVarsSection, helmfileVars})
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +310,7 @@ func ProcessConfig(
 		helmfileSettings = i.(map[interface{}]interface{})
 	}
 
-	globalAndHelmfileSettings, err := merge.Merge([]map[interface{}]interface{}{globalSettingsSection, helmfileSettings})
+	globalAndHelmfileSettings, err := m.Merge([]map[interface{}]interface{}{globalSettingsSection, helmfileSettings})
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +319,7 @@ func ProcessConfig(
 		helmfileEnv = i.(map[interface{}]interface{})
 	}
 
-	globalAndHelmfileEnv, err := merge.Merge([]map[interface{}]interface{}{globalEnvSection, helmfileEnv})
+	globalAndHelmfileEnv, err := m.Merge([]map[interface{}]interface{}{globalEnvSection, helmfileEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -340,22 +387,22 @@ func ProcessConfig(
 					}
 				}
 
-				finalComponentVars, err := merge.Merge([]map[interface{}]interface{}{globalAndTerraformVars, baseComponentVars, componentVars})
+				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformVars, baseComponentVars, componentVars})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := merge.Merge([]map[interface{}]interface{}{globalAndTerraformSettings, baseComponentSettings, componentSettings})
+				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformSettings, baseComponentSettings, componentSettings})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := merge.Merge([]map[interface{}]interface{}{globalAndTerraformEnv, baseComponentEnv, componentEnv})
+				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformEnv, baseComponentEnv, componentEnv})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentBackend, err := merge.Merge([]map[interface{}]interface{}{backend, baseComponentBackend, componentBackend})
+				finalComponentBackend, err := m.Merge([]map[interface{}]interface{}{backend, baseComponentBackend, componentBackend})
 				if err != nil {
 					return nil, err
 				}
@@ -419,17 +466,17 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
-				finalComponentVars, err := merge.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, componentVars})
+				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, componentVars})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := merge.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, componentSettings})
+				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, componentSettings})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := merge.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, componentEnv})
+				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, componentEnv})
 				if err != nil {
 					return nil, err
 				}

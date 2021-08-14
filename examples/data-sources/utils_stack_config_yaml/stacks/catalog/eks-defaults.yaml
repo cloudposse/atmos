@@ -1,3 +1,6 @@
+import:
+  - catalog/eks-app-defaults
+
 components:
   terraform:
 
