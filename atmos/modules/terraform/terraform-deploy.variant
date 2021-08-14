@@ -41,6 +41,7 @@ job "terraform deploy" {
       stack       = opt.stack
       command     = opt.command
       interactive = opt.interactive
+      args        = opt.args
     }
   }
 

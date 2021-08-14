@@ -23,9 +23,9 @@ job "terraform apply" {
   }
 
   option "args" {
-    default     = ""
     description = "A string of arguments to supply to the terraform command"
     type        = string
+    default     = ""
   }
 
   option "interactive" {
