@@ -25,7 +25,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) {
 	}
 	fmt.Println("Stack: " + stack)
 
-	args2 := RemoveCommonFlags(args)
+	args2 := removeCommonFlags(args)
 	fmt.Print("Args2: ")
 	fmt.Println(args2)
 }

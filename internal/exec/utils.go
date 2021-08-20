@@ -9,8 +9,8 @@ var (
 	commonFlags = []string{"--stack", "-s"}
 )
 
-// RemoveCommonFlags removes common CLI flags from the provided list of arguments/flags
-func RemoveCommonFlags(args []string) []string {
+// removeCommonFlags removes common CLI flags from the provided list of arguments/flags
+func removeCommonFlags(args []string) []string {
 	result := []string{}
 	indexesToRemove := []int{}
 
