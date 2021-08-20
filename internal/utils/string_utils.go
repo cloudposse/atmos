@@ -1,5 +1,7 @@
 package utils
 
+import "strings"
+
 // UniqueStrings returns a unique subset of the string slice provided
 func UniqueStrings(input []string) []string {
 	u := make([]string, 0, len(input))
@@ -19,6 +21,16 @@ func UniqueStrings(input []string) []string {
 func SliceContainsString(s []string, str string) bool {
 	for _, v := range s {
 		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
+// SliceContainsStartsWithString checks if a slice contains a string that starts with a given string
+func SliceContainsStartsWithString(s []string, str string) bool {
+	for _, v := range s {
+		if strings.HasPrefix(v, str) {
 			return true
 		}
 	}
