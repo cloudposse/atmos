@@ -7,25 +7,30 @@ import (
 )
 
 // ExecuteTerraform executes terraform commands
-func ExecuteTerraform(cmd *cobra.Command, args []string) {
-	fmt.Print("Args: ")
-	fmt.Println(args)
-
+func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	cmd.DisableFlagParsing = false
+
 	err := cmd.ParseFlags(args)
 	if err != nil {
-		return
+		return err
 	}
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
 		log.Fatalln(err)
-		return
+		return err
 	}
 	fmt.Println("Stack: " + stack)
 
-	args2 := removeCommonFlags(args)
+	commandArgsAndFlags := removeCommonFlags(args)
 	fmt.Print("Args2: ")
-	fmt.Println(args2)
+	fmt.Println(commandArgsAndFlags)
+
+	err = execCommand("terraform", commandArgsAndFlags)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

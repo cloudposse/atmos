@@ -13,7 +13,10 @@ var terraformCmd = &cobra.Command{
 	Long:               `This command runs terraform sub-commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
-		e.ExecuteTerraform(cmd, args)
+		err := e.ExecuteTerraform(cmd, args)
+		if err != nil {
+			log.Fatalln(err)
+		}
 	},
 }
 

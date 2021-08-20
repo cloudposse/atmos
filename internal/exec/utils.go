@@ -2,6 +2,8 @@ package exec
 
 import (
 	u "atmos/internal/utils"
+	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -32,4 +34,12 @@ func removeCommonFlags(args []string) []string {
 	}
 
 	return result
+}
+
+// https://medium.com/rungo/executing-shell-commands-script-files-and-executables-in-go-894814f1c0f7
+func execCommand(command string, args []string) error {
+	cmd := exec.Command(command, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stdout
+	return cmd.Run()
 }
