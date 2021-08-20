@@ -14,6 +14,16 @@ func SliceContainsString(s []string, str string) bool {
 	return false
 }
 
+// SliceContainsInt checks if an int is present in a slice
+func SliceContainsInt(s []int, i int) bool {
+	for _, v := range s {
+		if v == i {
+			return true
+		}
+	}
+	return false
+}
+
 // SliceContainsStringThatTheStringStartsWith checks if a slice contains a string that the given string begins with
 func SliceContainsStringThatTheStringStartsWith(s []string, str string) bool {
 	for _, v := range s {
