@@ -1,0 +1,16 @@
+{
+  "terraform": {
+    "backend": {
+      "s3": {
+        "acl": "bucket-owner-full-control",
+        "bucket": "eg-ue2-root-tfstate",
+        "dynamodb_table": "eg-ue2-root-tfstate-lock",
+        "encrypt": true,
+        "key": "terraform.tfstate",
+        "profile": "eg-gbl-root-terraform",
+        "region": "us-east-2",
+        "workspace_key_prefix": "vpc"
+      }
+    }
+  }
+}

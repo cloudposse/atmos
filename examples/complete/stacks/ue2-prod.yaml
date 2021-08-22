@@ -1,0 +1,18 @@
+import:
+  - ue2-globals
+  - catalog/vpc
+
+vars:
+  stage: prod
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: 10.8.0.0/18
