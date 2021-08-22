@@ -9,7 +9,7 @@ import (
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if len(args) < 3 {
-		return errors.New("invalid number of arguments and flags")
+		return errors.New("invalid number of arguments")
 	}
 
 	cmd.DisableFlagParsing = false
@@ -27,10 +27,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println("Stack: " + stack)
 
 	additionalArgsAndFlags := removeCommonArgsAndFlags(args)
-	fmt.Print("Args2: ")
-	fmt.Println(additionalArgsAndFlags)
+	terraformSubCommand := args[0]
+	allArgsAndFlags := append([]string{terraformSubCommand}, additionalArgsAndFlags...)
 
-	err = execCommand("terraform", additionalArgsAndFlags)
+	err = execCommand("terraform", allArgsAndFlags)
 	if err != nil {
 		return err
 	}
