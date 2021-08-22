@@ -1,9 +1,0 @@
-components:
-  terraform:
-
-    service-1:
-      vars:
-        name: service-1
-      settings:
-        spacelift:
-          workspace_enabled: true

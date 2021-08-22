@@ -8,7 +8,18 @@ import (
 )
 
 var (
-	commonFlags       = []string{"--stack", "-s"}
+	commonFlags = []string{
+		"--stack",
+		"-s",
+		"--dry-run",
+		"--kubeconfig-path",
+		"--terraform-dir",
+		"--helmfile-dir",
+		"--config-dir",
+	}
+
+	// First arg is a terraform subcommand
+	// Second arg is component
 	commonArgsIndexes = []int{0, 1}
 )
 
