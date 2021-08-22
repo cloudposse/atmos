@@ -2,12 +2,16 @@ package exec
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"log"
 )
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
+	if len(args) < 3 {
+		return errors.New("invalid number of arguments and flags")
+	}
+
 	cmd.DisableFlagParsing = false
 
 	err := cmd.ParseFlags(args)
@@ -18,16 +22,15 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
-		log.Fatalln(err)
 		return err
 	}
 	fmt.Println("Stack: " + stack)
 
-	commandArgsAndFlags := removeCommonFlags(args)
+	additionalArgsAndFlags := removeCommonArgsAndFlags(args)
 	fmt.Print("Args2: ")
-	fmt.Println(commandArgsAndFlags)
+	fmt.Println(additionalArgsAndFlags)
 
-	err = execCommand("terraform", commandArgsAndFlags)
+	err = execCommand("terraform", additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}

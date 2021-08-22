@@ -8,17 +8,20 @@ import (
 )
 
 var (
-	commonFlags = []string{"--stack", "-s"}
+	commonFlags       = []string{"--stack", "-s"}
+	commonArgsIndexes = []int{0, 1}
 )
 
-// removeCommonFlags removes common CLI flags from the provided list of arguments/flags
-func removeCommonFlags(args []string) []string {
+// removeCommonArgsAndFlags removes common args and flags from the provided list of arguments/flags
+func removeCommonArgsAndFlags(argsAndFlags []string) []string {
 	result := []string{}
 	indexesToRemove := []int{}
 
-	for i, arg := range args {
+	for i, arg := range argsAndFlags {
 		for _, f := range commonFlags {
-			if arg == f {
+			if u.SliceContainsInt(commonArgsIndexes, i) {
+				indexesToRemove = append(indexesToRemove, i)
+			} else if arg == f {
 				indexesToRemove = append(indexesToRemove, i)
 				indexesToRemove = append(indexesToRemove, i+1)
 			} else if strings.HasPrefix(arg, f+"=") {
@@ -27,7 +30,7 @@ func removeCommonFlags(args []string) []string {
 		}
 	}
 
-	for i, arg := range args {
+	for i, arg := range argsAndFlags {
 		if !u.SliceContainsInt(indexesToRemove, i) {
 			result = append(result, arg)
 		}
