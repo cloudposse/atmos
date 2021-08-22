@@ -1,0 +1,14 @@
+import:
+  - catalog/services/*
+
+components:
+  terraform:
+    test-component:
+      backend:
+        s3:
+          workspace_key_prefix: test-component
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        enabled: true

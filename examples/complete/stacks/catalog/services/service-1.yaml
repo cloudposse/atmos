@@ -1,0 +1,5 @@
+components:
+  terraform:
+    test-component:
+      vars:
+        service_1_name: "service_1"

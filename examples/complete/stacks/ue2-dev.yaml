@@ -1,5 +1,6 @@
 import:
   - ue2-globals
+  - catalog/test-component
   - catalog/vpc
 
 vars:
