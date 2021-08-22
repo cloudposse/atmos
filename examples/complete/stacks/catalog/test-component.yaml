@@ -1,3 +1,4 @@
+# `import` supports Globs https://pkg.go.dev/gopkg.in/godo.v2/glob
 import:
   - catalog/services/service-?.*
 
