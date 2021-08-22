@@ -19,4 +19,6 @@ terraform:
 helmfile:
   vars: {}
 
-components: {}
+components:
+  terraform: {}
+  helmfile: {}
