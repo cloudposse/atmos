@@ -1,0 +1,8 @@
+import:
+  - catalog/services/service-?-override.*
+
+components:
+  terraform:
+    test-component-override:
+      component: test-component
+      vars: {}

@@ -1,6 +1,7 @@
 import:
   - ue2-globals
   - catalog/test-component
+  - catalog/test-component-override
   - catalog/vpc
 
 vars:
