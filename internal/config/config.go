@@ -47,7 +47,7 @@ func InitConfig() error {
 	// from command-line arguments
 
 	fmt.Println(strings.Repeat("-", 120))
-	fmt.Println("Processing and merging configurations in the order of precedence...")
+	fmt.Println("Processing and merging configurations in the following order: system dir, home dir, current dir, ENV vars")
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -98,15 +98,7 @@ func InitConfig() error {
 	}
 
 	// Process ENV vars
-	stackDir := os.Getenv("ATMOS_STACK_DIR")
-	if len(stackDir) > 0 {
-		Config.StackDir = stackDir
-	}
-
-	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
-	if len(terraformDir) > 0 {
-		Config.TerraformDir = terraformDir
-	}
+	processEnvVars()
 
 	fmt.Println("Final CLI configuration:")
 	j, _ := json.MarshalIndent(&Config, "", strings.Repeat(" ", 2))
@@ -149,4 +141,16 @@ func processConfigFile(path string, v *viper.Viper) error {
 	fmt.Println("Processed config at " + path)
 
 	return nil
+}
+
+func processEnvVars() {
+	stackDir := os.Getenv("ATMOS_STACK_DIR")
+	if len(stackDir) > 0 {
+		Config.StackDir = stackDir
+	}
+
+	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
+	if len(terraformDir) > 0 {
+		Config.TerraformDir = terraformDir
+	}
 }
