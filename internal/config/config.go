@@ -1,10 +1,11 @@
 package config
 
 import (
-	f "atmos/internal/utils"
+	u "atmos/internal/utils"
 	"encoding/json"
 	"fmt"
 	"github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"os"
 	"path"
@@ -19,9 +20,10 @@ const (
 )
 
 type Configuration struct {
-	StackNamePattern string   `mapstructure:"StackNamePattern"`
-	StackDirs        []string `mapstructure:"StackDirs"`
-	TerraformDir     string   `mapstructure:"TerraformDir"`
+	StackNamePattern       string   `mapstructure:"StackNamePattern"`
+	StackDirs              []string `mapstructure:"StackDirs"`
+	StackDirsAbsolutePaths []string
+	TerraformDir           string `mapstructure:"TerraformDir"`
 }
 
 var (
@@ -120,6 +122,19 @@ func InitConfig() error {
 	// Process ENV vars
 	processEnvVars()
 
+	// Check config
+	err = checkConfig()
+	if err != nil {
+		return err
+	}
+
+	// Convert all stack dirs to absolute paths
+	absPaths, err := u.ConvertPathsToAbsolutePaths(Config.StackDirs)
+	if err != nil {
+		return err
+	}
+	Config.StackDirsAbsolutePaths = absPaths
+
 	fmt.Println("Final CLI configuration:")
 	j, _ := json.MarshalIndent(&Config, "", strings.Repeat(" ", 2))
 	if err != nil {
@@ -134,7 +149,7 @@ func InitConfig() error {
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
-	if !f.FileExists(path) {
+	if !u.FileExists(path) {
 		fmt.Println("No config found at " + path)
 		return nil
 	}
@@ -178,4 +193,18 @@ func processEnvVars() {
 	if len(stackNamePattern) > 0 {
 		Config.StackNamePattern = stackNamePattern
 	}
+}
+
+func checkConfig() error {
+	if len(Config.StackDirs) < 1 {
+		return errors.New("at least one path to stack config must be provided in 'StackDirs' or 'ATMOS_STACK_DIRS' ENV variable")
+	}
+	if len(Config.TerraformDir) < 1 {
+		return errors.New("terraform dir must be provided in 'TerraformDir' or 'ATMOS_TERRAFORM_DIR' ENV variable")
+	}
+	if len(Config.StackNamePattern) < 1 {
+		return errors.New("stack name pattern must be provided in 'StackNamePattern' or 'ATMOS_STACK_NAME_PATTERN' ENV variable")
+	}
+
+	return nil
 }

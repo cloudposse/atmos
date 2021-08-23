@@ -29,3 +29,18 @@ func IsYaml(file string) bool {
 	ext := filepath.Ext(file)
 	return SliceContainsString(yamlExtensions, ext)
 }
+
+// ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths
+func ConvertPathsToAbsolutePaths(dirs []string) ([]string, error) {
+	res := []string{}
+
+	for _, dir := range dirs {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, abs)
+	}
+
+	return res, nil
+}
