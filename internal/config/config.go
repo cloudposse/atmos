@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	ConfigFileName = "atmos.yaml"
+	configFileName          = "atmos.yaml"
+	systemDirConfigFilePath = "/usr/local/etc/atmos"
+	windowsAppDataEnvVar    = "CSIDL_LOCAL_APPDATA"
 )
 
 type Configuration struct {
@@ -64,16 +66,16 @@ func InitConfig() error {
 	// https://softwareengineering.stackexchange.com/questions/299869/where-is-the-appropriate-place-to-put-application-configuration-files-for-each-p
 	// https://stackoverflow.com/questions/37946282/why-does-appdata-in-windows-7-seemingly-points-to-wrong-folder
 	if runtime.GOOS == "windows" {
-		appDataDir := os.Getenv("CSIDL_LOCAL_APPDATA")
+		appDataDir := os.Getenv(windowsAppDataEnvVar)
 		if len(appDataDir) > 0 {
 			configFilePath1 = appDataDir
 		}
 	} else {
-		configFilePath1 = "/usr/local/etc/atmos"
+		configFilePath1 = systemDirConfigFilePath
 	}
 
 	if len(configFilePath1) > 0 {
-		configFile1 := path.Join(configFilePath1, ConfigFileName)
+		configFile1 := path.Join(configFilePath1, configFileName)
 		err = processConfigFile(configFile1, v)
 		if err != nil {
 			return err
@@ -85,7 +87,7 @@ func InitConfig() error {
 	if err != nil {
 		return err
 	}
-	configFile2 := path.Join(configFilePath2, ".atmos", ConfigFileName)
+	configFile2 := path.Join(configFilePath2, ".atmos", configFileName)
 	err = processConfigFile(configFile2, v)
 	if err != nil {
 		return err
@@ -96,7 +98,7 @@ func InitConfig() error {
 	if err != nil {
 		return err
 	}
-	configFile3 := path.Join(configFilePath3, ConfigFileName)
+	configFile3 := path.Join(configFilePath3, configFileName)
 	err = processConfigFile(configFile3, v)
 	if err != nil {
 		return err
