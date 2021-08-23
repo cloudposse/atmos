@@ -19,8 +19,9 @@ const (
 )
 
 type Configuration struct {
-	StackDirs    []string `mapstructure:"StackDirs"`
-	TerraformDir string   `mapstructure:"TerraformDir"`
+	StackNamePattern string   `mapstructure:"StackNamePattern"`
+	StackDirs        []string `mapstructure:"StackDirs"`
+	TerraformDir     string   `mapstructure:"TerraformDir"`
 }
 
 var (
@@ -171,5 +172,10 @@ func processEnvVars() {
 	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
 	if len(terraformDir) > 0 {
 		Config.TerraformDir = terraformDir
+	}
+
+	stackNamePattern := os.Getenv("ATMOS_STACK_NAME_PATTERN")
+	if len(stackNamePattern) > 0 {
+		Config.StackNamePattern = stackNamePattern
 	}
 }
