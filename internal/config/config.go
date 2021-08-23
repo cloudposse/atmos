@@ -90,12 +90,12 @@ func InitConfig() error {
 		return err
 	}
 
-	fmt.Println("Final configuration:")
+	fmt.Println("Final CLI configuration:")
 	j, _ := json.MarshalIndent(&Config, "", "\t")
-	fmt.Printf("%s\n", j)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("%s\n", j)
 
 	return nil
 }
