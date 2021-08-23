@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -20,10 +21,11 @@ const (
 )
 
 type Configuration struct {
-	StackNamePattern       string   `mapstructure:"StackNamePattern"`
-	StackDirs              []string `mapstructure:"StackDirs"`
-	StackDirsAbsolutePaths []string
-	TerraformDir           string `mapstructure:"TerraformDir"`
+	StackNamePattern         string   `mapstructure:"StackNamePattern"`
+	StackDirs                []string `mapstructure:"StackDirs"`
+	StackDirsAbsolutePaths   []string
+	TerraformDir             string `mapstructure:"TerraformDir"`
+	TerraformDirAbsolutePath string
 }
 
 var (
@@ -134,6 +136,13 @@ func InitConfig() error {
 		return err
 	}
 	Config.StackDirsAbsolutePaths = absPaths
+
+	// Convert terraform dir to absolute path
+	terraformDirAbsPath, err := filepath.Abs(Config.TerraformDir)
+	if err != nil {
+		return err
+	}
+	Config.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	fmt.Println("Final CLI configuration:")
 	j, _ := json.MarshalIndent(&Config, "", strings.Repeat(" ", 2))
