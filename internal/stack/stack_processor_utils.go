@@ -194,31 +194,3 @@ func CreateComponentStackMap(filePath string) (map[string]map[string][]string, e
 
 	return componentStackMap, nil
 }
-
-// FindAllStackConfigsInPaths finds all stack config files in the paths specified by globs
-func FindAllStackConfigsInPaths(pathGlobs []string) ([]string, error) {
-	res := []string{}
-
-	for _, p := range pathGlobs {
-		pathWithExt := p
-
-		ext := filepath.Ext(p)
-		if ext == "" {
-			ext = g.DefaultStackConfigFileExtension
-			pathWithExt = p + ext
-		}
-
-		// Find all matches in the glob
-		matches, err := filepath.Glob(pathWithExt)
-		if err != nil {
-			return nil, err
-		}
-
-		if matches != nil && len(matches) > 0 {
-			res = append(res, matches...)
-		}
-
-	}
-
-	return res, nil
-}

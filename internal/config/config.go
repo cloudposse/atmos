@@ -1,10 +1,11 @@
 package config
 
 import (
-	s "atmos/internal/stack"
+	g "atmos/internal/globals"
 	u "atmos/internal/utils"
 	"encoding/json"
 	"fmt"
+	"github.com/bmatcuk/doublestar"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -147,7 +148,7 @@ func InitConfig() error {
 	Config.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Find all stack config files in the provided paths
-	stackConfigFiles, err := s.FindAllStackConfigsInPaths(absPaths)
+	stackConfigFiles, err := findAllStackConfigsInPaths(absPaths)
 	if err != nil {
 		return err
 	}
@@ -236,4 +237,32 @@ func checkConfig() error {
 	}
 
 	return nil
+}
+
+// findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
+func findAllStackConfigsInPaths(pathGlobs []string) ([]string, error) {
+	res := []string{}
+
+	for _, p := range pathGlobs {
+		pathWithExt := p
+
+		ext := filepath.Ext(p)
+		if ext == "" {
+			ext = g.DefaultStackConfigFileExtension
+			pathWithExt = p + ext
+		}
+
+		// Find all matches in the glob
+		matches, err := doublestar.Glob(pathWithExt)
+		if err != nil {
+			return nil, err
+		}
+
+		if matches != nil && len(matches) > 0 {
+			res = append(res, matches...)
+		}
+
+	}
+
+	return res, nil
 }
