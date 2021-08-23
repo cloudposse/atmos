@@ -15,7 +15,7 @@ import (
 const (
 	configFileName          = "atmos.yaml"
 	systemDirConfigFilePath = "/usr/local/etc/atmos"
-	windowsAppDataEnvVar    = "CSIDL_LOCAL_APPDATA"
+	windowsAppDataEnvVar    = "LOCALAPPDATA"
 )
 
 type Configuration struct {
@@ -62,6 +62,7 @@ func InitConfig() error {
 	// Process config in system folder
 	configFilePath1 := ""
 
+	// https://pureinfotech.com/list-environment-variables-windows-10/
 	// https://docs.microsoft.com/en-us/windows/deployment/usmt/usmt-recognized-environment-variables
 	// https://softwareengineering.stackexchange.com/questions/299869/where-is-the-appropriate-place-to-put-application-configuration-files-for-each-p
 	// https://stackoverflow.com/questions/37946282/why-does-appdata-in-windows-7-seemingly-points-to-wrong-folder
