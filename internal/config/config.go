@@ -151,6 +151,14 @@ func InitConfig() error {
 	if err != nil {
 		return err
 	}
+	if len(stackConfigFiles) < 1 {
+		j, _ := json.MarshalIndent(absPaths, "", strings.Repeat(" ", 2))
+		if err != nil {
+			return err
+		}
+		errorMessage := fmt.Sprintf("No config files found in any of the provided path globs:\n%s\n", j)
+		return errors.New(errorMessage)
+	}
 	Config.StackConfigFiles = stackConfigFiles
 
 	fmt.Println("Final CLI configuration:")
@@ -199,29 +207,32 @@ func processConfigFile(path string, v *viper.Viper) error {
 func processEnvVars() {
 	stackDirs := os.Getenv("ATMOS_STACK_DIRS")
 	if len(stackDirs) > 0 {
+		fmt.Println("Found ENV var 'ATMOS_STACK_DIRS'")
 		Config.StackDirs = strings.Split(stackDirs, ",")
 	}
 
 	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
 	if len(terraformDir) > 0 {
+		fmt.Println("Found ENV var 'ATMOS_TERRAFORM_DIR'")
 		Config.TerraformDir = terraformDir
 	}
 
 	stackNamePattern := os.Getenv("ATMOS_STACK_NAME_PATTERN")
 	if len(stackNamePattern) > 0 {
+		fmt.Println("Found ENV var 'ATMOS_STACK_NAME_PATTERN'")
 		Config.StackNamePattern = stackNamePattern
 	}
 }
 
 func checkConfig() error {
 	if len(Config.StackDirs) < 1 {
-		return errors.New("at least one path to stack config must be provided in 'StackDirs' or 'ATMOS_STACK_DIRS' ENV variable")
+		return errors.New("At least one path to stack config must be provided in 'StackDirs' or 'ATMOS_STACK_DIRS' ENV variable")
 	}
 	if len(Config.TerraformDir) < 1 {
-		return errors.New("terraform dir must be provided in 'TerraformDir' or 'ATMOS_TERRAFORM_DIR' ENV variable")
+		return errors.New("Terraform dir must be provided in 'TerraformDir' or 'ATMOS_TERRAFORM_DIR' ENV variable")
 	}
 	if len(Config.StackNamePattern) < 1 {
-		return errors.New("stack name pattern must be provided in 'StackNamePattern' or 'ATMOS_STACK_NAME_PATTERN' ENV variable")
+		return errors.New("Stack name pattern must be provided in 'StackNamePattern' or 'ATMOS_STACK_NAME_PATTERN' ENV variable")
 	}
 
 	return nil
