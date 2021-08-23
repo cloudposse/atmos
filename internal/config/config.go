@@ -17,8 +17,8 @@ const (
 )
 
 type Configuration struct {
-	StackDir     string `yaml:"StackDir"`
-	TerraformDir string `yaml:"TerraformDir"`
+	StackDir     string `mapstructure:"StackDir"`
+	TerraformDir string `mapstructure:"TerraformDir"`
 }
 
 var (
@@ -34,6 +34,8 @@ var (
 	Config Configuration
 )
 
+// https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
+// https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitConfig() error {
 	// Config is loaded from these locations (from lower to higher priority):
 	// /usr/local/etc/atmos
