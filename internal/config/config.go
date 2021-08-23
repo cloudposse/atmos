@@ -22,8 +22,6 @@ type Configuration struct {
 }
 
 var (
-	ConfigFilePath1 = "/usr/local/etc/atmos"
-
 	// Default values
 	defaultConfig = map[string]interface{}{
 		// Default path to stack configs
@@ -59,9 +57,23 @@ func InitConfig() error {
 		return err
 	}
 
-	// Process config in /usr/local/etc/atmos
-	if runtime.GOOS != "windows" {
-		configFile1 := path.Join(ConfigFilePath1, ConfigFileName)
+	// Process config in system folder
+	configFilePath1 := ""
+
+	// https://docs.microsoft.com/en-us/windows/deployment/usmt/usmt-recognized-environment-variables
+	// https://softwareengineering.stackexchange.com/questions/299869/where-is-the-appropriate-place-to-put-application-configuration-files-for-each-p
+	// https://stackoverflow.com/questions/37946282/why-does-appdata-in-windows-7-seemingly-points-to-wrong-folder
+	if runtime.GOOS == "windows" {
+		appDataDir := os.Getenv("CSIDL_LOCAL_APPDATA")
+		if len(appDataDir) > 0 {
+			configFilePath1 = appDataDir
+		}
+	} else {
+		configFilePath1 = "/usr/local/etc/atmos"
+	}
+
+	if len(configFilePath1) > 0 {
+		configFile1 := path.Join(configFilePath1, ConfigFileName)
 		err = processConfigFile(configFile1, v)
 		if err != nil {
 			return err
