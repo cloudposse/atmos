@@ -1,2 +1,6 @@
-StackDir: "./stacks"
+StackDirs:
+  - "./stacks"
+
 TerraformDir: "./components/terraform"
+
+StackNamePattern: "tenant-environment-stage"

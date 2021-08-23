@@ -19,17 +19,21 @@ const (
 )
 
 type Configuration struct {
-	StackDir     string `mapstructure:"StackDir"`
-	TerraformDir string `mapstructure:"TerraformDir"`
+	StackDirs    []string `mapstructure:"StackDirs"`
+	TerraformDir string   `mapstructure:"TerraformDir"`
 }
 
 var (
 	// Default values
 	defaultConfig = map[string]interface{}{
-		// Default path to stack configs
-		"StackDir": "./stacks",
+		// Default paths to stack configs
+		"StackDirs": []string{
+			"./stacks",
+		},
 		// Default path to terraform components
 		"TerraformDir": "./components/terraform",
+		// Logical stack name pattern
+		"StackNamePattern": "environment-stage",
 	}
 
 	// Config is the CLI configuration structure
@@ -159,9 +163,9 @@ func processConfigFile(path string, v *viper.Viper) error {
 }
 
 func processEnvVars() {
-	stackDir := os.Getenv("ATMOS_STACK_DIR")
-	if len(stackDir) > 0 {
-		Config.StackDir = stackDir
+	stackDirs := os.Getenv("ATMOS_STACK_DIRS")
+	if len(stackDirs) > 0 {
+		Config.StackDirs = strings.Split(stackDirs, ",")
 	}
 
 	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
