@@ -14,6 +14,11 @@ const (
 	ConfigFileName  = "atmos.yaml"
 )
 
+type Configurations struct {
+	StackDir     string
+	TerraformDir string
+}
+
 var (
 	StackDir     = "./stacks"
 	TerraformDir = "./components/terraform"
@@ -28,7 +33,7 @@ func InitConfig() error {
 	// from command-line arguments
 
 	fmt.Println(strings.Repeat("-", 120))
-	fmt.Println("Searching 'atmos' configurations...")
+	fmt.Println("Processing configurations...")
 
 	// Process config in /usr/local/etc/atmos
 	configFile1 := path.Join(ConfigFilePath1, ConfigFileName)
