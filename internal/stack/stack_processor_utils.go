@@ -1,6 +1,7 @@
 package stack
 
 import (
+	g "atmos/internal/globals"
 	u "atmos/internal/utils"
 	"os"
 	"path"
@@ -181,15 +182,43 @@ func CreateComponentStackMap(filePath string) (map[string]map[string][]string, e
 
 	for stack, components := range stackComponentMap["terraform"] {
 		for _, component := range components {
-			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, ".yaml", "", 1))
+			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, g.DefaultStackConfigFileExtension, "", 1))
 		}
 	}
 
 	for stack, components := range stackComponentMap["helmfile"] {
 		for _, component := range components {
-			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, ".yaml", "", 1))
+			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, g.DefaultStackConfigFileExtension, "", 1))
 		}
 	}
 
 	return componentStackMap, nil
+}
+
+// FindAllStackConfigsInPaths finds all stack config files in the paths specified by globs
+func FindAllStackConfigsInPaths(pathGlobs []string) ([]string, error) {
+	res := []string{}
+
+	for _, p := range pathGlobs {
+		pathWithExt := p
+
+		ext := filepath.Ext(p)
+		if ext == "" {
+			ext = g.DefaultStackConfigFileExtension
+			pathWithExt = p + ext
+		}
+
+		// Find all matches in the glob
+		matches, err := filepath.Glob(pathWithExt)
+		if err != nil {
+			return nil, err
+		}
+
+		if matches != nil && len(matches) > 0 {
+			res = append(res, matches...)
+		}
+
+	}
+
+	return res, nil
 }

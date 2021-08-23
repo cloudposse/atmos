@@ -2,6 +2,7 @@ package stack
 
 import (
 	c "atmos/internal/convert"
+	g "atmos/internal/globals"
 	m "atmos/internal/merge"
 	u "atmos/internal/utils"
 	"fmt"
@@ -75,7 +76,7 @@ func ProcessYAMLConfigFiles(filePaths []string, processStackDeps bool, processCo
 				return
 			}
 
-			stackName := strings.TrimSuffix(strings.TrimSuffix(path.Base(p), ".yaml"), ".yml")
+			stackName := strings.TrimSuffix(strings.TrimSuffix(path.Base(p), g.DefaultStackConfigFileExtension), ".yml")
 
 			processYAMLConfigFilesLock.Lock()
 			defer processYAMLConfigFilesLock.Unlock()
@@ -129,7 +130,7 @@ func ProcessYAMLConfigFile(
 			impWithExt := imp
 			ext := filepath.Ext(imp)
 			if ext == "" {
-				ext = ".yaml"
+				ext = g.DefaultStackConfigFileExtension
 				impWithExt = imp + ext
 			}
 
@@ -209,7 +210,7 @@ func ProcessConfig(
 	componentStackMap map[string]map[string][]string,
 	importsConfig map[string]map[interface{}]interface{}) (map[interface{}]interface{}, error) {
 
-	stackName := strings.TrimSuffix(strings.TrimSuffix(path.Base(stack), ".yaml"), ".yml")
+	stackName := strings.TrimSuffix(strings.TrimSuffix(path.Base(stack), g.DefaultStackConfigFileExtension), ".yml")
 
 	globalVarsSection := map[interface{}]interface{}{}
 	globalSettingsSection := map[interface{}]interface{}{}

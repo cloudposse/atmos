@@ -1,5 +1,5 @@
 StackDirs:
-  - "./stacks"
+  - "./stacks/*"
 
 TerraformDir: "./components/terraform"
 

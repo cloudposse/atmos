@@ -1,6 +1,7 @@
 package config
 
 import (
+	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"encoding/json"
 	"fmt"
@@ -26,14 +27,15 @@ type Configuration struct {
 	StackDirsAbsolutePaths   []string
 	TerraformDir             string `mapstructure:"TerraformDir"`
 	TerraformDirAbsolutePath string
+	StackConfigFiles         []string
 }
 
 var (
 	// Default values
 	defaultConfig = map[string]interface{}{
 		// Default paths to stack configs
-		"StackDirs": []string{
-			"./stacks",
+		"StackDirs": []interface{}{
+			"./stacks/*",
 		},
 		// Default path to terraform components
 		"TerraformDir": "./components/terraform",
@@ -143,6 +145,13 @@ func InitConfig() error {
 		return err
 	}
 	Config.TerraformDirAbsolutePath = terraformDirAbsPath
+
+	// Find all stack config files in the provided paths
+	stackConfigFiles, err := s.FindAllStackConfigsInPaths(absPaths)
+	if err != nil {
+		return err
+	}
+	Config.StackConfigFiles = stackConfigFiles
 
 	fmt.Println("Final CLI configuration:")
 	j, _ := json.MarshalIndent(&Config, "", strings.Repeat(" ", 2))
