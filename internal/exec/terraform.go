@@ -1,9 +1,12 @@
 package exec
 
 import (
+	c "atmos/internal/config"
+	u "atmos/internal/utils"
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"path"
 	"strings"
 )
 
@@ -33,6 +36,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	component := args[1]
 	if len(component) < 1 {
 		return errors.New("'component' is required")
+	}
+	componentPath := path.Join(c.Config.TerraformDirAbsolutePath, component)
+	componentPathExists, err := u.IsDirectory(componentPath)
+	if err != nil || !componentPathExists {
+		return errors.New(fmt.Sprintf("Component '%s' does not exixt at '%s'", component, componentPath))
 	}
 
 	fmt.Println(strings.Repeat("-", 120))

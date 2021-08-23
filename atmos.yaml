@@ -1,6 +1,6 @@
 StackDirs:
   - "/Users/andriyknysh/Documents/Projects/Go/src/github.com/cloudposse/atmos/examples/complete/stacks/*"
 
-TerraformDir: "./components/terraform"
+TerraformDir: "/Users/andriyknysh/Documents/Projects/Go/src/github.com/cloudposse/atmos/examples/complete/components/terraform"
 
 StackNamePattern: "tenant-environment-stage"
