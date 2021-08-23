@@ -1,7 +1,13 @@
 package main
 
-import "atmos/cmd"
+import (
+	"atmos/cmd"
+	"log"
+)
 
 func main() {
-	cmd.Execute()
+	err := cmd.Execute()
+	if err != nil {
+		log.Fatalln(err)
+	}
 }

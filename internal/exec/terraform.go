@@ -35,12 +35,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return errors.New("'component' is required")
 	}
 
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Println(strings.Repeat("-", 120))
 	fmt.Println("Terraform command: " + terraformSubCommand)
 	fmt.Println("Component: " + component)
 	fmt.Println("Stack: " + stack)
 	fmt.Printf("Additional arguments: %v\n", additionalArgsAndFlags)
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Println(strings.Repeat("-", 120))
 
 	err = execCommand("terraform", allArgsAndFlags)
 	if err != nil {

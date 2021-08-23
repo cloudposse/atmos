@@ -1,2 +1,2 @@
-configDir: "./stacks"
-terraformDir: "./components/terraform"
+StackDir: "./stacks"
+TerraformDir: "./components/terraform"
