@@ -8,12 +8,12 @@ import (
 	"github.com/spf13/viper"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 )
 
 const (
-	ConfigFilePath1 = "/usr/local/etc/atmos"
-	ConfigFileName  = "atmos.yaml"
+	ConfigFileName = "atmos.yaml"
 )
 
 type Configuration struct {
@@ -22,6 +22,8 @@ type Configuration struct {
 }
 
 var (
+	ConfigFilePath1 = "/usr/local/etc/atmos"
+
 	// Default values
 	defaultConfig = map[string]interface{}{
 		// Default path to stack configs
@@ -49,6 +51,7 @@ func InitConfig() error {
 
 	v := viper.New()
 	v.SetConfigType("yaml")
+	v.SetTypeByDefaultValue(true)
 
 	// Add default config
 	err := v.MergeConfigMap(defaultConfig)
@@ -57,10 +60,12 @@ func InitConfig() error {
 	}
 
 	// Process config in /usr/local/etc/atmos
-	configFile1 := path.Join(ConfigFilePath1, ConfigFileName)
-	err = processConfigFile(configFile1, v)
-	if err != nil {
-		return err
+	if runtime.GOOS != "windows" {
+		configFile1 := path.Join(ConfigFilePath1, ConfigFileName)
+		err = processConfigFile(configFile1, v)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Process config in user's HOME dir
@@ -92,8 +97,19 @@ func InitConfig() error {
 		return err
 	}
 
+	// Process ENV vars
+	stackDir := os.Getenv("ATMOS_STACK_DIR")
+	if len(stackDir) > 0 {
+		Config.StackDir = stackDir
+	}
+
+	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
+	if len(terraformDir) > 0 {
+		Config.TerraformDir = terraformDir
+	}
+
 	fmt.Println("Final CLI configuration:")
-	j, _ := json.MarshalIndent(&Config, "", "\t")
+	j, _ := json.MarshalIndent(&Config, "", strings.Repeat(" ", 2))
 	if err != nil {
 		return err
 	}
