@@ -2,8 +2,10 @@ package config
 
 import (
 	f "atmos/internal/utils"
+	"encoding/json"
 	"fmt"
 	"github.com/mitchellh/go-homedir"
+	"github.com/spf13/viper"
 	"os"
 	"path"
 	"strings"
@@ -15,16 +17,18 @@ const (
 )
 
 type Configuration struct {
-	StackDir     string
-	TerraformDir string
+	StackDir     string `yaml:"StackDir"`
+	TerraformDir string `yaml:"TerraformDir"`
 }
 
 var (
-	// Default path to stack configs
-	stackDir = "./stacks"
-
-	// Default path to terraform components
-	terraformDir = "./components/terraform"
+	// Default values
+	defaultConfig = map[string]interface{}{
+		// Default path to stack configs
+		"StackDir": "./stacks",
+		// Default path to terraform components
+		"TerraformDir": "./components/terraform",
+	}
 
 	// Config is the CLI configuration structure
 	Config Configuration
@@ -41,9 +45,18 @@ func InitConfig() error {
 	fmt.Println(strings.Repeat("-", 120))
 	fmt.Println("Processing and merging configurations in the order of precedence...")
 
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Add default config
+	err := v.MergeConfigMap(defaultConfig)
+	if err != nil {
+		return err
+	}
+
 	// Process config in /usr/local/etc/atmos
 	configFile1 := path.Join(ConfigFilePath1, ConfigFileName)
-	err := processConfigFile(configFile1)
+	err = processConfigFile(configFile1, v)
 	if err != nil {
 		return err
 	}
@@ -54,7 +67,7 @@ func InitConfig() error {
 		return err
 	}
 	configFile2 := path.Join(configFilePath2, ".atmos", ConfigFileName)
-	err = processConfigFile(configFile2)
+	err = processConfigFile(configFile2, v)
 	if err != nil {
 		return err
 	}
@@ -65,29 +78,57 @@ func InitConfig() error {
 		return err
 	}
 	configFile3 := path.Join(configFilePath3, ConfigFileName)
-	err = processConfigFile(configFile3)
+	err = processConfigFile(configFile3, v)
 	if err != nil {
 		return err
 	}
 
-	if len(Config.StackDir) == 0 {
-		Config.StackDir = stackDir
+	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
+	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
+	err = v.Unmarshal(&Config)
+	if err != nil {
+		return err
 	}
 
-	if len(Config.TerraformDir) == 0 {
-		Config.TerraformDir = terraformDir
+	fmt.Println("Final configuration:")
+	j, _ := json.MarshalIndent(&Config, "", "\t")
+	fmt.Printf("%s\n", j)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func processConfigFile(path string) error {
+// https://github.com/NCAR/go-figure
+// https://github.com/spf13/viper/issues/181
+// https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
+func processConfigFile(path string, v *viper.Viper) error {
 	if !f.FileExists(path) {
 		fmt.Println("No config found at " + path)
 		return nil
 	}
 
 	fmt.Println("Found config at " + path)
+
+	reader, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+
+	defer func(reader *os.File) {
+		err := reader.Close()
+		if err != nil {
+			fmt.Println("Error closing file " + path + ". " + err.Error())
+		}
+	}(reader)
+
+	err = v.MergeConfig(reader)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Processed config at " + path)
 
 	return nil
 }
