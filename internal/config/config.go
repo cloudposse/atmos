@@ -14,14 +14,20 @@ const (
 	ConfigFileName  = "atmos.yaml"
 )
 
-type Configurations struct {
+type Configuration struct {
 	StackDir     string
 	TerraformDir string
 }
 
 var (
-	StackDir     = "./stacks"
-	TerraformDir = "./components/terraform"
+	// Default path to stack configs
+	stackDir = "./stacks"
+
+	// Default path to terraform components
+	terraformDir = "./components/terraform"
+
+	// Config is the CLI configuration structure
+	Config Configuration
 )
 
 func InitConfig() error {
@@ -33,7 +39,7 @@ func InitConfig() error {
 	// from command-line arguments
 
 	fmt.Println(strings.Repeat("-", 120))
-	fmt.Println("Processing configurations...")
+	fmt.Println("Processing and merging configurations in the order of precedence...")
 
 	// Process config in /usr/local/etc/atmos
 	configFile1 := path.Join(ConfigFilePath1, ConfigFileName)
@@ -62,6 +68,14 @@ func InitConfig() error {
 	err = processConfigFile(configFile3)
 	if err != nil {
 		return err
+	}
+
+	if len(Config.StackDir) == 0 {
+		Config.StackDir = stackDir
+	}
+
+	if len(Config.TerraformDir) == 0 {
+		Config.TerraformDir = terraformDir
 	}
 
 	return nil
