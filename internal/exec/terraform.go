@@ -62,40 +62,22 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Check and process stacks
 	var selectedStackConfigFile string
-	var stackSection map[interface{}]interface{}
-	var componentsSection map[string]interface{}
-	var terraformSection map[string]interface{}
-	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
 	var baseComponent string
 	var command string
-	var ok bool
 
 	if c.Config.StackType == "Directory" {
 		selectedStackConfigFile = c.Config.StackConfigFiles[0]
-		if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-			return errors.New(fmt.Sprintf("Stack '%s' does not exist in %s", stack, selectedStackConfigFile))
-		}
-		if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-			return errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
-		}
-		if terraformSection, ok = componentsSection["terraform"].(map[string]interface{}); !ok {
-			return errors.New(fmt.Sprintf("'components/terraform' section is missing in stack '%s'", stack))
-		}
-		if componentSection, ok = terraformSection[componentFromArg].(map[string]interface{}); !ok {
-			return errors.New(fmt.Sprintf("Invalid or missing configuration for component '%s' in stack '%s'", componentFromArg, stack))
-		}
-		if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-			return errors.New(fmt.Sprintf("Missing 'vars' section for component '%s' in stack '%s'", componentFromArg, stack))
-		}
-		if baseComponent, ok = componentSection["component"].(string); !ok {
-			baseComponent = ""
+
+		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, selectedStackConfigFile, componentFromArg)
+		if err != nil {
+			return err
 		}
 
-		if command, ok = componentSection["command"].(string); !ok {
-			command = "terraform"
-		} else {
+		if len(command) > 0 {
 			color.Cyan("Found 'command=%s' for component '%s' in stack '%s'\n\n", command, componentFromArg, stack)
+		} else {
+			command = "terraform"
 		}
 	} else {
 		//for k,v := range stacksMap {
@@ -160,7 +142,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)),
 	)
 	color.Green(fmt.Sprintf("Working dir: %s", componentPath))
-	fmt.Println(strings.Repeat("\n", 3))
+	fmt.Println(strings.Repeat("\n", 2))
 
 	err = execCommand(command, allArgsAndFlags, componentPath)
 	if err != nil {
