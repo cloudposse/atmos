@@ -1,5 +1,5 @@
 import:
-  - tenant2-globals
+  - tenant2/tenant2-globals
   - ue2-globals
   - catalog/test-component
   - catalog/test-component-override
