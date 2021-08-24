@@ -26,7 +26,12 @@ var (
 
 // ProcessYAMLConfigFiles takes a list of paths to YAML config files, processes and deep-merges all imports,
 // and returns a list of stack configs
-func ProcessYAMLConfigFiles(basePath string, filePaths []string, processStackDeps bool, processComponentDeps bool) ([]string, map[string]interface{}, error) {
+func ProcessYAMLConfigFiles(
+	basePath string,
+	filePaths []string,
+	processStackDeps bool,
+	processComponentDeps bool) ([]string, map[string]interface{}, error) {
+
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]interface{}{}
@@ -38,7 +43,6 @@ func ProcessYAMLConfigFiles(basePath string, filePaths []string, processStackDep
 		go func(i int, p string) {
 			defer wg.Done()
 
-			// basePath := path.Dir(p)
 			config, importsConfig, err := ProcessYAMLConfigFile(basePath, p, map[string]map[interface{}]interface{}{})
 			if err != nil {
 				errorResult = err
@@ -55,14 +59,14 @@ func ProcessYAMLConfigFiles(basePath string, filePaths []string, processStackDep
 
 			componentStackMap := map[string]map[string][]string{}
 			if processStackDeps {
-				componentStackMap, err = CreateComponentStackMap(p)
+				componentStackMap, err = CreateComponentStackMap(basePath, p)
 				if err != nil {
 					errorResult = err
 					return
 				}
 			}
 
-			finalConfig, err := ProcessConfig(p, config, processStackDeps, processComponentDeps, "", componentStackMap, importsConfig)
+			finalConfig, err := ProcessConfig(basePath, p, config, processStackDeps, processComponentDeps, "", componentStackMap, importsConfig)
 			if err != nil {
 				errorResult = err
 				return
@@ -76,7 +80,7 @@ func ProcessYAMLConfigFiles(basePath string, filePaths []string, processStackDep
 				return
 			}
 
-			stackName := strings.TrimSuffix(strings.TrimSuffix(path.Base(p), g.DefaultStackConfigFileExtension), ".yml")
+			stackName := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(p, basePath+"/"), g.DefaultStackConfigFileExtension), ".yml")
 
 			processYAMLConfigFilesLock.Lock()
 			defer processYAMLConfigFilesLock.Unlock()
@@ -202,6 +206,7 @@ func ProcessYAMLConfigFile(
 // ProcessConfig takes a raw stack config, deep-merges all variables, settings, environments and backends,
 // and returns the final stack configuration for all Terraform and helmfile components
 func ProcessConfig(
+	basePath string,
 	stack string,
 	config map[interface{}]interface{},
 	processStackDeps bool,
@@ -210,7 +215,7 @@ func ProcessConfig(
 	componentStackMap map[string]map[string][]string,
 	importsConfig map[string]map[interface{}]interface{}) (map[interface{}]interface{}, error) {
 
-	stackName := strings.TrimSuffix(strings.TrimSuffix(path.Base(stack), g.DefaultStackConfigFileExtension), ".yml")
+	stackName := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(stack, basePath+"/"), g.DefaultStackConfigFileExtension), ".yml")
 
 	globalVarsSection := map[interface{}]interface{}{}
 	globalSettingsSection := map[interface{}]interface{}{}

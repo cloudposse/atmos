@@ -110,7 +110,7 @@ func FindComponentDependencies(
 }
 
 // CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
-func CreateComponentStackMap(filePath string) (map[string]map[string][]string, error) {
+func CreateComponentStackMap(basePath string, filePath string) (map[string]map[string][]string, error) {
 	stackComponentMap := map[string]map[string][]string{}
 	stackComponentMap["terraform"] = map[string][]string{}
 	stackComponentMap["helmfile"] = map[string][]string{}
@@ -140,7 +140,9 @@ func CreateComponentStackMap(filePath string) (map[string]map[string][]string, e
 					return err
 				}
 
-				finalConfig, err := ProcessConfig(p,
+				finalConfig, err := ProcessConfig(
+					basePath,
+					p,
 					config,
 					false,
 					false,

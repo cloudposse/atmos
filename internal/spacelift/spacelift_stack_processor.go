@@ -24,7 +24,7 @@ func CreateSpaceliftStacks(
 	return TransformStackConfigToSpaceliftStacks(mapResult, stackConfigPathTemplate, processImports)
 }
 
-// TransformStackConfigToSpaceliftStacks takes a a map of stack configs and transforms it to a map of Spacelift stacks
+// TransformStackConfigToSpaceliftStacks takes a map of stack configs and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
 	stacks map[string]interface{},
 	stackConfigPathTemplate string,
