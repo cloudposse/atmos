@@ -81,7 +81,12 @@ func ProcessYAMLConfigFiles(
 				return
 			}
 
-			stackName := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(p, basePath+"/"), g.DefaultStackConfigFileExtension), ".yml")
+			stackName := strings.TrimSuffix(
+				strings.TrimSuffix(
+					u.TrimBasePathFromPath(basePath+"/", p),
+					g.DefaultStackConfigFileExtension),
+				".yml",
+			)
 
 			processYAMLConfigFilesLock.Lock()
 			defer processYAMLConfigFilesLock.Unlock()
@@ -216,7 +221,12 @@ func ProcessConfig(
 	componentStackMap map[string]map[string][]string,
 	importsConfig map[string]map[interface{}]interface{}) (map[interface{}]interface{}, error) {
 
-	stackName := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(stack, basePath+"/"), g.DefaultStackConfigFileExtension), ".yml")
+	stackName := strings.TrimSuffix(
+		strings.TrimSuffix(
+			u.TrimBasePathFromPath(basePath+"/", stack),
+			g.DefaultStackConfigFileExtension),
+		".yml",
+	)
 
 	globalVarsSection := map[interface{}]interface{}{}
 	globalSettingsSection := map[interface{}]interface{}{}

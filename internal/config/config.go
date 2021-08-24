@@ -196,8 +196,10 @@ func InitConfig(stack string) error {
 	fmt.Println(fmt.Sprintf("%s\n\n", j))
 
 	if stackIsPhysicalPath == true {
-		color.Cyan(fmt.Sprintf("Specified stack '%s' is a physical path since it matches the stack config file %s",
-			stack, matchedFile))
+		color.Cyan(fmt.Sprintf("Stack '%s' is a physical path since it matches the stack config file %s",
+			stack,
+			u.TrimBasePathFromPath(Config.StacksBaseAbsolutePath+"/", matchedFile)),
+		)
 	} else {
 		// The stack is a logical name
 		// Check if it matches the pattern specified in 'StackNamePattern'
@@ -205,11 +207,15 @@ func InitConfig(stack string) error {
 		stackNamePatternParts := strings.Split(Config.StackNamePattern, "-")
 
 		if len(stackParts) == len(stackNamePatternParts) {
-			color.Cyan(fmt.Sprintf("Specified stack '%s' is a logical name since it matches the stack name pattern '%s'",
-				stack, Config.StackNamePattern))
+			color.Cyan(fmt.Sprintf("Stack '%s' is a logical name since it matches the stack name pattern '%s'",
+				stack,
+				Config.StackNamePattern),
+			)
 		} else {
-			errorMessage := fmt.Sprintf("Specified stack '%s' is a logical name but it does not match the stack name pattern '%s'",
-				stack, Config.StackNamePattern)
+			errorMessage := fmt.Sprintf("Stack '%s' is a logical name but it does not match the stack name pattern '%s'",
+				stack,
+				Config.StackNamePattern,
+			)
 			return errors.New(errorMessage)
 		}
 	}
@@ -224,11 +230,11 @@ func InitConfig(stack string) error {
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
 	if !u.FileExists(path) {
-		fmt.Println(fmt.Sprintf("No config found at %s", path))
+		fmt.Println(fmt.Sprintf("No config found in %s", path))
 		return nil
 	}
 
-	color.Green("Found config at " + path)
+	color.Green("Found config in " + path)
 
 	reader, err := os.Open(path)
 	if err != nil {
@@ -247,7 +253,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return err
 	}
 
-	color.Green("Processed config at " + path)
+	color.Green("Processed config " + path)
 
 	return nil
 }
@@ -255,31 +261,31 @@ func processConfigFile(path string, v *viper.Viper) error {
 func processEnvVars() {
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
-		color.Green(fmt.Sprintf("Found ENV var 'ATMOS_STACKS_BASE_PATH': %s", stacksBasePath))
+		color.Green("Found ENV var 'ATMOS_STACKS_BASE_PATH': %s", stacksBasePath)
 		Config.StacksBasePath = stacksBasePath
 	}
 
 	includeStackPaths := os.Getenv("ATMOS_INCLUDE_STACK_PATHS")
 	if len(includeStackPaths) > 0 {
-		color.Green(fmt.Sprintf("Found ENV var 'ATMOS_INCLUDE_STACK_PATHS': %s", includeStackPaths))
+		color.Green("Found ENV var 'ATMOS_INCLUDE_STACK_PATHS': %s", includeStackPaths)
 		Config.IncludeStackPaths = strings.Split(includeStackPaths, ",")
 	}
 
 	excludeStackPaths := os.Getenv("ATMOS_EXCLUDE_STACK_PATHS")
 	if len(excludeStackPaths) > 0 {
-		color.Green(fmt.Sprintf("Found ENV var 'ATMOS_EXCLUDE_STACK_PATHS': %s", excludeStackPaths))
+		color.Green("Found ENV var 'ATMOS_EXCLUDE_STACK_PATHS': %s", excludeStackPaths)
 		Config.IncludeStackPaths = strings.Split(excludeStackPaths, ",")
 	}
 
 	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
 	if len(terraformDir) > 0 {
-		color.Green(fmt.Sprintf("Found ENV var 'ATMOS_TERRAFORM_DIR': %s", terraformDir))
+		color.Green("Found ENV var 'ATMOS_TERRAFORM_DIR': %s", terraformDir)
 		Config.TerraformDir = terraformDir
 	}
 
 	stackNamePattern := os.Getenv("ATMOS_STACK_NAME_PATTERN")
 	if len(stackNamePattern) > 0 {
-		color.Green(fmt.Sprintf("Found ENV var 'ATMOS_STACK_NAME_PATTERN': %s", stackNamePattern))
+		color.Green("Found ENV var 'ATMOS_STACK_NAME_PATTERN': %s", stackNamePattern)
 		Config.StackNamePattern = stackNamePattern
 	}
 }

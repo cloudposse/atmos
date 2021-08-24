@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 // IsDirectory checks if the path is a directory
@@ -55,4 +56,9 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 	}
 
 	return res, nil
+}
+
+// TrimBasePathFromPath trims the base path prefix from the path
+func TrimBasePathFromPath(basePath string, path string) string {
+	return strings.TrimPrefix(path, basePath)
 }

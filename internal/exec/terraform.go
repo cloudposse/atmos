@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
-	"strings"
 )
 
 // ExecuteTerraform executes terraform commands
@@ -61,15 +60,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	componentPath := path.Join(c.Config.TerraformDirAbsolutePath, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exixt at '%s'", component, componentPath))
+		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.Config.TerraformDir))
 	}
 
-	color.Green(strings.Repeat("-", 120))
 	color.Green("Terraform command: " + subCommand)
 	color.Green("Component: " + component)
 	color.Green("Stack: " + stack)
 	color.Green("Additional arguments: %v\n", additionalArgsAndFlags)
-	color.Green(strings.Repeat("-", 120))
 
 	//yamlConfig, err := yaml.Marshal(stacksMap)
 	//if err != nil {
@@ -79,7 +76,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute command
 	command := "terraform"
-	color.Cyan(fmt.Sprintf("\nExecuting command: %s %s %s\n", command,
+	color.Cyan(fmt.Sprintf("\nExecuting command: %s %s %s\n\n", command,
 		subCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
 
 	err = execCommand(command, allArgsAndFlags)
