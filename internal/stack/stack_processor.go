@@ -44,7 +44,12 @@ func ProcessYAMLConfigFiles(
 		go func(i int, p string) {
 			defer wg.Done()
 
-			config, importsConfig, err := ProcessYAMLConfigFile(basePath, p, map[string]map[interface{}]interface{}{})
+			stackBasePath := basePath
+			if len(stackBasePath) < 1 {
+				stackBasePath = path.Dir(p)
+			}
+
+			config, importsConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[interface{}]interface{}{})
 			if err != nil {
 				errorResult = err
 				return

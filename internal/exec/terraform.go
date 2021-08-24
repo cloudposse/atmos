@@ -53,14 +53,62 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Check stacks and find the component
-
-	// Find and check component (and its base component)
+	// Check if component was provided
 	componentFromArg := args[1]
-	component := componentFromArg
-	if len(component) < 1 {
+	if len(componentFromArg) < 1 {
 		return errors.New("'component' is required")
 	}
+
+	// Check and process stacks
+	var stackSection map[interface{}]interface{}
+	var componentsSection map[string]interface{}
+	var terraformSection map[string]interface{}
+	var componentSection map[string]interface{}
+	var componentVarsSection map[interface{}]interface{}
+	var baseComponent string
+	var ok bool
+
+	if c.Config.StackType == "Directory" {
+		if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
+			return errors.New(fmt.Sprintf("Stack '%s' does not exist in %s", stack, c.Config.StackConfigFiles[0]))
+		}
+		if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
+			return errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
+		}
+		if terraformSection, ok = componentsSection["terraform"].(map[string]interface{}); !ok {
+			return errors.New(fmt.Sprintf("'components/terraform' section is missing in stack '%s'", stack))
+		}
+		if componentSection, ok = terraformSection[componentFromArg].(map[string]interface{}); !ok {
+			return errors.New(fmt.Sprintf("Invalid or missing configuration for component '%s' in stack '%s'", componentFromArg, stack))
+		}
+		if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
+			return errors.New(fmt.Sprintf("Missing 'vars' section for component '%s' in stack '%s'", componentFromArg, stack))
+		}
+		if baseComponent, ok = componentSection["component"].(string); !ok {
+			baseComponent = ""
+		}
+
+		color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
+		err = u.PrintAsYAML(componentVarsSection)
+		if err != nil {
+			return err
+		}
+	} else {
+		//for k,v := range stacksMap {
+		//	if stack == k {
+		//		if i, ok := v["vars"]; ok {
+		//			globalVarsSection = i.(map[interface{}]interface{})
+		//		}
+		//	}
+		//}
+	}
+
+	// Check component (and its base component)
+	component := componentFromArg
+	if len(baseComponent) > 0 {
+		component = baseComponent
+	}
+
 	componentPath := path.Join(c.Config.TerraformDirAbsolutePath, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
@@ -70,15 +118,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Print command info
 	color.Cyan("Command info:")
 	color.Green("Terraform command: " + subCommand)
-	color.Green("Component: " + component)
+	color.Green("Component: " + componentFromArg)
+	if len(baseComponent) > 0 {
+		color.Green("Base component: " + baseComponent)
+	}
 	color.Green("Stack: " + stack)
 	color.Green("Additional arguments: %v\n", additionalArgsAndFlags)
-	fmt.Println()
-
-	err = u.PrintAsYAML(stacksMap)
-	if err != nil {
-		return err
-	}
 	fmt.Println()
 
 	// Execute command

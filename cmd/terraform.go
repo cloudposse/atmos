@@ -16,7 +16,7 @@ var terraformCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraform(cmd, args)
 		if err != nil {
-			color.Red("%s", err)
+			color.Red("%s\n\n", err)
 			os.Exit(1)
 		}
 	},
@@ -29,7 +29,7 @@ func init() {
 
 	err := terraformCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		color.Red("%s", err)
+		color.Red("%s\n\n", err)
 		os.Exit(1)
 	}
 
