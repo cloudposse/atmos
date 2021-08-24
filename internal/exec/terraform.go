@@ -61,6 +61,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check and process stacks
+	var selectedStackConfigFile string
 	var stackSection map[interface{}]interface{}
 	var componentsSection map[string]interface{}
 	var terraformSection map[string]interface{}
@@ -71,8 +72,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	var ok bool
 
 	if c.Config.StackType == "Directory" {
+		selectedStackConfigFile = c.Config.StackConfigFiles[0]
 		if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-			return errors.New(fmt.Sprintf("Stack '%s' does not exist in %s", stack, c.Config.StackConfigFiles[0]))
+			return errors.New(fmt.Sprintf("Stack '%s' does not exist in %s", stack, selectedStackConfigFile))
 		}
 		if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
 			return errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
@@ -89,8 +91,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if baseComponent, ok = componentSection["component"].(string); !ok {
 			baseComponent = ""
 		}
+
 		if command, ok = componentSection["command"].(string); !ok {
 			command = "terraform"
+		} else {
+			color.Cyan("Found 'command=%s' for component '%s' in stack '%s'\n\n", command, componentFromArg, stack)
 		}
 
 		color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
@@ -133,12 +138,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	color.Cyan("\nCommand info:")
 	color.Green("Terraform binary: " + command)
 	color.Green("Terraform command: " + subCommand)
+	color.Green("Additional arguments: %v", additionalArgsAndFlags)
 	color.Green("Component: " + componentFromArg)
 	if len(baseComponent) > 0 {
 		color.Green("Base component: " + baseComponent)
 	}
 	color.Green("Stack: " + stack)
-	color.Green("Additional arguments: %v\n", additionalArgsAndFlags)
+	color.Green("Stack config file: " + u.TrimBasePathFromPath(c.Config.StacksBaseAbsolutePath+"/", selectedStackConfigFile))
 	fmt.Println()
 
 	// Execute command
