@@ -374,11 +374,17 @@ func ProcessConfig(
 					componentBackend = i.(map[interface{}]interface{})[backendType].(map[interface{}]interface{})
 				}
 
+				componentTerraformCommand := "terraform"
+				if i, ok2 := componentMap["command"]; ok2 {
+					componentTerraformCommand = i.(string)
+				}
+
 				baseComponentVars := map[interface{}]interface{}{}
 				baseComponentSettings := map[interface{}]interface{}{}
 				baseComponentEnv := map[interface{}]interface{}{}
 				baseComponentBackend := map[interface{}]interface{}{}
 				baseComponentName := ""
+				baseComponentTerraformCommand := ""
 
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
@@ -402,6 +408,10 @@ func ProcessConfig(
 							if backendTypeSection, backendTypeSectionExist := baseComponentBackendSection.(map[interface{}]interface{})[backendType]; backendTypeSectionExist {
 								baseComponentBackend = backendTypeSection.(map[interface{}]interface{})
 							}
+						}
+
+						if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
+							baseComponentTerraformCommand = baseComponentCommandSection.(string)
 						}
 					} else {
 						return nil, errors.New("Terraform component '" + component.(string) + "' defines attribute 'component: " +
@@ -429,12 +439,17 @@ func ProcessConfig(
 					return nil, err
 				}
 
+				finalComponentTerraformCommand := componentTerraformCommand
+				if len(baseComponentTerraformCommand) > 0 {
+					finalComponentTerraformCommand = baseComponentTerraformCommand
+				}
 				comp := map[string]interface{}{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
 				comp["env"] = finalComponentEnv
 				comp["backend_type"] = backendType
 				comp["backend"] = finalComponentBackend
+				comp["command"] = finalComponentTerraformCommand
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
@@ -488,6 +503,11 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
+				componentHelmfileCommand := "helmfile"
+				if i, ok2 := componentMap["command"]; ok2 {
+					componentHelmfileCommand = i.(string)
+				}
+
 				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, componentVars})
 				if err != nil {
 					return nil, err
@@ -507,6 +527,7 @@ func ProcessConfig(
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
 				comp["env"] = finalComponentEnv
+				comp["command"] = componentHelmfileCommand
 
 				if processStackDeps == true {
 					componentStacks, err := FindComponentStacks("helmfile", component.(string), "", componentStackMap)

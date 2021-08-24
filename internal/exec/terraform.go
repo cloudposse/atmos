@@ -93,8 +93,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			command = "terraform"
 		}
 
-		err = u.PrintAsYAML(componentSection)
-
 		color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
 		err = u.PrintAsYAML(componentVarsSection)
 		if err != nil {
