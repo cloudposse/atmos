@@ -148,8 +148,17 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Execute command
-	color.Cyan(fmt.Sprintf("\nExecuting command: %s %s %s\n\n", command,
-		subCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
+	emoji, err := u.UnquoteCodePoint("\\U+1F680")
+	if err != nil {
+		return err
+	}
+
+	color.Cyan(fmt.Sprintf("\n%v Executing command: %s %s %s\n\n",
+		emoji,
+		command,
+		subCommand,
+		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)),
+	)
 
 	err = execCommand(command, allArgsAndFlags)
 	if err != nil {
