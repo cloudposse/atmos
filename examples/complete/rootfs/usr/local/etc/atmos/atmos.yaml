@@ -1,4 +1,4 @@
-StackDirs:
+IncludeStackPaths:
   - "./stacks"
 
 TerraformDir: "./components/terraform"

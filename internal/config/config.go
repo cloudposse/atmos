@@ -23,20 +23,27 @@ const (
 )
 
 type Configuration struct {
-	StackNamePattern         string   `mapstructure:"StackNamePattern"`
-	StackDirs                []string `mapstructure:"StackDirs"`
-	StackDirsAbsolutePaths   []string
-	TerraformDir             string `mapstructure:"TerraformDir"`
-	TerraformDirAbsolutePath string
-	StackConfigFiles         []string
+	StackNamePattern          string   `mapstructure:"StackNamePattern"`
+	IncludeStackPaths         []string `mapstructure:"IncludeStackPaths"`
+	IncludeStackAbsolutePaths []string
+	ExcludeStackPaths         []string `mapstructure:"ExcludeStackPaths"`
+	ExcludeStackAbsolutePaths []string
+	TerraformDir              string `mapstructure:"TerraformDir"`
+	TerraformDirAbsolutePath  string
+	StackConfigFiles          []string
 }
 
 var (
 	// Default values
 	defaultConfig = map[string]interface{}{
-		// Default paths to stack configs
-		"StackDirs": []interface{}{
-			"./stacks/*",
+		// Default paths (globs) to stack configs to include
+		"IncludeStackPaths": []interface{}{
+			"./stacks/**/*",
+		},
+		// Default paths (globs) to stack configs to exclude
+		"ExcludeStackPaths": []interface{}{
+			"./stacks/catalog/**/*",
+			"./stacks/**/*globals*",
 		},
 		// Default path to terraform components
 		"TerraformDir": "./components/terraform",
@@ -133,12 +140,19 @@ func InitConfig() error {
 		return err
 	}
 
-	// Convert all stack dirs to absolute paths
-	absPaths, err := u.ConvertPathsToAbsolutePaths(Config.StackDirs)
+	// Convert all include stack paths to absolute paths
+	includeStackAbsPaths, err := u.ConvertPathsToAbsolutePaths(Config.IncludeStackPaths)
 	if err != nil {
 		return err
 	}
-	Config.StackDirsAbsolutePaths = absPaths
+	Config.IncludeStackAbsolutePaths = includeStackAbsPaths
+
+	// Convert all exclude stack paths to absolute paths
+	excludeStackAbsPaths, err := u.ConvertPathsToAbsolutePaths(Config.ExcludeStackPaths)
+	if err != nil {
+		return err
+	}
+	Config.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert terraform dir to absolute path
 	terraformDirAbsPath, err := filepath.Abs(Config.TerraformDir)
@@ -148,12 +162,12 @@ func InitConfig() error {
 	Config.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Find all stack config files in the provided paths
-	stackConfigFiles, err := findAllStackConfigsInPaths(absPaths)
+	stackConfigFiles, err := findAllStackConfigsInPaths(includeStackAbsPaths, excludeStackAbsPaths)
 	if err != nil {
 		return err
 	}
 	if len(stackConfigFiles) < 1 {
-		j, _ := json.MarshalIndent(absPaths, "", strings.Repeat(" ", 2))
+		j, _ := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
 		if err != nil {
 			return err
 		}
@@ -206,32 +220,41 @@ func processConfigFile(path string, v *viper.Viper) error {
 }
 
 func processEnvVars() {
-	stackDirs := os.Getenv("ATMOS_STACK_DIRS")
-	if len(stackDirs) > 0 {
-		fmt.Println("Found ENV var 'ATMOS_STACK_DIRS'")
-		Config.StackDirs = strings.Split(stackDirs, ",")
+	includeStackPaths := os.Getenv("ATMOS_INCLUDE_STACK_PATHS")
+	if len(includeStackPaths) > 0 {
+		fmt.Println(fmt.Sprintf("Found ENV var 'ATMOS_INCLUDE_STACK_PATHS': %s", includeStackPaths))
+		Config.IncludeStackPaths = strings.Split(includeStackPaths, ",")
+	}
+
+	excludeStackPaths := os.Getenv("ATMOS_EXCLUDE_STACK_PATHS")
+	if len(excludeStackPaths) > 0 {
+		fmt.Println(fmt.Sprintf("Found ENV var 'ATMOS_EXCLUDE_STACK_PATHS': %s", excludeStackPaths))
+		Config.IncludeStackPaths = strings.Split(excludeStackPaths, ",")
 	}
 
 	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
 	if len(terraformDir) > 0 {
+		fmt.Println(fmt.Sprintf("Found ENV var 'ATMOS_TERRAFORM_DIR': %s", terraformDir))
 		fmt.Println("Found ENV var 'ATMOS_TERRAFORM_DIR'")
 		Config.TerraformDir = terraformDir
 	}
 
 	stackNamePattern := os.Getenv("ATMOS_STACK_NAME_PATTERN")
 	if len(stackNamePattern) > 0 {
-		fmt.Println("Found ENV var 'ATMOS_STACK_NAME_PATTERN'")
+		fmt.Println(fmt.Sprintf("Found ENV var 'ATMOS_STACK_NAME_PATTERN': %s", stackNamePattern))
 		Config.StackNamePattern = stackNamePattern
 	}
 }
 
 func checkConfig() error {
-	if len(Config.StackDirs) < 1 {
-		return errors.New("At least one path to stack config must be provided in 'StackDirs' or 'ATMOS_STACK_DIRS' ENV variable")
+	if len(Config.IncludeStackPaths) < 1 {
+		return errors.New("At least one path must be provided in 'IncludeStackPaths' or 'ATMOS_INCLUDE_STACK_PATHS' ENV variable")
 	}
+
 	if len(Config.TerraformDir) < 1 {
 		return errors.New("Terraform dir must be provided in 'TerraformDir' or 'ATMOS_TERRAFORM_DIR' ENV variable")
 	}
+
 	if len(Config.StackNamePattern) < 1 {
 		return errors.New("Stack name pattern must be provided in 'StackNamePattern' or 'ATMOS_STACK_NAME_PATTERN' ENV variable")
 	}
@@ -240,10 +263,10 @@ func checkConfig() error {
 }
 
 // findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
-func findAllStackConfigsInPaths(pathGlobs []string) ([]string, error) {
+func findAllStackConfigsInPaths(includeStackPaths []string, excludeStackPaths []string) ([]string, error) {
 	res := []string{}
 
-	for _, p := range pathGlobs {
+	for _, p := range includeStackPaths {
 		pathWithExt := p
 
 		ext := filepath.Ext(p)
@@ -258,8 +281,28 @@ func findAllStackConfigsInPaths(pathGlobs []string) ([]string, error) {
 			return nil, err
 		}
 
+		// Exclude files that match any of the excludePaths
 		if matches != nil && len(matches) > 0 {
-			res = append(res, matches...)
+			for _, matchedFile := range matches {
+				include := true
+
+				for _, excludePath := range excludeStackPaths {
+					match, err := doublestar.PathMatch(excludePath, matchedFile)
+					if err != nil {
+						fmt.Println(err)
+						include = false
+						continue
+					}
+					if match {
+						include = false
+						continue
+					}
+				}
+
+				if include == true {
+					res = append(res, matchedFile)
+				}
+			}
 		}
 
 	}
