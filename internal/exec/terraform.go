@@ -2,6 +2,7 @@ package exec
 
 import (
 	c "atmos/internal/config"
+	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"fmt"
 	"github.com/fatih/color"
@@ -42,11 +43,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
 
 	// Process stack config file(s)
-	//_, stacksMap, err := s.ProcessYAMLConfigFiles(
-	//	c.Config.StacksBaseAbsolutePath,
-	//	c.Config.StackConfigFiles,
-	//	false,
-	//	true)
+	_, stacksMap, err := s.ProcessYAMLConfigFiles(
+		c.Config.StacksBaseAbsolutePath,
+		c.Config.StackConfigFiles,
+		false,
+		true)
 
 	if err != nil {
 		return err
@@ -67,12 +68,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	color.Green("Component: " + component)
 	color.Green("Stack: " + stack)
 	color.Green("Additional arguments: %v\n", additionalArgsAndFlags)
+	fmt.Println()
 
-	//yamlConfig, err := yaml.Marshal(stacksMap)
-	//if err != nil {
-	//	return err
-	//}
-	//fmt.Printf(string(yamlConfig))
+	err = u.PrintAsYAML(stacksMap)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
 
 	// Execute command
 	command := "terraform"

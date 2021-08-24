@@ -22,16 +22,16 @@ const (
 )
 
 type Configuration struct {
-	StackNamePattern          string `mapstructure:"StackNamePattern"`
-	StacksBasePath            string `mapstructure:"StacksBasePath"`
-	StacksBaseAbsolutePath    string
-	IncludeStackPaths         []string `mapstructure:"IncludeStackPaths"`
-	IncludeStackAbsolutePaths []string
-	ExcludeStackPaths         []string `mapstructure:"ExcludeStackPaths"`
-	ExcludeStackAbsolutePaths []string
-	TerraformDir              string `mapstructure:"TerraformDir"`
-	TerraformDirAbsolutePath  string
-	StackConfigFiles          []string
+	StackNamePattern          string   `yaml:"StackNamePattern" mapstructure:"StackNamePattern"`
+	StacksBasePath            string   `yaml:"StacksBasePath" mapstructure:"StacksBasePath"`
+	StacksBaseAbsolutePath    string   `yaml:"StacksBaseAbsolutePath"`
+	IncludeStackPaths         []string `yaml:"IncludeStackPaths" mapstructure:"IncludeStackPaths"`
+	IncludeStackAbsolutePaths []string `yaml:"IncludeStackAbsolutePaths"`
+	ExcludeStackPaths         []string `yaml:"ExcludeStackPaths" mapstructure:"ExcludeStackPaths"`
+	ExcludeStackAbsolutePaths []string `yaml:"ExcludeStackAbsolutePaths"`
+	TerraformDir              string   `yaml:"TerraformDir" mapstructure:"TerraformDir"`
+	TerraformDirAbsolutePath  string   `yaml:"TerraformDirAbsolutePath"`
+	StackConfigFiles          []string `yaml:"StackConfigFiles"`
 }
 
 var (
@@ -189,11 +189,11 @@ func InitConfig(stack string) error {
 	Config.StackConfigFiles = stackConfigFiles
 
 	color.Cyan("\nFinal configuration:")
-	j, _ := json.MarshalIndent(&Config, "", strings.Repeat(" ", 2))
+	err = u.PrintAsYAML(Config)
 	if err != nil {
 		return err
 	}
-	fmt.Println(fmt.Sprintf("%s\n\n", j))
+	fmt.Println()
 
 	if stackIsPhysicalPath == true {
 		color.Cyan(fmt.Sprintf("Stack '%s' is a physical path since it matches the stack config file %s",
@@ -234,7 +234,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return nil
 	}
 
-	color.Green("Found config in " + path)
+	color.Green("Found config in %s", path)
 
 	reader, err := os.Open(path)
 	if err != nil {
@@ -253,7 +253,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return err
 	}
 
-	color.Green("Processed config " + path)
+	color.Green("Processed config %s", path)
 
 	return nil
 }
