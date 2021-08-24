@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/bmatcuk/doublestar v1.3.4
+	github.com/fatih/color v1.12.0
 	github.com/imdario/mergo v0.3.12
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.9.1

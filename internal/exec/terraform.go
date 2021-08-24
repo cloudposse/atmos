@@ -2,12 +2,11 @@ package exec
 
 import (
 	c "atmos/internal/config"
-	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 	"path"
 	"strings"
 )
@@ -44,11 +43,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
 
 	// Process stack config file(s)
-	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.Config.StacksBaseAbsolutePath,
-		c.Config.StackConfigFiles,
-		false,
-		true)
+	//_, stacksMap, err := s.ProcessYAMLConfigFiles(
+	//	c.Config.StacksBaseAbsolutePath,
+	//	c.Config.StackConfigFiles,
+	//	false,
+	//	true)
 
 	if err != nil {
 		return err
@@ -65,23 +64,22 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt at '%s'", component, componentPath))
 	}
 
-	fmt.Println(strings.Repeat("-", 120))
-	fmt.Println("Terraform command: " + subCommand)
-	fmt.Println("Component: " + component)
-	fmt.Println("Stack: " + stack)
-	fmt.Printf("Additional arguments: %v\n", additionalArgsAndFlags)
-	fmt.Println(strings.Repeat("-", 120))
+	color.Green(strings.Repeat("-", 120))
+	color.Green("Terraform command: " + subCommand)
+	color.Green("Component: " + component)
+	color.Green("Stack: " + stack)
+	color.Green("Additional arguments: %v\n", additionalArgsAndFlags)
+	color.Green(strings.Repeat("-", 120))
 
-	yamlConfig, err := yaml.Marshal(stacksMap)
-	if err != nil {
-		return err
-	}
-	fmt.Printf(string(yamlConfig))
+	//yamlConfig, err := yaml.Marshal(stacksMap)
+	//if err != nil {
+	//	return err
+	//}
+	//fmt.Printf(string(yamlConfig))
 
 	// Execute command
-	fmt.Println()
 	command := "terraform"
-	fmt.Println(fmt.Sprintf("Executing command: %s %s %s", command,
+	color.Blue(fmt.Sprintf("\nExecuting command: %s %s %s\n", command,
 		subCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
 
 	err = execCommand(command, allArgsAndFlags)

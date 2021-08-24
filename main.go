@@ -2,12 +2,14 @@ package main
 
 import (
 	"atmos/cmd"
-	"log"
+	"github.com/fatih/color"
+	"os"
 )
 
 func main() {
 	err := cmd.Execute()
 	if err != nil {
-		log.Fatalln(err)
+		color.Red("%s", err)
+		os.Exit(1)
 	}
 }

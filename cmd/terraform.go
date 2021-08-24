@@ -2,8 +2,9 @@ package cmd
 
 import (
 	e "atmos/internal/exec"
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"log"
+	"os"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -15,7 +16,8 @@ var terraformCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraform(cmd, args)
 		if err != nil {
-			log.Fatalln(err)
+			color.Red("%s", err)
+			os.Exit(1)
 		}
 	},
 }
@@ -27,8 +29,8 @@ func init() {
 
 	err := terraformCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		log.Fatalln(err)
-		return
+		color.Red("%s", err)
+		os.Exit(1)
 	}
 
 	RootCmd.AddCommand(terraformCmd)

@@ -2,8 +2,8 @@ package config
 
 import (
 	g "atmos/internal/globals"
-	"fmt"
 	"github.com/bmatcuk/doublestar"
+	"github.com/fatih/color"
 	"path/filepath"
 	"strings"
 )
@@ -40,7 +40,7 @@ func findAllStackConfigsInPaths(stack string, includeStackPaths []string, exclud
 				for _, excludePath := range excludeStackPaths {
 					match, err := doublestar.PathMatch(excludePath, matchedFile)
 					if err != nil {
-						fmt.Println(err)
+						color.Red("%s", err)
 						include = false
 						continue
 					}
