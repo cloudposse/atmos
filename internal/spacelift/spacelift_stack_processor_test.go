@@ -8,6 +8,8 @@ import (
 )
 
 func TestSpaceliftStackProcessor(t *testing.T) {
+	basePath := "../../examples/data-sources/utils_spacelift_stack_config/stacks"
+
 	filePaths := []string{
 		"../../examples/data-sources/utils_spacelift_stack_config/stacks/uw2-dev.yaml",
 		"../../examples/data-sources/utils_spacelift_stack_config/stacks/uw2-prod.yaml",
@@ -21,7 +23,7 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	processImports := true
 	stackConfigPathTemplate := "stacks/%s.yaml"
 
-	var spaceliftStacks, err = CreateSpaceliftStacks(filePaths, processStackDeps, processComponentDeps, processImports, stackConfigPathTemplate)
+	var spaceliftStacks, err = CreateSpaceliftStacks(basePath, filePaths, processStackDeps, processComponentDeps, processImports, stackConfigPathTemplate)
 	assert.Nil(t, err)
 
 	yamlSpaceliftStacks, err := yaml.Marshal(spaceliftStacks)

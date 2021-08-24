@@ -11,12 +11,13 @@ import (
 // CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
 // and returns a map of Spacelift stack configs
 func CreateSpaceliftStacks(
+	basePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
 	processImports bool,
 	stackConfigPathTemplate string) (map[string]interface{}, error) {
-	var _, mapResult, err = s.ProcessYAMLConfigFiles(filePaths, processStackDeps, processComponentDeps)
+	var _, mapResult, err = s.ProcessYAMLConfigFiles(basePath, filePaths, processStackDeps, processComponentDeps)
 	if err != nil {
 		return nil, err
 	}

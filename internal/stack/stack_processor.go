@@ -26,7 +26,7 @@ var (
 
 // ProcessYAMLConfigFiles takes a list of paths to YAML config files, processes and deep-merges all imports,
 // and returns a list of stack configs
-func ProcessYAMLConfigFiles(filePaths []string, processStackDeps bool, processComponentDeps bool) ([]string, map[string]interface{}, error) {
+func ProcessYAMLConfigFiles(basePath string, filePaths []string, processStackDeps bool, processComponentDeps bool) ([]string, map[string]interface{}, error) {
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]interface{}{}
@@ -38,7 +38,7 @@ func ProcessYAMLConfigFiles(filePaths []string, processStackDeps bool, processCo
 		go func(i int, p string) {
 			defer wg.Done()
 
-			basePath := path.Dir(p)
+			// basePath := path.Dir(p)
 			config, importsConfig, err := ProcessYAMLConfigFile(basePath, p, map[string]map[interface{}]interface{}{})
 			if err != nil {
 				errorResult = err

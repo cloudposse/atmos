@@ -2,6 +2,7 @@ package utils
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -31,15 +32,26 @@ func IsYaml(file string) bool {
 }
 
 // ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths
-func ConvertPathsToAbsolutePaths(dirs []string) ([]string, error) {
+func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
 	res := []string{}
 
-	for _, dir := range dirs {
+	for _, dir := range paths {
 		abs, err := filepath.Abs(dir)
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, abs)
+	}
+
+	return res, nil
+}
+
+// JoinAbsolutePathWithPaths joins a base path with each item in the path slice and returns a slice of absolute paths
+func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error) {
+	res := []string{}
+
+	for _, p := range paths {
+		res = append(res, path.Join(basePath, p))
 	}
 
 	return res, nil

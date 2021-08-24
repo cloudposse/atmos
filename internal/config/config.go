@@ -21,7 +21,9 @@ const (
 )
 
 type Configuration struct {
-	StackNamePattern          string   `mapstructure:"StackNamePattern"`
+	StackNamePattern          string `mapstructure:"StackNamePattern"`
+	StacksBasePath            string `mapstructure:"StacksBasePath"`
+	StacksBaseAbsolutePath    string
 	IncludeStackPaths         []string `mapstructure:"IncludeStackPaths"`
 	IncludeStackAbsolutePaths []string
 	ExcludeStackPaths         []string `mapstructure:"ExcludeStackPaths"`
@@ -34,14 +36,16 @@ type Configuration struct {
 var (
 	// Default values
 	defaultConfig = map[string]interface{}{
+		// Stacks base path
+		"StacksBasePath": "./stacks",
 		// Default paths (globs) to stack configs to include
 		"IncludeStackPaths": []interface{}{
-			"./stacks/**/*",
+			"**/*",
 		},
 		// Default paths (globs) to stack configs to exclude
 		"ExcludeStackPaths": []interface{}{
-			"./stacks/catalog/**/*",
-			"./stacks/**/*globals*",
+			"catalog/**/*",
+			"**/*globals*",
 		},
 		// Default path to terraform components
 		"TerraformDir": "./components/terraform",
@@ -58,8 +62,8 @@ var (
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitConfig(stack string) error {
 	// Config is loaded from these locations (from lower to higher priority):
-	// /usr/local/etc/atmos
-	// ~/.atmos
+	// system dir (/usr/local/etc/atmos on Linux)
+	// home dir (~/.atmos)
 	// from the current directory
 	// from ENV vars
 	// from command-line arguments
@@ -139,15 +143,22 @@ func InitConfig(stack string) error {
 		return err
 	}
 
-	// Convert all include stack paths to absolute paths
-	includeStackAbsPaths, err := u.ConvertPathsToAbsolutePaths(Config.IncludeStackPaths)
+	// Convert stacks base path to absolute path
+	stacksBaseAbsPath, err := filepath.Abs(Config.StacksBasePath)
+	if err != nil {
+		return err
+	}
+	Config.StacksBaseAbsolutePath = stacksBaseAbsPath
+
+	// Convert the included stack paths to absolute paths
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.IncludeStackPaths)
 	if err != nil {
 		return err
 	}
 	Config.IncludeStackAbsolutePaths = includeStackAbsPaths
 
-	// Convert all exclude stack paths to absolute paths
-	excludeStackAbsPaths, err := u.ConvertPathsToAbsolutePaths(Config.ExcludeStackPaths)
+	// Convert the excluded stack paths to absolute paths
+	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.ExcludeStackPaths)
 	if err != nil {
 		return err
 	}
@@ -167,7 +178,7 @@ func InitConfig(stack string) error {
 	}
 
 	if len(stackConfigFiles) < 1 {
-		j, _ := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
+		j, err := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
 		if err != nil {
 			return err
 		}
@@ -243,6 +254,12 @@ func processConfigFile(path string, v *viper.Viper) error {
 }
 
 func processEnvVars() {
+	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
+	if len(stacksBasePath) > 0 {
+		fmt.Println(fmt.Sprintf("Found ENV var 'ATMOS_STACKS_BASE_PATH': %s", stacksBasePath))
+		Config.StacksBasePath = stacksBasePath
+	}
+
 	includeStackPaths := os.Getenv("ATMOS_INCLUDE_STACK_PATHS")
 	if len(includeStackPaths) > 0 {
 		fmt.Println(fmt.Sprintf("Found ENV var 'ATMOS_INCLUDE_STACK_PATHS': %s", includeStackPaths))
@@ -270,6 +287,10 @@ func processEnvVars() {
 }
 
 func checkConfig() error {
+	if len(Config.StacksBasePath) < 1 {
+		return errors.New("Stack base path must be provided in 'StacksBasePath' or 'ATMOS_STACKS_BASE_PATH' ENV variable")
+	}
+
 	if len(Config.IncludeStackPaths) < 1 {
 		return errors.New("At least one path must be provided in 'IncludeStackPaths' or 'ATMOS_INCLUDE_STACK_PATHS' ENV variable")
 	}

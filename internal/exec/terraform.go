@@ -4,10 +4,10 @@ import (
 	c "atmos/internal/config"
 	s "atmos/internal/stack"
 	u "atmos/internal/utils"
-	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 	"path"
 	"strings"
 )
@@ -62,18 +62,23 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println(strings.Repeat("-", 120))
 
 	// Process stack config file(s)
-	_, stacksMap, err := s.ProcessYAMLConfigFiles(c.Config.StackConfigFiles, false, true)
+	_, stacksMap, err := s.ProcessYAMLConfigFiles(c.Config.StacksBaseAbsolutePath,
+		c.Config.StackConfigFiles,
+		false,
+		true)
+
 	if err != nil {
 		return err
 	}
 
-	j, _ := json.MarshalIndent(stacksMap, "", strings.Repeat(" ", 2))
+	yamlConfig, err := yaml.Marshal(stacksMap)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s\n", j)
+	fmt.Printf(string(yamlConfig))
 
 	// Execute command
+	fmt.Println()
 	command := "terraform"
 	fmt.Println(fmt.Sprintf("Executing command: %s %s %s", command,
 		subCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))

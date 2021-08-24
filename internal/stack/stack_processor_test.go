@@ -10,6 +10,8 @@ import (
 )
 
 func TestStackProcessor(t *testing.T) {
+	basePath := "../../examples/data-sources/utils_stack_config_yaml/stacks"
+
 	filePaths := []string{
 		"../../examples/data-sources/utils_stack_config_yaml/stacks/uw2-dev.yaml",
 		"../../examples/data-sources/utils_stack_config_yaml/stacks/uw2-prod.yaml",
@@ -20,7 +22,7 @@ func TestStackProcessor(t *testing.T) {
 	processStackDeps := true
 	processComponentDeps := true
 
-	var listResult, mapResult, err = ProcessYAMLConfigFiles(filePaths, processStackDeps, processComponentDeps)
+	var listResult, mapResult, err = ProcessYAMLConfigFiles(basePath, filePaths, processStackDeps, processComponentDeps)
 	assert.Nil(t, err)
 	assert.Equal(t, 4, len(listResult))
 	assert.Equal(t, 4, len(mapResult))
