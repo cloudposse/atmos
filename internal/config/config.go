@@ -29,7 +29,6 @@ type Configuration struct {
 	TerraformDir              string `mapstructure:"TerraformDir"`
 	TerraformDirAbsolutePath  string
 	StackConfigFiles          []string
-	StackDescription          string
 }
 
 var (
@@ -167,25 +166,6 @@ func InitConfig(stack string) error {
 		return err
 	}
 
-	if stackIsPhysicalPath == true {
-		Config.StackDescription = fmt.Sprintf("Specified stack '%s' is a physical path since it matches the stack config file %s",
-			stack, matchedFile)
-	} else {
-		// The stack is a logical name
-		// Check if it matches the pattern specified in 'StackNamePattern'
-		stackParts := strings.Split(stack, "-")
-		stackNamePatternParts := strings.Split(Config.StackNamePattern, "-")
-
-		if len(stackParts) == len(stackNamePatternParts) {
-			Config.StackDescription = fmt.Sprintf("Specified stack '%s' is a logical name since it matches the stack name pattern '%s'",
-				stack, Config.StackNamePattern)
-		} else {
-			errorMessage := fmt.Sprintf("Specified stack '%s' is a logical name but it does not match the stack name pattern '%s'",
-				stack, Config.StackNamePattern)
-			return errors.New(errorMessage)
-		}
-	}
-
 	if len(stackConfigFiles) < 1 {
 		j, _ := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
 		if err != nil {
@@ -202,6 +182,29 @@ func InitConfig(stack string) error {
 		return err
 	}
 	fmt.Printf("%s\n", j)
+
+	fmt.Println()
+
+	if stackIsPhysicalPath == true {
+		fmt.Println(fmt.Sprintf("Specified stack '%s' is a physical path since it matches the stack config file %s",
+			stack, matchedFile))
+	} else {
+		// The stack is a logical name
+		// Check if it matches the pattern specified in 'StackNamePattern'
+		stackParts := strings.Split(stack, "-")
+		stackNamePatternParts := strings.Split(Config.StackNamePattern, "-")
+
+		if len(stackParts) == len(stackNamePatternParts) {
+			fmt.Println(fmt.Sprintf("Specified stack '%s' is a logical name since it matches the stack name pattern '%s'",
+				stack, Config.StackNamePattern))
+		} else {
+			errorMessage := fmt.Sprintf("Specified stack '%s' is a logical name but it does not match the stack name pattern '%s'",
+				stack, Config.StackNamePattern)
+			return errors.New(errorMessage)
+		}
+	}
+
+	fmt.Println()
 
 	return nil
 }
