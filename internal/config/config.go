@@ -70,7 +70,7 @@ func InitConfig(stack string) error {
 	// from ENV vars
 	// from command-line arguments
 
-	color.Blue("\nProcessing and merging configurations in the following order: system dir, home dir, current dir, ENV vars\n")
+	color.Cyan("\nProcessing and merging configurations in the following order: system dir, home dir, current dir, ENV vars\n")
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -183,22 +183,20 @@ func InitConfig(stack string) error {
 		if err != nil {
 			return err
 		}
-		errorMessage := fmt.Sprintf("No config files found in any of the provided path globs:\n%s\n", j)
+		errorMessage := fmt.Sprintf("No config files found in any of the provided paths:\n%s\n", j)
 		return errors.New(errorMessage)
 	}
 	Config.StackConfigFiles = stackConfigFiles
 
-	color.Green("\nFinal configuration:")
+	color.Cyan("\nFinal configuration:")
 	j, _ := json.MarshalIndent(&Config, "", strings.Repeat(" ", 2))
 	if err != nil {
 		return err
 	}
-	color.Green("%s\n", j)
-
-	fmt.Println()
+	fmt.Println(fmt.Sprintf("%s\n\n", j))
 
 	if stackIsPhysicalPath == true {
-		color.Blue(fmt.Sprintf("Specified stack '%s' is a physical path since it matches the stack config file %s",
+		color.Cyan(fmt.Sprintf("Specified stack '%s' is a physical path since it matches the stack config file %s",
 			stack, matchedFile))
 	} else {
 		// The stack is a logical name
@@ -207,7 +205,7 @@ func InitConfig(stack string) error {
 		stackNamePatternParts := strings.Split(Config.StackNamePattern, "-")
 
 		if len(stackParts) == len(stackNamePatternParts) {
-			color.Blue(fmt.Sprintf("Specified stack '%s' is a logical name since it matches the stack name pattern '%s'",
+			color.Cyan(fmt.Sprintf("Specified stack '%s' is a logical name since it matches the stack name pattern '%s'",
 				stack, Config.StackNamePattern))
 		} else {
 			errorMessage := fmt.Sprintf("Specified stack '%s' is a logical name but it does not match the stack name pattern '%s'",
@@ -226,7 +224,7 @@ func InitConfig(stack string) error {
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
 	if !u.FileExists(path) {
-		color.Black("No config found at " + path)
+		fmt.Println(fmt.Sprintf("No config found at %s", path))
 		return nil
 	}
 

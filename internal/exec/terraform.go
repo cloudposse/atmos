@@ -79,7 +79,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute command
 	command := "terraform"
-	color.Blue(fmt.Sprintf("\nExecuting command: %s %s %s\n", command,
+	color.Cyan(fmt.Sprintf("\nExecuting command: %s %s %s\n", command,
 		subCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
 
 	err = execCommand(command, allArgsAndFlags)
