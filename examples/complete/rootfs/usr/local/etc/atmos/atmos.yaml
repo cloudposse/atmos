@@ -1,5 +1,11 @@
+StacksBasePath: "./stacks"
+
 IncludeStackPaths:
-  - "./stacks"
+  - "**/*"
+
+ExcludeStackPaths:
+  - "catalog/**/*"
+  - "**/*globals*"
 
 TerraformDir: "./components/terraform"
 
