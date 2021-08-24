@@ -97,12 +97,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		} else {
 			color.Cyan("Found 'command=%s' for component '%s' in stack '%s'\n\n", command, componentFromArg, stack)
 		}
-
-		color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
-		err = u.PrintAsYAML(componentVarsSection)
-		if err != nil {
-			return err
-		}
 	} else {
 		//for k,v := range stacksMap {
 		//	if stack == k {
@@ -111,6 +105,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		//		}
 		//	}
 		//}
+	}
+
+	color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
+	err = u.PrintAsYAML(componentVarsSection)
+	if err != nil {
+		return err
 	}
 
 	// Check component (and its base component)
@@ -153,14 +153,16 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	color.Cyan(fmt.Sprintf("\n%v Executing command: %s %s %s\n\n",
-		emoji,
+	color.Cyan(fmt.Sprintf("\nExecuting command  %v", emoji))
+	color.Green(fmt.Sprintf("Command: %s %s %s",
 		command,
 		subCommand,
 		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)),
 	)
+	color.Green(fmt.Sprintf("Working dir: %s", componentPath))
+	fmt.Println(strings.Repeat("\n", 3))
 
-	err = execCommand(command, allArgsAndFlags)
+	err = execCommand(command, allArgsAndFlags, componentPath)
 	if err != nil {
 		return err
 	}

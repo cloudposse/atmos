@@ -51,8 +51,9 @@ func removeCommonArgsAndFlags(argsAndFlags []string) []string {
 }
 
 // https://medium.com/rungo/executing-shell-commands-script-files-and-executables-in-go-894814f1c0f7
-func execCommand(command string, args []string) error {
+func execCommand(command string, args []string, dir string) error {
 	cmd := exec.Command(command, args...)
+	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
 	return cmd.Run()
