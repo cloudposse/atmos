@@ -1,0 +1,21 @@
+import:
+  - tenant1-globals
+  - ue2-globals
+  - catalog/test-component
+  - catalog/test-component-override
+  - catalog/vpc
+
+vars:
+  stage: dev
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: 10.10.0.0/18

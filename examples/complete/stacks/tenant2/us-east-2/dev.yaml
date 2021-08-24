@@ -1,11 +1,12 @@
 import:
+  - tenant2-globals
   - ue2-globals
   - catalog/test-component
   - catalog/test-component-override
   - catalog/vpc
 
 vars:
-  stage: prod
+  stage: dev
 
 terraform:
   vars: {}
@@ -17,4 +18,4 @@ components:
   terraform:
     vpc:
       vars:
-        cidr_block: 10.8.0.0/18
+        cidr_block: 10.10.0.0/18
