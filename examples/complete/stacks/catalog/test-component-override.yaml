@@ -6,6 +6,8 @@ import:
 components:
   terraform:
     test-component-override:
+      # Specify terraform binary to run
+      command: /usr/bin/terraform-015
       # By using `component` attribute, `test-component-override` inherits from `test-component` and can override its variables
       # In this example, variables for each service are overridden in `catalog/services/service-?-override.*`
       component: test-component

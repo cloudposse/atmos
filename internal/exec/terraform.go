@@ -2,7 +2,6 @@ package exec
 
 import (
 	c "atmos/internal/config"
-	m "atmos/internal/convert"
 	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"fmt"
@@ -68,6 +67,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
 	var baseComponent string
+	var command string
 	var ok bool
 
 	if c.Config.StackType == "Directory" {
@@ -89,6 +89,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if baseComponent, ok = componentSection["component"].(string); !ok {
 			baseComponent = ""
 		}
+		if command, ok = componentSection["command"].(string); !ok {
+			command = "terraform"
+		}
+
+		err = u.PrintAsYAML(componentSection)
 
 		color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
 		err = u.PrintAsYAML(componentVarsSection)
@@ -121,13 +126,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
 	varFileName := fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json", c.Config.TerraformDir, component, stackNameFormatted, componentFromArg)
 	color.Cyan("Writing variables to file %s", varFileName)
-	err = u.WriteToFileAsJSON(varFileName, m.MapsOfInterfacesToMapsOfStrings(componentVarsSection), 0644)
+	err = u.WriteToFileAsJSON(varFileName, componentVarsSection, 0644)
 	if err != nil {
 		return err
 	}
 
 	// Print command info
 	color.Cyan("\nCommand info:")
+	color.Green("Terraform binary: " + command)
 	color.Green("Terraform command: " + subCommand)
 	color.Green("Component: " + componentFromArg)
 	if len(baseComponent) > 0 {
@@ -138,7 +144,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Execute command
-	command := "terraform"
 	color.Cyan(fmt.Sprintf("\nExecuting command: %s %s %s\n\n", command,
 		subCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
 

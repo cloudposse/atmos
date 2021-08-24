@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"encoding/json"
 	"fmt"
+	jsoniter "github.com/json-iterator/go"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -10,6 +10,7 @@ import (
 
 // PrintAsJSON prints the provided value as YAML document to the console
 func PrintAsJSON(data interface{}) error {
+	var json = jsoniter.ConfigCompatibleWithStandardLibrary
 	j, err := json.MarshalIndent(data, "", strings.Repeat(" ", 2))
 	if err != nil {
 		return err
@@ -20,6 +21,7 @@ func PrintAsJSON(data interface{}) error {
 
 // WriteToFileAsJSON converts the provided value to YAML and writes it to the provided file
 func WriteToFileAsJSON(filePath string, data interface{}, fileMode os.FileMode) error {
+	var json = jsoniter.ConfigCompatibleWithStandardLibrary
 	j, err := json.MarshalIndent(data, "", strings.Repeat(" ", 2))
 	if err != nil {
 		return err
