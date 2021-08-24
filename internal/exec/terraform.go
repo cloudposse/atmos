@@ -30,8 +30,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	additionalArgsAndFlags := removeCommonArgsAndFlags(args)
-	terraformSubCommand := args[0]
-	allArgsAndFlags := append([]string{terraformSubCommand}, additionalArgsAndFlags...)
+	subCommand := args[0]
+	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
 
 	component := args[1]
 	if len(component) < 1 {
@@ -44,7 +44,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println(strings.Repeat("-", 120))
-	fmt.Println("Terraform command: " + terraformSubCommand)
+	fmt.Println("Terraform command: " + subCommand)
 	fmt.Println("Component: " + component)
 	fmt.Println("Stack: " + stack)
 	fmt.Printf("Additional arguments: %v\n", additionalArgsAndFlags)
@@ -53,7 +53,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	command := "terraform"
 
 	fmt.Println(fmt.Sprintf("Executing command: %s %s %s", command,
-		terraformSubCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
+		subCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
 
 	err = execCommand(command, allArgsAndFlags)
 	if err != nil {
