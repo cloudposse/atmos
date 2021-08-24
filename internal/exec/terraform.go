@@ -43,6 +43,17 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	subCommand := args[0]
 	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
 
+	// Process stack config file(s)
+	_, stacksMap, err := s.ProcessYAMLConfigFiles(
+		c.Config.StacksBaseAbsolutePath,
+		c.Config.StackConfigFiles,
+		false,
+		true)
+
+	if err != nil {
+		return err
+	}
+
 	// Find and check component
 	component := args[1]
 	if len(component) < 1 {
@@ -60,17 +71,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println("Stack: " + stack)
 	fmt.Printf("Additional arguments: %v\n", additionalArgsAndFlags)
 	fmt.Println(strings.Repeat("-", 120))
-
-	// Process stack config file(s)
-	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.Config.StacksBaseAbsolutePath,
-		c.Config.StackConfigFiles,
-		false,
-		true)
-
-	if err != nil {
-		return err
-	}
 
 	yamlConfig, err := yaml.Marshal(stacksMap)
 	if err != nil {

@@ -44,6 +44,7 @@ var (
 		},
 		// Default paths (globs) to stack configs to exclude
 		"ExcludeStackPaths": []interface{}{
+			"globals/**/*",
 			"catalog/**/*",
 			"**/*globals*",
 		},

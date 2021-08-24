@@ -4,6 +4,7 @@ IncludeStackPaths:
   - "**/*"
 
 ExcludeStackPaths:
+  - "globals/**/*"
   - "catalog/**/*"
   - "**/*globals*"
 

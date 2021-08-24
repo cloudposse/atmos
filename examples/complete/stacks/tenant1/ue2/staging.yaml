@@ -1,6 +1,6 @@
 import:
-  - tenant1/tenant1-globals
-  - ue2-globals
+  - globals/tenant1-globals
+  - globals/ue2-globals
   - catalog/test-component
   - catalog/test-component-override
   - catalog/vpc
