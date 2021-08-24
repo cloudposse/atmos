@@ -50,7 +50,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Additional arguments: %v\n", additionalArgsAndFlags)
 	fmt.Println(strings.Repeat("-", 120))
 
-	err = execCommand("terraform", allArgsAndFlags)
+	command := "terraform"
+
+	fmt.Println(fmt.Sprintf("Executing command: %s %s %s", command,
+		terraformSubCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
+
+	err = execCommand(command, allArgsAndFlags)
 	if err != nil {
 		return err
 	}

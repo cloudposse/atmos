@@ -24,12 +24,17 @@ func SliceContainsInt(s []int, i int) bool {
 	return false
 }
 
-// SliceContainsStringThatTheStringStartsWith checks if a slice contains a string that the given string begins with
-func SliceContainsStringThatTheStringStartsWith(s []string, str string) bool {
+// SliceContainsStringStartsWith checks if a slice contains a string that the given string begins with
+func SliceContainsStringStartsWith(s []string, str string) bool {
 	for _, v := range s {
 		if strings.HasPrefix(str, v) {
 			return true
 		}
 	}
 	return false
+}
+
+// SliceOfStringsToSpaceSeparatedString checks if an int is present in a slice
+func SliceOfStringsToSpaceSeparatedString(s []string) string {
+	return strings.Join(s, " ")
 }
