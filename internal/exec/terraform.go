@@ -2,6 +2,7 @@ package exec
 
 import (
 	c "atmos/internal/config"
+	m "atmos/internal/convert"
 	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
+	"strings"
 )
 
 // ExecuteTerraform executes terraform commands
@@ -115,8 +117,17 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.Config.TerraformDir))
 	}
 
+	// Write variables to a file
+	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
+	varFileName := fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json", c.Config.TerraformDir, component, stackNameFormatted, componentFromArg)
+	color.Cyan("Writing variables to file %s", varFileName)
+	err = u.WriteToFileAsJSON(varFileName, m.MapsOfInterfacesToMapsOfStrings(componentVarsSection), 0644)
+	if err != nil {
+		return err
+	}
+
 	// Print command info
-	color.Cyan("Command info:")
+	color.Cyan("\nCommand info:")
 	color.Green("Terraform command: " + subCommand)
 	color.Green("Component: " + componentFromArg)
 	if len(baseComponent) > 0 {
