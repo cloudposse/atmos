@@ -55,6 +55,7 @@ var (
 	Config Configuration
 )
 
+// InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitConfig() error {
@@ -264,7 +265,7 @@ func checkConfig() error {
 
 // findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
 func findAllStackConfigsInPaths(includeStackPaths []string, excludeStackPaths []string) ([]string, error) {
-	res := []string{}
+	var res []string
 
 	for _, p := range includeStackPaths {
 		pathWithExt := p
