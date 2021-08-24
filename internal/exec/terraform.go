@@ -80,12 +80,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			command = "terraform"
 		}
 	} else {
-		//for k,v := range stacksMap {
-		//	if stack == k {
-		//		if i, ok := v["vars"]; ok {
-		//			globalVarsSection = i.(map[interface{}]interface{})
-		//		}
-		//	}
+		color.Cyan("Stack '%s' is a logical name.\nSearching for a stack config file where the component '%s' is defined...", stack, componentFromArg)
+
+		//for stackName, stackData := range stacksMap {
 		//}
 	}
 
