@@ -6,6 +6,7 @@ import (
 	m "atmos/internal/merge"
 	u "atmos/internal/utils"
 	"fmt"
+	"github.com/bmatcuk/doublestar"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -148,7 +149,7 @@ func ProcessYAMLConfigFile(
 			}
 
 			// Find all matches in the glob
-			matches, err := filepath.Glob(impWithExtPath)
+			matches, err := doublestar.Glob(impWithExtPath)
 			if err != nil {
 				return nil, nil, err
 			}

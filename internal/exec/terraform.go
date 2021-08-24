@@ -62,7 +62,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println(strings.Repeat("-", 120))
 
 	// Process stack config file(s)
-	_, stacksMap, err := s.ProcessYAMLConfigFiles(c.Config.StacksBaseAbsolutePath,
+	_, stacksMap, err := s.ProcessYAMLConfigFiles(
+		c.Config.StacksBaseAbsolutePath,
 		c.Config.StackConfigFiles,
 		false,
 		true)
