@@ -32,6 +32,7 @@ type Configuration struct {
 	TerraformDir              string   `yaml:"TerraformDir" mapstructure:"TerraformDir"`
 	TerraformDirAbsolutePath  string   `yaml:"TerraformDirAbsolutePath"`
 	StackConfigFiles          []string `yaml:"StackConfigFiles"`
+	StackType                 string   `yaml:"StackType"`
 }
 
 var (
@@ -188,18 +189,14 @@ func InitConfig(stack string) error {
 	}
 	Config.StackConfigFiles = stackConfigFiles
 
-	color.Cyan("\nFinal configuration:")
-	err = u.PrintAsYAML(Config)
-	if err != nil {
-		return err
-	}
 	fmt.Println()
 
 	if stackIsPhysicalPath == true {
-		color.Cyan(fmt.Sprintf("Stack '%s' is a physical path since it matches the stack config file %s",
+		color.Cyan(fmt.Sprintf("Stack '%s' is a directory since it matches the stack config file %s",
 			stack,
 			u.TrimBasePathFromPath(Config.StacksBaseAbsolutePath+"/", matchedFile)),
 		)
+		Config.StackType = "Directory"
 	} else {
 		// The stack is a logical name
 		// Check if it matches the pattern specified in 'StackNamePattern'
@@ -211,6 +208,7 @@ func InitConfig(stack string) error {
 				stack,
 				Config.StackNamePattern),
 			)
+			Config.StackType = "Logical"
 		} else {
 			errorMessage := fmt.Sprintf("Stack '%s' is a logical name but it does not match the stack name pattern '%s'",
 				stack,
@@ -220,6 +218,11 @@ func InitConfig(stack string) error {
 		}
 	}
 
+	color.Cyan("\nFinal configuration:")
+	err = u.PrintAsYAML(Config)
+	if err != nil {
+		return err
+	}
 	fmt.Println()
 
 	return nil

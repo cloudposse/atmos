@@ -53,8 +53,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Find and check component
-	component := args[1]
+	// Check stacks and find the component
+
+	// Find and check component (and its base component)
+	componentFromArg := args[1]
+	component := componentFromArg
 	if len(component) < 1 {
 		return errors.New("'component' is required")
 	}
@@ -64,6 +67,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.Config.TerraformDir))
 	}
 
+	// Print command info
+	color.Cyan("Command info:")
 	color.Green("Terraform command: " + subCommand)
 	color.Green("Component: " + component)
 	color.Green("Stack: " + stack)
