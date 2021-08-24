@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	c "atmos/internal/config"
 	"github.com/spf13/cobra"
-	"log"
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -24,10 +22,6 @@ func init() {
 }
 
 func initConfig() {
-	err := c.InitConfig()
-	if err != nil {
-		log.Fatalln(err)
-	}
 }
 
 // https://blog.knoldus.com/create-kubectl-like-cli-with-go-and-cobra/

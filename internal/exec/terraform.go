@@ -29,6 +29,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	err = c.InitConfig(stack)
+	if err != nil {
+		return err
+	}
+
 	additionalArgsAndFlags := removeCommonArgsAndFlags(args)
 	subCommand := args[0]
 	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
@@ -51,7 +56,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println(strings.Repeat("-", 120))
 
 	command := "terraform"
-
 	fmt.Println(fmt.Sprintf("Executing command: %s %s %s", command,
 		subCommand, u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)))
 

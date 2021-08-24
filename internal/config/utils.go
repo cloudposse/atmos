@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"github.com/bmatcuk/doublestar"
 	"path/filepath"
+	"strings"
 )
 
 // findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
-func findAllStackConfigsInPaths(includeStackPaths []string, excludeStackPaths []string) ([]string, error) {
+func findAllStackConfigsInPaths(stack string, includeStackPaths []string, excludeStackPaths []string) ([]string, bool, string, error) {
 	var res []string
 
 	for _, p := range includeStackPaths {
@@ -23,12 +24,17 @@ func findAllStackConfigsInPaths(includeStackPaths []string, excludeStackPaths []
 		// Find all matches in the glob
 		matches, err := doublestar.Glob(pathWithExt)
 		if err != nil {
-			return nil, err
+			return nil, false, "", err
 		}
 
 		// Exclude files that match any of the excludePaths
 		if matches != nil && len(matches) > 0 {
 			for _, matchedFile := range matches {
+				stackMatch := strings.HasSuffix(matchedFile, stack+g.DefaultStackConfigFileExtension)
+				if stackMatch == true {
+					return []string{matchedFile}, true, matchedFile, nil
+				}
+
 				include := true
 
 				for _, excludePath := range excludeStackPaths {
@@ -51,5 +57,5 @@ func findAllStackConfigsInPaths(includeStackPaths []string, excludeStackPaths []
 		}
 	}
 
-	return res, nil
+	return res, false, "", nil
 }

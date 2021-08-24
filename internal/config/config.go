@@ -29,6 +29,7 @@ type Configuration struct {
 	TerraformDir              string `mapstructure:"TerraformDir"`
 	TerraformDirAbsolutePath  string
 	StackConfigFiles          []string
+	StackDescription          string
 }
 
 var (
@@ -56,7 +57,7 @@ var (
 // InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitConfig() error {
+func InitConfig(stack string) error {
 	// Config is loaded from these locations (from lower to higher priority):
 	// /usr/local/etc/atmos
 	// ~/.atmos
@@ -160,11 +161,31 @@ func InitConfig() error {
 	}
 	Config.TerraformDirAbsolutePath = terraformDirAbsPath
 
-	// Find all stack config files in the provided paths
-	stackConfigFiles, err := findAllStackConfigsInPaths(includeStackAbsPaths, excludeStackAbsPaths)
+	// If the specified stack name is a logical name, find all stack config files in the provided paths
+	stackConfigFiles, stackIsPhysicalPath, matchedFile, err := findAllStackConfigsInPaths(stack, includeStackAbsPaths, excludeStackAbsPaths)
 	if err != nil {
 		return err
 	}
+
+	if stackIsPhysicalPath == true {
+		Config.StackDescription = fmt.Sprintf("Specified stack '%s' is a physical path since it matches the stack config file %s",
+			stack, matchedFile)
+	} else {
+		// The stack is a logical name
+		// Check if it matches the pattern specified in 'StackNamePattern'
+		stackParts := strings.Split(stack, "-")
+		stackNamePatternParts := strings.Split(Config.StackNamePattern, "-")
+
+		if len(stackParts) == len(stackNamePatternParts) {
+			Config.StackDescription = fmt.Sprintf("Specified stack '%s' is a logical name since it matches the stack name pattern '%s'",
+				stack, Config.StackNamePattern)
+		} else {
+			errorMessage := fmt.Sprintf("Specified stack '%s' is a logical name but it does not match the stack name pattern '%s'",
+				stack, Config.StackNamePattern)
+			return errors.New(errorMessage)
+		}
+	}
+
 	if len(stackConfigFiles) < 1 {
 		j, _ := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
 		if err != nil {
@@ -175,7 +196,7 @@ func InitConfig() error {
 	}
 	Config.StackConfigFiles = stackConfigFiles
 
-	fmt.Println("Final CLI configuration:")
+	fmt.Println("Final configuration:")
 	j, _ := json.MarshalIndent(&Config, "", strings.Repeat(" ", 2))
 	if err != nil {
 		return err
