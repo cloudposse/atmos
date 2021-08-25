@@ -13,6 +13,10 @@ import (
 	"strings"
 )
 
+const (
+	autoApproveFlag = "-auto-approve"
+)
+
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if len(args) < 3 {
@@ -42,7 +46,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Process CLI arguments and flags
 	additionalArgsAndFlags := removeCommonArgsAndFlags(args)
 	subCommand := args[0]
-	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
 
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
@@ -61,7 +64,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return errors.New("'component' is required")
 	}
 
-	// Print found stack config files
+	// Print the stack config files
 	fmt.Println()
 	var msg string
 	if c.ProcessedConfig.StackType == "Directory" {
@@ -112,7 +115,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		for stackName, _ := range stacksMap {
+		for stackName := range stacksMap {
 			componentVarsSection, baseComponent, command, err = checkStackConfig(stackName, stacksMap, componentFromArg)
 			if err != nil {
 				continue
@@ -195,11 +198,19 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Handle `terraform deploy` custom command
+	if subCommand == "deploy" {
+		subCommand = "apply"
+		if !u.SliceContainsString(additionalArgsAndFlags, autoApproveFlag) {
+			additionalArgsAndFlags = append(additionalArgsAndFlags, autoApproveFlag)
+		}
+	}
+
 	// Print command info
 	color.Cyan("\nCommand info:")
 	color.Green("Terraform binary: " + command)
 	color.Green("Terraform command: " + subCommand)
-	color.Green("Additional arguments: %v", additionalArgsAndFlags)
+	color.Green("Arguments and flags: %v", additionalArgsAndFlags)
 	color.Green("Component: " + componentFromArg)
 	if len(baseComponent) > 0 {
 		color.Green("Base component: " + baseComponent)
@@ -250,6 +261,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	cleanUp := false
+	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
 
 	switch subCommand {
 	case "plan":
@@ -260,7 +272,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		cleanUp = true
 		break
 	case "apply":
-		allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
+		// Use the planfile if `-auto-approve` flag is specified
+		// Use the varfile if `-auto-approve` is specified
+		if !u.SliceContainsString(allArgsAndFlags, autoApproveFlag) {
+			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
+		} else {
+			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		}
 		cleanUp = true
 		break
 	}
