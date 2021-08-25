@@ -208,13 +208,29 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	color.Green(fmt.Sprintf("Working dir: %s", componentPath))
 	fmt.Println(strings.Repeat("\n", 2))
 
+	planFile := fmt.Sprintf("%s-%s.planfile", stackNameFormatted, componentFromArg)
+	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, componentFromArg)
+
+	var workspaceName string
+	if len(baseComponent) > 0 {
+		workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, componentFromArg)
+	} else {
+		workspaceName = stackNameFormatted
+	}
+
 	err = execCommand(command, []string{"init"}, componentPath)
 	if err != nil {
 		return err
 	}
 
-	planFile := fmt.Sprintf("%s-%s.planfile", stackNameFormatted, componentFromArg)
-	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, componentFromArg)
+	err = execCommand(command, []string{"workspace", "select", workspaceName}, componentPath)
+	if err != nil {
+		err = execCommand(command, []string{"workspace", "new", workspaceName}, componentPath)
+		if err != nil {
+			return err
+		}
+	}
+
 	cleanUp := false
 
 	switch subCommand {
