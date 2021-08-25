@@ -218,11 +218,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		workspaceName = stackNameFormatted
 	}
 
+	// Run `terraform init`
 	err = execCommand(command, []string{"init"}, componentPath)
 	if err != nil {
 		return err
 	}
 
+	// Run `terraform workspace`
 	err = execCommand(command, []string{"workspace", "select", workspaceName}, componentPath)
 	if err != nil {
 		err = execCommand(command, []string{"workspace", "new", workspaceName}, componentPath)
@@ -237,12 +239,17 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	case "plan":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile, "-out", planFile}...)
 		break
+	case "destroy":
+		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		cleanUp = true
+		break
 	case "apply":
 		allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
 		cleanUp = true
 		break
 	}
 
+	// Execute the command
 	err = execCommand(command, allArgsAndFlags, componentPath)
 	if err != nil {
 		return err
@@ -250,10 +257,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	if cleanUp == true {
 		planFilePath := fmt.Sprintf("%s/%s/%s", c.Config.TerraformDir, component, planFile)
-		err := os.Remove(planFilePath)
-		if err != nil {
-			color.Red("Error deleting terraform plan file '%s': %s\n", planFilePath, err)
-		}
+		_ = os.Remove(planFilePath)
 
 		varFilePath := fmt.Sprintf("%s/%s/%s", c.Config.TerraformDir, component, varFile)
 		err = os.Remove(varFilePath)

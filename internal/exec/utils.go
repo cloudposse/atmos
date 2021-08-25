@@ -56,6 +56,7 @@ func removeCommonArgsAndFlags(argsAndFlags []string) []string {
 func execCommand(command string, args []string, dir string) error {
 	cmd := exec.Command(command, args...)
 	cmd.Dir = dir
+	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
 	return cmd.Run()
