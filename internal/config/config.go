@@ -193,13 +193,13 @@ func InitConfig(stack string) error {
 		stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
 
 		if len(stackParts) == len(stackNamePatternParts) {
-			color.Cyan(fmt.Sprintf("Stack '%s' is a logical name since it matches the stack name pattern '%s'",
+			color.Cyan(fmt.Sprintf("Stack '%s' matches the stack name pattern '%s'",
 				stack,
 				Config.Stacks.NamePattern),
 			)
 			ProcessedConfig.StackType = "Logical"
 		} else {
-			errorMessage := fmt.Sprintf("Stack '%s' is a logical name but it does not match the stack name pattern '%s'",
+			errorMessage := fmt.Sprintf("Stack '%s' does not match the stack name pattern '%s'",
 				stack,
 				Config.Stacks.NamePattern,
 			)
@@ -207,7 +207,7 @@ func InitConfig(stack string) error {
 		}
 	}
 
-	color.Cyan("\nFinal configuration:")
+	color.Cyan("\nFinal CLI configuration:")
 	err = u.PrintAsYAML(Config)
 	if err != nil {
 		return err

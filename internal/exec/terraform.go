@@ -71,14 +71,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-
-		if len(command) > 0 {
-			color.Cyan("Found 'command=%s' for component '%s' in stack '%s'\n\n", command, componentFromArg, stack)
-		} else {
-			command = "terraform"
-		}
 	} else {
-		color.Cyan("Stack '%s' is a logical name.\nSearching for stack config where the component '%s' is defined...\n", stack, componentFromArg)
+		color.Cyan("Searching for stack config where the component '%s' is defined\n", componentFromArg)
 
 		if len(c.Config.Stacks.NamePattern) < 1 {
 			return errors.New("Stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
@@ -149,9 +143,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				componentFromArg,
 				stack,
 				c.Config.Stacks.NamePattern,
-			),
-			)
+			))
 		}
+	}
+
+	if len(command) > 0 {
+		color.Cyan("Found 'command: %s' for component '%s' in stack '%s'\n\n", command, componentFromArg, stack)
+	} else {
+		command = "terraform"
 	}
 
 	color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
@@ -175,7 +174,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Write variables to a file
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
 	varFileName := fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json", c.Config.Components.Terraform.BasePath, component, stackNameFormatted, componentFromArg)
-	color.Cyan("Writing variables to file %s", varFileName)
+	color.Cyan("Writing variables to file:")
+	fmt.Println(varFileName)
 	err = u.WriteToFileAsJSON(varFileName, componentVarsSection, 0644)
 	if err != nil {
 		return err
@@ -203,9 +203,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	color.Green(fmt.Sprintf("Command: %s %s %s",
 		command,
 		subCommand,
-		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags)),
-	)
-	color.Green(fmt.Sprintf("Working dir: %s", componentPath))
+		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags),
+	))
+
+	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, component)
+	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
 	fmt.Println(strings.Repeat("\n", 2))
 
 	planFile := fmt.Sprintf("%s-%s.planfile", stackNameFormatted, componentFromArg)
