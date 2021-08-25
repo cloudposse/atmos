@@ -47,7 +47,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
 		c.ProcessedConfig.StacksBaseAbsolutePath,
-		c.ProcessedConfig.StackConfigFiles,
+		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true)
 
@@ -59,6 +59,20 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	componentFromArg := args[1]
 	if len(componentFromArg) < 1 {
 		return errors.New("'component' is required")
+	}
+
+	// Print found stack config files
+	fmt.Println()
+	var msg string
+	if c.ProcessedConfig.StackType == "Directory" {
+		msg = "Found the config file for the provided stack:"
+	} else {
+		msg = "Found config files:"
+	}
+	color.Cyan(msg)
+	err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+	if err != nil {
+		return err
 	}
 
 	// Check and process stacks

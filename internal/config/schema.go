@@ -26,11 +26,12 @@ type Configuration struct {
 }
 
 type ProcessedConfiguration struct {
-	StacksBaseAbsolutePath    string   `yaml:"StacksBaseAbsolutePath" json:"StacksBaseAbsolutePath"`
-	IncludeStackAbsolutePaths []string `yaml:"IncludeStackAbsolutePaths" json:"IncludeStackAbsolutePaths"`
-	ExcludeStackAbsolutePaths []string `yaml:"ExcludeStackAbsolutePaths" json:"ExcludeStackAbsolutePaths"`
-	TerraformDirAbsolutePath  string   `yaml:"TerraformDirAbsolutePath" json:"TerraformDirAbsolutePath"`
-	HelmfileDirAbsolutePath   string   `yaml:"HelmfileDirAbsolutePath" json:"HelmfileDirAbsolutePath"`
-	StackConfigFiles          []string `yaml:"StackConfigFiles" json:"StackConfigFiles"`
-	StackType                 string   `yaml:"StackType" json:"StackType"`
+	StacksBaseAbsolutePath        string   `yaml:"StacksBaseAbsolutePath" json:"StacksBaseAbsolutePath"`
+	IncludeStackAbsolutePaths     []string `yaml:"IncludeStackAbsolutePaths" json:"IncludeStackAbsolutePaths"`
+	ExcludeStackAbsolutePaths     []string `yaml:"ExcludeStackAbsolutePaths" json:"ExcludeStackAbsolutePaths"`
+	TerraformDirAbsolutePath      string   `yaml:"TerraformDirAbsolutePath" json:"TerraformDirAbsolutePath"`
+	HelmfileDirAbsolutePath       string   `yaml:"HelmfileDirAbsolutePath" json:"HelmfileDirAbsolutePath"`
+	StackConfigFilesRelativePaths []string `yaml:"StackConfigFilesRelativePaths" json:"StackConfigFilesRelativePaths"`
+	StackConfigFilesAbsolutePaths []string `yaml:"StackConfigFilesAbsolutePaths" json:"StackConfigFilesAbsolutePaths"`
+	StackType                     string   `yaml:"StackType" json:"StackType"`
 }

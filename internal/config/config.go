@@ -172,12 +172,17 @@ func InitConfig(stack string) error {
 	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
-	stackConfigFiles, stackIsPhysicalPath, matchedFile, err := findAllStackConfigsInPaths(stack, includeStackAbsPaths, excludeStackAbsPaths)
+	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := findAllStackConfigsInPaths(
+		stack,
+		includeStackAbsPaths,
+		excludeStackAbsPaths,
+	)
+
 	if err != nil {
 		return err
 	}
 
-	if len(stackConfigFiles) < 1 {
+	if len(stackConfigFilesAbsolutePaths) < 1 {
 		j, err := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
 		if err != nil {
 			return err
@@ -185,14 +190,16 @@ func InitConfig(stack string) error {
 		errorMessage := fmt.Sprintf("No config files found in any of the provided paths:\n%s\n", j)
 		return errors.New(errorMessage)
 	}
-	ProcessedConfig.StackConfigFiles = stackConfigFiles
+
+	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	fmt.Println()
 
 	if stackIsPhysicalPath == true {
-		color.Cyan(fmt.Sprintf("Stack '%s' is a directory since it matches the stack config file %s",
+		color.Cyan(fmt.Sprintf("Stack '%s' is a directory, it matches the stack config file %s",
 			stack,
-			u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFile)),
+			stackConfigFilesRelativePaths[0]),
 		)
 		ProcessedConfig.StackType = "Directory"
 	} else {
@@ -208,7 +215,7 @@ func InitConfig(stack string) error {
 			)
 			ProcessedConfig.StackType = "Logical"
 		} else {
-			errorMessage := fmt.Sprintf("Stack '%s' does not match the stack name pattern '%s'",
+			errorMessage := fmt.Sprintf("Stack '%s' is not a directory and it does not match the stack name pattern '%s'",
 				stack,
 				Config.Stacks.NamePattern,
 			)
