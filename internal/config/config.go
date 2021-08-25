@@ -305,9 +305,5 @@ func checkConfig() error {
 		return errors.New("Terraform dir must be provided in 'TerraformDir' or 'ATMOS_TERRAFORM_DIR' ENV variable")
 	}
 
-	if len(Config.StackNamePattern) < 1 {
-		return errors.New("Stack name pattern must be provided in 'StackNamePattern' or 'ATMOS_STACK_NAME_PATTERN' ENV variable")
-	}
-
 	return nil
 }

@@ -61,15 +61,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check and process stacks
-	var selectedStackConfigFile string
 	var componentVarsSection map[interface{}]interface{}
 	var baseComponent string
 	var command string
 
 	if c.Config.StackType == "Directory" {
-		selectedStackConfigFile = c.Config.StackConfigFiles[0]
-
-		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, selectedStackConfigFile, componentFromArg)
+		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, componentFromArg)
 		if err != nil {
 			return err
 		}
@@ -80,10 +77,80 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			command = "terraform"
 		}
 	} else {
-		color.Cyan("Stack '%s' is a logical name.\nSearching for a stack config file where the component '%s' is defined...", stack, componentFromArg)
+		color.Cyan("Stack '%s' is a logical name.\nSearching for stack config where the component '%s' is defined...\n", stack, componentFromArg)
 
-		//for stackName, stackData := range stacksMap {
-		//}
+		if len(c.Config.StackNamePattern) < 1 {
+			return errors.New("Stack name pattern must be provided in 'StackNamePattern' or 'ATMOS_STACK_NAME_PATTERN' ENV variable")
+		}
+
+		stackParts := strings.Split(stack, "-")
+		stackNamePatternParts := strings.Split(c.Config.StackNamePattern, "-")
+
+		var tenant string
+		var environment string
+		var stage string
+		var tenantFound bool
+		var environmentFound bool
+		var stageFound bool
+
+		for i, part := range stackNamePatternParts {
+			if part == "tenant" {
+				tenant = stackParts[i]
+			} else if part == "environment" {
+				environment = stackParts[i]
+			} else if part == "stage" {
+				stage = stackParts[i]
+			}
+		}
+
+		for stackName, _ := range stacksMap {
+			componentVarsSection, baseComponent, command, err = checkStackConfig(stackName, stacksMap, componentFromArg)
+			if err != nil {
+				continue
+			}
+
+			tenantFound = true
+			environmentFound = true
+			stageFound = true
+
+			// Search for tenant in stack
+			if len(tenant) > 0 {
+				if tenantInStack, ok := componentVarsSection["tenant"].(string); !ok || tenantInStack != tenant {
+					tenantFound = false
+				}
+			}
+
+			// Search for environment in stack
+			if len(environment) > 0 {
+				if environmentInStack, ok := componentVarsSection["environment"].(string); !ok || environmentInStack != environment {
+					environmentFound = false
+				}
+			}
+
+			// Search for stage in stack
+			if len(stage) > 0 {
+				if stageInStack, ok := componentVarsSection["stage"].(string); !ok || stageInStack != stage {
+					stageFound = false
+				}
+			}
+
+			if tenantFound == true && environmentFound == true && stageFound == true {
+				color.Green("Found stack config for component '%s' in stack '%s'\n\n", componentFromArg, stackName)
+				stack = stackName
+				break
+			}
+		}
+
+		if tenantFound == false || environmentFound == false || stageFound == false {
+			return errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
+				"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
+				"Did you forget any imports?",
+				componentFromArg,
+				stack,
+				c.Config.StackNamePattern,
+			),
+			)
+		}
 	}
 
 	color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
@@ -123,7 +190,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		color.Green("Base component: " + baseComponent)
 	}
 	color.Green("Stack: " + stack)
-	color.Green("Stack config file: " + u.TrimBasePathFromPath(c.Config.StacksBaseAbsolutePath+"/", selectedStackConfigFile))
 	fmt.Println()
 
 	// Execute command

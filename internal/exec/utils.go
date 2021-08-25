@@ -65,7 +65,6 @@ func execCommand(command string, args []string, dir string) error {
 func checkStackConfig(
 	stack string,
 	stacksMap map[string]interface{},
-	stackConfigFile string,
 	component string,
 ) (map[interface{}]interface{}, string, string, error) {
 
@@ -79,7 +78,7 @@ func checkStackConfig(
 	var ok bool
 
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist in %s", stack, stackConfigFile))
+		return nil, "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
 		return nil, "", "", errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
