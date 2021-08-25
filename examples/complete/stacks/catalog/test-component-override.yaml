@@ -1,5 +1,8 @@
-# `import` supports Globs https://pkg.go.dev/gopkg.in/godo.v2/glob
-# File extensions are optional (if not specified, `.yaml` is used by default
+# `import` supports POSIX-style Globs
+# https://en.wikipedia.org/wiki/Glob_(programming)
+# https://pkg.go.dev/gopkg.in/godo.v2/glob
+# https://github.com/bmatcuk/doublestar
+# File extensions are optional (if not specified, `.yaml` is used by default)
 import:
   - catalog/services/service-?-override.*
 
