@@ -2,6 +2,7 @@ package config
 
 import (
 	u "atmos/internal/utils"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/fatih/color"
@@ -23,23 +24,26 @@ const (
 
 var (
 	// Default values
-	defaultConfig = map[string]interface{}{
-		// Stacks base path
-		"StacksBasePath": "./stacks",
-		// Default paths (globs) to stack configs to include
-		"IncludeStackPaths": []interface{}{
-			"**/*",
+	defaultConfig = Configuration{
+		Components: Components{
+			Terraform: Terraform{
+				BasePath: "./components/terraform",
+			},
+			Helmfile: Helmfile{
+				BasePath: "./components/helmfile",
+			},
 		},
-		// Default paths (globs) to stack configs to exclude
-		"ExcludeStackPaths": []interface{}{
-			"globals/**/*",
-			"catalog/**/*",
-			"**/*globals*",
+		Stacks: Stacks{
+			BasePath: "./stacks",
+			IncludedPaths: []string{
+				"**/*",
+			},
+			ExcludedPaths: []string{
+				"globals/**/*",
+				"catalog/**/*",
+				"**/*globals*",
+			},
 		},
-		// Default path to terraform components
-		"TerraformDir": "./components/terraform",
-		// Logical stack name pattern
-		"StackNamePattern": "environment-stage",
 	}
 
 	// Config is the CLI configuration structure
@@ -67,7 +71,12 @@ func InitConfig(stack string) error {
 	v.SetTypeByDefaultValue(true)
 
 	// Add default config
-	err := v.MergeConfigMap(defaultConfig)
+	j, err := json.Marshal(defaultConfig)
+	if err != nil {
+		return err
+	}
+	reader := bytes.NewReader(j)
+	err = v.MergeConfig(reader)
 	if err != nil {
 		return err
 	}
@@ -297,7 +306,7 @@ func checkConfig() error {
 	}
 
 	if len(Config.Components.Terraform.BasePath) < 1 {
-		return errors.New("Terraform dir must be provided in 'components.terraform.base_path' config or 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV variable")
+		return errors.New("Terraform base path must be provided in 'components.terraform.base_path' config or 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV variable")
 	}
 
 	return nil

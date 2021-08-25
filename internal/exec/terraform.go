@@ -168,7 +168,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.Config.Components.Terraform.BasePath))
+		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.ProcessedConfig.TerraformDirAbsolutePath))
 	}
 
 	// Write variables to a file
