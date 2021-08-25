@@ -1,13 +1,18 @@
-StacksBasePath: "./examples/complete/stacks"
+# CLI config supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+# https://en.wikipedia.org/wiki/Glob_(programming)
 
-IncludeStackPaths:
-  - "**/*"
+components:
+  terraform:
+    base_path: "./examples/complete/components/terraform"
+  helmfile:
+    base_path: "./examples/complete/components/helmfile"
 
-ExcludeStackPaths:
-  - "globals/**/*"
-  - "catalog/**/*"
-  - "**/*globals*"
-
-TerraformDir: "./examples/complete/components/terraform"
-
-StackNamePattern: "tenant-environment-stage"
+stacks:
+  base_path: "./examples/complete/stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "globals/**/*"
+    - "catalog/**/*"
+    - "**/*globals*"
+  name_pattern: "{tenant}-{environment}-{stage}"

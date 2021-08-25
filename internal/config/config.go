@@ -21,20 +21,6 @@ const (
 	windowsAppDataEnvVar    = "LOCALAPPDATA"
 )
 
-type Configuration struct {
-	StackNamePattern          string   `yaml:"StackNamePattern" mapstructure:"StackNamePattern"`
-	StacksBasePath            string   `yaml:"StacksBasePath" mapstructure:"StacksBasePath"`
-	StacksBaseAbsolutePath    string   `yaml:"StacksBaseAbsolutePath"`
-	IncludeStackPaths         []string `yaml:"IncludeStackPaths" mapstructure:"IncludeStackPaths"`
-	IncludeStackAbsolutePaths []string `yaml:"IncludeStackAbsolutePaths"`
-	ExcludeStackPaths         []string `yaml:"ExcludeStackPaths" mapstructure:"ExcludeStackPaths"`
-	ExcludeStackAbsolutePaths []string `yaml:"ExcludeStackAbsolutePaths"`
-	TerraformDir              string   `yaml:"TerraformDir" mapstructure:"TerraformDir"`
-	TerraformDirAbsolutePath  string   `yaml:"TerraformDirAbsolutePath"`
-	StackConfigFiles          []string `yaml:"StackConfigFiles"`
-	StackType                 string   `yaml:"StackType"`
-}
-
 var (
 	// Default values
 	defaultConfig = map[string]interface{}{
@@ -58,6 +44,9 @@ var (
 
 	// Config is the CLI configuration structure
 	Config Configuration
+
+	// ProcessedConfig holds all the calculated values
+	ProcessedConfig ProcessedConfiguration
 )
 
 // InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars
@@ -146,32 +135,32 @@ func InitConfig(stack string) error {
 	}
 
 	// Convert stacks base path to absolute path
-	stacksBaseAbsPath, err := filepath.Abs(Config.StacksBasePath)
+	stacksBaseAbsPath, err := filepath.Abs(Config.Stacks.BasePath)
 	if err != nil {
 		return err
 	}
-	Config.StacksBaseAbsolutePath = stacksBaseAbsPath
+	ProcessedConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.IncludeStackPaths)
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
-	Config.IncludeStackAbsolutePaths = includeStackAbsPaths
+	ProcessedConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
-	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.ExcludeStackPaths)
+	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}
-	Config.ExcludeStackAbsolutePaths = excludeStackAbsPaths
+	ProcessedConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert terraform dir to absolute path
-	terraformDirAbsPath, err := filepath.Abs(Config.TerraformDir)
+	terraformDirAbsPath, err := filepath.Abs(Config.Components.Terraform.BasePath)
 	if err != nil {
 		return err
 	}
-	Config.TerraformDirAbsolutePath = terraformDirAbsPath
+	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
 	stackConfigFiles, stackIsPhysicalPath, matchedFile, err := findAllStackConfigsInPaths(stack, includeStackAbsPaths, excludeStackAbsPaths)
@@ -187,32 +176,32 @@ func InitConfig(stack string) error {
 		errorMessage := fmt.Sprintf("No config files found in any of the provided paths:\n%s\n", j)
 		return errors.New(errorMessage)
 	}
-	Config.StackConfigFiles = stackConfigFiles
+	ProcessedConfig.StackConfigFiles = stackConfigFiles
 
 	fmt.Println()
 
 	if stackIsPhysicalPath == true {
 		color.Cyan(fmt.Sprintf("Stack '%s' is a directory since it matches the stack config file %s",
 			stack,
-			u.TrimBasePathFromPath(Config.StacksBaseAbsolutePath+"/", matchedFile)),
+			u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFile)),
 		)
-		Config.StackType = "Directory"
+		ProcessedConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name
 		// Check if it matches the pattern specified in 'StackNamePattern'
 		stackParts := strings.Split(stack, "-")
-		stackNamePatternParts := strings.Split(Config.StackNamePattern, "-")
+		stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
 
 		if len(stackParts) == len(stackNamePatternParts) {
 			color.Cyan(fmt.Sprintf("Stack '%s' is a logical name since it matches the stack name pattern '%s'",
 				stack,
-				Config.StackNamePattern),
+				Config.Stacks.NamePattern),
 			)
-			Config.StackType = "Logical"
+			ProcessedConfig.StackType = "Logical"
 		} else {
 			errorMessage := fmt.Sprintf("Stack '%s' is a logical name but it does not match the stack name pattern '%s'",
 				stack,
-				Config.StackNamePattern,
+				Config.Stacks.NamePattern,
 			)
 			return errors.New(errorMessage)
 		}
@@ -264,45 +253,51 @@ func processEnvVars() {
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
 		color.Green("Found ENV var 'ATMOS_STACKS_BASE_PATH': %s", stacksBasePath)
-		Config.StacksBasePath = stacksBasePath
+		Config.Stacks.BasePath = stacksBasePath
 	}
 
-	includeStackPaths := os.Getenv("ATMOS_INCLUDE_STACK_PATHS")
-	if len(includeStackPaths) > 0 {
-		color.Green("Found ENV var 'ATMOS_INCLUDE_STACK_PATHS': %s", includeStackPaths)
-		Config.IncludeStackPaths = strings.Split(includeStackPaths, ",")
+	stacksIncludedPaths := os.Getenv("ATMOS_STACKS_INCLUDED_PATHS")
+	if len(stacksIncludedPaths) > 0 {
+		color.Green("Found ENV var 'ATMOS_STACKS_INCLUDED_PATHS': %s", stacksIncludedPaths)
+		Config.Stacks.IncludedPaths = strings.Split(stacksIncludedPaths, ",")
 	}
 
-	excludeStackPaths := os.Getenv("ATMOS_EXCLUDE_STACK_PATHS")
-	if len(excludeStackPaths) > 0 {
-		color.Green("Found ENV var 'ATMOS_EXCLUDE_STACK_PATHS': %s", excludeStackPaths)
-		Config.IncludeStackPaths = strings.Split(excludeStackPaths, ",")
+	stacksExcludedPaths := os.Getenv("ATMOS_STACKS_EXCLUDED_PATHS")
+	if len(stacksExcludedPaths) > 0 {
+		color.Green("Found ENV var 'ATMOS_STACKS_EXCLUDED_PATHS': %s", stacksExcludedPaths)
+		Config.Stacks.ExcludedPaths = strings.Split(stacksExcludedPaths, ",")
 	}
 
-	terraformDir := os.Getenv("ATMOS_TERRAFORM_DIR")
-	if len(terraformDir) > 0 {
-		color.Green("Found ENV var 'ATMOS_TERRAFORM_DIR': %s", terraformDir)
-		Config.TerraformDir = terraformDir
+	stacksNamePattern := os.Getenv("ATMOS_STACKS_NAME_PATTERN")
+	if len(stacksNamePattern) > 0 {
+		color.Green("Found ENV var 'ATMOS_STACKS_NAME_PATTERN': %s", stacksNamePattern)
+		Config.Stacks.NamePattern = stacksNamePattern
 	}
 
-	stackNamePattern := os.Getenv("ATMOS_STACK_NAME_PATTERN")
-	if len(stackNamePattern) > 0 {
-		color.Green("Found ENV var 'ATMOS_STACK_NAME_PATTERN': %s", stackNamePattern)
-		Config.StackNamePattern = stackNamePattern
+	componentsTerraformBasePath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
+	if len(componentsTerraformBasePath) > 0 {
+		color.Green("Found ENV var 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH': %s", componentsTerraformBasePath)
+		Config.Components.Terraform.BasePath = componentsTerraformBasePath
+	}
+
+	componentsHelmfileBasePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
+	if len(componentsHelmfileBasePath) > 0 {
+		color.Green("Found ENV var 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH': %s", componentsHelmfileBasePath)
+		Config.Components.Helmfile.BasePath = componentsHelmfileBasePath
 	}
 }
 
 func checkConfig() error {
-	if len(Config.StacksBasePath) < 1 {
-		return errors.New("Stack base path must be provided in 'StacksBasePath' or 'ATMOS_STACKS_BASE_PATH' ENV variable")
+	if len(Config.Stacks.BasePath) < 1 {
+		return errors.New("Stack base path must be provided in 'stacks.base_path' config or 'ATMOS_STACKS_BASE_PATH' ENV variable")
 	}
 
-	if len(Config.IncludeStackPaths) < 1 {
-		return errors.New("At least one path must be provided in 'IncludeStackPaths' or 'ATMOS_INCLUDE_STACK_PATHS' ENV variable")
+	if len(Config.Stacks.IncludedPaths) < 1 {
+		return errors.New("At least one path must be provided in 'stacks.included_paths' config or 'ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	}
 
-	if len(Config.TerraformDir) < 1 {
-		return errors.New("Terraform dir must be provided in 'TerraformDir' or 'ATMOS_TERRAFORM_DIR' ENV variable")
+	if len(Config.Components.Terraform.BasePath) < 1 {
+		return errors.New("Terraform dir must be provided in 'components.terraform.base_path' config or 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV variable")
 	}
 
 	return nil

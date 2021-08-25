@@ -46,8 +46,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.Config.StacksBaseAbsolutePath,
-		c.Config.StackConfigFiles,
+		c.ProcessedConfig.StacksBaseAbsolutePath,
+		c.ProcessedConfig.StackConfigFiles,
 		false,
 		true)
 
@@ -66,7 +66,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	var baseComponent string
 	var command string
 
-	if c.Config.StackType == "Directory" {
+	if c.ProcessedConfig.StackType == "Directory" {
 		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, componentFromArg)
 		if err != nil {
 			return err
@@ -80,12 +80,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	} else {
 		color.Cyan("Stack '%s' is a logical name.\nSearching for stack config where the component '%s' is defined...\n", stack, componentFromArg)
 
-		if len(c.Config.StackNamePattern) < 1 {
-			return errors.New("Stack name pattern must be provided in 'StackNamePattern' or 'ATMOS_STACK_NAME_PATTERN' ENV variable")
+		if len(c.Config.Stacks.NamePattern) < 1 {
+			return errors.New("Stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		}
 
 		stackParts := strings.Split(stack, "-")
-		stackNamePatternParts := strings.Split(c.Config.StackNamePattern, "-")
+		stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
 
 		var tenant string
 		var environment string
@@ -95,11 +95,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		var stageFound bool
 
 		for i, part := range stackNamePatternParts {
-			if part == "tenant" {
+			if part == "{tenant}" {
 				tenant = stackParts[i]
-			} else if part == "environment" {
+			} else if part == "{environment}" {
 				environment = stackParts[i]
-			} else if part == "stage" {
+			} else if part == "{stage}" {
 				stage = stackParts[i]
 			}
 		}
@@ -148,7 +148,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				"Did you forget any imports?",
 				componentFromArg,
 				stack,
-				c.Config.StackNamePattern,
+				c.Config.Stacks.NamePattern,
 			),
 			)
 		}
@@ -166,15 +166,15 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		component = baseComponent
 	}
 
-	componentPath := path.Join(c.Config.TerraformDirAbsolutePath, component)
+	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.Config.TerraformDir))
+		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.Config.Components.Terraform.BasePath))
 	}
 
 	// Write variables to a file
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
-	varFileName := fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json", c.Config.TerraformDir, component, stackNameFormatted, componentFromArg)
+	varFileName := fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json", c.Config.Components.Terraform.BasePath, component, stackNameFormatted, componentFromArg)
 	color.Cyan("Writing variables to file %s", varFileName)
 	err = u.WriteToFileAsJSON(varFileName, componentVarsSection, 0644)
 	if err != nil {
@@ -256,13 +256,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	if cleanUp == true {
-		planFilePath := fmt.Sprintf("%s/%s/%s", c.Config.TerraformDir, component, planFile)
+		planFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, component, planFile)
 		_ = os.Remove(planFilePath)
 
-		varFilePath := fmt.Sprintf("%s/%s/%s", c.Config.TerraformDir, component, varFile)
+		varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, component, varFile)
 		err = os.Remove(varFilePath)
 		if err != nil {
-			color.Red("Error deleting terraform var file '%s': %s\n", varFilePath, err)
+			color.Red("Error deleting terraform var file: %s\n", err)
 		}
 	}
 

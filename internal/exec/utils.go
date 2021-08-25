@@ -18,6 +18,7 @@ var (
 		"--terraform-dir",
 		"--helmfile-dir",
 		"--config-dir",
+		"--stacks-dir",
 	}
 
 	// First arg is a terraform subcommand
