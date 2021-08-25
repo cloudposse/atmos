@@ -8,6 +8,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"os"
 	"path"
 	"strings"
 )
@@ -207,9 +208,42 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	color.Green(fmt.Sprintf("Working dir: %s", componentPath))
 	fmt.Println(strings.Repeat("\n", 2))
 
+	err = execCommand(command, []string{"init"}, componentPath)
+	if err != nil {
+		return err
+	}
+
+	planFile := fmt.Sprintf("%s-%s.planfile", stackNameFormatted, componentFromArg)
+	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, componentFromArg)
+	cleanUp := false
+
+	switch subCommand {
+	case "plan":
+		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile, "-out", planFile}...)
+		break
+	case "apply":
+		allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
+		cleanUp = true
+		break
+	}
+
 	err = execCommand(command, allArgsAndFlags, componentPath)
 	if err != nil {
 		return err
+	}
+
+	if cleanUp == true {
+		planFilePath := fmt.Sprintf("%s/%s/%s", c.Config.TerraformDir, component, planFile)
+		err := os.Remove(planFilePath)
+		if err != nil {
+			color.Red("Error deleting terraform plan file '%s': %s\n", planFilePath, err)
+		}
+
+		varFilePath := fmt.Sprintf("%s/%s/%s", c.Config.TerraformDir, component, varFile)
+		err = os.Remove(varFilePath)
+		if err != nil {
+			color.Red("Error deleting terraform var file '%s': %s\n", varFilePath, err)
+		}
 	}
 
 	return nil
