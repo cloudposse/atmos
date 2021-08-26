@@ -1,3 +1,5 @@
+// https://github.com/roboll/helmfile#cli-reference
+
 package exec
 
 import (
@@ -231,7 +233,8 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, componentFromArg)
 
 	allArgsAndFlags := []string{"--state-values-file", varFile}
-	allArgsAndFlags = append([]string{subCommand}, additionalArgsAndFlags...)
+	allArgsAndFlags = append(allArgsAndFlags, subCommand)
+	allArgsAndFlags = append(allArgsAndFlags, additionalArgsAndFlags...)
 
 	// Execute the command
 	err = execCommand(command, allArgsAndFlags, componentPath)
