@@ -1,9 +1,10 @@
 import:
   - globals/tenant2-globals
   - globals/ue2-globals
-  - catalog/test-component
-  - catalog/test-component-override
-  - catalog/vpc
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+  - catalog/terraform/vpc
+  - catalog/helmfile/echo-server
 
 vars:
   stage: prod
