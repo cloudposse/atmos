@@ -156,7 +156,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if tenantFound == false || environmentFound == false || stageFound == false {
 			return errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
 				"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
-				"Did you forget any imports?",
+				"Did you forget an import?",
 				componentFromArg,
 				stack,
 				c.Config.Stacks.NamePattern,

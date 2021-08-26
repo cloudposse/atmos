@@ -152,7 +152,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		if tenantFound == false || environmentFound == false || stageFound == false {
 			return errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
 				"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
-				"Did you forget any imports?",
+				"Did you forget an import?",
 				componentFromArg,
 				stack,
 				c.Config.Stacks.NamePattern,
@@ -186,17 +186,17 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Write variables to a file
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
-	varFileName := fmt.Sprintf("%s/%s/%s-%s.helmfile.tfvars.json", c.Config.Components.Helmfile.BasePath, component, stackNameFormatted, componentFromArg)
+	varFileName := fmt.Sprintf("%s/%s/%s-%s.helmfile.vars.yaml", c.Config.Components.Helmfile.BasePath, component, stackNameFormatted, componentFromArg)
 	color.Cyan("Writing variables to file:")
 	fmt.Println(varFileName)
-	err = u.WriteToFileAsJSON(varFileName, componentVarsSection, 0644)
+	err = u.WriteToFileAsYAML(varFileName, componentVarsSection, 0644)
 	if err != nil {
 		return err
 	}
 
 	// Handle `helmfile deploy` custom command
 	if subCommand == "deploy" {
-		subCommand = "apply"
+		subCommand = "sync"
 	}
 
 	// Print command info
@@ -228,31 +228,10 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
 	fmt.Println(strings.Repeat("\n", 2))
 
-	planFile := fmt.Sprintf("%s-%s.planfile", stackNameFormatted, componentFromArg)
-	varFile := fmt.Sprintf("%s-%s.helmfile.tfvars.json", stackNameFormatted, componentFromArg)
+	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, componentFromArg)
 
-	cleanUp := false
-	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
-
-	switch subCommand {
-	case "plan":
-		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile, "-out", planFile}...)
-		break
-	case "destroy":
-		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		cleanUp = true
-		break
-	case "apply":
-		// Use the planfile if `-auto-approve` flag is specified
-		// Use the varfile if `-auto-approve` is specified
-		if !u.SliceContainsString(allArgsAndFlags, autoApproveFlag) {
-			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
-		} else {
-			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		}
-		cleanUp = true
-		break
-	}
+	allArgsAndFlags := []string{"--state-values-file", varFile}
+	allArgsAndFlags = append([]string{subCommand}, additionalArgsAndFlags...)
 
 	// Execute the command
 	err = execCommand(command, allArgsAndFlags, componentPath)
@@ -260,15 +239,11 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if cleanUp == true {
-		planFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, component, planFile)
-		_ = os.Remove(planFilePath)
-
-		varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, component, varFile)
-		err = os.Remove(varFilePath)
-		if err != nil {
-			color.Red("Error deleting helmfile var file: %s\n", err)
-		}
+	// Cleanup
+	varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, component, varFile)
+	err = os.Remove(varFilePath)
+	if err != nil {
+		color.Red("Error deleting helmfile var file: %s\n", err)
 	}
 
 	return nil
