@@ -311,6 +311,24 @@ func processEnvVars() {
 		color.Green("Found ENV var 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH': %s", componentsHelmfileBasePath)
 		Config.Components.Helmfile.BasePath = componentsHelmfileBasePath
 	}
+
+	componentsHelmfileKubeconfigPath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH")
+	if len(componentsHelmfileKubeconfigPath) > 0 {
+		color.Green("Found ENV var 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH': %s", componentsHelmfileKubeconfigPath)
+		Config.Components.Helmfile.KubeconfigPath = componentsHelmfileKubeconfigPath
+	}
+
+	componentsHelmfileHelmAwsProfilePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN")
+	if len(componentsHelmfileHelmAwsProfilePattern) > 0 {
+		color.Green("Found ENV var 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN': %s", componentsHelmfileHelmAwsProfilePattern)
+		Config.Components.Helmfile.HelmAwsProfilePattern = componentsHelmfileHelmAwsProfilePattern
+	}
+
+	componentsHelmfileClusterNamePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN")
+	if len(componentsHelmfileClusterNamePattern) > 0 {
+		color.Green("Found ENV var 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN': %s", componentsHelmfileClusterNamePattern)
+		Config.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
+	}
 }
 
 func checkConfig() error {
@@ -320,10 +338,6 @@ func checkConfig() error {
 
 	if len(Config.Stacks.IncludedPaths) < 1 {
 		return errors.New("At least one path must be provided in 'stacks.included_paths' config or 'ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
-	}
-
-	if len(Config.Components.Terraform.BasePath) < 1 {
-		return errors.New("Terraform base path must be provided in 'components.terraform.base_path' config or 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV variable")
 	}
 
 	return nil

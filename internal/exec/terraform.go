@@ -21,6 +21,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags,
 		err := processConfigAndStacks("terraform", cmd, args)
 
+	err = checkTerraformConfig()
+	if err != nil {
+		return err
+	}
+
 	// Check if the component exists
 	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
@@ -138,6 +143,15 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			color.Yellow("Error deleting terraform var file: %s\n", err)
 		}
+	}
+
+	return nil
+}
+
+func checkTerraformConfig() error {
+	if len(c.Config.Components.Terraform.BasePath) < 1 {
+		return errors.New("Base path to terraform components must be provided in 'components.terraform.base_path' config or " +
+			"'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV variable")
 	}
 
 	return nil

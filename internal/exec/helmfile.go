@@ -19,6 +19,11 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags,
 		err := processConfigAndStacks("helmfile", cmd, args)
 
+	err = checkHelmfileConfig()
+	if err != nil {
+		return err
+	}
+
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
@@ -86,6 +91,30 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	err = os.Remove(varFilePath)
 	if err != nil {
 		color.Yellow("Error deleting helmfile var file: %s\n", err)
+	}
+
+	return nil
+}
+
+func checkHelmfileConfig() error {
+	if len(c.Config.Components.Helmfile.BasePath) < 1 {
+		return errors.New("Base path to helmfile components must be provided in 'components.helmfile.base_path' config or " +
+			"'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV variable")
+	}
+
+	if len(c.Config.Components.Helmfile.KubeconfigPath) < 1 {
+		return errors.New("Kubeconfig path must be provided in 'components.helmfile.kubeconfig_path' config or " +
+			"'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV variable")
+	}
+
+	if len(c.Config.Components.Helmfile.HelmAwsProfilePattern) < 1 {
+		return errors.New("Helm AWS profile pattern must be provided in 'components.helmfile.helm_aws_profile_pattern' config or " +
+			"'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV variable")
+	}
+
+	if len(c.Config.Components.Helmfile.ClusterNamePattern) < 1 {
+		return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " +
+			"'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
 	}
 
 	return nil
