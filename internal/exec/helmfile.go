@@ -16,13 +16,7 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-
-	stack,
-		componentFromArg,
-		component,
-		baseComponent,
-		command,
-		componentVarsSection,
+	stack, componentFromArg, component, baseComponent, command, componentVarsSection,
 		err := processConfigAndStacks("helmfile", cmd, args)
 
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, component)

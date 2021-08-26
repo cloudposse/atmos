@@ -18,12 +18,7 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	stack,
-		componentFromArg,
-		component,
-		baseComponent,
-		command,
-		componentVarsSection,
+	stack, componentFromArg, component, baseComponent, command, componentVarsSection,
 		err := processConfigAndStacks("terraform", cmd, args)
 
 	// Check if the component exists
