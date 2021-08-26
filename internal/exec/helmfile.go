@@ -16,7 +16,7 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	stack, componentFromArg, component, baseComponent, command, componentVarsSection,
+	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags,
 		err := processConfigAndStacks("helmfile", cmd, args)
 
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, component)
@@ -24,9 +24,6 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.ProcessedConfig.HelmfileDirAbsolutePath))
 	}
-
-	// Process CLI arguments and flags
-	additionalArgsAndFlags, subCommand := processCommonArgsAndFlags(args)
 
 	// Write variables to a file
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)

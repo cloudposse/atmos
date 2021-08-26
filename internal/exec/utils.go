@@ -24,10 +24,6 @@ var (
 		"--config-dir",
 		"--stacks-dir",
 	}
-
-	// First arg is a terraform subcommand
-	// Second arg is component
-	commonArgsIndexes = []int{0, 1}
 )
 
 // Check stack schema and return component info
@@ -79,12 +75,14 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	component string,
 	baseComponent string,
 	command string,
+	subCommand string,
 	componentVarsSection map[interface{}]interface{},
+	additionalArgsAndFlags []string,
 	err error,
 ) {
 
 	if len(args) < 3 {
-		return "", "", "", "", "", nil,
+		return "", "", "", "", "", "", nil, nil,
 			errors.New("invalid number of arguments")
 	}
 
@@ -92,20 +90,57 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	err = cmd.ParseFlags(args)
 	if err != nil {
-		return "", "", "", "", "", nil, err
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
+			err
 	}
 	flags := cmd.Flags()
 
 	// Get stack
 	stack, err = flags.GetString("stack")
 	if err != nil {
-		return "", "", "", "", "", nil, err
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
+			err
+	}
+
+	additionalArgsAndFlags, subCommand, componentFromArg, err = processArgsAndFlags(args)
+	if err != nil {
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
+			err
 	}
 
 	// Process and merge CLI configurations
 	err = c.InitConfig(stack)
 	if err != nil {
-		return "", "", "", "", "", nil, err
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
+			err
 	}
 
 	// Process stack config file(s)
@@ -116,13 +151,28 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		true)
 
 	if err != nil {
-		return "", "", "", "", "", nil, err
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
+			err
 	}
 
 	// Check if component was provided
 	componentFromArg = args[1]
 	if len(componentFromArg) < 1 {
-		return "", "", "", "", "", nil,
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
 			errors.New("'component' is required")
 	}
 
@@ -137,20 +187,43 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	color.Cyan(msg)
 	err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 	if err != nil {
-		return "", "", "", "", "", nil, err
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
+			err
 	}
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
 		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, componentType, componentFromArg)
 		if err != nil {
-			return "", "", "", "", "", nil, err
+			return "",
+				"",
+				"",
+				"",
+				"",
+				"",
+				nil,
+				nil,
+				err
 		}
 	} else {
 		color.Cyan("Searching for stack config where the component '%s' is defined\n", componentFromArg)
 
 		if len(c.Config.Stacks.NamePattern) < 1 {
-			return "", "", "", "", "", nil,
+			return "",
+				"",
+				"",
+				"",
+				"",
+				"",
+				nil,
+				nil,
 				errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		}
 
@@ -213,7 +286,14 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 
 		if tenantFound == false || environmentFound == false || stageFound == false {
-			return "", "", "", "", "", nil,
+			return "",
+				"",
+				"",
+				"",
+				"",
+				"",
+				nil,
+				nil,
 				errors.New(fmt.Sprintf("\ncould not find config for component '%s' for stack '%s'.\n"+
 					"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
 					"Did you forget an import?",
@@ -233,7 +313,15 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
 	err = u.PrintAsYAML(componentVarsSection)
 	if err != nil {
-		return "", "", "", "", "", nil, err
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
+			err
 	}
 
 	component = componentFromArg
@@ -246,12 +334,18 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		component,
 		baseComponent,
 		command,
+		subCommand,
 		componentVarsSection,
+		additionalArgsAndFlags,
 		nil
 }
 
-// processCommonArgsAndFlags removes common args and flags from the provided list of arguments/flags
-func processCommonArgsAndFlags(argsAndFlags []string) (additionalArgsAndFlags []string, subCommand string) {
+// processArgsAndFlags removes common args and flags from the provided list of arguments/flags
+func processArgsAndFlags(argsAndFlags []string) (additionalArgsAndFlags []string, subCommand string, componentFromArg string, err error) {
+	// First arg is a terraform/helmfile subcommand
+	// Second arg is component
+	commonArgsIndexes := []int{0, 1}
+
 	indexesToRemove := []int{}
 
 	for i, arg := range argsAndFlags {
@@ -274,7 +368,8 @@ func processCommonArgsAndFlags(argsAndFlags []string) (additionalArgsAndFlags []
 	}
 
 	subCommand = argsAndFlags[0]
-	return additionalArgsAndFlags, subCommand
+	componentFromArg = argsAndFlags[1]
+	return additionalArgsAndFlags, subCommand, componentFromArg, nil
 }
 
 // https://medium.com/rungo/executing-shell-commands-script-files-and-executables-in-go-894814f1c0f7
