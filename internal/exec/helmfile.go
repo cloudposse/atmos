@@ -26,8 +26,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Process CLI arguments and flags
-	additionalArgsAndFlags := processCommonArgsAndFlags(args)
-	subCommand := args[0]
+	additionalArgsAndFlags, subCommand := processCommonArgsAndFlags(args)
 
 	// Write variables to a file
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)

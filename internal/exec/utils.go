@@ -251,8 +251,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 }
 
 // processCommonArgsAndFlags removes common args and flags from the provided list of arguments/flags
-func processCommonArgsAndFlags(argsAndFlags []string) []string {
-	result := []string{}
+func processCommonArgsAndFlags(argsAndFlags []string) (additionalArgsAndFlags []string, subCommand string) {
 	indexesToRemove := []int{}
 
 	for i, arg := range argsAndFlags {
@@ -270,11 +269,12 @@ func processCommonArgsAndFlags(argsAndFlags []string) []string {
 
 	for i, arg := range argsAndFlags {
 		if !u.SliceContainsInt(indexesToRemove, i) {
-			result = append(result, arg)
+			additionalArgsAndFlags = append(additionalArgsAndFlags, arg)
 		}
 	}
 
-	return result
+	subCommand = argsAndFlags[0]
+	return additionalArgsAndFlags, subCommand
 }
 
 // https://medium.com/rungo/executing-shell-commands-script-files-and-executables-in-go-894814f1c0f7
