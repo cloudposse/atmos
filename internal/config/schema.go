@@ -38,3 +38,10 @@ type ProcessedConfiguration struct {
 	StackConfigFilesAbsolutePaths []string `yaml:"StackConfigFilesAbsolutePaths" json:"StackConfigFilesAbsolutePaths"`
 	StackType                     string   `yaml:"StackType" json:"StackType"`
 }
+
+type Context struct {
+	Namespace   string
+	Tenant      string
+	Environment string
+	Stage       string
+}

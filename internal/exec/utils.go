@@ -23,6 +23,7 @@ var (
 		"--helmfile-dir",
 		"--config-dir",
 		"--stacks-dir",
+		"--global-options",
 	}
 )
 
@@ -82,7 +83,14 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 ) {
 
 	if len(args) < 3 {
-		return "", "", "", "", "", "", nil, nil,
+		return "",
+			"",
+			"",
+			"",
+			"",
+			"",
+			nil,
+			nil,
 			errors.New("invalid number of arguments")
 	}
 
@@ -381,4 +389,37 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
 	return cmd.Run()
+}
+
+func getContextFromVars(vars map[interface{}]interface{}) c.Context {
+	var context c.Context
+
+	if namespace, ok := vars["namespace"].(string); ok {
+		context.Namespace = namespace
+	}
+
+	if tenant, ok := vars["tenant"].(string); ok {
+		context.Tenant = tenant
+	}
+
+	if environment, ok := vars["environment"].(string); ok {
+		context.Environment = environment
+	}
+
+	if stage, ok := vars["stage"].(string); ok {
+		context.Stage = stage
+	}
+
+	return context
+}
+
+func replaceContextTokens(context c.Context, pattern string) string {
+	return strings.Replace(
+		strings.Replace(
+			strings.Replace(
+				strings.Replace(pattern,
+					"{namespace}", context.Namespace, 1),
+				"{environment}", context.Environment, 1),
+			"{tenant}", context.Tenant, 1),
+		"{stage}", context.Stage, 1)
 }

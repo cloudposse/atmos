@@ -76,12 +76,21 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, componentFromArg)
 
+	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}
 	allArgsAndFlags = append(allArgsAndFlags, subCommand)
 	allArgsAndFlags = append(allArgsAndFlags, additionalArgsAndFlags...)
 
+	context := getContextFromVars(componentVarsSection)
+
+	// Prepare ENV vars
+	helmAwsProfile := replaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
+	envVars := []string{
+		fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
+	}
+
 	// Execute the command
-	err = execCommand(command, allArgsAndFlags, componentPath, nil)
+	err = execCommand(command, allArgsAndFlags, componentPath, envVars)
 	if err != nil {
 		return err
 	}
