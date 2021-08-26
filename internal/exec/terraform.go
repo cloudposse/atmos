@@ -121,8 +121,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		cleanUp = true
 		break
 	case "apply":
-		// Use the planfile if `-auto-approve` flag is specified
-		// Use the varfile if `-auto-approve` is specified
+		// Use the planfile if `-auto-approve` flag is not specified
+		// Use the varfile if `-auto-approve` flag is specified
 		if !u.SliceContainsString(allArgsAndFlags, autoApproveFlag) {
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
 		} else {
