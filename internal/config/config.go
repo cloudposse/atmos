@@ -30,7 +30,10 @@ var (
 				BasePath: "./components/terraform",
 			},
 			Helmfile: Helmfile{
-				BasePath: "./components/helmfile",
+				BasePath:              "./components/helmfile",
+				KubeconfigPath:        "/dev/shm",
+				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
+				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 			},
 		},
 		Stacks: Stacks{

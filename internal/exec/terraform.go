@@ -86,15 +86,15 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run `terraform init`
-	err = execCommand(command, []string{"init"}, componentPath)
+	err = execCommand(command, []string{"init"}, componentPath, nil)
 	if err != nil {
 		return err
 	}
 
 	// Run `terraform workspace`
-	err = execCommand(command, []string{"workspace", "select", workspaceName}, componentPath)
+	err = execCommand(command, []string{"workspace", "select", workspaceName}, componentPath, nil)
 	if err != nil {
-		err = execCommand(command, []string{"workspace", "new", workspaceName}, componentPath)
+		err = execCommand(command, []string{"workspace", "new", workspaceName}, componentPath, nil)
 		if err != nil {
 			return err
 		}
@@ -124,7 +124,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Execute the command
-	err = execCommand(command, allArgsAndFlags, componentPath)
+	err = execCommand(command, allArgsAndFlags, componentPath, nil)
 	if err != nil {
 		return err
 	}

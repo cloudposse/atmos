@@ -6,6 +6,9 @@ components:
     base_path: "./examples/complete/components/terraform"
   helmfile:
     base_path: "./examples/complete/components/helmfile"
+    kubeconfig_path: "/dev/shm"
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
 
 stacks:
   base_path: "./examples/complete/stacks"

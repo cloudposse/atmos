@@ -76,7 +76,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags = append(allArgsAndFlags, additionalArgsAndFlags...)
 
 	// Execute the command
-	err = execCommand(command, allArgsAndFlags, componentPath)
+	err = execCommand(command, allArgsAndFlags, componentPath, nil)
 	if err != nil {
 		return err
 	}

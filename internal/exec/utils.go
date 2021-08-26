@@ -373,8 +373,9 @@ func processArgsAndFlags(argsAndFlags []string) (additionalArgsAndFlags []string
 }
 
 // https://medium.com/rungo/executing-shell-commands-script-files-and-executables-in-go-894814f1c0f7
-func execCommand(command string, args []string, dir string) error {
+func execCommand(command string, args []string, dir string, env []string) error {
 	cmd := exec.Command(command, args...)
+	cmd.Env = env
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
