@@ -13,9 +13,7 @@ import (
 	"strings"
 )
 
-const ()
-
-// ExecuteTerraform executes terraform commands
+// ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	if len(args) < 3 {
 		return errors.New("Invalid number of arguments")
@@ -82,7 +80,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	var command string
 
 	if c.ProcessedConfig.StackType == "Directory" {
-		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, componentFromArg)
+		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, "helmfile", componentFromArg)
 		if err != nil {
 			return err
 		}
@@ -114,7 +112,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		}
 
 		for stackName := range stacksMap {
-			componentVarsSection, baseComponent, command, err = checkStackConfig(stackName, stacksMap, componentFromArg)
+			componentVarsSection, baseComponent, command, err = checkStackConfig(stackName, stacksMap, "helmfile", componentFromArg)
 			if err != nil {
 				continue
 			}
@@ -180,15 +178,15 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		component = baseComponent
 	}
 
-	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, component)
+	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.ProcessedConfig.TerraformDirAbsolutePath))
+		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.ProcessedConfig.HelmfileDirAbsolutePath))
 	}
 
 	// Write variables to a file
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
-	varFileName := fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json", c.Config.Components.Terraform.BasePath, component, stackNameFormatted, componentFromArg)
+	varFileName := fmt.Sprintf("%s/%s/%s-%s.helmfile.tfvars.json", c.Config.Components.Helmfile.BasePath, component, stackNameFormatted, componentFromArg)
 	color.Cyan("Writing variables to file:")
 	fmt.Println(varFileName)
 	err = u.WriteToFileAsJSON(varFileName, componentVarsSection, 0644)
@@ -196,12 +194,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Handle `terraform deploy` custom command
+	// Handle `helmfile deploy` custom command
 	if subCommand == "deploy" {
 		subCommand = "apply"
-		if !u.SliceContainsString(additionalArgsAndFlags, autoApproveFlag) {
-			additionalArgsAndFlags = append(additionalArgsAndFlags, autoApproveFlag)
-		}
 	}
 
 	// Print command info
@@ -229,34 +224,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags),
 	))
 
-	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, component)
+	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, component)
 	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
 	fmt.Println(strings.Repeat("\n", 2))
 
 	planFile := fmt.Sprintf("%s-%s.planfile", stackNameFormatted, componentFromArg)
-	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, componentFromArg)
-
-	var workspaceName string
-	if len(baseComponent) > 0 {
-		workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, componentFromArg)
-	} else {
-		workspaceName = stackNameFormatted
-	}
-
-	// Run `terraform init`
-	err = execCommand(command, []string{"init"}, componentPath)
-	if err != nil {
-		return err
-	}
-
-	// Run `terraform workspace`
-	err = execCommand(command, []string{"workspace", "select", workspaceName}, componentPath)
-	if err != nil {
-		err = execCommand(command, []string{"workspace", "new", workspaceName}, componentPath)
-		if err != nil {
-			return err
-		}
-	}
+	varFile := fmt.Sprintf("%s-%s.helmfile.tfvars.json", stackNameFormatted, componentFromArg)
 
 	cleanUp := false
 	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
@@ -288,13 +261,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	if cleanUp == true {
-		planFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, component, planFile)
+		planFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, component, planFile)
 		_ = os.Remove(planFilePath)
 
-		varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, component, varFile)
+		varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, component, varFile)
 		err = os.Remove(varFilePath)
 		if err != nil {
-			color.Red("Error deleting terraform var file: %s\n", err)
+			color.Red("Error deleting helmfile var file: %s\n", err)
 		}
 	}
 

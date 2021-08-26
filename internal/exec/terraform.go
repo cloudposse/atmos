@@ -84,7 +84,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	var command string
 
 	if c.ProcessedConfig.StackType == "Directory" {
-		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, componentFromArg)
+		componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, "terraform", componentFromArg)
 		if err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 
 		for stackName := range stacksMap {
-			componentVarsSection, baseComponent, command, err = checkStackConfig(stackName, stacksMap, componentFromArg)
+			componentVarsSection, baseComponent, command, err = checkStackConfig(stackName, stacksMap, "terraform", componentFromArg)
 			if err != nil {
 				continue
 			}

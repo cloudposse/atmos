@@ -67,6 +67,7 @@ func execCommand(command string, args []string, dir string) error {
 func checkStackConfig(
 	stack string,
 	stacksMap map[string]interface{},
+	componentType string,
 	component string,
 ) (map[interface{}]interface{}, string, string, error) {
 
@@ -85,7 +86,7 @@ func checkStackConfig(
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
 		return nil, "", "", errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
 	}
-	if terraformSection, ok = componentsSection["terraform"].(map[string]interface{}); !ok {
+	if terraformSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
 		return nil, "", "", errors.New(fmt.Sprintf("'components/terraform' section is missing in stack '%s'", stack))
 	}
 	if componentSection, ok = terraformSection[component].(map[string]interface{}); !ok {

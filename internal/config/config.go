@@ -171,6 +171,13 @@ func InitConfig(stack string) error {
 	}
 	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
+	// Convert helmfile dir to absolute path
+	helmfileDirAbsPath, err := filepath.Abs(Config.Components.Helmfile.BasePath)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
+
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
 	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := findAllStackConfigsInPaths(
 		stack,
