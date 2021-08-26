@@ -29,7 +29,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Process CLI arguments and flags
-	additionalArgsAndFlags := removeCommonArgsAndFlags(args)
+	additionalArgsAndFlags := processCommonArgsAndFlags(args)
 	subCommand := args[0]
 
 	// Write variables to a file
