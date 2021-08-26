@@ -85,7 +85,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, component, varFile)
 	err = os.Remove(varFilePath)
 	if err != nil {
-		color.Red("Error deleting helmfile var file: %s\n", err)
+		color.Yellow("Error deleting helmfile var file: %s\n", err)
 	}
 
 	return nil

@@ -136,7 +136,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, component, varFile)
 		err = os.Remove(varFilePath)
 		if err != nil {
-			color.Red("Error deleting terraform var file: %s\n", err)
+			color.Yellow("Error deleting terraform var file: %s\n", err)
 		}
 	}
 
