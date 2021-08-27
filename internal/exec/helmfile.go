@@ -45,8 +45,19 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		subCommand = "sync"
 	}
 
+	context := getContextFromVars(componentVarsSection)
+
+	// Prepare AWS profile
+	helmAwsProfile := replaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
+	color.Cyan(fmt.Sprintf("\nUsing AWS_PROFILE=%s", helmAwsProfile))
+
+	// Download kubeconfig
+	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, stackNameFormatted)
+	clusterName := replaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
+	color.Cyan(fmt.Sprintf("Downloaded kubeconfig from the cluster '%s' and saved it to %s\n", clusterName, kubeconfigPath))
+
 	// Print command info
-	color.Cyan("\nCommand info:")
+	color.Cyan("\n\nCommand info:")
 	color.Green("Helmfile binary: " + command)
 	color.Green("Helmfile command: " + subCommand)
 	color.Green("Arguments and flags: %v", additionalArgsAndFlags)
@@ -64,14 +75,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags = append(allArgsAndFlags, subCommand)
 	allArgsAndFlags = append(allArgsAndFlags, additionalArgsAndFlags...)
 
-	context := getContextFromVars(componentVarsSection)
-
 	// Prepare ENV vars
-	helmAwsProfile := replaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
-	color.Cyan(fmt.Sprintf("\nUsing AWS profile: %s", helmAwsProfile))
-	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, stackNameFormatted)
-	color.Cyan(fmt.Sprintf("Using kubeconfig: %s\n", kubeconfigPath))
-
 	envVars := []string{
 		fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
 		fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
