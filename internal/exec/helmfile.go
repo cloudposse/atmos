@@ -49,15 +49,32 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Prepare AWS profile
 	helmAwsProfile := replaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
-	color.Cyan(fmt.Sprintf("\nUsing AWS_PROFILE=%s", helmAwsProfile))
+	color.Cyan(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
-	// Download kubeconfig
+	// Download kubeconfig by running `aws eks update-kubeconfig`
 	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, stackNameFormatted)
 	clusterName := replaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
-	color.Cyan(fmt.Sprintf("Downloaded kubeconfig from the cluster '%s' and saved it to %s\n", clusterName, kubeconfigPath))
+	color.Cyan(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
+
+	err = execCommand("aws",
+		[]string{
+			"--profile",
+			helmAwsProfile,
+			"eks",
+			"update-kubeconfig",
+			fmt.Sprintf("--name=%s", clusterName),
+			fmt.Sprintf("--region=%s", context.Region),
+			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
+		},
+		componentPath,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
 
 	// Print command info
-	color.Cyan("\n\nCommand info:")
+	color.Cyan("\nCommand info:")
 	color.Green("Helmfile binary: " + command)
 	color.Green("Helmfile command: " + subCommand)
 	color.Green("Arguments and flags: %v", additionalArgsAndFlags)
@@ -66,6 +83,8 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		color.Green("Base component: " + baseComponent)
 	}
 	color.Green("Stack: " + stack)
+	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, component)
+	color.Green(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 	fmt.Println()
 
 	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, componentFromArg)
@@ -99,8 +118,6 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		subCommand,
 		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags),
 	))
-	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, component)
-	color.Green(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
 	err = execCommand(command, allArgsAndFlags, componentPath, envVars)
 	if err != nil {

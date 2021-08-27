@@ -61,24 +61,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		color.Green("Base component: " + baseComponent)
 	}
 	color.Green("Stack: " + stack)
-	fmt.Println()
-
-	// Execute command
-	emoji, err := u.UnquoteCodePoint("\\U+1F680")
-	if err != nil {
-		return err
-	}
-
-	color.Cyan(fmt.Sprintf("\nExecuting command  %v", emoji))
-	color.Green(fmt.Sprintf("Command: %s %s %s",
-		command,
-		subCommand,
-		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags),
-	))
-
 	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, component)
 	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
-	fmt.Println(strings.Repeat("\n", 2))
+	fmt.Println()
 
 	planFile := fmt.Sprintf("%s-%s.planfile", stackNameFormatted, componentFromArg)
 	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, componentFromArg)

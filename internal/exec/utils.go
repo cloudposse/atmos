@@ -386,6 +386,7 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
+	color.Cyan("\nExecuting command: %s\n\n", cmd.String())
 	return cmd.Run()
 }
 
