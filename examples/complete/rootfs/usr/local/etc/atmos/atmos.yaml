@@ -18,10 +18,10 @@ components:
 stacks:
   # Can also be set using `ATMOS_STACKS_BASE_PATH` ENV var
   base_path: "./stacks"
-  # Can also be set using `ATMOS_STACKS_INCLUDED_PATHS` ENV var
+  # Can also be set using `ATMOS_STACKS_INCLUDED_PATHS` ENV var (comma-separated values string)
   included_paths:
     - "**/*"
-  # Can also be set using `ATMOS_STACKS_EXCLUDED_PATHS` ENV var
+  # Can also be set using `ATMOS_STACKS_EXCLUDED_PATHS` ENV var (comma-separated values string)
   excluded_paths:
     - "globals/**/*"
     - "catalog/**/*"
