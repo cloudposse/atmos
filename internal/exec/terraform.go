@@ -75,21 +75,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		workspaceName = stackNameFormatted
 	}
 
-	// Run `terraform init`
-	err = execCommand(command, []string{"init"}, componentPath, nil)
-	if err != nil {
-		return err
-	}
-
-	// Run `terraform workspace`
-	err = execCommand(command, []string{"workspace", "select", workspaceName}, componentPath, nil)
-	if err != nil {
-		err = execCommand(command, []string{"workspace", "new", workspaceName}, componentPath, nil)
-		if err != nil {
-			return err
-		}
-	}
-
 	cleanUp := false
 	allArgsAndFlags := append([]string{subCommand}, additionalArgsAndFlags...)
 
@@ -113,10 +98,27 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		break
 	}
 
-	// Execute the command
-	err = execCommand(command, allArgsAndFlags, componentPath, nil)
+	// Run `terraform init`
+	err = execCommand(command, []string{"init"}, componentPath, nil)
 	if err != nil {
 		return err
+	}
+
+	// Run `terraform workspace`
+	err = execCommand(command, []string{"workspace", "select", workspaceName}, componentPath, nil)
+	if err != nil {
+		err = execCommand(command, []string{"workspace", "new", workspaceName}, componentPath, nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	if subCommand != "workspace" {
+		// Execute the command
+		err = execCommand(command, allArgsAndFlags, componentPath, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	if cleanUp == true {
