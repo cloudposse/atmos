@@ -57,23 +57,6 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	color.Green("Stack: " + stack)
 	fmt.Println()
 
-	// Execute command
-	emoji, err := u.UnquoteCodePoint("\\U+1F680")
-	if err != nil {
-		return err
-	}
-
-	color.Cyan(fmt.Sprintf("\nExecuting command  %v", emoji))
-	color.Green(fmt.Sprintf("Command: %s %s %s",
-		command,
-		subCommand,
-		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags),
-	))
-
-	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, component)
-	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
-	fmt.Println(strings.Repeat("\n", 2))
-
 	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, componentFromArg)
 
 	// Prepare arguments and flags
@@ -85,11 +68,27 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Prepare ENV vars
 	helmAwsProfile := replaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
+	color.Cyan(fmt.Sprintf("\nUsing AWS profile `%s`\n", helmAwsProfile))
+
 	envVars := []string{
 		fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
 	}
 
 	// Execute the command
+	emoji, err := u.UnquoteCodePoint("\\U+1F680")
+	if err != nil {
+		return err
+	}
+
+	color.Cyan(fmt.Sprintf("\nExecuting command  %v", emoji))
+	color.Green(fmt.Sprintf("Command: %s %s %s",
+		command,
+		subCommand,
+		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags),
+	))
+	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, component)
+	color.Green(fmt.Sprintf("Working dir: %s\n\n", workingDir))
+
 	err = execCommand(command, allArgsAndFlags, componentPath, envVars)
 	if err != nil {
 		return err
