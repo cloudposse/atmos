@@ -44,4 +44,5 @@ type Context struct {
 	Tenant      string
 	Environment string
 	Stage       string
+	Region      string
 }

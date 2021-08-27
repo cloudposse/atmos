@@ -383,7 +383,7 @@ func processArgsAndFlags(argsAndFlags []string) (additionalArgsAndFlags []string
 // https://medium.com/rungo/executing-shell-commands-script-files-and-executables-in-go-894814f1c0f7
 func execCommand(command string, args []string, dir string, env []string) error {
 	cmd := exec.Command(command, args...)
-	cmd.Env = env
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -408,6 +408,10 @@ func getContextFromVars(vars map[interface{}]interface{}) c.Context {
 
 	if stage, ok := vars["stage"].(string); ok {
 		context.Stage = stage
+	}
+
+	if region, ok := vars["region"].(string); ok {
+		context.Region = region
 	}
 
 	return context
