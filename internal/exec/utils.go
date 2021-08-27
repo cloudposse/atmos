@@ -13,6 +13,12 @@ import (
 	"strings"
 )
 
+const (
+	// Custom flag to specify helmfile `GLOBAL OPTIONS`
+	// https://github.com/roboll/helmfile#cli-reference
+	globalOptionsFlag = "--global-options"
+)
+
 var (
 	commonFlags = []string{
 		"--stack",
@@ -23,7 +29,7 @@ var (
 		"--helmfile-dir",
 		"--config-dir",
 		"--stacks-dir",
-		"--global-options",
+		globalOptionsFlag,
 	}
 )
 
@@ -79,6 +85,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	subCommand string,
 	componentVarsSection map[interface{}]interface{},
 	additionalArgsAndFlags []string,
+	globalOptions []string,
 	err error,
 ) {
 
@@ -89,6 +96,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			nil,
 			nil,
 			nil,
 			errors.New("invalid number of arguments")
@@ -106,6 +114,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			nil,
 			nil,
+			nil,
 			err
 	}
 	flags := cmd.Flags()
@@ -121,10 +130,11 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			nil,
 			nil,
+			nil,
 			err
 	}
 
-	additionalArgsAndFlags, subCommand, componentFromArg, err = processArgsAndFlags(args)
+	additionalArgsAndFlags, subCommand, componentFromArg, globalOptions, err = processArgsAndFlags(args)
 	if err != nil {
 		return "",
 			"",
@@ -132,6 +142,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			nil,
 			nil,
 			nil,
 			err
@@ -146,6 +157,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			nil,
 			nil,
 			nil,
 			err
@@ -167,6 +179,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			nil,
 			nil,
+			nil,
 			err
 	}
 
@@ -179,6 +192,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			nil,
 			nil,
 			nil,
 			errors.New("'component' is required")
@@ -203,6 +217,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			nil,
 			nil,
+			nil,
 			err
 	}
 
@@ -218,6 +233,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				"",
 				nil,
 				nil,
+				nil,
 				err
 		}
 	} else {
@@ -230,6 +246,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				"",
 				"",
 				"",
+				nil,
 				nil,
 				nil,
 				errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
@@ -302,6 +319,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				"",
 				nil,
 				nil,
+				nil,
 				errors.New(fmt.Sprintf("\ncould not find config for component '%s' for stack '%s'.\n"+
 					"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
 					"Did you forget an import?",
@@ -327,6 +345,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			nil,
 			nil,
+			nil,
 			err
 	}
 
@@ -343,18 +362,38 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		subCommand,
 		componentVarsSection,
 		additionalArgsAndFlags,
+		globalOptions,
 		nil
 }
 
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags
-func processArgsAndFlags(argsAndFlags []string) (additionalArgsAndFlags []string, subCommand string, componentFromArg string, err error) {
+func processArgsAndFlags(argsAndFlags []string) (
+	additionalArgsAndFlags []string,
+	subCommand string,
+	componentFromArg string,
+	globalOptions []string,
+	err error,
+) {
+	subCommand = argsAndFlags[0]
+	componentFromArg = argsAndFlags[1]
+	globalOptions = nil
+
 	// First arg is a terraform/helmfile subcommand
 	// Second arg is component
 	commonArgsIndexes := []int{0, 1}
 
 	indexesToRemove := []int{}
 
+	// https://github.com/roboll/helmfile#cli-reference
+	var globalOptionsFlagIndex int
+
 	for i, arg := range argsAndFlags {
+		if arg == globalOptionsFlag {
+			globalOptionsFlagIndex = i + 1
+		} else if strings.HasPrefix(arg+"=", globalOptionsFlag) {
+			globalOptionsFlagIndex = i
+		}
+
 		for _, f := range commonFlags {
 			if u.SliceContainsInt(commonArgsIndexes, i) {
 				indexesToRemove = append(indexesToRemove, i)
@@ -371,14 +410,21 @@ func processArgsAndFlags(argsAndFlags []string) (additionalArgsAndFlags []string
 		if !u.SliceContainsInt(indexesToRemove, i) {
 			additionalArgsAndFlags = append(additionalArgsAndFlags, arg)
 		}
+
+		if globalOptionsFlagIndex > 0 && i == globalOptionsFlagIndex {
+			if strings.HasPrefix(arg, globalOptionsFlag+"=") {
+				parts := strings.SplitN(arg, "=", 2)
+				globalOptions = strings.Split(parts[1], " ")
+			} else {
+				globalOptions = strings.Split(arg, " ")
+			}
+		}
 	}
 
-	subCommand = argsAndFlags[0]
-	componentFromArg = argsAndFlags[1]
-	return additionalArgsAndFlags, subCommand, componentFromArg, nil
+	return additionalArgsAndFlags, subCommand, componentFromArg, globalOptions, nil
 }
 
-// https://medium.com/rungo/executing-shell-commands-script-files-and-executables-in-go-894814f1c0f7
+// execCommand prints and executes the provided commands with args and flags
 func execCommand(command string, args []string, dir string, env []string) error {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)

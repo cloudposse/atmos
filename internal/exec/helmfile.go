@@ -16,7 +16,7 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags,
+	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags, globalOptions,
 		err := processConfigAndStacks("helmfile", cmd, args)
 
 	err = checkHelmfileConfig()
@@ -77,6 +77,14 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	color.Cyan("\nCommand info:")
 	color.Green("Helmfile binary: " + command)
 	color.Green("Helmfile command: " + subCommand)
+
+	// https://github.com/roboll/helmfile#cli-reference
+	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace=test"
+	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
+	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
+	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
+	color.Green("Global options: %v", globalOptions)
+
 	color.Green("Arguments and flags: %v", additionalArgsAndFlags)
 	color.Green("Component: " + componentFromArg)
 	if len(baseComponent) > 0 {
@@ -91,6 +99,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}
+	if globalOptions != nil && len(globalOptions) > 0 {
+		allArgsAndFlags = append(allArgsAndFlags, globalOptions...)
+	}
 	allArgsAndFlags = append(allArgsAndFlags, subCommand)
 	allArgsAndFlags = append(allArgsAndFlags, additionalArgsAndFlags...)
 
@@ -105,19 +116,6 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Sprintf("REGION=%s", context.Region),
 		fmt.Sprintf("STACK=%s", stackNameFormatted),
 	}
-
-	// Execute the command
-	emoji, err := u.UnquoteCodePoint("\\U+1F680")
-	if err != nil {
-		return err
-	}
-
-	color.Cyan(fmt.Sprintf("\nExecuting command  %v", emoji))
-	color.Green(fmt.Sprintf("Command: %s %s %s",
-		command,
-		subCommand,
-		u.SliceOfStringsToSpaceSeparatedString(additionalArgsAndFlags),
-	))
 
 	err = execCommand(command, allArgsAndFlags, componentPath, envVars)
 	if err != nil {
