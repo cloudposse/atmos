@@ -312,9 +312,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 	}
 
-	if len(command) > 0 {
-		color.Cyan("Found 'command: %s' for component '%s' in stack '%s'\n\n", command, componentFromArg, stack)
-	} else {
+	if len(command) < 1 {
 		command = componentType
 	}
 

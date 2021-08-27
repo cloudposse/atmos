@@ -68,12 +68,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Prepare ENV vars
 	helmAwsProfile := replaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
-	kubeconfig := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, stackNameFormatted)
-	color.Cyan(fmt.Sprintf("\nUsing AWS profile `%s`\n", helmAwsProfile))
+	color.Cyan(fmt.Sprintf("\nUsing AWS profile: %s", helmAwsProfile))
+	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, stackNameFormatted)
+	color.Cyan(fmt.Sprintf("Using kubeconfig: %s\n", kubeconfigPath))
 
 	envVars := []string{
 		fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
-		fmt.Sprintf("KUBECONFIG=%s", kubeconfig),
+		fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
 		fmt.Sprintf("NAMESPACE=%s", context.Namespace),
 		fmt.Sprintf("TENANT=%s", context.Tenant),
 		fmt.Sprintf("ENVIRONMENT=%s", context.Environment),
