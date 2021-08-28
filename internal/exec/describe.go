@@ -60,7 +60,7 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
 		c.ProcessedConfig.StacksBaseAbsolutePath,
 		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
-		false,
+		true,
 		true)
 
 	if err != nil {
