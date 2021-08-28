@@ -190,7 +190,11 @@ func ProcessYAMLConfigFile(
 					defer processYAMLConfigFileLock.Unlock()
 					configs = append(configs, yamlConfig)
 					importRelativePathWithExt := strings.Replace(p, basePath+"/", "", 1)
-					importRelativePathWithoutExt := strings.Replace(importRelativePathWithExt, ext, "", 1)
+					ext2 := filepath.Ext(importRelativePathWithExt)
+					if ext2 == "" {
+						ext2 = g.DefaultStackConfigFileExtension
+					}
+					importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 					importsConfig[importRelativePathWithoutExt] = yamlConfig
 				}(importFile)
 			}
