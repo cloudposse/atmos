@@ -65,14 +65,14 @@ func ProcessYAMLConfigFiles(
 
 			componentStackMap := map[string]map[string][]string{}
 			if processStackDeps {
-				componentStackMap, err = CreateComponentStackMap(basePath, p)
+				componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
 				if err != nil {
 					errorResult = err
 					return
 				}
 			}
 
-			finalConfig, err := ProcessConfig(basePath, p, config, processStackDeps, processComponentDeps, "", componentStackMap, importsConfig)
+			finalConfig, err := ProcessConfig(stackBasePath, p, config, processStackDeps, processComponentDeps, "", componentStackMap, importsConfig)
 			if err != nil {
 				errorResult = err
 				return
@@ -88,7 +88,7 @@ func ProcessYAMLConfigFiles(
 
 			stackName := strings.TrimSuffix(
 				strings.TrimSuffix(
-					u.TrimBasePathFromPath(basePath+"/", p),
+					u.TrimBasePathFromPath(stackBasePath+"/", p),
 					g.DefaultStackConfigFileExtension),
 				".yml",
 			)
