@@ -99,9 +99,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run `terraform init`
-	err = execCommand(command, []string{"init"}, componentPath, nil)
-	if err != nil {
-		return err
+	if subCommand != "init" {
+		err = execCommand(command, []string{"init"}, componentPath, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Run `terraform workspace`
