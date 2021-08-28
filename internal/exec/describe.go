@@ -8,7 +8,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"path"
 	"strings"
 )
 
@@ -30,17 +29,6 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	}
 
 	component := args[0]
-
-	// Check if the component exists
-	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, component)
-	componentPathExists, err := u.IsDirectory(componentPath)
-	if err != nil || !componentPathExists {
-		componentPath = path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, component)
-		componentPathExists, err = u.IsDirectory(componentPath)
-		if err != nil || !componentPathExists {
-			return errors.New(fmt.Sprintf("Component '%s' does not exixt", component))
-		}
-	}
 
 	// Print the stack config files
 	fmt.Println()
