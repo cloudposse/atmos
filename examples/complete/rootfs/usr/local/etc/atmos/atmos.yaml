@@ -4,9 +4,11 @@
 components:
   terraform:
     # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` ENV var
+    # Supports both absolute and relative paths
     base_path: "./components/terraform"
   helmfile:
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var
+    # Supports both absolute and relative paths
     base_path: "./components/helmfile"
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH` ENV var
     kubeconfig_path: "/dev/shm"
@@ -17,6 +19,7 @@ components:
 
 stacks:
   # Can also be set using `ATMOS_STACKS_BASE_PATH` ENV var
+  # Supports both absolute and relative paths
   base_path: "./stacks"
   # Can also be set using `ATMOS_STACKS_INCLUDED_PATHS` ENV var (comma-separated values string)
   included_paths:
