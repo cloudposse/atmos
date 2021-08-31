@@ -1,4 +1,4 @@
-# CLI config is loaded from the following locations (from lower to higher priority):
+# CLI config is loaded from the following locations (from lowest to highest priority):
 # system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 # home dir (~/.atmos)
 # current directory
