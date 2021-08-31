@@ -1,4 +1,10 @@
-# CLI config supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+# CLI config is loaded from the following locations (from lower to higher priority):
+# system dir (/usr/local/etc/atmos on Linux)
+# home dir (~/.atmos)
+# current directory
+# ENV vars
+#
+# It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
 # https://en.wikipedia.org/wiki/Glob_(programming)
 
 components:

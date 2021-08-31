@@ -60,12 +60,11 @@ var (
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitConfig(stack string) error {
-	// Config is loaded from these locations (from lower to higher priority):
+	// Config is loaded from the following locations (from lower to higher priority):
 	// system dir (/usr/local/etc/atmos on Linux)
 	// home dir (~/.atmos)
-	// from the current directory
-	// from ENV vars
-	// from command-line arguments
+	// current directory
+	// ENV vars
 
 	color.Cyan("\nProcessing and merging configurations in the following order: system dir, home dir, current dir, ENV vars\n")
 
