@@ -20,6 +20,13 @@ const (
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags, _,
 		err := processConfigAndStacks("terraform", cmd, args)
+	if err != nil {
+		return err
+	}
+
+	if len(stack) < 1 {
+		return errors.New("the specified stack does not exist")
+	}
 
 	err = checkTerraformConfig()
 	if err != nil {

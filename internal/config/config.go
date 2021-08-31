@@ -61,7 +61,7 @@ var (
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitConfig(stack string) error {
 	// Config is loaded from the following locations (from lower to higher priority):
-	// system dir (/usr/local/etc/atmos on Linux)
+	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
 	// current directory
 	// ENV vars
@@ -224,7 +224,7 @@ func InitConfig(stack string) error {
 			)
 			ProcessedConfig.StackType = "Logical"
 		} else {
-			errorMessage := fmt.Sprintf("Stack '%s' is not a directory and it does not match the stack name pattern '%s'",
+			errorMessage := fmt.Sprintf("Stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
 				stack,
 				Config.Stacks.NamePattern,
 			)

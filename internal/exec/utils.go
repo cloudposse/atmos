@@ -458,7 +458,7 @@ func processArgsAndFlags(argsAndFlags []string) (
 	return additionalArgsAndFlags, subCommand, componentFromArg, globalOptions, nil
 }
 
-// execCommand prints and executes the provided commands with args and flags
+// execCommand prints and executes the provided command with args and flags
 func execCommand(command string, args []string, dir string, env []string) error {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)
