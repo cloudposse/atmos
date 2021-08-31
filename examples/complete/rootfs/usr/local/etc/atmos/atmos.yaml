@@ -1,5 +1,5 @@
 # CLI config is loaded from the following locations (from lower to higher priority):
-# system dir (/usr/local/etc/atmos on Linux)
+# system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 # home dir (~/.atmos)
 # current directory
 # ENV vars
