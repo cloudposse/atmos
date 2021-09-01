@@ -354,9 +354,9 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				nil,
 				nil,
 				nil,
-				errors.New(fmt.Sprintf("\ncould not find config for component '%s' for stack '%s'.\n"+
+				errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
 					"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
-					"Did you forget an import?",
+					"Are the component and stack names correct? Did you forget an import?",
 					componentFromArg,
 					stack,
 					c.Config.Stacks.NamePattern,
