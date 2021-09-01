@@ -196,7 +196,8 @@ func InitConfig(stack string) error {
 		if err != nil {
 			return err
 		}
-		errorMessage := fmt.Sprintf("No config files found in any of the provided paths:\n%s\n", j)
+		errorMessage := fmt.Sprintf("\nNo config files found in any of the provided "+
+			"stack paths:\n%s\n\nCheck if `stacks.base_path` is correctly set in `atmos.yaml` CLI config files", j)
 		return errors.New(errorMessage)
 	}
 
