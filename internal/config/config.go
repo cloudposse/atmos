@@ -9,6 +9,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"path/filepath"
@@ -192,12 +193,14 @@ func InitConfig(stack string) error {
 	}
 
 	if len(stackConfigFilesAbsolutePaths) < 1 {
-		j, err := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
+		// j, err := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
+		j, err := yaml.Marshal(includeStackAbsPaths)
 		if err != nil {
 			return err
 		}
-		errorMessage := fmt.Sprintf("\nNo config files found in any of the provided "+
-			"stack paths:\n%s\n\nCheck if `stacks.base_path` is correctly set in `atmos.yaml` CLI config files", j)
+		errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
+			"paths:\n%s\n\nCheck if 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
+			"files or ENV vars.", j)
 		return errors.New(errorMessage)
 	}
 
