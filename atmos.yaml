@@ -15,7 +15,7 @@ components:
   helmfile:
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var
     # Supports both absolute and relative paths
-    base_path: "./examples/complete/helmfile"
+    base_path: "./examples/complete/components/helmfile"
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH` ENV var
     kubeconfig_path: "/dev/shm"
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN` ENV var
