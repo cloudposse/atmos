@@ -16,7 +16,7 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags, globalOptions,
+	stack, componentFromArg, componentPrefix, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags, globalOptions,
 		err := processConfigAndStacks("helmfile", cmd, args)
 	if err != nil {
 		return err
@@ -31,7 +31,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, component)
+	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, componentPrefix, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.ProcessedConfig.HelmfileDirAbsolutePath))

@@ -113,6 +113,7 @@ func findComponentConfig(
 func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (
 	stack string,
 	componentFromArg string,
+	componentPrefix string,
 	component string,
 	baseComponent string,
 	command string,
@@ -125,6 +126,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	if len(args) < 3 {
 		return "",
+			"",
 			"",
 			"",
 			"",
@@ -146,6 +148,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -157,6 +160,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	stack, err = flags.GetString("stack")
 	if err != nil {
 		return "",
+			"",
 			"",
 			"",
 			"",
@@ -176,6 +180,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -186,6 +191,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	err = c.InitConfig(stack)
 	if err != nil {
 		return "",
+			"",
 			"",
 			"",
 			"",
@@ -211,6 +217,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -221,6 +228,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	componentFromArg = args[1]
 	if len(componentFromArg) < 1 {
 		return "",
+			"",
 			"",
 			"",
 			"",
@@ -249,6 +257,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -265,6 +274,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				"",
 				"",
 				"",
+				"",
 				nil,
 				nil,
 				nil,
@@ -275,6 +285,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 		if len(c.Config.Stacks.NamePattern) < 1 {
 			return "",
+				"",
 				"",
 				"",
 				"",
@@ -351,6 +362,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				"",
 				"",
 				"",
+				"",
 				nil,
 				nil,
 				nil,
@@ -377,10 +389,18 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
 			err
+	}
+
+	componentPrefix = ""
+	componentFromArgParts := strings.Split(componentFromArg, "/")
+
+	if len(componentFromArgParts) > 1 {
+
 	}
 
 	component = componentFromArg
@@ -390,6 +410,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	return stack,
 		componentFromArg,
+		componentPrefix,
 		component,
 		baseComponent,
 		command,

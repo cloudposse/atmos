@@ -18,7 +18,7 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags, _,
+	stack, componentFromArg, componentPrefix, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags, _,
 		err := processConfigAndStacks("terraform", cmd, args)
 	if err != nil {
 		return err
@@ -34,7 +34,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the component exists
-	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, component)
+	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, componentPrefix, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.ProcessedConfig.TerraformDirAbsolutePath))
