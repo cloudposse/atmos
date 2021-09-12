@@ -16,7 +16,7 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	stack, componentFromArg, componentFolderPrefix, _, component, _, baseComponent,
+	stack, componentFromArg, componentFolderPrefix, componentNamePrefix, component, _, baseComponent,
 		command, subCommand, componentVarsSection, additionalArgsAndFlags, globalOptions,
 		err := processConfigAndStacks("helmfile", cmd, args)
 	if err != nil {
@@ -41,9 +41,27 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		))
 	}
 
-	// Write variables to a file
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
-	varFileName := fmt.Sprintf("%s/%s/%s-%s.helmfile.vars.yaml", c.Config.Components.Helmfile.BasePath, component, stackNameFormatted, componentFromArg)
+
+	// Write variables to a file
+	var varFileName string
+	if len(componentFolderPrefix) == 0 {
+		varFileName = fmt.Sprintf("%s/%s/%s-%s.helmfile.vars.yaml",
+			c.Config.Components.Helmfile.BasePath,
+			component,
+			stackNameFormatted,
+			component,
+		)
+	} else {
+		varFileName = fmt.Sprintf("%s/%s/%s/%s-%s.helmfile.vars.yaml",
+			c.Config.Components.Helmfile.BasePath,
+			componentFolderPrefix,
+			component,
+			stackNameFormatted,
+			component,
+		)
+	}
+
 	color.Cyan("Writing variables to file:")
 	fmt.Println(varFileName)
 	err = u.WriteToFileAsYAML(varFileName, componentVarsSection, 0644)
@@ -102,11 +120,22 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		color.Green("Base component: " + baseComponent)
 	}
 	color.Green("Stack: " + stack)
-	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, component)
+
+	var workingDir string
+	if len(componentNamePrefix) == 0 {
+		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, component)
+	} else {
+		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Helmfile.BasePath, componentNamePrefix, component)
+	}
 	color.Green(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 	fmt.Println()
 
-	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, componentFromArg)
+	var varFile string
+	if len(componentNamePrefix) == 0 {
+		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, component)
+	} else {
+		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", stackNameFormatted, componentNamePrefix, component)
+	}
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}

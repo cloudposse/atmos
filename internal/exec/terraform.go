@@ -98,6 +98,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		color.Green("Base component: " + baseComponentPath)
 	}
 	color.Green("Stack: " + stack)
+
 	var workingDir string
 	if len(componentNamePrefix) == 0 {
 		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, component)

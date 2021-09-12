@@ -6,6 +6,7 @@ import:
   - catalog/terraform/test-component-override
   - catalog/terraform/vpc
   - catalog/helmfile/echo-server
+  - catalog/helmfile/infra-server
 
 vars:
   stage: staging
