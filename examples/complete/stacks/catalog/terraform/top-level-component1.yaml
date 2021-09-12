@@ -1,0 +1,13 @@
+components:
+  terraform:
+    top-level-component1:
+      backend:
+        s3:
+          workspace_key_prefix: top-level-component1
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        enabled: true
+        service_1_name: "service-1"
+        service_2_name: "service-2"

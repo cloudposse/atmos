@@ -1,6 +1,7 @@
 import:
   - globals/tenant1-globals
   - globals/ue2-globals
+  - catalog/terraform/top-level-component1
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
   - catalog/terraform/vpc
