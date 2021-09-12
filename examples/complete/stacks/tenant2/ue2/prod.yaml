@@ -17,6 +17,6 @@ helmfile:
 
 components:
   terraform:
-    vpc:
+    "infra/vpc":
       vars:
         cidr_block: 10.8.0.0/18

@@ -8,7 +8,7 @@ import:
 
 components:
   terraform:
-    test-component:
+    "test/test-component":
       backend:
         s3:
           workspace_key_prefix: test-component

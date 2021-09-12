@@ -1,6 +1,6 @@
 components:
   terraform:
-    test-component-override:
+    "test/test-component-override":
       vars:
         service_1_name: "service-1-override"
         service_1_map:

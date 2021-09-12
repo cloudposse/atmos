@@ -18,7 +18,8 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	stack, componentFromArg, componentPrefix, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags, _,
+	stack, componentFromArg, componentFolderPrefix, componentNamePrefix, component, baseComponent,
+		command, subCommand, componentVarsSection, additionalArgsAndFlags, _,
 		err := processConfigAndStacks("terraform", cmd, args)
 	if err != nil {
 		return err
@@ -34,15 +35,36 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the component exists
-	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, componentPrefix, component)
+	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, componentFolderPrefix, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.ProcessedConfig.TerraformDirAbsolutePath))
+		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s",
+			component,
+			path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, componentFolderPrefix),
+		))
 	}
 
-	// Write variables to a file
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
-	varFileName := fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json", c.Config.Components.Terraform.BasePath, component, stackNameFormatted, componentFromArg)
+
+	// Write variables to a file
+	var varFileName string
+	if len(componentFolderPrefix) == 0 {
+		varFileName = fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json",
+			c.Config.Components.Terraform.BasePath,
+			component,
+			stackNameFormatted,
+			component,
+		)
+	} else {
+		varFileName = fmt.Sprintf("%s/%s/%s/%s-%s.terraform.tfvars.json",
+			c.Config.Components.Terraform.BasePath,
+			componentFolderPrefix,
+			component,
+			stackNameFormatted,
+			component,
+		)
+	}
+
 	color.Cyan("Writing variables to file:")
 	fmt.Println(varFileName)
 	err = u.WriteToFileAsJSON(varFileName, componentVarsSection, 0644)
@@ -68,18 +90,37 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		color.Green("Base component: " + baseComponent)
 	}
 	color.Green("Stack: " + stack)
-	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, component)
+	var workingDir string
+	if len(componentNamePrefix) == 0 {
+		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, component)
+	} else {
+		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Terraform.BasePath, componentNamePrefix, component)
+	}
 	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
 	fmt.Println()
 
-	planFile := fmt.Sprintf("%s-%s.planfile", stackNameFormatted, componentFromArg)
-	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, componentFromArg)
+	var planFile, varFile string
+	if len(componentNamePrefix) == 0 {
+		planFile = fmt.Sprintf("%s-%s.planfile", stackNameFormatted, component)
+		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, component)
+	} else {
+		planFile = fmt.Sprintf("%s-%s-%s.planfile", stackNameFormatted, componentNamePrefix, component)
+		varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", stackNameFormatted, componentNamePrefix, component)
+	}
 
 	var workspaceName string
-	if len(baseComponent) > 0 {
-		workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, componentFromArg)
+	if len(componentNamePrefix) == 0 {
+		if len(baseComponent) > 0 {
+			workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, component)
+		} else {
+			workspaceName = stackNameFormatted
+		}
 	} else {
-		workspaceName = stackNameFormatted
+		if len(baseComponent) > 0 {
+			workspaceName = fmt.Sprintf("%s-%s-%s", componentNamePrefix, stackNameFormatted, component)
+		} else {
+			workspaceName = fmt.Sprintf("%s-%s", componentNamePrefix, stackNameFormatted)
+		}
 	}
 
 	cleanUp := false
