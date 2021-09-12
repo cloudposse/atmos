@@ -18,7 +18,7 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	stack, componentFromArg, componentFolderPrefix, componentNamePrefix, component, baseComponent,
+	stack, componentFromArg, componentFolderPrefix, componentNamePrefix, component, baseComponentPath, baseComponent,
 		command, subCommand, componentVarsSection, additionalArgsAndFlags, _,
 		err := processConfigAndStacks("terraform", cmd, args)
 	if err != nil {
@@ -34,12 +34,20 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	var finalComponent string
+
+	if len(baseComponent) > 0 {
+		finalComponent = baseComponent
+	} else {
+		finalComponent = component
+	}
+
 	// Check if the component exists
-	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, componentFolderPrefix, component)
+	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, componentFolderPrefix, finalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s",
-			component,
+			finalComponent,
 			path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, componentFolderPrefix),
 		))
 	}
@@ -51,7 +59,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if len(componentFolderPrefix) == 0 {
 		varFileName = fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json",
 			c.Config.Components.Terraform.BasePath,
-			component,
+			finalComponent,
 			stackNameFormatted,
 			component,
 		)
@@ -59,7 +67,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		varFileName = fmt.Sprintf("%s/%s/%s/%s-%s.terraform.tfvars.json",
 			c.Config.Components.Terraform.BasePath,
 			componentFolderPrefix,
-			component,
+			finalComponent,
 			stackNameFormatted,
 			component,
 		)
@@ -86,8 +94,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	color.Green("Terraform command: " + subCommand)
 	color.Green("Arguments and flags: %v", additionalArgsAndFlags)
 	color.Green("Component: " + componentFromArg)
-	if len(baseComponent) > 0 {
-		color.Green("Base component: " + baseComponent)
+	if len(baseComponentPath) > 0 {
+		color.Green("Base component: " + baseComponentPath)
 	}
 	color.Green("Stack: " + stack)
 	var workingDir string
@@ -111,13 +119,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	var workspaceName string
 	if len(componentNamePrefix) == 0 {
 		if len(baseComponent) > 0 {
-			workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, component)
+			workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, finalComponent)
 		} else {
 			workspaceName = stackNameFormatted
 		}
 	} else {
 		if len(baseComponent) > 0 {
-			workspaceName = fmt.Sprintf("%s-%s-%s", componentNamePrefix, stackNameFormatted, component)
+			workspaceName = fmt.Sprintf("%s-%s-%s", componentNamePrefix, stackNameFormatted, finalComponent)
 		} else {
 			workspaceName = fmt.Sprintf("%s-%s", componentNamePrefix, stackNameFormatted)
 		}

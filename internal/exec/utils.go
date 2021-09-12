@@ -46,7 +46,7 @@ func checkStackConfig(
 	var componentTypeSection map[string]interface{}
 	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
-	var baseComponent string
+	var baseComponentPath string
 	var command string
 	var ok bool
 
@@ -65,14 +65,14 @@ func checkStackConfig(
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
 		return nil, nil, "", "", errors.New(fmt.Sprintf("Missing 'vars' section for component '%s' in stack '%s'", component, stack))
 	}
-	if baseComponent, ok = componentSection["component"].(string); !ok {
-		baseComponent = ""
+	if baseComponentPath, ok = componentSection["component"].(string); !ok {
+		baseComponentPath = ""
 	}
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
 	}
 
-	return componentSection, componentVarsSection, baseComponent, command, nil
+	return componentSection, componentVarsSection, baseComponentPath, command, nil
 }
 
 // findComponentConfig finds component section in config
@@ -116,6 +116,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	componentFolderPrefix string,
 	componentNamePrefix string,
 	component string,
+	baseComponentPath string,
 	baseComponent string,
 	command string,
 	subCommand string,
@@ -127,6 +128,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	if len(args) < 3 {
 		return "",
+			"",
 			"",
 			"",
 			"",
@@ -152,6 +154,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -163,6 +166,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	stack, err = flags.GetString("stack")
 	if err != nil {
 		return "",
+			"",
 			"",
 			"",
 			"",
@@ -186,6 +190,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -196,6 +201,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	err = c.InitConfig(stack)
 	if err != nil {
 		return "",
+			"",
 			"",
 			"",
 			"",
@@ -225,6 +231,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -235,6 +242,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	componentFromArg = args[1]
 	if len(componentFromArg) < 1 {
 		return "",
+			"",
 			"",
 			"",
 			"",
@@ -267,6 +275,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -275,9 +284,10 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		_, componentVarsSection, baseComponent, command, err = checkStackConfig(stack, stacksMap, componentType, componentFromArg)
+		_, componentVarsSection, baseComponentPath, command, err = checkStackConfig(stack, stacksMap, componentType, componentFromArg)
 		if err != nil {
 			return "",
+				"",
 				"",
 				"",
 				"",
@@ -295,6 +305,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 		if len(c.Config.Stacks.NamePattern) < 1 {
 			return "",
+				"",
 				"",
 				"",
 				"",
@@ -329,7 +340,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 
 		for stackName := range stacksMap {
-			_, componentVarsSection, baseComponent, command, err = checkStackConfig(stackName, stacksMap, componentType, componentFromArg)
+			_, componentVarsSection, baseComponentPath, command, err = checkStackConfig(stackName, stacksMap, componentType, componentFromArg)
 			if err != nil {
 				continue
 			}
@@ -375,6 +386,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				"",
 				"",
 				"",
+				"",
 				nil,
 				nil,
 				nil,
@@ -403,6 +415,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			"",
 			"",
 			"",
+			"",
 			nil,
 			nil,
 			nil,
@@ -411,20 +424,27 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	componentFolderPrefix = ""
 	componentNamePrefix = ""
-	componentFromArgParts := strings.Split(componentFromArg, "/")
 
-	if len(componentFromArgParts) > 1 {
-		componentFromArgPartsLength := len(componentFromArgParts)
-		componentFromArgPartsWithoutLast := componentFromArgParts[:componentFromArgPartsLength-1]
+	finalComponentPathParts := strings.Split(componentFromArg, "/")
+	finalComponentPathPartsLength := len(finalComponentPathParts)
+
+	if finalComponentPathPartsLength > 1 {
+		componentFromArgPartsWithoutLast := finalComponentPathParts[:finalComponentPathPartsLength-1]
 		componentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
 		componentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "-")
-		component = componentFromArgParts[componentFromArgPartsLength-1]
+		component = finalComponentPathParts[finalComponentPathPartsLength-1]
 	} else {
 		component = componentFromArg
 	}
 
-	if len(baseComponent) > 0 {
-		component = baseComponent
+	if len(baseComponentPath) > 0 {
+		baseComponentPathParts := strings.Split(baseComponentPath, "/")
+		baseComponentPathPartsLength := len(baseComponentPathParts)
+		if baseComponentPathPartsLength > 1 {
+			baseComponent = baseComponentPathParts[baseComponentPathPartsLength-1]
+		} else {
+			baseComponent = baseComponentPath
+		}
 	}
 
 	return stack,
@@ -432,6 +452,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		componentFolderPrefix,
 		componentNamePrefix,
 		component,
+		baseComponentPath,
 		baseComponent,
 		command,
 		subCommand,
