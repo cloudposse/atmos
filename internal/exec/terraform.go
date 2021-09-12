@@ -55,22 +55,37 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
 
 	// Write variables to a file
-	var varFileName string
-	if len(componentFolderPrefix) == 0 {
-		varFileName = fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json",
-			c.Config.Components.Terraform.BasePath,
-			finalComponent,
-			stackNameFormatted,
-			component,
-		)
+	var varFileName, varFileNameFromArg string
+
+	// Handle `terraform varfile` custom command
+	if subCommand == "varfile" {
+		if len(additionalArgsAndFlags) == 2 {
+			fileFlag := additionalArgsAndFlags[0]
+			if fileFlag == "-f" || fileFlag == "--file" {
+				varFileNameFromArg = additionalArgsAndFlags[1]
+			}
+		}
+	}
+
+	if len(varFileNameFromArg) > 0 {
+		varFileName = varFileNameFromArg
 	} else {
-		varFileName = fmt.Sprintf("%s/%s/%s/%s-%s.terraform.tfvars.json",
-			c.Config.Components.Terraform.BasePath,
-			componentFolderPrefix,
-			finalComponent,
-			stackNameFormatted,
-			component,
-		)
+		if len(componentFolderPrefix) == 0 {
+			varFileName = fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json",
+				c.Config.Components.Terraform.BasePath,
+				finalComponent,
+				stackNameFormatted,
+				component,
+			)
+		} else {
+			varFileName = fmt.Sprintf("%s/%s/%s/%s-%s.terraform.tfvars.json",
+				c.Config.Components.Terraform.BasePath,
+				componentFolderPrefix,
+				finalComponent,
+				stackNameFormatted,
+				component,
+			)
+		}
 	}
 
 	color.Cyan("Writing variables to file:")
@@ -78,6 +93,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	err = u.WriteToFileAsJSON(varFileName, componentVarsSection, 0644)
 	if err != nil {
 		return err
+	}
+
+	// Handle `terraform varfile` custom command
+	if subCommand == "varfile" {
+		fmt.Println()
+		return nil
 	}
 
 	// Handle `terraform deploy` custom command
