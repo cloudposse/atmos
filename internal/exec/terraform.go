@@ -35,7 +35,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the component exists
-	color.Blue("%s      %s", component, baseComponent)
 	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, componentFolderPrefix, component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
