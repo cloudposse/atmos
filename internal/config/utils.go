@@ -8,6 +8,7 @@ import (
 	"github.com/fatih/color"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -71,7 +72,7 @@ func findAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, false, nil
 }
 
-func processEnvVars() {
+func processEnvVars() error {
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
 		color.Green("Found ENV var 'ATMOS_STACKS_BASE_PATH': %s", stacksBasePath)
@@ -102,6 +103,16 @@ func processEnvVars() {
 		Config.Components.Terraform.BasePath = componentsTerraformBasePath
 	}
 
+	componentsTerraformApplyAutoApprove := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE")
+	if len(componentsTerraformApplyAutoApprove) > 0 {
+		color.Green("Found ENV var 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE': %s", componentsTerraformApplyAutoApprove)
+		applyAutoApproveBool, err := strconv.ParseBool(componentsTerraformApplyAutoApprove)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.ApplyAutoApprove = applyAutoApproveBool
+	}
+
 	componentsHelmfileBasePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
 	if len(componentsHelmfileBasePath) > 0 {
 		color.Green("Found ENV var 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH': %s", componentsHelmfileBasePath)
@@ -125,6 +136,8 @@ func processEnvVars() {
 		color.Green("Found ENV var 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN': %s", componentsHelmfileClusterNamePattern)
 		Config.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
 	}
+
+	return nil
 }
 
 func checkConfig() error {

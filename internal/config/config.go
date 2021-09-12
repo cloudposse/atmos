@@ -28,7 +28,8 @@ var (
 	defaultConfig = Configuration{
 		Components: Components{
 			Terraform: Terraform{
-				BasePath: "./components/terraform",
+				BasePath:         "./components/terraform",
+				ApplyAutoApprove: false,
 			},
 			Helmfile: Helmfile{
 				BasePath:              "./components/helmfile",
@@ -138,7 +139,10 @@ func InitConfig(stack string) error {
 	}
 
 	// Process ENV vars
-	processEnvVars()
+	err = processEnvVars()
+	if err != nil {
+		return err
+	}
 
 	// Check config
 	err = checkConfig()
