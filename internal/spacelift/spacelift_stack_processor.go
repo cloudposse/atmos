@@ -51,7 +51,7 @@ func TransformStackConfigToSpaceliftStacks(
 
 	for stackName, stackConfig := range stacks {
 		config := stackConfig.(map[interface{}]interface{})
-		imports := []string{}
+		var imports []string
 
 		if processImports == true {
 			if i, ok := config["imports"]; ok {
@@ -187,17 +187,14 @@ func TransformStackConfigToSpaceliftStacks(
 						}
 						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackName))
 					}
+
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
-					// Split on the first `-` and get the two parts: environment and stage
-					stackNameParts := strings.SplitN(stackName, "-", 2)
-					stackNamePartsLen := len(stackNameParts)
-					if stackNamePartsLen == 2 {
-						labels = append(labels, fmt.Sprintf("folder:%s/%s", stackNameParts[0], stackNameParts[1]))
-					}
+					labels = append(labels, fmt.Sprintf("folder:%s", stackName))
+
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Add Spacelift stack config to the final map
-					spaceliftStackName := fmt.Sprintf("%s-%s", stackName, component)
+					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", stackName, component), "/", "-", -1)
 					res[spaceliftStackName] = spaceliftConfig
 				}
 			}

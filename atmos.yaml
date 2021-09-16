@@ -12,6 +12,8 @@ components:
     # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` ENV var
     # Supports both absolute and relative paths
     base_path: "./examples/complete/components/terraform"
+    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE` ENV var
+    apply_auto_approve: false
   helmfile:
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var
     # Supports both absolute and relative paths

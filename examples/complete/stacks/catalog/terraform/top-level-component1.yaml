@@ -4,14 +4,14 @@
 # https://github.com/bmatcuk/doublestar
 # File extensions are optional (if not specified, `.yaml` is used by default)
 import:
-  - catalog/terraform/services/service-?.*
+  - catalog/terraform/services/top-level-service-?.*
 
 components:
   terraform:
-    "test/test-component":
+    top-level-component1:
       backend:
         s3:
-          workspace_key_prefix: test-component
+          workspace_key_prefix: top-level-component1
       settings:
         spacelift:
           workspace_enabled: true

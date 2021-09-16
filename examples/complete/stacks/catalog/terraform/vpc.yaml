@@ -1,6 +1,6 @@
 components:
   terraform:
-    vpc:
+    "infra/vpc":
       backend:
         s3:
           workspace_key_prefix: vpc

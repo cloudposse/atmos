@@ -16,13 +16,12 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	stack, componentFromArg, component, baseComponent, command, subCommand, componentVarsSection, additionalArgsAndFlags, globalOptions,
-		err := processConfigAndStacks("helmfile", cmd, args)
+	info, err := processConfigAndStacks("helmfile", cmd, args)
 	if err != nil {
 		return err
 	}
 
-	if len(stack) < 1 {
+	if len(info.Stack) < 1 {
 		return errors.New("the specified stack does not exist")
 	}
 
@@ -31,28 +30,49 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, component)
+	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.Component)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s", component, c.ProcessedConfig.HelmfileDirAbsolutePath))
+		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s",
+			info.Component,
+			path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix),
+		))
 	}
 
+	stackNameFormatted := strings.Replace(info.Stack, "/", "-", -1)
+
 	// Write variables to a file
-	stackNameFormatted := strings.Replace(stack, "/", "-", -1)
-	varFileName := fmt.Sprintf("%s/%s/%s-%s.helmfile.vars.yaml", c.Config.Components.Helmfile.BasePath, component, stackNameFormatted, componentFromArg)
+	var varFileName string
+	if len(info.ComponentFolderPrefix) == 0 {
+		varFileName = fmt.Sprintf("%s/%s/%s-%s.helmfile.vars.yaml",
+			c.Config.Components.Helmfile.BasePath,
+			info.Component,
+			stackNameFormatted,
+			info.Component,
+		)
+	} else {
+		varFileName = fmt.Sprintf("%s/%s/%s/%s-%s.helmfile.vars.yaml",
+			c.Config.Components.Helmfile.BasePath,
+			info.ComponentFolderPrefix,
+			info.Component,
+			stackNameFormatted,
+			info.Component,
+		)
+	}
+
 	color.Cyan("Writing variables to file:")
 	fmt.Println(varFileName)
-	err = u.WriteToFileAsYAML(varFileName, componentVarsSection, 0644)
+	err = u.WriteToFileAsYAML(varFileName, info.ComponentVarsSection, 0644)
 	if err != nil {
 		return err
 	}
 
 	// Handle `helmfile deploy` custom command
-	if subCommand == "deploy" {
-		subCommand = "sync"
+	if info.SubCommand == "deploy" {
+		info.SubCommand = "sync"
 	}
 
-	context := getContextFromVars(componentVarsSection)
+	context := getContextFromVars(info.ComponentVarsSection)
 
 	// Prepare AWS profile
 	helmAwsProfile := replaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
@@ -82,35 +102,46 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Print command info
 	color.Cyan("\nCommand info:")
-	color.Green("Helmfile binary: " + command)
-	color.Green("Helmfile command: " + subCommand)
+	color.Green("Helmfile binary: " + info.Command)
+	color.Green("Helmfile command: " + info.SubCommand)
 
 	// https://github.com/roboll/helmfile#cli-reference
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
-	color.Green("Global options: %v", globalOptions)
+	color.Green("Global options: %v", info.GlobalOptions)
 
-	color.Green("Arguments and flags: %v", additionalArgsAndFlags)
-	color.Green("Component: " + componentFromArg)
-	if len(baseComponent) > 0 {
-		color.Green("Base component: " + baseComponent)
+	color.Green("Arguments and flags: %v", info.AdditionalArgsAndFlags)
+	color.Green("Component: " + info.ComponentFromArg)
+	if len(info.BaseComponent) > 0 {
+		color.Green("Base component: " + info.BaseComponent)
 	}
-	color.Green("Stack: " + stack)
-	workingDir := fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, component)
+	color.Green("Stack: " + info.Stack)
+
+	var workingDir string
+	if len(info.ComponentNamePrefix) == 0 {
+		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, info.Component)
+	} else {
+		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Helmfile.BasePath, info.ComponentNamePrefix, info.Component)
+	}
 	color.Green(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 	fmt.Println()
 
-	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, componentFromArg)
+	var varFile string
+	if len(info.ComponentNamePrefix) == 0 {
+		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, info.Component)
+	} else {
+		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", stackNameFormatted, info.ComponentNamePrefix, info.Component)
+	}
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}
-	if globalOptions != nil && len(globalOptions) > 0 {
-		allArgsAndFlags = append(allArgsAndFlags, globalOptions...)
+	if info.GlobalOptions != nil && len(info.GlobalOptions) > 0 {
+		allArgsAndFlags = append(allArgsAndFlags, info.GlobalOptions...)
 	}
-	allArgsAndFlags = append(allArgsAndFlags, subCommand)
-	allArgsAndFlags = append(allArgsAndFlags, additionalArgsAndFlags...)
+	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
+	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Prepare ENV vars
 	envVars := []string{
@@ -124,13 +155,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Sprintf("STACK=%s", stackNameFormatted),
 	}
 
-	err = execCommand(command, allArgsAndFlags, componentPath, envVars)
+	err = execCommand(info.Command, allArgsAndFlags, componentPath, envVars)
 	if err != nil {
 		return err
 	}
 
 	// Cleanup
-	varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, component, varFile)
+	varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, info.Component, varFile)
 	err = os.Remove(varFilePath)
 	if err != nil {
 		color.Yellow("Error deleting helmfile var file: %s\n", err)
