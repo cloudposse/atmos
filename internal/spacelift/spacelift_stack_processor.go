@@ -51,7 +51,7 @@ func TransformStackConfigToSpaceliftStacks(
 
 	for stackName, stackConfig := range stacks {
 		config := stackConfig.(map[interface{}]interface{})
-		imports := []string{}
+		var imports []string
 
 		if processImports == true {
 			if i, ok := config["imports"]; ok {
