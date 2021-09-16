@@ -142,11 +142,11 @@ func processEnvVars() error {
 
 func checkConfig() error {
 	if len(Config.Stacks.BasePath) < 1 {
-		return errors.New("Stack base path must be provided in 'stacks.base_path' config or 'ATMOS_STACKS_BASE_PATH' ENV variable")
+		return errors.New("stack base path must be provided in 'stacks.base_path' config or 'ATMOS_STACKS_BASE_PATH' ENV variable")
 	}
 
 	if len(Config.Stacks.IncludedPaths) < 1 {
-		return errors.New("At least one path must be provided in 'stacks.included_paths' config or 'ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
+		return errors.New("at least one path must be provided in 'stacks.included_paths' config or 'ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	}
 
 	return nil

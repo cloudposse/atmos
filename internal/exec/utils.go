@@ -33,6 +33,21 @@ var (
 	}
 )
 
+type ConfigAndStacksInfo struct {
+	Stack                  string
+	ComponentFromArg       string
+	ComponentFolderPrefix  string
+	ComponentNamePrefix    string
+	Component              string
+	BaseComponentPath      string
+	BaseComponent          string
+	Command                string
+	SubCommand             string
+	ComponentVarsSection   map[interface{}]interface{}
+	AdditionalArgsAndFlags []string
+	GlobalOptions          []string
+}
+
 // checkStackConfig checks stack schema and return component info
 func checkStackConfig(
 	stack string,
@@ -110,109 +125,37 @@ func findComponentConfig(
 }
 
 // processConfigAndStacks processes CLI config and stacks
-func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (
-	stack string,
-	componentFromArg string,
-	componentFolderPrefix string,
-	componentNamePrefix string,
-	component string,
-	baseComponentPath string,
-	baseComponent string,
-	command string,
-	subCommand string,
-	componentVarsSection map[interface{}]interface{},
-	additionalArgsAndFlags []string,
-	globalOptions []string,
-	err error,
-) {
+func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (ConfigAndStacksInfo, error) {
+
+	var info ConfigAndStacksInfo
 
 	if len(args) < 3 {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			errors.New("invalid number of arguments")
+		return info, errors.New("invalid number of arguments")
 	}
 
 	cmd.DisableFlagParsing = false
 
-	err = cmd.ParseFlags(args)
+	err := cmd.ParseFlags(args)
 	if err != nil {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			err
+		return info, err
 	}
 	flags := cmd.Flags()
 
 	// Get stack
-	stack, err = flags.GetString("stack")
+	info.Stack, err = flags.GetString("stack")
 	if err != nil {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			err
+		return info, err
 	}
 
-	additionalArgsAndFlags, subCommand, componentFromArg, globalOptions, err = processArgsAndFlags(args)
+	info.AdditionalArgsAndFlags, info.SubCommand, info.ComponentFromArg, info.GlobalOptions, err = processArgsAndFlags(args)
 	if err != nil {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			err
+		return info, err
 	}
 
 	// Process and merge CLI configurations
-	err = c.InitConfig(stack)
+	err = c.InitConfig(info.Stack)
 	if err != nil {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			err
+		return info, err
 	}
 
 	// Process stack config file(s)
@@ -223,37 +166,13 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		true)
 
 	if err != nil {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			err
+		return info, err
 	}
 
 	// Check if component was provided
-	componentFromArg = args[1]
-	if len(componentFromArg) < 1 {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			errors.New("'component' is required")
+	info.ComponentFromArg = args[1]
+	if len(info.ComponentFromArg) < 1 {
+		return info, errors.New("'component' is required")
 	}
 
 	// Print the stack config files
@@ -267,59 +186,27 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	color.Cyan(msg)
 	err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 	if err != nil {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			err
+		return info, err
 	}
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		_, componentVarsSection, baseComponentPath, command, err = checkStackConfig(stack, stacksMap, componentType, componentFromArg)
+		_, info.ComponentVarsSection, info.BaseComponentPath, info.Command, err = checkStackConfig(info.Stack,
+			stacksMap,
+			componentType,
+			info.ComponentFromArg)
 		if err != nil {
-			return "",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				nil,
-				nil,
-				nil,
-				err
+			return info, err
 		}
 	} else {
-		color.Cyan("Searching for stack config where the component '%s' is defined\n", componentFromArg)
+		color.Cyan("Searching for stack config where the component '%s' is defined\n", info.ComponentFromArg)
 
 		if len(c.Config.Stacks.NamePattern) < 1 {
-			return "",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				nil,
-				nil,
-				nil,
+			return info,
 				errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		}
 
-		stackParts := strings.Split(stack, "-")
+		stackParts := strings.Split(info.Stack, "-")
 		stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
 
 		var tenant string
@@ -340,7 +227,10 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 
 		for stackName := range stacksMap {
-			_, componentVarsSection, baseComponentPath, command, err = checkStackConfig(stackName, stacksMap, componentType, componentFromArg)
+			_, info.ComponentVarsSection, info.BaseComponentPath, info.Command, err = checkStackConfig(stackName,
+				stacksMap,
+				componentType,
+				info.ComponentFromArg)
 			if err != nil {
 				continue
 			}
@@ -351,115 +241,80 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 			// Search for tenant in stack
 			if len(tenant) > 0 {
-				if tenantInStack, ok := componentVarsSection["tenant"].(string); !ok || tenantInStack != tenant {
+				if tenantInStack, ok := info.ComponentVarsSection["tenant"].(string); !ok || tenantInStack != tenant {
 					tenantFound = false
 				}
 			}
 
 			// Search for environment in stack
 			if len(environment) > 0 {
-				if environmentInStack, ok := componentVarsSection["environment"].(string); !ok || environmentInStack != environment {
+				if environmentInStack, ok := info.ComponentVarsSection["environment"].(string); !ok || environmentInStack != environment {
 					environmentFound = false
 				}
 			}
 
 			// Search for stage in stack
 			if len(stage) > 0 {
-				if stageInStack, ok := componentVarsSection["stage"].(string); !ok || stageInStack != stage {
+				if stageInStack, ok := info.ComponentVarsSection["stage"].(string); !ok || stageInStack != stage {
 					stageFound = false
 				}
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for component '%s' in stack '%s'\n\n", componentFromArg, stackName)
-				stack = stackName
+				color.Green("Found stack config for component '%s' in stack '%s'\n\n", info.ComponentFromArg, stackName)
+				info.Stack = stackName
 				break
 			}
 		}
 
 		if tenantFound == false || environmentFound == false || stageFound == false {
-			return "",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				"",
-				nil,
-				nil,
-				nil,
+			return info,
 				errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
 					"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
 					"Are the component and stack names correct? Did you forget an import?",
-					componentFromArg,
-					stack,
+					info.ComponentFromArg,
+					info.Stack,
 					c.Config.Stacks.NamePattern,
 				))
 		}
 	}
 
-	if len(command) < 1 {
-		command = componentType
+	if len(info.Command) < 1 {
+		info.Command = componentType
 	}
 
-	color.Cyan("Variables for component '%s' in stack '%s':", componentFromArg, stack)
-	err = u.PrintAsYAML(componentVarsSection)
+	color.Cyan("Variables for component '%s' in stack '%s':", info.ComponentFromArg, info.Stack)
+	err = u.PrintAsYAML(info.ComponentVarsSection)
 	if err != nil {
-		return "",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			nil,
-			nil,
-			nil,
-			err
+		return info, err
 	}
 
-	componentFolderPrefix = ""
-	componentNamePrefix = ""
+	info.ComponentFolderPrefix = ""
+	info.ComponentNamePrefix = ""
 
-	finalComponentPathParts := strings.Split(componentFromArg, "/")
+	finalComponentPathParts := strings.Split(info.ComponentFromArg, "/")
 	finalComponentPathPartsLength := len(finalComponentPathParts)
 
 	if finalComponentPathPartsLength > 1 {
 		componentFromArgPartsWithoutLast := finalComponentPathParts[:finalComponentPathPartsLength-1]
-		componentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
-		componentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "-")
-		component = finalComponentPathParts[finalComponentPathPartsLength-1]
+		info.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
+		info.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "-")
+		info.Component = finalComponentPathParts[finalComponentPathPartsLength-1]
 	} else {
-		component = componentFromArg
+		info.Component = info.ComponentFromArg
 	}
 
-	if len(baseComponentPath) > 0 {
-		baseComponentPathParts := strings.Split(baseComponentPath, "/")
+	if len(info.BaseComponentPath) > 0 {
+		baseComponentPathParts := strings.Split(info.BaseComponentPath, "/")
 		baseComponentPathPartsLength := len(baseComponentPathParts)
 		if baseComponentPathPartsLength > 1 {
-			baseComponent = baseComponentPathParts[baseComponentPathPartsLength-1]
+			info.BaseComponent = baseComponentPathParts[baseComponentPathPartsLength-1]
 		} else {
-			baseComponent = baseComponentPath
+			info.BaseComponent = info.BaseComponentPath
 		}
 	}
 
-	return stack,
-		componentFromArg,
-		componentFolderPrefix,
-		componentNamePrefix,
-		component,
-		baseComponentPath,
-		baseComponent,
-		command,
-		subCommand,
-		componentVarsSection,
-		additionalArgsAndFlags,
-		globalOptions,
-		nil
+	return info, nil
 }
 
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags

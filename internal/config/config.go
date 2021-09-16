@@ -197,7 +197,6 @@ func InitConfig(stack string) error {
 	}
 
 	if len(stackConfigFilesAbsolutePaths) < 1 {
-		// j, err := json.MarshalIndent(includeStackAbsPaths, "", strings.Repeat(" ", 2))
 		j, err := yaml.Marshal(includeStackAbsPaths)
 		if err != nil {
 			return err
