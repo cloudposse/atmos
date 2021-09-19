@@ -29,6 +29,12 @@ job "terraform output" {
     default     = false
   }
 
+  option "args" {
+    description = "A string of arguments to supply to `terraform output`"
+    type        = string
+    default     = ""
+  }
+
   step "write varfile" {
     run "terraform write varfile" {
       component   = param.component
@@ -52,13 +58,18 @@ job "terraform output" {
     }
   }
 
+  variable "args" {
+    type  = list(string)
+    value = compact(split(" ", opt.args))
+  }
+
   step "output cmd" {
     run "terraform subcommand" {
       component   = param.component
       stack       = opt.stack
       command     = opt.command
       subcommand  = "output"
-      args        = []
+      args        = var.args
       interactive = opt.interactive
     }
   }
