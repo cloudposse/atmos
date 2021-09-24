@@ -22,8 +22,6 @@ builds:
       - arm
       - arm64
     binary: atmos
-    main: ./main.go
-    dir: build
     ldflags:
       - '-s -w -X "atmos/cmd.Version={{.Env.GORELEASER_CURRENT_TAG}}"'
 
