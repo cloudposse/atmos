@@ -1,10 +1,8 @@
 #!/bin/bash
 
-version="1.0.0"
+version="0.0.1"
 
-now=$(date -u +'%Y-%m-%d %T')
-
-go build -o bin/atmos -v -ldflags "-X 'atmos/cmd.Version=$version' -X 'atmos/cmd.BuildTime=$now UTC'"
+go build -o build/atmos -v -ldflags "-X 'atmos/cmd.Version=$version'"
 
 # https://www.digitalocean.com/community/tutorials/using-ldflags-to-set-version-information-for-go-applications
 # https://blog.kowalczyk.info/article/vEja/embedding-build-number-in-go-executable.html
