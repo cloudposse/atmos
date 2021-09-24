@@ -4,6 +4,8 @@ on:
   release:
     types: [ published ]
 
+  workflow_dispatch:
+
 jobs:
   build:
     name: 'Build CLI and attach to GitHub release'
@@ -22,23 +24,6 @@ jobs:
         with:
           go-version: '1.16'
       - run: go version
-
-      # Generate Go code
-      - name: 'Generate Go Code'
-        env:
-          VARIANT_VERSION: "0.38.0"
-        run: |
-          set -e -x
-          wget -q https://github.com/mumoshu/variant2/releases/download/v${VARIANT_VERSION}/variant_${VARIANT_VERSION}_linux_amd64.tar.gz && \
-            tar -zvxf variant*.tar.gz variant
-          # Modify the variant script to inject the version tag and git short SHA
-          sed -i "s/%CUSTOM%/${{ github.event.release.tag_name }} ($(git log -n 1 --format=%h))/" atmos/modules/utils/version.variant
-          # Convert into go code
-          ./variant export go atmos build
-          # reset the variant script so we have a clean git repo matching the tag commit SHA (required by goreleaser)
-          git checkout -- atmos/modules/utils/version.variant
-          # Download go modules once so that parallel builds do not try to download them in parallel and clash with each other
-          cd build && go mod tidy
 
       # Build and release
       - name: Run GoReleaser
