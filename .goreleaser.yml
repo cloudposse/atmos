@@ -2,8 +2,7 @@
 
 before:
   hooks:
-  # this is just an example and not a requirement
-  # - go mod tidy
+    - 'go mod tidy'
 
 builds:
   - env:
