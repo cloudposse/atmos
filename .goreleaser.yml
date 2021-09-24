@@ -1,4 +1,5 @@
 # Visit https://goreleaser.com for documentation on how to customize this behavior.
+
 before:
   hooks:
   # this is just an example and not a requirement

@@ -1,3 +1,6 @@
+## 1.0.0
+ - Rewrite in Go
+
 ## 0.8.0
 
 - Convert infrastructure YAML stack configs into Spacelift stack configs
