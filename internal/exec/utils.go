@@ -150,6 +150,11 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 
+	// Check if component was provided
+	if len(configAndStacksInfo.ComponentFromArg) < 1 {
+		return configAndStacksInfo, errors.New("'component' is required")
+	}
+
 	// Process and merge CLI configurations
 	err = c.InitConfig(configAndStacksInfo)
 	if err != nil {
@@ -165,12 +170,6 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	if err != nil {
 		return configAndStacksInfo, err
-	}
-
-	// Check if component was provided
-	configAndStacksInfo.ComponentFromArg = args[1]
-	if len(configAndStacksInfo.ComponentFromArg) < 1 {
-		return configAndStacksInfo, errors.New("'component' is required")
 	}
 
 	// Print the stack config files
@@ -320,14 +319,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags
 func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error) {
 	var info c.ArgsAndFlagsInfo
-	subCommand := inputArgsAndFlags[0]
-	componentFromArg := inputArgsAndFlags[1]
 	var additionalArgsAndFlags []string
 	var globalOptions []string
-
-	// First arg is a terraform/helmfile subcommand
-	// Second arg is component
-	commonArgsIndexes := []int{0, 1}
 
 	var indexesToRemove []int
 
@@ -394,9 +387,7 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 		}
 
 		for _, f := range commonFlags {
-			if u.SliceContainsInt(commonArgsIndexes, i) {
-				indexesToRemove = append(indexesToRemove, i)
-			} else if arg == f {
+			if arg == f {
 				indexesToRemove = append(indexesToRemove, i)
 				indexesToRemove = append(indexesToRemove, i+1)
 			} else if strings.HasPrefix(arg, f+"=") {
@@ -420,9 +411,9 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 		}
 	}
 
-	info.AdditionalArgsAndFlags = additionalArgsAndFlags
-	info.SubCommand = subCommand
-	info.ComponentFromArg = componentFromArg
+	info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+	info.SubCommand = additionalArgsAndFlags[0]
+	info.ComponentFromArg = additionalArgsAndFlags[1]
 	info.GlobalOptions = globalOptions
 
 	return info, nil
