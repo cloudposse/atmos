@@ -67,6 +67,7 @@ func InitConfig(stack string) error {
 	// home dir (~/.atmos)
 	// current directory
 	// ENV vars
+	// Command-line arguments
 
 	color.Cyan("\nProcessing and merging configurations in the following order: system dir, home dir, current dir, ENV vars\n")
 

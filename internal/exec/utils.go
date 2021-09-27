@@ -17,6 +17,10 @@ const (
 	// Custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference
 	globalOptionsFlag = "--global-options"
+
+	terraformDirFlag = "--terraform-dir"
+	helmfileDirFlag  = "--helmfile-dir"
+	configDirFlag    = "--config-dir"
 )
 
 var (
@@ -25,13 +29,23 @@ var (
 		"-s",
 		"--dry-run",
 		"--kubeconfig-path",
-		"--terraform-dir",
-		"--helmfile-dir",
-		"--config-dir",
+		terraformDirFlag,
+		helmfileDirFlag,
+		configDirFlag,
 		"--stacks-dir",
 		globalOptionsFlag,
 	}
 )
+
+type ArgsAndFlagsInfo struct {
+	AdditionalArgsAndFlags []string
+	SubCommand             string
+	ComponentFromArg       string
+	GlobalOptions          []string
+	TerraformDir           string
+	HelmfileDir            string
+	StacksDir              string
+}
 
 type ConfigAndStacksInfo struct {
 	Stack                  string
@@ -126,7 +140,6 @@ func findComponentConfig(
 
 // processConfigAndStacks processes CLI config and stacks
 func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (ConfigAndStacksInfo, error) {
-
 	var info ConfigAndStacksInfo
 
 	if len(args) < 3 {
@@ -147,10 +160,15 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		return info, err
 	}
 
-	info.AdditionalArgsAndFlags, info.SubCommand, info.ComponentFromArg, info.GlobalOptions, err = processArgsAndFlags(args)
+	argsAndFlagsInfo, err := processArgsAndFlags(args)
 	if err != nil {
 		return info, err
 	}
+
+	info.AdditionalArgsAndFlags = argsAndFlagsInfo.AdditionalArgsAndFlags
+	info.SubCommand = argsAndFlagsInfo.SubCommand
+	info.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
+	info.GlobalOptions = argsAndFlagsInfo.GlobalOptions
 
 	// Process and merge CLI configurations
 	err = c.InitConfig(info.Stack)
@@ -318,16 +336,15 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 }
 
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags
-func processArgsAndFlags(argsAndFlags []string) (
-	additionalArgsAndFlags []string,
-	subCommand string,
-	componentFromArg string,
-	globalOptions []string,
-	err error,
+func processArgsAndFlags(inputArgsAndFlags []string) (
+	ArgsAndFlagsInfo,
+	error,
 ) {
-	subCommand = argsAndFlags[0]
-	componentFromArg = argsAndFlags[1]
-	globalOptions = nil
+	var info ArgsAndFlagsInfo
+	subCommand := inputArgsAndFlags[0]
+	componentFromArg := inputArgsAndFlags[1]
+	var additionalArgsAndFlags []string
+	var globalOptions []string
 
 	// First arg is a terraform/helmfile subcommand
 	// Second arg is component
@@ -338,11 +355,50 @@ func processArgsAndFlags(argsAndFlags []string) (
 	// https://github.com/roboll/helmfile#cli-reference
 	var globalOptionsFlagIndex int
 
-	for i, arg := range argsAndFlags {
+	for i, arg := range inputArgsAndFlags {
 		if arg == globalOptionsFlag {
 			globalOptionsFlagIndex = i + 1
 		} else if strings.HasPrefix(arg+"=", globalOptionsFlag) {
 			globalOptionsFlagIndex = i
+		}
+
+		if arg == terraformDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.TerraformDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", terraformDirFlag) {
+			var terraformDirFlagParts = strings.Split(arg, "=")
+			if len(terraformDirFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.TerraformDir = terraformDirFlagParts[1]
+		}
+
+		if arg == helmfileDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.HelmfileDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", helmfileDirFlag) {
+			var helmfileDirFlagParts = strings.Split(arg, "=")
+			if len(helmfileDirFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.HelmfileDir = helmfileDirFlagParts[1]
+		}
+
+		if arg == configDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.StacksDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", configDirFlag) {
+			var stacksDirFlagParts = strings.Split(arg, "=")
+			if len(stacksDirFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.StacksDir = stacksDirFlagParts[1]
 		}
 
 		for _, f := range commonFlags {
@@ -357,7 +413,7 @@ func processArgsAndFlags(argsAndFlags []string) (
 		}
 	}
 
-	for i, arg := range argsAndFlags {
+	for i, arg := range inputArgsAndFlags {
 		if !u.SliceContainsInt(indexesToRemove, i) {
 			additionalArgsAndFlags = append(additionalArgsAndFlags, arg)
 		}
@@ -372,7 +428,12 @@ func processArgsAndFlags(argsAndFlags []string) (
 		}
 	}
 
-	return additionalArgsAndFlags, subCommand, componentFromArg, globalOptions, nil
+	info.AdditionalArgsAndFlags = additionalArgsAndFlags
+	info.SubCommand = subCommand
+	info.ComponentFromArg = componentFromArg
+	info.GlobalOptions = globalOptions
+
+	return info, nil
 }
 
 // execCommand prints and executes the provided command with args and flags
