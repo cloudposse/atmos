@@ -189,7 +189,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		_, configAndStacksInfo.ComponentVarsSection, configAndStacksInfo.BaseComponentPath, configAndStacksInfo.Command, err = checkStackConfig(configAndStacksInfo.Stack,
+		_, configAndStacksInfo.ComponentVarsSection, configAndStacksInfo.BaseComponentPath, configAndStacksInfo.Command, err = checkStackConfig(
+			configAndStacksInfo.Stack,
 			stacksMap,
 			componentType,
 			configAndStacksInfo.ComponentFromArg)
@@ -225,7 +226,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 
 		for stackName := range stacksMap {
-			_, configAndStacksInfo.ComponentVarsSection, configAndStacksInfo.BaseComponentPath, configAndStacksInfo.Command, err = checkStackConfig(stackName,
+			_, configAndStacksInfo.ComponentVarsSection, configAndStacksInfo.BaseComponentPath, configAndStacksInfo.Command, err = checkStackConfig(
+				stackName,
 				stacksMap,
 				componentType,
 				configAndStacksInfo.ComponentFromArg)

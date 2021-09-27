@@ -25,6 +25,10 @@ var describeComponentCmd = &cobra.Command{
 func init() {
 	describeComponentCmd.DisableFlagParsing = false
 	describeComponentCmd.PersistentFlags().StringP("stack", "s", "", "")
+	describeComponentCmd.PersistentFlags().StringP("--terraform-dir", "", "", "")
+	describeComponentCmd.PersistentFlags().StringP("--helmfile-dir", "", "", "")
+	describeComponentCmd.PersistentFlags().StringP("--config-dir", "", "", "")
+	describeComponentCmd.PersistentFlags().StringP("--stacks-dir", "", "", "")
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

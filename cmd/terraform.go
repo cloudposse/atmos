@@ -26,6 +26,9 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "")
+	terraformCmd.PersistentFlags().StringP("--terraform-dir", "", "", "")
+	terraformCmd.PersistentFlags().StringP("--config-dir", "", "", "")
+	terraformCmd.PersistentFlags().StringP("--stacks-dir", "", "", "")
 
 	err := terraformCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
