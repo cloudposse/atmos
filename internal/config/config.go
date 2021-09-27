@@ -1,6 +1,7 @@
 package config
 
 import (
+	e "atmos/internal/exec"
 	u "atmos/internal/utils"
 	"bytes"
 	"encoding/json"
@@ -61,7 +62,7 @@ var (
 // InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitConfig(stack string) error {
+func InitConfig(configAndStacksInfo e.ConfigAndStacksInfo) error {
 	// Config is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
@@ -145,6 +146,17 @@ func InitConfig(stack string) error {
 		return err
 	}
 
+	// Process command-line args
+	if len(configAndStacksInfo.TerraformDir) > 0 {
+		Config.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
+	}
+	if len(configAndStacksInfo.HelmfileDir) > 0 {
+		Config.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
+	}
+	if len(configAndStacksInfo.StacksDir) > 0 {
+		Config.Stacks.BasePath = configAndStacksInfo.StacksDir
+	}
+
 	// Check config
 	err = checkConfig()
 	if err != nil {
@@ -188,7 +200,7 @@ func InitConfig(stack string) error {
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
 	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := findAllStackConfigsInPaths(
-		stack,
+		configAndStacksInfo.Stack,
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
 	)
@@ -215,25 +227,25 @@ func InitConfig(stack string) error {
 
 	if stackIsPhysicalPath == true {
 		color.Cyan(fmt.Sprintf("Stack '%s' is a directory, it matches the stack config file %s",
-			stack,
+			configAndStacksInfo.Stack,
 			stackConfigFilesRelativePaths[0]),
 		)
 		ProcessedConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name
 		// Check if it matches the pattern specified in 'StackNamePattern'
-		stackParts := strings.Split(stack, "-")
+		stackParts := strings.Split(configAndStacksInfo.Stack, "-")
 		stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
 
 		if len(stackParts) == len(stackNamePatternParts) {
 			color.Cyan(fmt.Sprintf("Stack '%s' matches the stack name pattern '%s'",
-				stack,
+				configAndStacksInfo.Stack,
 				Config.Stacks.NamePattern),
 			)
 			ProcessedConfig.StackType = "Logical"
 		} else {
 			errorMessage := fmt.Sprintf("Stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
-				stack,
+				configAndStacksInfo.Stack,
 				Config.Stacks.NamePattern,
 			)
 			return errors.New(errorMessage)
