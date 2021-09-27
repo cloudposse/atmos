@@ -411,9 +411,17 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 		}
 	}
 
-	info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
-	info.SubCommand = additionalArgsAndFlags[0]
-	info.ComponentFromArg = additionalArgsAndFlags[1]
+	// Handle the legacy command `terraform write varfile`
+	if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
+		info.SubCommand = "write varfile"
+		info.ComponentFromArg = additionalArgsAndFlags[2]
+		info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
+	} else {
+		info.SubCommand = additionalArgsAndFlags[0]
+		info.ComponentFromArg = additionalArgsAndFlags[1]
+		info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+	}
+
 	info.GlobalOptions = globalOptions
 
 	return info, nil
