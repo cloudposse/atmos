@@ -318,10 +318,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 }
 
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags
-func processArgsAndFlags(inputArgsAndFlags []string) (
-	c.ArgsAndFlagsInfo,
-	error,
-) {
+func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error) {
 	var info c.ArgsAndFlagsInfo
 	subCommand := inputArgsAndFlags[0]
 	componentFromArg := inputArgsAndFlags[1]
