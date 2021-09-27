@@ -21,6 +21,7 @@ const (
 	terraformDirFlag = "--terraform-dir"
 	helmfileDirFlag  = "--helmfile-dir"
 	configDirFlag    = "--config-dir"
+	stackDirFlag     = "--stacks-dir"
 )
 
 var (
@@ -32,7 +33,7 @@ var (
 		terraformDirFlag,
 		helmfileDirFlag,
 		configDirFlag,
-		"--stacks-dir",
+		stackDirFlag,
 		globalOptionsFlag,
 	}
 )
@@ -147,6 +148,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
+	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 
 	// Process and merge CLI configurations
 	err = c.InitConfig(configAndStacksInfo)
@@ -372,11 +374,24 @@ func processArgsAndFlags(inputArgsAndFlags []string) (
 			}
 			info.StacksDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", configDirFlag) {
+			var configDirFlagParts = strings.Split(arg, "=")
+			if len(configDirFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.StacksDir = configDirFlagParts[1]
+		}
+
+		if arg == stackDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.ConfigDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", stackDirFlag) {
 			var stacksDirFlagParts = strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
-			info.StacksDir = stacksDirFlagParts[1]
+			info.ConfigDir = stacksDirFlagParts[1]
 		}
 
 		for _, f := range commonFlags {

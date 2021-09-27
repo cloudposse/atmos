@@ -148,12 +148,19 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// Process command-line args
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		Config.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
+		color.Cyan(fmt.Sprintf("\nUsing command line argument '%s' as Terraform directory", configAndStacksInfo.TerraformDir))
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		Config.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
+		color.Cyan(fmt.Sprintf("\nUsing command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
+	}
+	if len(configAndStacksInfo.ConfigDir) > 0 {
+		Config.Stacks.BasePath = configAndStacksInfo.ConfigDir
+		color.Cyan(fmt.Sprintf("\nUsing command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
 	}
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		Config.Stacks.BasePath = configAndStacksInfo.StacksDir
+		color.Cyan(fmt.Sprintf("\nUsing command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
 	}
 
 	// Check config

@@ -55,6 +55,7 @@ type ArgsAndFlagsInfo struct {
 	GlobalOptions          []string
 	TerraformDir           string
 	HelmfileDir            string
+	ConfigDir              string
 	StacksDir              string
 }
 
@@ -73,5 +74,6 @@ type ConfigAndStacksInfo struct {
 	GlobalOptions          []string
 	TerraformDir           string
 	HelmfileDir            string
+	ConfigDir              string
 	StacksDir              string
 }
