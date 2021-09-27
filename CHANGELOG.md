@@ -1,5 +1,5 @@
 ## 1.0.0
- - Rewrite in Go
+ - Rewrite in Go to make it easier for others to contribute and continue extending capabilities. Deprecate variant2.
 
 ## 0.8.0
 
