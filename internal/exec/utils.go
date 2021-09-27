@@ -37,34 +37,6 @@ var (
 	}
 )
 
-type ArgsAndFlagsInfo struct {
-	AdditionalArgsAndFlags []string
-	SubCommand             string
-	ComponentFromArg       string
-	GlobalOptions          []string
-	TerraformDir           string
-	HelmfileDir            string
-	StacksDir              string
-}
-
-type ConfigAndStacksInfo struct {
-	Stack                  string
-	ComponentFromArg       string
-	ComponentFolderPrefix  string
-	ComponentNamePrefix    string
-	Component              string
-	BaseComponentPath      string
-	BaseComponent          string
-	Command                string
-	SubCommand             string
-	ComponentVarsSection   map[interface{}]interface{}
-	AdditionalArgsAndFlags []string
-	GlobalOptions          []string
-	TerraformDir           string
-	HelmfileDir            string
-	StacksDir              string
-}
-
 // checkStackConfig checks stack schema and return component info
 func checkStackConfig(
 	stack string,
@@ -142,8 +114,8 @@ func findComponentConfig(
 }
 
 // processConfigAndStacks processes CLI config and stacks
-func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (ConfigAndStacksInfo, error) {
-	var configAndStacksInfo ConfigAndStacksInfo
+func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
+	var configAndStacksInfo c.ConfigAndStacksInfo
 
 	if len(args) < 3 {
 		return configAndStacksInfo, errors.New("invalid number of arguments")
@@ -343,10 +315,10 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags
 func processArgsAndFlags(inputArgsAndFlags []string) (
-	ArgsAndFlagsInfo,
+	c.ArgsAndFlagsInfo,
 	error,
 ) {
-	var info ArgsAndFlagsInfo
+	var info c.ArgsAndFlagsInfo
 	subCommand := inputArgsAndFlags[0]
 	componentFromArg := inputArgsAndFlags[1]
 	var additionalArgsAndFlags []string

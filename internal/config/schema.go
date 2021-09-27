@@ -47,3 +47,31 @@ type Context struct {
 	Stage       string
 	Region      string
 }
+
+type ArgsAndFlagsInfo struct {
+	AdditionalArgsAndFlags []string
+	SubCommand             string
+	ComponentFromArg       string
+	GlobalOptions          []string
+	TerraformDir           string
+	HelmfileDir            string
+	StacksDir              string
+}
+
+type ConfigAndStacksInfo struct {
+	Stack                  string
+	ComponentFromArg       string
+	ComponentFolderPrefix  string
+	ComponentNamePrefix    string
+	Component              string
+	BaseComponentPath      string
+	BaseComponent          string
+	Command                string
+	SubCommand             string
+	ComponentVarsSection   map[interface{}]interface{}
+	AdditionalArgsAndFlags []string
+	GlobalOptions          []string
+	TerraformDir           string
+	HelmfileDir            string
+	StacksDir              string
+}

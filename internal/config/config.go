@@ -1,7 +1,6 @@
 package config
 
 import (
-	e "atmos/internal/exec"
 	u "atmos/internal/utils"
 	"bytes"
 	"encoding/json"
@@ -62,7 +61,7 @@ var (
 // InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitConfig(configAndStacksInfo e.ConfigAndStacksInfo) error {
+func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// Config is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
