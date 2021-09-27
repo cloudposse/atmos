@@ -3,19 +3,20 @@
 # home dir (~/.atmos)
 # current directory
 # ENV vars
+# Command-line arguments
 #
 # It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
 # https://en.wikipedia.org/wiki/Glob_(programming)
 
 components:
   terraform:
-    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` ENV var
+    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` ENV var, or `--terraform-dir` command-line argument
     # Supports both absolute and relative paths
     base_path: "./components/terraform"
     # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE` ENV var
     apply_auto_approve: false
   helmfile:
-    # Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var
+    # Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var, or `--helmfile-dir` command-line argument
     # Supports both absolute and relative paths
     base_path: "./components/helmfile"
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH` ENV var
@@ -26,7 +27,7 @@ components:
     cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
 
 stacks:
-  # Can also be set using `ATMOS_STACKS_BASE_PATH` ENV var
+  # Can also be set using `ATMOS_STACKS_BASE_PATH` ENV var, or `--config-dir` and `--stacks-dir` command-line arguments
   # Supports both absolute and relative paths
   base_path: "./stacks"
   # Can also be set using `ATMOS_STACKS_INCLUDED_PATHS` ENV var (comma-separated values string)
