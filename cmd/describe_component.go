@@ -12,7 +12,7 @@ var describeComponentCmd = &cobra.Command{
 	Use:                "component",
 	Short:              "describe component",
 	Long:               `This command shows configuration for components`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeComponent(cmd, args)
 		if err != nil {
