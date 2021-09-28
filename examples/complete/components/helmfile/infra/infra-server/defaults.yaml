@@ -1,0 +1,32 @@
+installed: false
+
+server_name: echo-server
+
+ingress_api: networking.k8s.io/v1beta1
+
+# Hostname will be set by:
+#   printf .Values.hostname_template .Values.stage .Values.environment
+hostname_template: "echo.%v.%v.example.io"
+
+# Set aws_load_balancer_controller_enabled: true to turn on
+# configuration specific to https://github.com/kubernetes-sigs/aws-load-balancer-controller v2
+aws_load_balancer_controller_enabled: true
+ingress_class: "alb"
+alb_group_name: "common"
+
+# For nginx, use
+#  aws_load_balancer_controller_enabled: false
+#  ingress_class: "nginx"
+
+alb_certificate_autodiscovery_enabled: true
+
+tls_enabled: true
+tls_certificate_cluster_issuer: "" # for Jetstack cert-manager, e.g. "letsencrypt-prod"
+# Leave tls_secret_name blank to not include a secret, e.g. for ALB auto-discovery
+tls_secret_name: echo-server-tls
+
+# set alb_ssl_redirect_enabled to true to make HTTP redirect to HTTPS
+alb_ssl_redirect_enabled: true
+# service_type defaults to NodePort (required for aws-load-balancer),
+# You can set to ClusterIP with:
+# service_type: ClusterIP

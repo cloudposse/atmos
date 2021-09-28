@@ -1,0 +1,24 @@
+vars:
+  namespace: eg
+
+terraform:
+  vars: {}
+  backend_type: s3 # s3, remote, vault, etc.
+  backend:
+    s3:
+      encrypt: true
+      bucket: "eg-ue2-root-tfstate"
+      key: "terraform.tfstate"
+      dynamodb_table: "eg-ue2-root-tfstate-lock"
+      profile: "eg-gbl-root-terraform"
+      acl: "bucket-owner-full-control"
+      region: "us-east-2"
+    remote:
+    vault:
+
+helmfile:
+  vars: {}
+
+components:
+  terraform: {}
+  helmfile: {}

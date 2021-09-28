@@ -1,0 +1,5 @@
+components:
+  helmfile:
+    "infra/infra-server":
+      vars:
+        installed: true
