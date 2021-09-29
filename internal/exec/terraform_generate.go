@@ -145,7 +145,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	}
 
 	if componentBackendSection == nil {
-		return errors.New(fmt.Sprintf("\nCould not find 'backend' config for component '%s'.\n", component))
+		return errors.New(fmt.Sprintf("\nCould not find 'backend' config for the '%s' component.\n", component))
 	}
 
 	var componentBackendConfig = map[string]interface{}{
