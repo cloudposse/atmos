@@ -146,13 +146,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	var workspaceName string
 	if len(info.ComponentNamePrefix) == 0 {
 		if len(info.BaseComponent) > 0 {
-			workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, finalComponent)
+			workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, info.Component)
 		} else {
 			workspaceName = stackNameFormatted
 		}
 	} else {
 		if len(info.BaseComponent) > 0 {
-			workspaceName = fmt.Sprintf("%s-%s-%s", info.ComponentNamePrefix, stackNameFormatted, finalComponent)
+			workspaceName = fmt.Sprintf("%s-%s-%s", info.ComponentNamePrefix, stackNameFormatted, info.Component)
 		} else {
 			workspaceName = fmt.Sprintf("%s-%s", info.ComponentNamePrefix, stackNameFormatted)
 		}

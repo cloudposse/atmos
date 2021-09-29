@@ -3,7 +3,7 @@ components:
     "infra/vpc":
       backend:
         s3:
-          workspace_key_prefix: vpc
+          workspace_key_prefix: infra-vpc
       settings:
         spacelift:
           workspace_enabled: true
