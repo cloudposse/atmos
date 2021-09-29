@@ -162,13 +162,13 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Find if the component has a base component
 	var baseComponent string
 	if baseComponentSection, ok := componentSection["component"].(string); ok {
 		baseComponent = baseComponentSection
 	}
 
 	var finalComponent string
-
 	if len(baseComponent) > 0 {
 		finalComponent = baseComponent
 	} else {
