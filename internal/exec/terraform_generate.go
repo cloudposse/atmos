@@ -127,7 +127,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for component '%s' in stack '%s'\n\n", component, stackName)
+				color.Green("Found stack config for the '%s' component in the '%s' stack\n\n", component, stackName)
 				stack = stackName
 				break
 			}
