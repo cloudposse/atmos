@@ -52,7 +52,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		c.ProcessedConfig.StacksBaseAbsolutePath,
 		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
 		false,
-		true)
+		false)
 
 	if err != nil {
 		return err
@@ -60,15 +60,13 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
+	var componentBackendSection map[interface{}]interface{}
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		componentSection, componentVarsSection, err = findComponentConfig(stack, stacksMap, "terraform", component)
+		componentSection, componentVarsSection, componentBackendSection, err = findComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
-			componentSection, componentVarsSection, err = findComponentConfig(stack, stacksMap, "helmfile", component)
-			if err != nil {
-				return err
-			}
+			return err
 		}
 	} else {
 		color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
@@ -98,12 +96,9 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		}
 
 		for stackName := range stacksMap {
-			componentSection, componentVarsSection, err = findComponentConfig(stackName, stacksMap, "terraform", component)
+			componentSection, componentVarsSection, componentBackendSection, err = findComponentConfig(stackName, stacksMap, "terraform", component)
 			if err != nil {
-				componentSection, componentVarsSection, err = findComponentConfig(stackName, stacksMap, "helmfile", component)
-				if err != nil {
-					continue
-				}
+				continue
 			}
 
 			tenantFound = true
@@ -149,12 +144,48 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	color.Cyan("\nComponent config:\n\n")
-	err = u.PrintAsYAML(componentSection)
+	if componentBackendSection == nil {
+		return errors.New(fmt.Sprintf("\nCould not find 'backend' config for component '%s'.\n", component))
+	}
+
+	var componentBackendConfig = map[string]interface{}{
+		"terraform": map[string]interface{}{
+			"backend": map[string]interface{}{
+				"s3": componentBackendSection,
+			},
+		},
+	}
+
+	color.Cyan("\nComponent backend config:\n\n")
+	err = u.PrintAsJSON(componentBackendConfig)
 	if err != nil {
 		return err
 	}
 
+	var baseComponent string
+	if baseComponentSection, ok := componentSection["component"].(string); ok {
+		baseComponent = baseComponentSection
+	}
+
+	var finalComponent string
+
+	if len(baseComponent) > 0 {
+		finalComponent = baseComponent
+	} else {
+		finalComponent = component
+	}
+
+	// Write backend to file
+	var varFileName = fmt.Sprintf("%s/%s/backend.tf.json", c.ProcessedConfig.TerraformDirAbsolutePath, finalComponent)
+
+	color.Cyan("\nWriting backend config to file:")
+	fmt.Println(varFileName)
+	err = u.WriteToFileAsJSON(varFileName, componentBackendConfig, 0644)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
 	return nil
 }
 

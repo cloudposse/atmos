@@ -51,7 +51,7 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
 		c.ProcessedConfig.StacksBaseAbsolutePath,
 		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
-		false,
+		true,
 		true)
 
 	if err != nil {
@@ -63,9 +63,9 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		componentSection, componentVarsSection, err = findComponentConfig(stack, stacksMap, "terraform", component)
+		componentSection, componentVarsSection, _, err = findComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
-			componentSection, componentVarsSection, err = findComponentConfig(stack, stacksMap, "helmfile", component)
+			componentSection, componentVarsSection, _, err = findComponentConfig(stack, stacksMap, "helmfile", component)
 			if err != nil {
 				return err
 			}
@@ -98,9 +98,9 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		}
 
 		for stackName := range stacksMap {
-			componentSection, componentVarsSection, err = findComponentConfig(stackName, stacksMap, "terraform", component)
+			componentSection, componentVarsSection, _, err = findComponentConfig(stackName, stacksMap, "terraform", component)
 			if err != nil {
-				componentSection, componentVarsSection, err = findComponentConfig(stackName, stacksMap, "helmfile", component)
+				componentSection, componentVarsSection, _, err = findComponentConfig(stackName, stacksMap, "helmfile", component)
 				if err != nil {
 					continue
 				}

@@ -60,20 +60,21 @@ type ArgsAndFlagsInfo struct {
 }
 
 type ConfigAndStacksInfo struct {
-	Stack                  string
-	ComponentFromArg       string
-	ComponentFolderPrefix  string
-	ComponentNamePrefix    string
-	Component              string
-	BaseComponentPath      string
-	BaseComponent          string
-	Command                string
-	SubCommand             string
-	ComponentVarsSection   map[interface{}]interface{}
-	AdditionalArgsAndFlags []string
-	GlobalOptions          []string
-	TerraformDir           string
-	HelmfileDir            string
-	ConfigDir              string
-	StacksDir              string
+	Stack                   string
+	ComponentFromArg        string
+	ComponentFolderPrefix   string
+	ComponentNamePrefix     string
+	Component               string
+	BaseComponentPath       string
+	BaseComponent           string
+	Command                 string
+	SubCommand              string
+	ComponentVarsSection    map[interface{}]interface{}
+	ComponentBackendSection map[interface{}]interface{}
+	AdditionalArgsAndFlags  []string
+	GlobalOptions           []string
+	TerraformDir            string
+	HelmfileDir             string
+	ConfigDir               string
+	StacksDir               string
 }
