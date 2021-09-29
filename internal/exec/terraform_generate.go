@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-// ExecuteDescribeComponent executes `describe component` command
-func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
+// ExecuteTerraformGenerateBackend executes `terraform generate backend` command
+func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. Command requires one argument `component`")
 	}
@@ -51,8 +51,8 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
 		c.ProcessedConfig.StacksBaseAbsolutePath,
 		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
-		true,
-		true)
+		false,
+		false)
 
 	if err != nil {
 		return err
@@ -60,15 +60,13 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 
 	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
+	var componentBackendSection map[interface{}]interface{}
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		componentSection, componentVarsSection, _, err = findComponentConfig(stack, stacksMap, "terraform", component)
+		componentSection, componentVarsSection, componentBackendSection, err = findComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
-			componentSection, componentVarsSection, _, err = findComponentConfig(stack, stacksMap, "helmfile", component)
-			if err != nil {
-				return err
-			}
+			return err
 		}
 	} else {
 		color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
@@ -98,12 +96,9 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		}
 
 		for stackName := range stacksMap {
-			componentSection, componentVarsSection, _, err = findComponentConfig(stackName, stacksMap, "terraform", component)
+			componentSection, componentVarsSection, componentBackendSection, err = findComponentConfig(stackName, stacksMap, "terraform", component)
 			if err != nil {
-				componentSection, componentVarsSection, _, err = findComponentConfig(stackName, stacksMap, "helmfile", component)
-				if err != nil {
-					continue
-				}
+				continue
 			}
 
 			tenantFound = true
@@ -132,14 +127,14 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for component '%s' in stack '%s'\n\n", component, stackName)
+				color.Green("Found stack config for the '%s' component in the '%s' stack\n\n", component, stackName)
 				stack = stackName
 				break
 			}
 		}
 
 		if tenantFound == false || environmentFound == false || stageFound == false {
-			return errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
+			return errors.New(fmt.Sprintf("\nCould not find config for the '%s' component in the '%s' stack.\n"+
 				"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
 				"Are the component and stack names correct? Did you forget an import?",
 				component,
@@ -149,11 +144,57 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	color.Cyan("\nComponent config:\n\n")
-	err = u.PrintAsYAML(componentSection)
+	if componentBackendSection == nil {
+		return errors.New(fmt.Sprintf("\nCould not find 'backend' config for the '%s' component.\n", component))
+	}
+
+	var componentBackendConfig = map[string]interface{}{
+		"terraform": map[string]interface{}{
+			"backend": map[string]interface{}{
+				"s3": componentBackendSection,
+			},
+		},
+	}
+
+	color.Cyan("\nComponent backend config:\n\n")
+	err = u.PrintAsJSON(componentBackendConfig)
 	if err != nil {
 		return err
 	}
 
+	// Check if the `backend` section has `workspace_key_prefix`
+	if _, ok := componentBackendSection["workspace_key_prefix"].(string); !ok {
+		return errors.New(fmt.Sprintf("\nBackend config for the '%s' component is missing 'workspace_key_prefix'\n", component))
+	}
+
+	// Find if the component has a base component
+	var baseComponent string
+	if baseComponentSection, ok := componentSection["component"].(string); ok {
+		baseComponent = baseComponentSection
+	}
+
+	var finalComponent string
+	if len(baseComponent) > 0 {
+		finalComponent = baseComponent
+	} else {
+		finalComponent = component
+	}
+
+	// Write backend to file
+	var varFileName = fmt.Sprintf("%s/%s/backend.tf.json", c.Config.Components.Terraform.BasePath, finalComponent)
+
+	color.Cyan("\nWriting backend config to file:")
+	fmt.Println(varFileName)
+	err = u.WriteToFileAsJSON(varFileName, componentBackendConfig, 0644)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	return nil
+}
+
+// ExecuteTerraformGenerateBackends executes `terraform generate backends` command
+func ExecuteTerraformGenerateBackends(cmd *cobra.Command, args []string) error {
 	return nil
 }
