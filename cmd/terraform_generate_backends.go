@@ -11,7 +11,7 @@ import (
 var terraformGenerateBackendsCmd = &cobra.Command{
 	Use:                "backends",
 	Short:              "generate backends",
-	Long:               `This command generates backend configs for all terraform components`,
+	Long:               `This command generates the backend configs for all terraform components`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateBackends(cmd, args)
