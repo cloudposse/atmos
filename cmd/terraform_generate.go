@@ -8,7 +8,7 @@ import (
 var terraformGenerateCmd = &cobra.Command{
 	Use:                "generate",
 	Short:              "generate",
-	Long:               "This command generates backends and variables for terraform components",
+	Long:               "This command generates backend configs and variable configs for terraform components",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
