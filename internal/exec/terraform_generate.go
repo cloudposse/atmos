@@ -162,6 +162,11 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Check if the `backend` section has `workspace_key_prefix`
+	if _, ok := componentBackendSection["workspace_key_prefix"].(string); !ok {
+		return errors.New(fmt.Sprintf("\nBackend config for component '%s' is missing 'workspace_key_prefix'\n", component))
+	}
+
 	// Find if the component has a base component
 	var baseComponent string
 	if baseComponentSection, ok := componentSection["component"].(string); ok {
