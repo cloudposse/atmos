@@ -176,7 +176,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write backend to file
-	var varFileName = fmt.Sprintf("%s/%s/backend.tf.json", c.ProcessedConfig.TerraformDirAbsolutePath, finalComponent)
+	var varFileName = fmt.Sprintf("%s/%s/backend.tf.json", c.Config.Components.Terraform.BasePath, finalComponent)
 
 	color.Cyan("\nWriting backend config to file:")
 	fmt.Println(varFileName)
