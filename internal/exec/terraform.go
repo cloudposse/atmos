@@ -207,11 +207,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	if cleanUp == true {
-		planFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, info.Component, planFile)
-		_ = os.Remove(planFilePath)
+		planFilePath := fmt.Sprintf("%s/%s", workingDir, planFile)
+		err = os.Remove(planFilePath)
+		if err != nil {
+			color.Yellow("Error deleting terraform plan file: %s\n", err)
+		}
 
-		varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, info.Component, varFile)
-		err = os.Remove(varFilePath)
+		err = os.Remove(varFileName)
 		if err != nil {
 			color.Yellow("Error deleting terraform var file: %s\n", err)
 		}

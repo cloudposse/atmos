@@ -305,7 +305,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	if finalComponentPathPartsLength > 1 {
 		componentFromArgPartsWithoutLast := finalComponentPathParts[:finalComponentPathPartsLength-1]
 		configAndStacksInfo.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
-		configAndStacksInfo.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "-")
+		configAndStacksInfo.ComponentNamePrefix = strings.Join(componentFromArgPartsWithoutLast, "-")
 		configAndStacksInfo.Component = finalComponentPathParts[finalComponentPathPartsLength-1]
 	} else {
 		configAndStacksInfo.Component = configAndStacksInfo.ComponentFromArg
