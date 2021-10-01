@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"path"
-	"strings"
 )
 
 const (
@@ -50,8 +49,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		))
 	}
 
-	stackNameFormatted := strings.Replace(info.Stack, "/", "-", -1)
-
 	// Write variables to a file
 	var varFileName, varFileNameFromArg string
 
@@ -72,7 +69,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			varFileName = fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json",
 				c.Config.Components.Terraform.BasePath,
 				finalComponent,
-				stackNameFormatted,
+				info.ContextPrefix,
 				info.Component,
 			)
 		} else {
@@ -80,7 +77,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
 				finalComponent,
-				stackNameFormatted,
+				info.ContextPrefix,
 				info.Component,
 			)
 		}
@@ -126,36 +123,22 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	color.Green("Stack: " + info.Stack)
 
 	var workingDir string
-	if len(info.ComponentNamePrefix) == 0 {
-		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, info.Component)
+	if len(info.ComponentFolderPrefix) == 0 {
+		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, finalComponent)
 	} else {
-		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Terraform.BasePath, info.ComponentNamePrefix, info.Component)
+		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	}
 	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
 	fmt.Println()
 
-	var planFile, varFile string
-	if len(info.ComponentNamePrefix) == 0 {
-		planFile = fmt.Sprintf("%s-%s.planfile", stackNameFormatted, info.Component)
-		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, info.Component)
-	} else {
-		planFile = fmt.Sprintf("%s-%s-%s.planfile", stackNameFormatted, info.ComponentNamePrefix, info.Component)
-		varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", stackNameFormatted, info.ComponentNamePrefix, info.Component)
-	}
+	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
+	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
 
 	var workspaceName string
-	if len(info.ComponentNamePrefix) == 0 {
-		if len(info.BaseComponent) > 0 {
-			workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, info.Component)
-		} else {
-			workspaceName = stackNameFormatted
-		}
+	if len(info.BaseComponent) > 0 {
+		workspaceName = fmt.Sprintf("%s-%s", info.ContextPrefix, info.Component)
 	} else {
-		if len(info.BaseComponent) > 0 {
-			workspaceName = fmt.Sprintf("%s-%s-%s", info.ComponentNamePrefix, stackNameFormatted, info.Component)
-		} else {
-			workspaceName = fmt.Sprintf("%s-%s", info.ComponentNamePrefix, stackNameFormatted)
-		}
+		workspaceName = info.ContextPrefix
 	}
 
 	cleanUp := false

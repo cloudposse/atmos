@@ -78,4 +78,5 @@ type ConfigAndStacksInfo struct {
 	ConfigDir               string
 	StacksDir               string
 	Context                 Context
+	ContextPrefix           string
 }

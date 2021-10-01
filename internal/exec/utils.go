@@ -194,6 +194,12 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo, err
 	}
 
+	if len(c.Config.Stacks.NamePattern) < 1 {
+		return configAndStacksInfo,
+			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+	}
+	stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
+
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
 		_, configAndStacksInfo.ComponentVarsSection, _, configAndStacksInfo.BaseComponentPath, configAndStacksInfo.Command, err = checkStackConfig(
@@ -207,13 +213,13 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	} else {
 		color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
 
-		if len(c.Config.Stacks.NamePattern) < 1 {
-			return configAndStacksInfo,
-				errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-		}
-
 		stackParts := strings.Split(configAndStacksInfo.Stack, "-")
-		stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
+		if len(stackParts) != len(stackNamePatternParts) {
+			return configAndStacksInfo,
+				errors.New(fmt.Sprintf("Stack '%s' does not match the stack name pattern '%s'",
+					configAndStacksInfo.Stack,
+					c.Config.Stacks.NamePattern))
+		}
 
 		var tenant string
 		var environment string
@@ -268,7 +274,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for component '%s' in stack '%s'\n\n", configAndStacksInfo.ComponentFromArg, stackName)
+				color.Green("Found stack config for the component '%s' in the stack '%s'\n\n", configAndStacksInfo.ComponentFromArg, stackName)
 				configAndStacksInfo.Stack = stackName
 				break
 			}
@@ -276,8 +282,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 		if tenantFound == false || environmentFound == false || stageFound == false {
 			return configAndStacksInfo,
-				errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
-					"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
+				errors.New(fmt.Sprintf("\nCould not find config for the component '%s' in the stack '%s'.\n"+
+					"Check that all attributes in the stack name pattern '%s' are defined in the stack config files.\n"+
 					"Are the component and stack names correct? Did you forget an import?",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
@@ -290,7 +296,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		configAndStacksInfo.Command = componentType
 	}
 
-	color.Cyan("Variables for component '%s' in stack '%s':", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
+	color.Cyan("Variables for the component '%s' in the stack '%s':", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
 	err = u.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
 	if err != nil {
 		return configAndStacksInfo, err
@@ -321,8 +327,54 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 	}
 
+	// Process context
 	configAndStacksInfo.Context = getContextFromVars(configAndStacksInfo.ComponentVarsSection)
+	contextPrefix := ""
 
+	for _, part := range stackNamePatternParts {
+		if part == "{tenant}" {
+			if len(configAndStacksInfo.Context.Tenant) == 0 {
+				return configAndStacksInfo,
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
+						c.Config.Stacks.NamePattern,
+						configAndStacksInfo.Stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = configAndStacksInfo.Context.Tenant
+			} else {
+				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Tenant
+			}
+		} else if part == "{environment}" {
+			if len(configAndStacksInfo.Context.Environment) == 0 {
+				return configAndStacksInfo,
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack %s does not have an environment defined",
+						c.Config.Stacks.NamePattern,
+						configAndStacksInfo.Stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = configAndStacksInfo.Context.Environment
+			} else {
+				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Environment
+			}
+		} else if part == "{stage}" {
+			if len(configAndStacksInfo.Context.Stage) == 0 {
+				return configAndStacksInfo,
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
+						c.Config.Stacks.NamePattern,
+						configAndStacksInfo.Stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = configAndStacksInfo.Context.Stage
+			} else {
+				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Stage
+			}
+		}
+	}
+
+	configAndStacksInfo.ContextPrefix = contextPrefix
 	return configAndStacksInfo, nil
 }
 
