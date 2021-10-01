@@ -191,10 +191,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	if cleanUp == true {
 		planFilePath := fmt.Sprintf("%s/%s", workingDir, planFile)
-		err = os.Remove(planFilePath)
-		if err != nil {
-			color.Yellow("Error deleting terraform plan file: %s\n", err)
-		}
+		_ = os.Remove(planFilePath)
 
 		err = os.Remove(varFileName)
 		if err != nil {
