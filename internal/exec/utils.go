@@ -321,6 +321,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 	}
 
+	configAndStacksInfo.Context = getContextFromVars(configAndStacksInfo.ComponentVarsSection)
+
 	return configAndStacksInfo, nil
 }
 

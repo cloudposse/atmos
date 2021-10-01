@@ -77,4 +77,5 @@ type ConfigAndStacksInfo struct {
 	HelmfileDir             string
 	ConfigDir               string
 	StacksDir               string
+	Context                 Context
 }
