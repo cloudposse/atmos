@@ -24,9 +24,15 @@ type Stacks struct {
 	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
 }
 
+type Logs struct {
+	Verbose bool `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
+	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
+}
+
 type Configuration struct {
 	Components Components
 	Stacks     Stacks
+	Logs       Logs
 }
 
 type ProcessedConfiguration struct {
