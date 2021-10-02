@@ -40,3 +40,7 @@ stacks:
     - "**/*globals*"
   # Can also be set using `ATMOS_STACKS_NAME_PATTERN` ENV var
   name_pattern: "{tenant}-{environment}-{stage}"
+
+logs:
+  verbose: true
+  colors: true
