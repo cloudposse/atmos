@@ -14,7 +14,7 @@ import (
 // ExecuteTerraformGenerateBackend executes `terraform generate backend` command
 func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("invalid arguments. Command requires one argument `component`")
+		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
 	flags := cmd.Flags()
 

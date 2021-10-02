@@ -49,6 +49,10 @@ var (
 				"**/*globals*",
 			},
 		},
+		Logs: Logs{
+			Verbose: true,
+			Colors:  true,
+		},
 	}
 
 	// Config is the CLI configuration structure

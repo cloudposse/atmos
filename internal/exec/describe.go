@@ -14,7 +14,7 @@ import (
 // ExecuteDescribeComponent executes `describe component` command
 func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("invalid arguments. Command requires one argument `component`")
+		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
 	flags := cmd.Flags()
 
@@ -132,14 +132,14 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for component '%s' in stack '%s'\n\n", component, stackName)
+				color.Green("Found stack config for component '%s' in the stack '%s'\n\n", component, stackName)
 				stack = stackName
 				break
 			}
 		}
 
 		if tenantFound == false || environmentFound == false || stageFound == false {
-			return errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
+			return errors.New(fmt.Sprintf("\nCould not find config for the component '%s' in the stack '%s'.\n"+
 				"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
 				"Are the component and stack names correct? Did you forget an import?",
 				component,

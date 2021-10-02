@@ -152,7 +152,7 @@ func ProcessYAMLConfigFile(
 			impWithExtPath := path.Join(basePath, impWithExt)
 
 			if impWithExtPath == filePath {
-				errorMessage := fmt.Sprintf("Invalid import in config file %s.\nThe file imports itself in import: '%s'",
+				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nThe file imports itself in '%s'",
 					filePath,
 					strings.Replace(impWithExt, basePath+"/", "", 1))
 				return nil, nil, errors.New(errorMessage)
@@ -165,7 +165,7 @@ func ProcessYAMLConfigFile(
 			}
 
 			if matches == nil {
-				errorMessage := fmt.Sprintf("Invalid import in config file %s.\nNo matches found for import: '%s'",
+				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nNo matches found for the import '%s'",
 					filePath,
 					strings.Replace(impWithExt, basePath+"/", "", 1))
 				return nil, nil, errors.New(errorMessage)

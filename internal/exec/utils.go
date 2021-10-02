@@ -60,16 +60,16 @@ func checkStackConfig(
 		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
+		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in stack '%s'", componentType, stack))
+		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for component '%s' in stack '%s'", component, stack))
+		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Missing 'vars' section for component '%s' in stack '%s'", component, stack))
+		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
@@ -104,16 +104,16 @@ func findComponentConfig(
 		return nil, nil, nil, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
+		return nil, nil, nil, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("'components/%s' section is missing in stack '%s'", componentType, stack))
+		return nil, nil, nil, errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("Invalid or missing configuration for component '%s' in stack '%s'", component, stack))
+		return nil, nil, nil, errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("Missing 'vars' section for component '%s' in stack '%s'", component, stack))
+		return nil, nil, nil, errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
