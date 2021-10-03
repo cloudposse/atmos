@@ -3,6 +3,7 @@ package config
 type Terraform struct {
 	BasePath         string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
+	DeployRunInit    bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
 }
 
 type Helmfile struct {

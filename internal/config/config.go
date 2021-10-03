@@ -31,6 +31,7 @@ var (
 			Terraform: Terraform{
 				BasePath:         "./components/terraform",
 				ApplyAutoApprove: false,
+				DeployRunInit:    true,
 			},
 			Helmfile: Helmfile{
 				BasePath:              "./components/helmfile",
@@ -51,7 +52,7 @@ var (
 			},
 		},
 		Logs: Logs{
-			Verbose: true,
+			Verbose: false,
 			Colors:  true,
 		},
 	}

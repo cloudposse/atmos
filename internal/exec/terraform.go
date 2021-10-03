@@ -97,7 +97,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run `terraform init`
-	if info.SubCommand != "init" && info.SubCommand != "deploy" && info.SubCommand != "workspace" {
+	runTerraformInit := true
+	if info.SubCommand == "init" ||
+		info.SubCommand == "workspace" ||
+		(info.SubCommand == "deploy" && c.Config.Components.Terraform.DeployRunInit == false) {
+		runTerraformInit = false
+	}
+	if runTerraformInit == true {
 		err = execCommand(info.Command, []string{"init"}, componentPath, nil)
 		if err != nil {
 			return err
