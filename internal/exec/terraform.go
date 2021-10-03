@@ -96,6 +96,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Run `terraform init`
+	if info.SubCommand != "init" && info.SubCommand != "deploy" && info.SubCommand != "workspace" {
+		err = execCommand(info.Command, []string{"init"}, componentPath, nil)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Handle `terraform deploy` custom command
 	if info.SubCommand == "deploy" {
 		info.SubCommand = "apply"
@@ -152,23 +160,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		cleanUp = true
 		break
 	case "apply":
-		// Use the planfile if `-auto-approve` flag is not specified
-		// Use the varfile if `-auto-approve` flag is specified
-		if !u.SliceContainsString(allArgsAndFlags, autoApproveFlag) {
-			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
-		} else {
-			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		}
+		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		cleanUp = true
 		break
-	}
-
-	// Run `terraform init`
-	if info.SubCommand != "init" {
-		err = execCommand(info.Command, []string{"init"}, componentPath, nil)
-		if err != nil {
-			return err
-		}
 	}
 
 	// Run `terraform workspace`
