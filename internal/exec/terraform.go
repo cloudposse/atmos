@@ -148,7 +148,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		workspaceName = info.ContextPrefix
 	}
 
-	cleanUp := false
 	allArgsAndFlags := append([]string{info.SubCommand}, info.AdditionalArgsAndFlags...)
 
 	switch info.SubCommand {
@@ -157,11 +156,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		break
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		cleanUp = true
 		break
 	case "apply":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		cleanUp = true
 		break
 	}
 
@@ -182,14 +179,15 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if cleanUp == true {
+	// Clean up
+	if info.SubCommand != "plan" {
 		planFilePath := fmt.Sprintf("%s/%s", workingDir, planFile)
 		_ = os.Remove(planFilePath)
+	}
 
-		err = os.Remove(varFileName)
-		if err != nil {
-			color.Yellow("Error deleting terraform var file: %s\n", err)
-		}
+	err = os.Remove(varFileName)
+	if err != nil {
+		color.Yellow("Error deleting terraform varfile: %s\n", err)
 	}
 
 	return nil
