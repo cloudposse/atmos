@@ -1,6 +1,7 @@
 package config
 
 import (
+	g "atmos/internal/globals"
 	u "atmos/internal/utils"
 	"bytes"
 	"encoding/json"
@@ -73,7 +74,14 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// ENV vars
 	// Command-line arguments
 
-	color.Cyan("\nProcessing and merging configurations in the following order: system dir, home dir, current dir, ENV vars\n")
+	err := processLogsConfig()
+	if err != nil {
+		return err
+	}
+
+	if g.LogVerbose {
+		color.Cyan("\nProcessing and merging configurations in the following order: system dir, home dir, current dir, ENV vars\n")
+	}
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -152,19 +160,19 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// Process command-line args
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		Config.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
-		color.Cyan(fmt.Sprintf("\nUsing command line argument '%s' as Terraform directory", configAndStacksInfo.TerraformDir))
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		Config.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
-		color.Cyan(fmt.Sprintf("\nUsing command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
 	}
 	if len(configAndStacksInfo.ConfigDir) > 0 {
 		Config.Stacks.BasePath = configAndStacksInfo.ConfigDir
-		color.Cyan(fmt.Sprintf("\nUsing command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
 	}
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		Config.Stacks.BasePath = configAndStacksInfo.StacksDir
-		color.Cyan(fmt.Sprintf("\nUsing command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
 	}
 
 	// Check config
@@ -233,13 +241,13 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
 	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
-	fmt.Println()
-
 	if stackIsPhysicalPath == true {
-		color.Cyan(fmt.Sprintf("Stack '%s' is a directory, it matches the stack config file %s",
-			configAndStacksInfo.Stack,
-			stackConfigFilesRelativePaths[0]),
-		)
+		if g.LogVerbose {
+			color.Cyan(fmt.Sprintf("Stack '%s' is a directory, it matches the stack config file %s",
+				configAndStacksInfo.Stack,
+				stackConfigFilesRelativePaths[0]),
+			)
+		}
 		ProcessedConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name
@@ -248,10 +256,12 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
 
 		if len(stackParts) == len(stackNamePatternParts) {
-			color.Cyan(fmt.Sprintf("Stack '%s' matches the stack name pattern '%s'",
-				configAndStacksInfo.Stack,
-				Config.Stacks.NamePattern),
-			)
+			if g.LogVerbose {
+				color.Cyan(fmt.Sprintf("Stack '%s' matches the stack name pattern '%s'",
+					configAndStacksInfo.Stack,
+					Config.Stacks.NamePattern),
+				)
+			}
 			ProcessedConfig.StackType = "Logical"
 		} else {
 			errorMessage := fmt.Sprintf("Stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
@@ -262,10 +272,12 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		}
 	}
 
-	color.Cyan("\nFinal CLI configuration:")
-	err = u.PrintAsYAML(Config)
-	if err != nil {
-		return err
+	if g.LogVerbose {
+		color.Cyan("\nFinal CLI configuration:")
+		err = u.PrintAsYAML(Config)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -276,11 +288,15 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
 	if !u.FileExists(path) {
-		fmt.Println(fmt.Sprintf("No config found in %s", path))
+		if g.LogVerbose {
+			fmt.Println(fmt.Sprintf("No config found in %s", path))
+		}
 		return nil
 	}
 
-	color.Green("Found config in %s", path)
+	if g.LogVerbose {
+		color.Green("Found config in %s", path)
+	}
 
 	reader, err := os.Open(path)
 	if err != nil {
@@ -299,7 +315,9 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return err
 	}
 
-	color.Green("Processed config %s", path)
+	if g.LogVerbose {
+		color.Green("Processed config %s", path)
+	}
 
 	return nil
 }

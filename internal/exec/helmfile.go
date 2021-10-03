@@ -99,22 +99,22 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Print command info
 	color.Cyan("\nCommand info:")
-	color.Green("Helmfile binary: " + info.Command)
-	color.Green("Helmfile command: " + info.SubCommand)
+	fmt.Println("Helmfile binary: " + info.Command)
+	fmt.Println("Helmfile command: " + info.SubCommand)
 
 	// https://github.com/roboll/helmfile#cli-reference
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
-	color.Green("Global options: %v", info.GlobalOptions)
+	fmt.Println(fmt.Sprintf("Global options: %v", info.GlobalOptions))
 
-	color.Green("Arguments and flags: %v", info.AdditionalArgsAndFlags)
-	color.Green("Component: " + info.ComponentFromArg)
+	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponent) > 0 {
-		color.Green("Base component: " + info.BaseComponent)
+		fmt.Println("Base component: " + info.BaseComponent)
 	}
-	color.Green("Stack: " + info.Stack)
+	fmt.Println("Stack: " + info.Stack)
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
@@ -122,8 +122,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	} else {
 		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
 	}
-	color.Green(fmt.Sprintf("Working dir: %s\n\n", workingDir))
-	fmt.Println()
+	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
 	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
 

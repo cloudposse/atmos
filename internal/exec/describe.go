@@ -2,6 +2,7 @@ package exec
 
 import (
 	c "atmos/internal/config"
+	g "atmos/internal/globals"
 	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"fmt"
@@ -34,18 +35,20 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	component := args[0]
 
 	// Print the stack config files
-	fmt.Println()
-	var msg string
-	if c.ProcessedConfig.StackType == "Directory" {
-		msg = "Found the config file for the provided stack:"
-	} else {
-		msg = "Found config files:"
-	}
-	color.Cyan(msg)
+	if g.LogVerbose {
+		fmt.Println()
+		var msg string
+		if c.ProcessedConfig.StackType == "Directory" {
+			msg = "Found the config file for the provided stack:"
+		} else {
+			msg = "Found config files:"
+		}
+		color.Cyan(msg)
 
-	err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
-	if err != nil {
-		return err
+		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
@@ -71,7 +74,9 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
+		if g.LogVerbose {
+			color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
+		}
 
 		if len(c.Config.Stacks.NamePattern) < 1 {
 			return errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
@@ -149,7 +154,10 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	color.Cyan("\nComponent config:\n\n")
+	if g.LogVerbose {
+		color.Cyan("\nComponent config:\n\n")
+	}
+
 	err = u.PrintAsYAML(componentSection)
 	if err != nil {
 		return err

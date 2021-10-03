@@ -113,14 +113,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Print command info
 	color.Cyan("\nCommand info:")
-	color.Green("Terraform binary: " + info.Command)
-	color.Green("Terraform command: " + info.SubCommand)
-	color.Green("Arguments and flags: %v", info.AdditionalArgsAndFlags)
-	color.Green("Component: " + info.ComponentFromArg)
+	fmt.Println("Terraform binary: " + info.Command)
+	fmt.Println("Terraform command: " + info.SubCommand)
+	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponentPath) > 0 {
-		color.Green("Base component: " + info.BaseComponentPath)
+		fmt.Println("Base component: " + info.BaseComponentPath)
 	}
-	color.Green("Stack: " + info.Stack)
+	fmt.Println("Stack: " + info.Stack)
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
@@ -128,8 +128,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	} else {
 		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	}
-	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
-	fmt.Println()
+	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
 	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
 	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)

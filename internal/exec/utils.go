@@ -2,6 +2,7 @@ package exec
 
 import (
 	c "atmos/internal/config"
+	g "atmos/internal/globals"
 	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"errors"
@@ -138,7 +139,6 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 	flags := cmd.Flags()
 
-	// Get stack
 	configAndStacksInfo.Stack, err = flags.GetString("stack")
 	if err != nil {
 		return configAndStacksInfo, err
@@ -181,17 +181,19 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	// Print the stack config files
-	fmt.Println()
-	var msg string
-	if c.ProcessedConfig.StackType == "Directory" {
-		msg = "Found the config file for the provided stack:"
-	} else {
-		msg = "Found config files:"
-	}
-	color.Cyan(msg)
-	err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
-	if err != nil {
-		return configAndStacksInfo, err
+	if g.LogVerbose {
+		fmt.Println()
+		var msg string
+		if c.ProcessedConfig.StackType == "Directory" {
+			msg = "Found the config file for the provided stack:"
+		} else {
+			msg = "Found config files:"
+		}
+		color.Cyan(msg)
+		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
 	}
 
 	if len(c.Config.Stacks.NamePattern) < 1 {
@@ -211,7 +213,9 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			return configAndStacksInfo, err
 		}
 	} else {
-		color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
+		if g.LogVerbose {
+			color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
+		}
 
 		stackParts := strings.Split(configAndStacksInfo.Stack, "-")
 		if len(stackParts) != len(stackNamePatternParts) {
@@ -274,7 +278,9 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for the component '%s' in the stack '%s'\n\n", configAndStacksInfo.ComponentFromArg, stackName)
+				if g.LogVerbose {
+					color.Green("Found stack config for the component '%s' in the stack '%s'\n\n", configAndStacksInfo.ComponentFromArg, stackName)
+				}
 				configAndStacksInfo.Stack = stackName
 				break
 			}
@@ -292,11 +298,11 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 	}
 
-	if len(configAndStacksInfo.Command) < 1 {
+	if len(configAndStacksInfo.Command) == 0 {
 		configAndStacksInfo.Command = componentType
 	}
 
-	color.Cyan("Variables for the component '%s' in the stack '%s':", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
+	color.Cyan("\nVariables for the component '%s' in the stack '%s':", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
 	err = u.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
 	if err != nil {
 		return configAndStacksInfo, err
@@ -497,7 +503,9 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
-	color.Cyan("\nExecuting command:\n%s\n\n", cmd.String())
+	color.Cyan("\nExecuting command:\n")
+	fmt.Println(cmd.String())
+	fmt.Println()
 	return cmd.Run()
 }
 
