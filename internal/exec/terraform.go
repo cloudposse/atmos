@@ -177,8 +177,24 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check if the terraform command requires user interaction,
+	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
+	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		errorMessage := ""
+		if info.SubCommand == "apply" {
+			errorMessage = "`terraform apply` requires a user interaction, but it's running without `tty` or `stdin` attached." +
+				"\nUse `terraform apply -auto-approve` or `terraform deploy` instead."
+		} else if info.SubCommand == "destroy" {
+			errorMessage = "`terraform destroy` requires a user interaction, but it's running without `tty` or `stdin` attached." +
+				"\nUse `terraform destroy -auto-approve` if you need to destroy resources without asking the user for confirmation."
+		}
+		if errorMessage != "" {
+			return errors.New(errorMessage)
+		}
+	}
+
+	// Execute the command
 	if info.SubCommand != "workspace" {
-		// Execute the command
 		err = execCommand(info.Command, allArgsAndFlags, componentPath, nil)
 		if err != nil {
 			return err
