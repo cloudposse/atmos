@@ -177,7 +177,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check if the terraform command requires user interaction,
+	// Check if the terraform command requires a user interaction,
 	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
 	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		errorMessage := ""
