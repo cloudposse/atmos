@@ -182,11 +182,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		errorMessage := ""
 		if info.SubCommand == "apply" {
-			errorMessage = "`terraform apply` requires a user interaction, but it's running without `tty` or `stdin` attached." +
-				"\nUse `terraform apply -auto-approve` or `terraform deploy` instead."
+			errorMessage = "'terraform apply' requires a user interaction, but it's running without `tty` or `stdin` attached." +
+				"\nUse 'terraform apply -auto-approve' or 'terraform deploy' instead."
 		} else if info.SubCommand == "destroy" {
-			errorMessage = "`terraform destroy` requires a user interaction, but it's running without `tty` or `stdin` attached." +
-				"\nUse `terraform destroy -auto-approve` if you need to destroy resources without asking the user for confirmation."
+			errorMessage = "'terraform destroy' requires a user interaction, but it's running without `tty` or `stdin` attached." +
+				"\nUse 'terraform destroy -auto-approve' if you need to destroy resources without asking the user for confirmation."
 		}
 		if errorMessage != "" {
 			return errors.New(errorMessage)
