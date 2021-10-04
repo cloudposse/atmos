@@ -64,7 +64,7 @@ var (
 	ProcessedConfig ProcessedConfiguration
 )
 
-// InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars
+// InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
@@ -81,7 +81,8 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	}
 
 	if g.LogVerbose {
-		color.Cyan("\nProcessing and merging configurations in the following order:\nsystem dir, home dir, current dir, ENV vars, command-line arguments\n")
+		color.Cyan("\nProcessing and merging configurations in the following order:\n")
+		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments\n")
 	}
 
 	v := viper.New()
@@ -244,7 +245,7 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 
 	if stackIsPhysicalPath == true {
 		if g.LogVerbose {
-			color.Cyan(fmt.Sprintf("The stack '%s' matches the stack config file %s",
+			color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
 				configAndStacksInfo.Stack,
 				stackConfigFilesRelativePaths[0]),
 			)
@@ -258,14 +259,14 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 
 		if len(stackParts) == len(stackNamePatternParts) {
 			if g.LogVerbose {
-				color.Cyan(fmt.Sprintf("The stack '%s' matches the stack name pattern '%s'",
+				color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack name pattern '%s'",
 					configAndStacksInfo.Stack,
 					Config.Stacks.NamePattern),
 				)
 			}
 			ProcessedConfig.StackType = "Logical"
 		} else {
-			errorMessage := fmt.Sprintf("The stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
+			errorMessage := fmt.Sprintf("\nThe stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
 				configAndStacksInfo.Stack,
 				Config.Stacks.NamePattern,
 			)

@@ -137,7 +137,9 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for component '%s' in the stack '%s'\n\n", component, stackName)
+				if g.LogVerbose == true {
+					color.Cyan("Found stack config for component '%s' in the stack '%s'\n\n", component, stackName)
+				}
 				stack = stackName
 				break
 			}
