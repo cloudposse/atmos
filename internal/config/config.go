@@ -81,7 +81,7 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	}
 
 	if g.LogVerbose {
-		color.Cyan("\nProcessing and merging configurations in the following order: system dir, home dir, current dir, ENV vars\n")
+		color.Cyan("\nProcessing and merging configurations in the following order:\nsystem dir, home dir, current dir, ENV vars, command-line arguments\n")
 	}
 
 	v := viper.New()
