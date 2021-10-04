@@ -244,7 +244,7 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 
 	if stackIsPhysicalPath == true {
 		if g.LogVerbose {
-			color.Cyan(fmt.Sprintf("Stack '%s' is a directory, it matches the stack config file %s",
+			color.Cyan(fmt.Sprintf("The stack '%s' matches the stack config file %s",
 				configAndStacksInfo.Stack,
 				stackConfigFilesRelativePaths[0]),
 			)
@@ -258,14 +258,14 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 
 		if len(stackParts) == len(stackNamePatternParts) {
 			if g.LogVerbose {
-				color.Cyan(fmt.Sprintf("Stack '%s' matches the stack name pattern '%s'",
+				color.Cyan(fmt.Sprintf("The stack '%s' matches the stack name pattern '%s'",
 					configAndStacksInfo.Stack,
 					Config.Stacks.NamePattern),
 				)
 			}
 			ProcessedConfig.StackType = "Logical"
 		} else {
-			errorMessage := fmt.Sprintf("Stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
+			errorMessage := fmt.Sprintf("The stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
 				configAndStacksInfo.Stack,
 				Config.Stacks.NamePattern,
 			)
