@@ -14,28 +14,18 @@ import (
 	"strings"
 )
 
-const (
-	// Custom flag to specify helmfile `GLOBAL OPTIONS`
-	// https://github.com/roboll/helmfile#cli-reference
-	globalOptionsFlag = "--global-options"
-
-	terraformDirFlag = "--terraform-dir"
-	helmfileDirFlag  = "--helmfile-dir"
-	configDirFlag    = "--config-dir"
-	stackDirFlag     = "--stacks-dir"
-)
-
 var (
 	commonFlags = []string{
 		"--stack",
 		"-s",
 		"--dry-run",
 		"--kubeconfig-path",
-		terraformDirFlag,
-		helmfileDirFlag,
-		configDirFlag,
-		stackDirFlag,
-		globalOptionsFlag,
+		g.TerraformDirFlag,
+		g.HelmfileDirFlag,
+		g.ConfigDirFlag,
+		g.StackDirFlag,
+		g.GlobalOptionsFlag,
+		g.DeployRunInitFlag,
 	}
 )
 
@@ -157,6 +147,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
+	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
@@ -396,18 +387,18 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 	var globalOptionsFlagIndex int
 
 	for i, arg := range inputArgsAndFlags {
-		if arg == globalOptionsFlag {
+		if arg == g.GlobalOptionsFlag {
 			globalOptionsFlagIndex = i + 1
-		} else if strings.HasPrefix(arg+"=", globalOptionsFlag) {
+		} else if strings.HasPrefix(arg+"=", g.GlobalOptionsFlag) {
 			globalOptionsFlagIndex = i
 		}
 
-		if arg == terraformDirFlag {
+		if arg == g.TerraformDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.TerraformDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", terraformDirFlag) {
+		} else if strings.HasPrefix(arg+"=", g.TerraformDirFlag) {
 			var terraformDirFlagParts = strings.Split(arg, "=")
 			if len(terraformDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
@@ -415,12 +406,12 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.TerraformDir = terraformDirFlagParts[1]
 		}
 
-		if arg == helmfileDirFlag {
+		if arg == g.HelmfileDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.HelmfileDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", helmfileDirFlag) {
+		} else if strings.HasPrefix(arg+"=", g.HelmfileDirFlag) {
 			var helmfileDirFlagParts = strings.Split(arg, "=")
 			if len(helmfileDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
@@ -428,12 +419,12 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.HelmfileDir = helmfileDirFlagParts[1]
 		}
 
-		if arg == configDirFlag {
+		if arg == g.ConfigDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.StacksDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", configDirFlag) {
+		} else if strings.HasPrefix(arg+"=", g.ConfigDirFlag) {
 			var configDirFlagParts = strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
@@ -441,17 +432,30 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.StacksDir = configDirFlagParts[1]
 		}
 
-		if arg == stackDirFlag {
+		if arg == g.StackDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.ConfigDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", stackDirFlag) {
+		} else if strings.HasPrefix(arg+"=", g.StackDirFlag) {
 			var stacksDirFlagParts = strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.ConfigDir = stacksDirFlagParts[1]
+		}
+
+		if arg == g.DeployRunInitFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.DeployRunInit = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.DeployRunInitFlag) {
+			var deployRunInitFlagParts = strings.Split(arg, "=")
+			if len(deployRunInitFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.DeployRunInit = deployRunInitFlagParts[1]
 		}
 
 		for _, f := range commonFlags {
@@ -470,7 +474,7 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 		}
 
 		if globalOptionsFlagIndex > 0 && i == globalOptionsFlagIndex {
-			if strings.HasPrefix(arg, globalOptionsFlag+"=") {
+			if strings.HasPrefix(arg, g.GlobalOptionsFlag+"=") {
 				parts := strings.SplitN(arg, "=", 2)
 				globalOptions = strings.Split(parts[1], " ")
 			} else {

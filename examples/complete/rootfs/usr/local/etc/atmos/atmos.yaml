@@ -15,7 +15,7 @@ components:
     base_path: "./components/terraform"
     # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE` ENV var
     apply_auto_approve: false
-    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT` ENV var
+    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT` ENV var, or `--deploy-run-init` command-line argument
     deploy_run_init: true
   helmfile:
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var, or `--helmfile-dir` command-line argument

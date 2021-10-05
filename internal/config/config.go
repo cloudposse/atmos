@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -169,6 +170,14 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		Config.Stacks.BasePath = configAndStacksInfo.StacksDir
 		color.Cyan(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
+	}
+	if len(configAndStacksInfo.DeployRunInit) > 0 {
+		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.DeployRunInit = deployRunInitBool
+		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
 	}
 
 	// Check config

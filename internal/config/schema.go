@@ -64,6 +64,7 @@ type ArgsAndFlagsInfo struct {
 	HelmfileDir            string
 	ConfigDir              string
 	StacksDir              string
+	DeployRunInit          string
 }
 
 type ConfigAndStacksInfo struct {
@@ -86,4 +87,5 @@ type ConfigAndStacksInfo struct {
 	StacksDir               string
 	Context                 Context
 	ContextPrefix           string
+	DeployRunInit           string
 }
