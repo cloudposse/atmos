@@ -2,6 +2,7 @@ package exec
 
 import (
 	c "atmos/internal/config"
+	g "atmos/internal/globals"
 	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"errors"
@@ -13,28 +14,18 @@ import (
 	"strings"
 )
 
-const (
-	// Custom flag to specify helmfile `GLOBAL OPTIONS`
-	// https://github.com/roboll/helmfile#cli-reference
-	globalOptionsFlag = "--global-options"
-
-	terraformDirFlag = "--terraform-dir"
-	helmfileDirFlag  = "--helmfile-dir"
-	configDirFlag    = "--config-dir"
-	stackDirFlag     = "--stacks-dir"
-)
-
 var (
 	commonFlags = []string{
 		"--stack",
 		"-s",
 		"--dry-run",
 		"--kubeconfig-path",
-		terraformDirFlag,
-		helmfileDirFlag,
-		configDirFlag,
-		stackDirFlag,
-		globalOptionsFlag,
+		g.TerraformDirFlag,
+		g.HelmfileDirFlag,
+		g.ConfigDirFlag,
+		g.StackDirFlag,
+		g.GlobalOptionsFlag,
+		g.DeployRunInitFlag,
 	}
 )
 
@@ -60,16 +51,16 @@ func checkStackConfig(
 		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
+		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in stack '%s'", componentType, stack))
+		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for component '%s' in stack '%s'", component, stack))
+		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Missing 'vars' section for component '%s' in stack '%s'", component, stack))
+		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
@@ -104,16 +95,16 @@ func findComponentConfig(
 		return nil, nil, nil, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("'components' section is missing in stack '%s'", stack))
+		return nil, nil, nil, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("'components/%s' section is missing in stack '%s'", componentType, stack))
+		return nil, nil, nil, errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("Invalid or missing configuration for component '%s' in stack '%s'", component, stack))
+		return nil, nil, nil, errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("Missing 'vars' section for component '%s' in stack '%s'", component, stack))
+		return nil, nil, nil, errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
@@ -138,7 +129,6 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 	flags := cmd.Flags()
 
-	// Get stack
 	configAndStacksInfo.Stack, err = flags.GetString("stack")
 	if err != nil {
 		return configAndStacksInfo, err
@@ -157,6 +147,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
+	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
@@ -181,18 +172,26 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	// Print the stack config files
-	fmt.Println()
-	var msg string
-	if c.ProcessedConfig.StackType == "Directory" {
-		msg = "Found the config file for the provided stack:"
-	} else {
-		msg = "Found config files:"
+	if g.LogVerbose {
+		fmt.Println()
+		var msg string
+		if c.ProcessedConfig.StackType == "Directory" {
+			msg = "Found the config file for the provided stack:"
+		} else {
+			msg = "Found config files:"
+		}
+		color.Cyan(msg)
+		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
 	}
-	color.Cyan(msg)
-	err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
-	if err != nil {
-		return configAndStacksInfo, err
+
+	if len(c.Config.Stacks.NamePattern) < 1 {
+		return configAndStacksInfo,
+			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	}
+	stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
@@ -205,15 +204,17 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			return configAndStacksInfo, err
 		}
 	} else {
-		color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
-
-		if len(c.Config.Stacks.NamePattern) < 1 {
-			return configAndStacksInfo,
-				errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+		if g.LogVerbose {
+			color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
 		}
 
 		stackParts := strings.Split(configAndStacksInfo.Stack, "-")
-		stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
+		if len(stackParts) != len(stackNamePatternParts) {
+			return configAndStacksInfo,
+				errors.New(fmt.Sprintf("Stack '%s' does not match the stack name pattern '%s'",
+					configAndStacksInfo.Stack,
+					c.Config.Stacks.NamePattern))
+		}
 
 		var tenant string
 		var environment string
@@ -268,7 +269,9 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for component '%s' in stack '%s'\n\n", configAndStacksInfo.ComponentFromArg, stackName)
+				if g.LogVerbose {
+					color.Green("Found stack config for the component '%s' in the stack '%s'\n\n", configAndStacksInfo.ComponentFromArg, stackName)
+				}
 				configAndStacksInfo.Stack = stackName
 				break
 			}
@@ -276,8 +279,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 		if tenantFound == false || environmentFound == false || stageFound == false {
 			return configAndStacksInfo,
-				errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
-					"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
+				errors.New(fmt.Sprintf("\nCould not find config for the component '%s' in the stack '%s'.\n"+
+					"Check that all attributes in the stack name pattern '%s' are defined in the stack config files.\n"+
 					"Are the component and stack names correct? Did you forget an import?",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
@@ -286,11 +289,11 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 	}
 
-	if len(configAndStacksInfo.Command) < 1 {
+	if len(configAndStacksInfo.Command) == 0 {
 		configAndStacksInfo.Command = componentType
 	}
 
-	color.Cyan("Variables for component '%s' in stack '%s':", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
+	color.Cyan("\nVariables for the component '%s' in the stack '%s':", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
 	err = u.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
 	if err != nil {
 		return configAndStacksInfo, err
@@ -305,7 +308,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	if finalComponentPathPartsLength > 1 {
 		componentFromArgPartsWithoutLast := finalComponentPathParts[:finalComponentPathPartsLength-1]
 		configAndStacksInfo.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
-		configAndStacksInfo.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "-")
+		configAndStacksInfo.ComponentNamePrefix = strings.Join(componentFromArgPartsWithoutLast, "-")
 		configAndStacksInfo.Component = finalComponentPathParts[finalComponentPathPartsLength-1]
 	} else {
 		configAndStacksInfo.Component = configAndStacksInfo.ComponentFromArg
@@ -321,6 +324,54 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 	}
 
+	// Process context
+	configAndStacksInfo.Context = getContextFromVars(configAndStacksInfo.ComponentVarsSection)
+	contextPrefix := ""
+
+	for _, part := range stackNamePatternParts {
+		if part == "{tenant}" {
+			if len(configAndStacksInfo.Context.Tenant) == 0 {
+				return configAndStacksInfo,
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
+						c.Config.Stacks.NamePattern,
+						configAndStacksInfo.Stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = configAndStacksInfo.Context.Tenant
+			} else {
+				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Tenant
+			}
+		} else if part == "{environment}" {
+			if len(configAndStacksInfo.Context.Environment) == 0 {
+				return configAndStacksInfo,
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack %s does not have an environment defined",
+						c.Config.Stacks.NamePattern,
+						configAndStacksInfo.Stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = configAndStacksInfo.Context.Environment
+			} else {
+				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Environment
+			}
+		} else if part == "{stage}" {
+			if len(configAndStacksInfo.Context.Stage) == 0 {
+				return configAndStacksInfo,
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
+						c.Config.Stacks.NamePattern,
+						configAndStacksInfo.Stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = configAndStacksInfo.Context.Stage
+			} else {
+				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Stage
+			}
+		}
+	}
+
+	configAndStacksInfo.ContextPrefix = contextPrefix
 	return configAndStacksInfo, nil
 }
 
@@ -336,18 +387,18 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 	var globalOptionsFlagIndex int
 
 	for i, arg := range inputArgsAndFlags {
-		if arg == globalOptionsFlag {
+		if arg == g.GlobalOptionsFlag {
 			globalOptionsFlagIndex = i + 1
-		} else if strings.HasPrefix(arg+"=", globalOptionsFlag) {
+		} else if strings.HasPrefix(arg+"=", g.GlobalOptionsFlag) {
 			globalOptionsFlagIndex = i
 		}
 
-		if arg == terraformDirFlag {
+		if arg == g.TerraformDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.TerraformDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", terraformDirFlag) {
+		} else if strings.HasPrefix(arg+"=", g.TerraformDirFlag) {
 			var terraformDirFlagParts = strings.Split(arg, "=")
 			if len(terraformDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
@@ -355,12 +406,12 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.TerraformDir = terraformDirFlagParts[1]
 		}
 
-		if arg == helmfileDirFlag {
+		if arg == g.HelmfileDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.HelmfileDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", helmfileDirFlag) {
+		} else if strings.HasPrefix(arg+"=", g.HelmfileDirFlag) {
 			var helmfileDirFlagParts = strings.Split(arg, "=")
 			if len(helmfileDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
@@ -368,12 +419,12 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.HelmfileDir = helmfileDirFlagParts[1]
 		}
 
-		if arg == configDirFlag {
+		if arg == g.ConfigDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.StacksDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", configDirFlag) {
+		} else if strings.HasPrefix(arg+"=", g.ConfigDirFlag) {
 			var configDirFlagParts = strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
@@ -381,17 +432,30 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.StacksDir = configDirFlagParts[1]
 		}
 
-		if arg == stackDirFlag {
+		if arg == g.StackDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.ConfigDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", stackDirFlag) {
+		} else if strings.HasPrefix(arg+"=", g.StackDirFlag) {
 			var stacksDirFlagParts = strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.ConfigDir = stacksDirFlagParts[1]
+		}
+
+		if arg == g.DeployRunInitFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.DeployRunInit = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.DeployRunInitFlag) {
+			var deployRunInitFlagParts = strings.Split(arg, "=")
+			if len(deployRunInitFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.DeployRunInit = deployRunInitFlagParts[1]
 		}
 
 		for _, f := range commonFlags {
@@ -410,7 +474,7 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 		}
 
 		if globalOptionsFlagIndex > 0 && i == globalOptionsFlagIndex {
-			if strings.HasPrefix(arg, globalOptionsFlag+"=") {
+			if strings.HasPrefix(arg, g.GlobalOptionsFlag+"=") {
 				parts := strings.SplitN(arg, "=", 2)
 				globalOptions = strings.Split(parts[1], " ")
 			} else {
@@ -443,7 +507,9 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
-	color.Cyan("\nExecuting command:\n%s\n\n", cmd.String())
+	color.Cyan("\nExecuting command:\n")
+	fmt.Println(cmd.String())
+	fmt.Println()
 	return cmd.Run()
 }
 

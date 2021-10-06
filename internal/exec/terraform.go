@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"path"
-	"strings"
 )
 
 const (
@@ -50,8 +49,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		))
 	}
 
-	stackNameFormatted := strings.Replace(info.Stack, "/", "-", -1)
-
 	// Write variables to a file
 	var varFileName, varFileNameFromArg string
 
@@ -72,7 +69,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			varFileName = fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json",
 				c.Config.Components.Terraform.BasePath,
 				finalComponent,
-				stackNameFormatted,
+				info.ContextPrefix,
 				info.Component,
 			)
 		} else {
@@ -80,7 +77,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
 				finalComponent,
-				stackNameFormatted,
+				info.ContextPrefix,
 				info.Component,
 			)
 		}
@@ -97,6 +94,20 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if info.SubCommand == "varfile" || info.SubCommand == "write varfile" {
 		fmt.Println()
 		return nil
+	}
+
+	// Run `terraform init`
+	runTerraformInit := true
+	if info.SubCommand == "init" ||
+		info.SubCommand == "workspace" ||
+		(info.SubCommand == "deploy" && c.Config.Components.Terraform.DeployRunInit == false) {
+		runTerraformInit = false
+	}
+	if runTerraformInit == true {
+		err = execCommand(info.Command, []string{"init"}, componentPath, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Handle `terraform deploy` custom command
@@ -116,49 +127,33 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Print command info
 	color.Cyan("\nCommand info:")
-	color.Green("Terraform binary: " + info.Command)
-	color.Green("Terraform command: " + info.SubCommand)
-	color.Green("Arguments and flags: %v", info.AdditionalArgsAndFlags)
-	color.Green("Component: " + info.ComponentFromArg)
+	fmt.Println("Terraform binary: " + info.Command)
+	fmt.Println("Terraform command: " + info.SubCommand)
+	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponentPath) > 0 {
-		color.Green("Base component: " + info.BaseComponentPath)
+		fmt.Println("Base component: " + info.BaseComponentPath)
 	}
-	color.Green("Stack: " + info.Stack)
+	fmt.Println("Stack: " + info.Stack)
 
 	var workingDir string
-	if len(info.ComponentNamePrefix) == 0 {
-		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, info.Component)
+	if len(info.ComponentFolderPrefix) == 0 {
+		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, finalComponent)
 	} else {
-		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Terraform.BasePath, info.ComponentNamePrefix, info.Component)
+		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	}
-	color.Green(fmt.Sprintf("Working dir: %s", workingDir))
-	fmt.Println()
+	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
-	var planFile, varFile string
-	if len(info.ComponentNamePrefix) == 0 {
-		planFile = fmt.Sprintf("%s-%s.planfile", stackNameFormatted, info.Component)
-		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", stackNameFormatted, info.Component)
-	} else {
-		planFile = fmt.Sprintf("%s-%s-%s.planfile", stackNameFormatted, info.ComponentNamePrefix, info.Component)
-		varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", stackNameFormatted, info.ComponentNamePrefix, info.Component)
-	}
+	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
+	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
 
 	var workspaceName string
-	if len(info.ComponentNamePrefix) == 0 {
-		if len(info.BaseComponent) > 0 {
-			workspaceName = fmt.Sprintf("%s-%s", stackNameFormatted, info.Component)
-		} else {
-			workspaceName = stackNameFormatted
-		}
+	if len(info.BaseComponent) > 0 {
+		workspaceName = fmt.Sprintf("%s-%s", info.ContextPrefix, info.Component)
 	} else {
-		if len(info.BaseComponent) > 0 {
-			workspaceName = fmt.Sprintf("%s-%s-%s", info.ComponentNamePrefix, stackNameFormatted, info.Component)
-		} else {
-			workspaceName = fmt.Sprintf("%s-%s", info.ComponentNamePrefix, stackNameFormatted)
-		}
+		workspaceName = info.ContextPrefix
 	}
 
-	cleanUp := false
 	allArgsAndFlags := append([]string{info.SubCommand}, info.AdditionalArgsAndFlags...)
 
 	switch info.SubCommand {
@@ -167,26 +162,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		break
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		cleanUp = true
 		break
 	case "apply":
-		// Use the planfile if `-auto-approve` flag is not specified
-		// Use the varfile if `-auto-approve` flag is specified
-		if !u.SliceContainsString(allArgsAndFlags, autoApproveFlag) {
-			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
-		} else {
-			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		}
-		cleanUp = true
+		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
-	}
-
-	// Run `terraform init`
-	if info.SubCommand != "init" {
-		err = execCommand(info.Command, []string{"init"}, componentPath, nil)
-		if err != nil {
-			return err
-		}
 	}
 
 	// Run `terraform workspace`
@@ -198,23 +177,39 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check if the terraform command requires a user interaction,
+	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
+	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		errorMessage := ""
+		if info.SubCommand == "apply" {
+			errorMessage = "'terraform apply' requires a user interaction, but it's running without `tty` or `stdin` attached." +
+				"\nUse 'terraform apply -auto-approve' or 'terraform deploy' instead."
+		} else if info.SubCommand == "destroy" {
+			errorMessage = "'terraform destroy' requires a user interaction, but it's running without `tty` or `stdin` attached." +
+				"\nUse 'terraform destroy -auto-approve' if you need to destroy resources without asking the user for confirmation."
+		}
+		if errorMessage != "" {
+			return errors.New(errorMessage)
+		}
+	}
+
+	// Execute the command
 	if info.SubCommand != "workspace" {
-		// Execute the command
 		err = execCommand(info.Command, allArgsAndFlags, componentPath, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	if cleanUp == true {
-		planFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, info.Component, planFile)
+	// Clean up
+	if info.SubCommand != "plan" {
+		planFilePath := fmt.Sprintf("%s/%s", workingDir, planFile)
 		_ = os.Remove(planFilePath)
+	}
 
-		varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.TerraformDirAbsolutePath, info.Component, varFile)
-		err = os.Remove(varFilePath)
-		if err != nil {
-			color.Yellow("Error deleting terraform var file: %s\n", err)
-		}
+	err = os.Remove(varFileName)
+	if err != nil {
+		color.Yellow("Error deleting terraform varfile: %s\n", err)
 	}
 
 	return nil

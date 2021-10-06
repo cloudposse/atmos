@@ -26,9 +26,6 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	helmfileCmd.DisableFlagParsing = true
 	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "")
-	helmfileCmd.PersistentFlags().StringP("--helmfile-dir", "", "", "")
-	helmfileCmd.PersistentFlags().StringP("--config-dir", "", "", "")
-	helmfileCmd.PersistentFlags().StringP("--stacks-dir", "", "", "")
 
 	err := helmfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

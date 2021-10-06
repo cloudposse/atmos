@@ -2,6 +2,7 @@ package exec
 
 import (
 	c "atmos/internal/config"
+	g "atmos/internal/globals"
 	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"fmt"
@@ -14,7 +15,7 @@ import (
 // ExecuteDescribeComponent executes `describe component` command
 func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("invalid arguments. Command requires one argument `component`")
+		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
 	flags := cmd.Flags()
 
@@ -34,18 +35,20 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	component := args[0]
 
 	// Print the stack config files
-	fmt.Println()
-	var msg string
-	if c.ProcessedConfig.StackType == "Directory" {
-		msg = "Found the config file for the provided stack:"
-	} else {
-		msg = "Found config files:"
-	}
-	color.Cyan(msg)
+	if g.LogVerbose {
+		fmt.Println()
+		var msg string
+		if c.ProcessedConfig.StackType == "Directory" {
+			msg = "Found the config file for the provided stack:"
+		} else {
+			msg = "Found config files:"
+		}
+		color.Cyan(msg)
 
-	err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
-	if err != nil {
-		return err
+		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
@@ -71,7 +74,9 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
+		if g.LogVerbose {
+			color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
+		}
 
 		if len(c.Config.Stacks.NamePattern) < 1 {
 			return errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
@@ -132,14 +137,16 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for component '%s' in stack '%s'\n\n", component, stackName)
+				if g.LogVerbose == true {
+					color.Cyan("Found stack config for component '%s' in the stack '%s'\n\n", component, stackName)
+				}
 				stack = stackName
 				break
 			}
 		}
 
 		if tenantFound == false || environmentFound == false || stageFound == false {
-			return errors.New(fmt.Sprintf("\nCould not find config for component '%s' for stack '%s'.\n"+
+			return errors.New(fmt.Sprintf("\nCould not find config for the component '%s' in the stack '%s'.\n"+
 				"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
 				"Are the component and stack names correct? Did you forget an import?",
 				component,
@@ -149,7 +156,10 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	color.Cyan("\nComponent config:\n\n")
+	if g.LogVerbose {
+		color.Cyan("\nComponent config:\n\n")
+	}
+
 	err = u.PrintAsYAML(componentSection)
 	if err != nil {
 		return err

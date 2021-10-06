@@ -3,6 +3,7 @@ package config
 type Terraform struct {
 	BasePath         string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
+	DeployRunInit    bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
 }
 
 type Helmfile struct {
@@ -24,9 +25,15 @@ type Stacks struct {
 	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
 }
 
+type Logs struct {
+	Verbose bool `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
+	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
+}
+
 type Configuration struct {
 	Components Components
 	Stacks     Stacks
+	Logs       Logs
 }
 
 type ProcessedConfiguration struct {
@@ -57,6 +64,7 @@ type ArgsAndFlagsInfo struct {
 	HelmfileDir            string
 	ConfigDir              string
 	StacksDir              string
+	DeployRunInit          string
 }
 
 type ConfigAndStacksInfo struct {
@@ -77,4 +85,7 @@ type ConfigAndStacksInfo struct {
 	HelmfileDir             string
 	ConfigDir               string
 	StacksDir               string
+	Context                 Context
+	ContextPrefix           string
+	DeployRunInit           string
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"path"
-	"strings"
 )
 
 // ExecuteHelmfile executes helmfile commands
@@ -39,15 +38,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		))
 	}
 
-	stackNameFormatted := strings.Replace(info.Stack, "/", "-", -1)
-
 	// Write variables to a file
 	var varFileName string
 	if len(info.ComponentFolderPrefix) == 0 {
 		varFileName = fmt.Sprintf("%s/%s/%s-%s.helmfile.vars.yaml",
 			c.Config.Components.Helmfile.BasePath,
 			info.Component,
-			stackNameFormatted,
+			info.ContextPrefix,
 			info.Component,
 		)
 	} else {
@@ -55,7 +52,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 			c.Config.Components.Helmfile.BasePath,
 			info.ComponentFolderPrefix,
 			info.Component,
-			stackNameFormatted,
+			info.ContextPrefix,
 			info.Component,
 		)
 	}
@@ -79,7 +76,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	color.Cyan(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
 	// Download kubeconfig by running `aws eks update-kubeconfig`
-	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, stackNameFormatted)
+	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
 	clusterName := replaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
 	color.Cyan(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
@@ -102,38 +99,32 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Print command info
 	color.Cyan("\nCommand info:")
-	color.Green("Helmfile binary: " + info.Command)
-	color.Green("Helmfile command: " + info.SubCommand)
+	fmt.Println("Helmfile binary: " + info.Command)
+	fmt.Println("Helmfile command: " + info.SubCommand)
 
 	// https://github.com/roboll/helmfile#cli-reference
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
-	color.Green("Global options: %v", info.GlobalOptions)
+	fmt.Println(fmt.Sprintf("Global options: %v", info.GlobalOptions))
 
-	color.Green("Arguments and flags: %v", info.AdditionalArgsAndFlags)
-	color.Green("Component: " + info.ComponentFromArg)
+	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponent) > 0 {
-		color.Green("Base component: " + info.BaseComponent)
+		fmt.Println("Base component: " + info.BaseComponent)
 	}
-	color.Green("Stack: " + info.Stack)
+	fmt.Println("Stack: " + info.Stack)
 
 	var workingDir string
-	if len(info.ComponentNamePrefix) == 0 {
+	if len(info.ComponentFolderPrefix) == 0 {
 		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, info.Component)
 	} else {
-		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Helmfile.BasePath, info.ComponentNamePrefix, info.Component)
+		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
 	}
-	color.Green(fmt.Sprintf("Working dir: %s\n\n", workingDir))
-	fmt.Println()
+	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
-	var varFile string
-	if len(info.ComponentNamePrefix) == 0 {
-		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", stackNameFormatted, info.Component)
-	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", stackNameFormatted, info.ComponentNamePrefix, info.Component)
-	}
+	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}
@@ -152,7 +143,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Sprintf("ENVIRONMENT=%s", context.Environment),
 		fmt.Sprintf("STAGE=%s", context.Stage),
 		fmt.Sprintf("REGION=%s", context.Region),
-		fmt.Sprintf("STACK=%s", stackNameFormatted),
+		fmt.Sprintf("STACK=%s", info.Stack),
 	}
 
 	err = execCommand(info.Command, allArgsAndFlags, componentPath, envVars)
@@ -161,10 +152,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cleanup
-	varFilePath := fmt.Sprintf("%s/%s/%s", c.ProcessedConfig.HelmfileDirAbsolutePath, info.Component, varFile)
-	err = os.Remove(varFilePath)
+	err = os.Remove(varFileName)
 	if err != nil {
-		color.Yellow("Error deleting helmfile var file: %s\n", err)
+		color.Yellow("Error deleting helmfile varfile: %s\n", err)
 	}
 
 	return nil

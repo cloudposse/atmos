@@ -2,6 +2,7 @@ package exec
 
 import (
 	c "atmos/internal/config"
+	g "atmos/internal/globals"
 	s "atmos/internal/stack"
 	u "atmos/internal/utils"
 	"fmt"
@@ -14,7 +15,7 @@ import (
 // ExecuteTerraformGenerateBackend executes `terraform generate backend` command
 func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("invalid arguments. Command requires one argument `component`")
+		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
 	flags := cmd.Flags()
 
@@ -34,18 +35,20 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	component := args[0]
 
 	// Print the stack config files
-	fmt.Println()
-	var msg string
-	if c.ProcessedConfig.StackType == "Directory" {
-		msg = "Found the config file for the provided stack:"
-	} else {
-		msg = "Found config files:"
-	}
-	color.Cyan(msg)
+	if g.LogVerbose {
+		fmt.Println()
+		var msg string
+		if c.ProcessedConfig.StackType == "Directory" {
+			msg = "Found the config file for the provided stack:"
+		} else {
+			msg = "Found config files:"
+		}
+		color.Cyan(msg)
 
-	err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
-	if err != nil {
-		return err
+		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
