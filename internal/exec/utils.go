@@ -191,6 +191,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo,
 			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	}
+
 	stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
 
 	// Check and process stacks
