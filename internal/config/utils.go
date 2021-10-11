@@ -41,21 +41,35 @@ func findAllStackConfigsInPaths(
 		if matches != nil && len(matches) > 0 {
 			for _, matchedFileAbsolutePath := range matches {
 				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
+
+				// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
 				stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+g.DefaultStackConfigFileExtension)
 				if stackMatch == true {
-					return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
+					allExcluded := true
+					for _, excludePath := range excludeStackPaths {
+						excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
+						if err != nil {
+							color.Red("%s", err)
+							continue
+						} else if excludeMatch == true {
+							allExcluded = false
+							break
+						}
+					}
+					if allExcluded == true {
+						return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
+					}
 				}
 
 				include := true
 
 				for _, excludePath := range excludeStackPaths {
-					match, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
+					excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
 						color.Red("%s", err)
 						include = false
 						continue
-					}
-					if match {
+					} else if excludeMatch {
 						include = false
 						continue
 					}
