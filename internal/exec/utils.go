@@ -191,6 +191,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo,
 			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	}
+
 	stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
 
 	// Check and process stacks
@@ -293,7 +294,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		configAndStacksInfo.Command = componentType
 	}
 
-	color.Cyan("\nVariables for the component '%s' in the stack '%s':", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
+	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
 	err = u.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
 	if err != nil {
 		return configAndStacksInfo, err

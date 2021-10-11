@@ -20,9 +20,6 @@ import (
 var (
 	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
 	processYAMLConfigFilesLock = &sync.Mutex{}
-
-	// Mutex to serialize updates of the result map of ProcessYAMLConfigFile function
-	processYAMLConfigFileLock = &sync.Mutex{}
 )
 
 // ProcessYAMLConfigFiles takes a list of paths to YAML config files, processes and deep-merges all imports,
@@ -133,11 +130,6 @@ func ProcessYAMLConfigFile(
 	if importsSection, ok := stackMapConfig["import"]; ok {
 		imports := importsSection.([]interface{})
 
-		count := len(imports)
-		var errorResult error
-		var wg sync.WaitGroup
-		wg.Add(count)
-
 		for _, im := range imports {
 			imp := im.(string)
 
@@ -158,52 +150,34 @@ func ProcessYAMLConfigFile(
 				return nil, nil, errors.New(errorMessage)
 			}
 
-			// Find all matches in the glob
-			matches, err := doublestar.Glob(impWithExtPath)
+			// Find all import matches in the glob
+			importMatches, err := doublestar.Glob(impWithExtPath)
 			if err != nil {
 				return nil, nil, err
 			}
 
-			if matches == nil {
+			if importMatches == nil {
 				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nNo matches found for the import '%s'",
 					filePath,
 					strings.Replace(impWithExt, basePath+"/", "", 1))
 				return nil, nil, errors.New(errorMessage)
 			}
 
-			// If we import a glob with more than 1 file, add the difference to the WaitGroup
-			if len(matches) > 1 {
-				wg.Add(len(matches) - 1)
+			for _, importFile := range importMatches {
+				yamlConfig, _, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
+				if err != nil {
+					return nil, nil, err
+				}
+
+				configs = append(configs, yamlConfig)
+				importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
+				ext2 := filepath.Ext(importRelativePathWithExt)
+				if ext2 == "" {
+					ext2 = g.DefaultStackConfigFileExtension
+				}
+				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+				importsConfig[importRelativePathWithoutExt] = yamlConfig
 			}
-
-			for _, importFile := range matches {
-				go func(p string) {
-					defer wg.Done()
-
-					yamlConfig, _, err := ProcessYAMLConfigFile(basePath, p, importsConfig)
-					if err != nil {
-						errorResult = err
-						return
-					}
-
-					processYAMLConfigFileLock.Lock()
-					defer processYAMLConfigFileLock.Unlock()
-					configs = append(configs, yamlConfig)
-					importRelativePathWithExt := strings.Replace(p, basePath+"/", "", 1)
-					ext2 := filepath.Ext(importRelativePathWithExt)
-					if ext2 == "" {
-						ext2 = g.DefaultStackConfigFileExtension
-					}
-					importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
-					importsConfig[importRelativePathWithoutExt] = yamlConfig
-				}(importFile)
-			}
-		}
-
-		wg.Wait()
-
-		if errorResult != nil {
-			return nil, nil, errorResult
 		}
 	}
 
