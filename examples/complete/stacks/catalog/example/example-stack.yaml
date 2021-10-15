@@ -1,0 +1,8 @@
+vars:
+  stage: dev
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
