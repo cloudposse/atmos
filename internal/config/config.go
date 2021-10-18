@@ -1,11 +1,11 @@
 package config
 
 import (
-	g "atmos/internal/globals"
-	u "atmos/internal/utils"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	g "github.com/cloudposse/atmos/internal/globals"
+	u "github.com/cloudposse/atmos/internal/utils"
 	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"

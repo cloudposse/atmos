@@ -1,4 +1,4 @@
-module atmos
+module github.com/cloudposse/atmos
 
 go 1.17
 

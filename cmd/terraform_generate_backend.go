@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	e "atmos/internal/exec"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"os"
