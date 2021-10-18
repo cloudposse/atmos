@@ -1,12 +1,12 @@
 package stack
 
 import (
-	c "atmos/internal/convert"
-	g "atmos/internal/globals"
-	m "atmos/internal/merge"
-	u "atmos/internal/utils"
 	"fmt"
 	"github.com/bmatcuk/doublestar"
+	c "github.com/cloudposse/atmos/internal/convert"
+	g "github.com/cloudposse/atmos/internal/globals"
+	m "github.com/cloudposse/atmos/internal/merge"
+	u "github.com/cloudposse/atmos/internal/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"

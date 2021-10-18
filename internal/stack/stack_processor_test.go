@@ -1,8 +1,8 @@
 package stack
 
 import (
-	c "atmos/internal/convert"
-	u "atmos/internal/utils"
+	c "github.com/cloudposse/atmos/internal/convert"
+	u "github.com/cloudposse/atmos/internal/utils"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,7 +39,7 @@ func TestStackProcessor(t *testing.T) {
 	mapConfig2 := mapResult["tenant1/ue2/dev"]
 	assert.Equal(t, len(imports), len(mapConfig2.(map[interface{}]interface{})["imports"].([]string)))
 
-	assert.Equal(t, 15, len(imports))
+	assert.Equal(t, 16, len(imports))
 	assert.Equal(t, "catalog/helmfile/echo-server", imports[0])
 	assert.Equal(t, "catalog/helmfile/infra-server", imports[1])
 	assert.Equal(t, "catalog/terraform/services/service-1", imports[2])
@@ -48,13 +48,14 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "catalog/terraform/services/service-2-override", imports[5])
 	assert.Equal(t, "catalog/terraform/services/top-level-service-1", imports[6])
 	assert.Equal(t, "catalog/terraform/services/top-level-service-2", imports[7])
-	assert.Equal(t, "catalog/terraform/test-component", imports[8])
-	assert.Equal(t, "catalog/terraform/test-component-override", imports[9])
-	assert.Equal(t, "catalog/terraform/top-level-component1", imports[10])
-	assert.Equal(t, "catalog/terraform/vpc", imports[11])
-	assert.Equal(t, "globals/globals", imports[12])
-	assert.Equal(t, "globals/tenant1-globals", imports[13])
-	assert.Equal(t, "globals/ue2-globals", imports[14])
+	assert.Equal(t, "catalog/terraform/tenant1-ue2-dev", imports[8])
+	assert.Equal(t, "catalog/terraform/test-component", imports[9])
+	assert.Equal(t, "catalog/terraform/test-component-override", imports[10])
+	assert.Equal(t, "catalog/terraform/top-level-component1", imports[11])
+	assert.Equal(t, "catalog/terraform/vpc", imports[12])
+	assert.Equal(t, "globals/globals", imports[13])
+	assert.Equal(t, "globals/tenant1-globals", imports[14])
+	assert.Equal(t, "globals/ue2-globals", imports[15])
 
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)

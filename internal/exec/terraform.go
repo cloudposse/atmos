@@ -1,9 +1,9 @@
 package exec
 
 import (
-	c "atmos/internal/config"
-	u "atmos/internal/utils"
 	"fmt"
+	c "github.com/cloudposse/atmos/internal/config"
+	u "github.com/cloudposse/atmos/internal/utils"
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"

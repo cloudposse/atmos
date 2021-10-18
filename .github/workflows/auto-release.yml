@@ -18,9 +18,8 @@ jobs:
           github_token: ${{ secrets.PUBLIC_REPO_ACCESS_TOKEN }}
       # Drafts your next Release notes as Pull Requests are merged into "main"
       - uses: release-drafter/release-drafter@v5
-        if: "!contains(steps.get-merged-pull-request.outputs.labels, 'no-release')"
         with:
-          publish: true
+          publish: ${{ !contains(steps.get-merged-pull-request.outputs.labels, 'no-release') }}
           prerelease: false
           config-name: auto-release.yml
         env:

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"atmos/cmd"
+	"github.com/cloudposse/atmos/cmd"
 	"github.com/fatih/color"
 	"os"
 )

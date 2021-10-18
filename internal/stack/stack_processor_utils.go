@@ -1,8 +1,8 @@
 package stack
 
 import (
-	g "atmos/internal/globals"
-	u "atmos/internal/utils"
+	g "github.com/cloudposse/atmos/internal/globals"
+	u "github.com/cloudposse/atmos/internal/utils"
 	"os"
 	"path"
 	"path/filepath"

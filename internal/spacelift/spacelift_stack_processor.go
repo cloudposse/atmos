@@ -1,9 +1,9 @@
 package spacelift
 
 import (
-	s "atmos/internal/stack"
-	u "atmos/internal/utils"
 	"fmt"
+	s "github.com/cloudposse/atmos/internal/stack"
+	u "github.com/cloudposse/atmos/internal/utils"
 	"github.com/pkg/errors"
 	"strings"
 )
