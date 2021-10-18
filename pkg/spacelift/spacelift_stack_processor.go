@@ -2,8 +2,8 @@ package spacelift
 
 import (
 	"fmt"
-	s "github.com/cloudposse/atmos/internal/stack"
-	u "github.com/cloudposse/atmos/internal/utils"
+	s "github.com/cloudposse/atmos/pkg/stack"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"strings"
 )
@@ -65,7 +65,7 @@ func TransformStackConfigToSpaceliftStacks(
 			if terraformComponents, ok := componentsSection["terraform"]; ok {
 				terraformComponentsMap := terraformComponents.(map[string]interface{})
 
-				terraformComponentNamesInCurrentStack := u.StringKeysFromMap(terraformComponentsMap)
+				terraformComponentNamesInCurrentStack := utils.StringKeysFromMap(terraformComponentsMap)
 
 				for component, v := range terraformComponentsMap {
 					componentMap := v.(map[string]interface{})
@@ -191,7 +191,7 @@ func TransformStackConfigToSpaceliftStacks(
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
 					labels = append(labels, fmt.Sprintf("folder:%s", stackName))
 
-					spaceliftConfig["labels"] = u.UniqueStrings(labels)
+					spaceliftConfig["labels"] = utils.UniqueStrings(labels)
 
 					// Add Spacelift stack config to the final map
 					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", stackName, component), "/", "-", -1)
@@ -213,9 +213,9 @@ func buildSpaceliftDependsOnStackName(
 ) (string, error) {
 	var spaceliftStackName string
 
-	if u.SliceContainsString(allStackNames, dependsOn) {
+	if utils.SliceContainsString(allStackNames, dependsOn) {
 		spaceliftStackName = dependsOn
-	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
+	} else if utils.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
 		spaceliftStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
 	} else {
 		errorMessage := errors.New(fmt.Sprintf("Component '%[1]s' in stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+

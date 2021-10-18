@@ -4,7 +4,7 @@ import (
 	"errors"
 	"github.com/bmatcuk/doublestar"
 	g "github.com/cloudposse/atmos/internal/globals"
-	u "github.com/cloudposse/atmos/internal/utils"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"os"
 	"path/filepath"

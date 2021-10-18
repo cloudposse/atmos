@@ -5,8 +5,8 @@ import (
 	"fmt"
 	c "github.com/cloudposse/atmos/internal/config"
 	g "github.com/cloudposse/atmos/internal/globals"
-	s "github.com/cloudposse/atmos/internal/stack"
-	u "github.com/cloudposse/atmos/internal/utils"
+	s "github.com/cloudposse/atmos/pkg/stack"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"os"
@@ -181,7 +181,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			msg = "Found config files:"
 		}
 		color.Cyan(msg)
-		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		err = utils.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -295,7 +295,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
-	err = u.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
+	err = utils.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -470,7 +470,7 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 	}
 
 	for i, arg := range inputArgsAndFlags {
-		if !u.SliceContainsInt(indexesToRemove, i) {
+		if !utils.SliceContainsInt(indexesToRemove, i) {
 			additionalArgsAndFlags = append(additionalArgsAndFlags, arg)
 		}
 
