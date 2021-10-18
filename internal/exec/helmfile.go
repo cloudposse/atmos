@@ -5,7 +5,7 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/internal/config"
-	u "github.com/cloudposse/atmos/internal/utils"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -30,7 +30,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.Component)
-	componentPathExists, err := u.IsDirectory(componentPath)
+	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s",
 			info.Component,
@@ -59,7 +59,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	color.Cyan("Writing variables to file:")
 	fmt.Println(varFileName)
-	err = u.WriteToFileAsYAML(varFileName, info.ComponentVarsSection, 0644)
+	err = utils.WriteToFileAsYAML(varFileName, info.ComponentVarsSection, 0644)
 	if err != nil {
 		return err
 	}

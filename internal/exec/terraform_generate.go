@@ -4,8 +4,8 @@ import (
 	"fmt"
 	c "github.com/cloudposse/atmos/internal/config"
 	g "github.com/cloudposse/atmos/internal/globals"
-	s "github.com/cloudposse/atmos/internal/stack"
-	u "github.com/cloudposse/atmos/internal/utils"
+	s "github.com/cloudposse/atmos/pkg/stack"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -45,7 +45,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		}
 		color.Cyan(msg)
 
-		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		err = utils.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return err
 		}
@@ -160,7 +160,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	}
 
 	color.Cyan("\nComponent backend config:\n\n")
-	err = u.PrintAsJSON(componentBackendConfig)
+	err = utils.PrintAsJSON(componentBackendConfig)
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	color.Cyan("\nWriting backend config to file:")
 	fmt.Println(varFileName)
-	err = u.WriteToFileAsJSON(varFileName, componentBackendConfig, 0644)
+	err = utils.WriteToFileAsJSON(varFileName, componentBackendConfig, 0644)
 	if err != nil {
 		return err
 	}

@@ -3,7 +3,7 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/internal/config"
-	u "github.com/cloudposse/atmos/internal/utils"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -41,7 +41,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Check if the component exists
 	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
-	componentPathExists, err := u.IsDirectory(componentPath)
+	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exixt in %s",
 			finalComponent,
@@ -85,7 +85,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	color.Cyan("Writing variables to file:")
 	fmt.Println(varFileName)
-	err = u.WriteToFileAsJSON(varFileName, info.ComponentVarsSection, 0644)
+	err = utils.WriteToFileAsJSON(varFileName, info.ComponentVarsSection, 0644)
 	if err != nil {
 		return err
 	}
@@ -113,14 +113,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Handle `terraform deploy` custom command
 	if info.SubCommand == "deploy" {
 		info.SubCommand = "apply"
-		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
 
 	// Handle Config.Components.Terraform.ApplyAutoApprove flag
 	if info.SubCommand == "apply" && c.Config.Components.Terraform.ApplyAutoApprove == true {
-		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
@@ -179,7 +179,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Check if the terraform command requires a user interaction,
 	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
-	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+	if os.Stdin == nil && !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		errorMessage := ""
 		if info.SubCommand == "apply" {
 			errorMessage = "'terraform apply' requires a user interaction, but it's running without `tty` or `stdin` attached." +

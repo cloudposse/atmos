@@ -2,7 +2,7 @@ package stack
 
 import (
 	g "github.com/cloudposse/atmos/internal/globals"
-	u "github.com/cloudposse/atmos/internal/utils"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"os"
 	"path"
 	"path/filepath"
@@ -31,7 +31,7 @@ func FindComponentStacks(
 		}
 	}
 
-	unique := u.UniqueStrings(stacks)
+	unique := utils.UniqueStrings(stacks)
 	sort.Strings(unique)
 	return unique, nil
 }
@@ -104,7 +104,7 @@ func FindComponentDependencies(
 	}
 
 	deps = append(deps, stack)
-	unique := u.UniqueStrings(deps)
+	unique := utils.UniqueStrings(deps)
 	sort.Strings(unique)
 	return unique, nil
 }
@@ -127,12 +127,12 @@ func CreateComponentStackMap(basePath string, filePath string) (map[string]map[s
 				return err
 			}
 
-			isDirectory, err := u.IsDirectory(p)
+			isDirectory, err := utils.IsDirectory(p)
 			if err != nil {
 				return err
 			}
 
-			isYaml := u.IsYaml(p)
+			isYaml := utils.IsYaml(p)
 
 			if !isDirectory && isYaml {
 				config, _, err := ProcessYAMLConfigFile(basePath, p, map[string]map[interface{}]interface{}{})

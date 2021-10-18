@@ -1,8 +1,8 @@
 package stack
 
 import (
-	c "github.com/cloudposse/atmos/internal/convert"
-	u "github.com/cloudposse/atmos/internal/utils"
+	c "github.com/cloudposse/atmos/pkg/convert"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
