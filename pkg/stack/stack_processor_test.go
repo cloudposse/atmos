@@ -3,10 +3,9 @@ package stack
 import (
 	c "github.com/cloudposse/atmos/pkg/convert"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"testing"
-
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v2"
+	"testing"
 )
 
 func TestStackProcessor(t *testing.T) {
@@ -56,6 +55,21 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "globals/globals", imports[13])
 	assert.Equal(t, "globals/tenant1-globals", imports[14])
 	assert.Equal(t, "globals/ue2-globals", imports[15])
+
+	components := mapConfig1["components"].(map[interface{}]interface{})
+	terraformComponents := components["terraform"].(map[interface{}]interface{})
+
+	infraVpcComponent := terraformComponents["infra/vpc"].(map[interface{}]interface{})
+	infraVpcComponentBackend := infraVpcComponent["backend"].(map[interface{}]interface{})
+	infraVpcComponentBackendWorkspaceKeyPrefix := infraVpcComponentBackend["workspace_key_prefix"].(string)
+	assert.Equal(t, "infra-vpc", infraVpcComponentBackendWorkspaceKeyPrefix)
+
+	testTestComponentOverrideComponent := terraformComponents["test/test-component-override"].(map[interface{}]interface{})
+	testTestComponentOverrideComponentBackend := testTestComponentOverrideComponent["backend"].(map[interface{}]interface{})
+	testTestComponentOverrideComponentBaseComponent := testTestComponentOverrideComponent["component"].(string)
+	testTestComponentOverrideComponentBackendWorkspaceKeyPrefix := testTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
+	assert.Equal(t, "test-test-component", testTestComponentOverrideComponentBackendWorkspaceKeyPrefix)
+	assert.Equal(t, "test/test-component", testTestComponentOverrideComponentBaseComponent)
 
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)

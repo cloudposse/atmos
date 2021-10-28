@@ -155,7 +155,7 @@ func CreateComponentStackMap(basePath string, filePath string) (map[string]map[s
 
 				if componentsConfig, componentsConfigExists := finalConfig["components"]; componentsConfigExists {
 					componentsSection := componentsConfig.(map[string]interface{})
-					stackName := strings.Replace(p, dir+"/", "", 1)
+					stackName := strings.Replace(p, basePath+"/", "", 1)
 
 					if terraformConfig, terraformConfigExists := componentsSection["terraform"]; terraformConfigExists {
 						terraformSection := terraformConfig.(map[string]interface{})
