@@ -149,6 +149,15 @@ func findComponentConfig(
 	var componentBackendSection map[interface{}]interface{}
 	var ok bool
 
+	if len(stack) == 0 {
+		return nil, nil, nil, errors.New("Stack must be provided and must not be empty")
+	}
+	if len(component) == 0 {
+		return nil, nil, nil, errors.New("Component must be provided and must not be empty")
+	}
+	if len(componentType) == 0 {
+		return nil, nil, nil, errors.New("Component type must be provided and must not be empty")
+	}
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
 		return nil, nil, nil, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
