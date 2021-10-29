@@ -70,6 +70,16 @@ func InitConfig() error {
 	// ENV vars
 	// Command-line arguments
 
+	err := processLogsConfig()
+	if err != nil {
+		return err
+	}
+
+	if g.LogVerbose {
+		color.Cyan("\nProcessing and merging configurations in the following order:\n")
+		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments\n")
+	}
+
 	v := viper.New()
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
