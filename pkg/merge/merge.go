@@ -5,8 +5,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Merge takes a list of maps of interface as input and returns a single map with the merged contents
-func Merge(inputs []map[interface{}]interface{}) (map[interface{}]interface{}, error) {
+// MergeWithOptions takes a list of maps of interface and options as input and returns a single map with the merged contents
+func MergeWithOptions(inputs []map[interface{}]interface{}, appendSlice, sliceDeepCopy bool) (map[interface{}]interface{}, error) {
 	merged := map[interface{}]interface{}{}
 
 	for index := range inputs {
@@ -27,10 +27,26 @@ func Merge(inputs []map[interface{}]interface{}) (map[interface{}]interface{}, e
 			return nil, err
 		}
 
-		if err = mergo.Merge(&merged, dataCurrent, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue, mergo.WithTypeCheck); err != nil {
+		var opts []func(*mergo.Config)
+		opts = append(opts, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue, mergo.WithTypeCheck)
+
+		if appendSlice {
+			opts = append(opts, mergo.WithAppendSlice)
+		}
+
+		if sliceDeepCopy {
+			opts = append(opts, mergo.WithSliceDeepCopy)
+		}
+
+		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
 			return nil, err
 		}
 	}
 
 	return merged, nil
+}
+
+// Merge takes a list of maps of interface as input and returns a single map with the merged contents
+func Merge(inputs []map[interface{}]interface{}) (map[interface{}]interface{}, error) {
+	return MergeWithOptions(inputs, false, false)
 }

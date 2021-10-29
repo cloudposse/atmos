@@ -59,10 +59,10 @@ var (
 	ProcessedConfig ProcessedConfiguration
 )
 
-// InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
+// InitConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
+func InitConfig() error {
 	// Config is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
@@ -148,8 +148,13 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		return err
 	}
 
+	return nil
+}
+
+// ProcessConfig processes and checks CLI configuration
+func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// Process ENV vars
-	err = processEnvVars()
+	err := processEnvVars()
 	if err != nil {
 		return err
 	}
