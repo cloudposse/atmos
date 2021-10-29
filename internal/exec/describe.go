@@ -27,7 +27,12 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.Stack = stack
 
-	err = c.InitConfig(configAndStacksInfo)
+	err = c.InitConfig()
+	if err != nil {
+		return err
+	}
+
+	err = c.ProcessConfig(configAndStacksInfo)
 	if err != nil {
 		return err
 	}

@@ -164,7 +164,12 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	// Process and merge CLI configurations
-	err = c.InitConfig(configAndStacksInfo)
+	err = c.InitConfig()
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	err = c.ProcessConfig(configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
