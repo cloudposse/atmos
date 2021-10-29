@@ -175,17 +175,3 @@ func checkConfig() error {
 
 	return nil
 }
-
-func processLogsConfig() error {
-	logVerbose := os.Getenv("ATMOS_LOGS_VERBOSE")
-	if len(logVerbose) > 0 {
-		color.Cyan("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerbose)
-		logVerboseBool, err := strconv.ParseBool(logVerbose)
-		if err != nil {
-			return err
-		}
-		Config.Logs.Verbose = logVerboseBool
-		g.LogVerbose = logVerboseBool
-	}
-	return nil
-}

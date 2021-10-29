@@ -59,26 +59,16 @@ var (
 	ProcessedConfig ProcessedConfiguration
 )
 
-// InitConfig processes and merges configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
+// InitConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
+func InitConfig() error {
 	// Config is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
 	// current directory
 	// ENV vars
 	// Command-line arguments
-
-	err := processLogsConfig()
-	if err != nil {
-		return err
-	}
-
-	if g.LogVerbose {
-		color.Cyan("\nProcessing and merging configurations in the following order:\n")
-		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments\n")
-	}
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -148,8 +138,13 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		return err
 	}
 
+	return nil
+}
+
+// ProcessConfig processes and checks CLI configuration
+func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// Process ENV vars
-	err = processEnvVars()
+	err := processEnvVars()
 	if err != nil {
 		return err
 	}
@@ -247,12 +242,6 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	if stackIsPhysicalPath == true {
-		if g.LogVerbose {
-			color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
-				configAndStacksInfo.Stack,
-				stackConfigFilesRelativePaths[0]),
-			)
-		}
 		ProcessedConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name
@@ -261,12 +250,6 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
 
 		if len(stackParts) == len(stackNamePatternParts) {
-			if g.LogVerbose {
-				color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack name pattern '%s'",
-					configAndStacksInfo.Stack,
-					Config.Stacks.NamePattern),
-				)
-			}
 			ProcessedConfig.StackType = "Logical"
 		} else {
 			errorMessage := fmt.Sprintf("\nThe stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
@@ -274,14 +257,6 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 				Config.Stacks.NamePattern,
 			)
 			return errors.New(errorMessage)
-		}
-	}
-
-	if g.LogVerbose {
-		color.Cyan("\nFinal CLI configuration:")
-		err = utils.PrintAsYAML(Config)
-		if err != nil {
-			return err
 		}
 	}
 
@@ -293,14 +268,7 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
 	if !utils.FileExists(path) {
-		if g.LogVerbose {
-			fmt.Println(fmt.Sprintf("No config found in %s", path))
-		}
 		return nil
-	}
-
-	if g.LogVerbose {
-		color.Green("Found config in %s", path)
 	}
 
 	reader, err := os.Open(path)
@@ -318,10 +286,6 @@ func processConfigFile(path string, v *viper.Viper) error {
 	err = v.MergeConfig(reader)
 	if err != nil {
 		return err
-	}
-
-	if g.LogVerbose {
-		color.Green("Processed config %s", path)
 	}
 
 	return nil

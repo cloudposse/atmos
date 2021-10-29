@@ -1,8 +1,8 @@
 package stack
 
 import (
-	g "github.com/cloudposse/atmos/internal/globals"
-	"github.com/cloudposse/atmos/pkg/utils"
+	g "github.com/cloudposse/terraform-provider-utils/internal/globals"
+	"github.com/cloudposse/terraform-provider-utils/internal/utils"
 	"os"
 	"path"
 	"path/filepath"

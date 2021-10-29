@@ -15,7 +15,7 @@ func TestComponentProcessor(t *testing.T) {
 	var tenant1Ue2DevTestTestComponent map[string]interface{}
 	component = "test/test-component"
 	stack = "tenant1-ue2-dev"
-	tenant1Ue2DevTestTestComponent, err = ProcessComponent(component, stack)
+	tenant1Ue2DevTestTestComponent, err = ProcessComponentInStack(component, stack)
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentBackend := tenant1Ue2DevTestTestComponent["backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentBaseComponent := tenant1Ue2DevTestTestComponent["component"]
@@ -34,6 +34,30 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "globals/ue2-globals", tenant1Ue2DevTestTestComponentDeps[5])
 	assert.Equal(t, "tenant1/ue2/dev", tenant1Ue2DevTestTestComponentDeps[6])
 
+	var tenant1Ue2DevTestTestComponent2 map[string]interface{}
+	component = "test/test-component"
+	tenant := "tenant1"
+	environment := "ue2"
+	stage := "dev"
+	tenant1Ue2DevTestTestComponent2, err = ProcessComponentFromContext(component, tenant, environment, stage)
+	assert.Nil(t, err)
+	tenant1Ue2DevTestTestComponentBackend2 := tenant1Ue2DevTestTestComponent2["backend"].(map[interface{}]interface{})
+	tenant1Ue2DevTestTestComponentBaseComponent2 := tenant1Ue2DevTestTestComponent2["component"]
+	tenant1Ue2DevTestTestComponentWorkspace2 := tenant1Ue2DevTestTestComponent2["workspace"].(string)
+	tenant1Ue2DevTestTestComponentBackendWorkspaceKeyPrefix2 := tenant1Ue2DevTestTestComponentBackend2["workspace_key_prefix"].(string)
+	tenant1Ue2DevTestTestComponentDeps2 := tenant1Ue2DevTestTestComponent2["deps"].([]string)
+	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentBackendWorkspaceKeyPrefix2)
+	assert.Nil(t, tenant1Ue2DevTestTestComponentBaseComponent2)
+	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevTestTestComponentWorkspace2)
+	assert.Equal(t, 7, len(tenant1Ue2DevTestTestComponentDeps2))
+	assert.Equal(t, "catalog/terraform/services/service-1", tenant1Ue2DevTestTestComponentDeps2[0])
+	assert.Equal(t, "catalog/terraform/services/service-2", tenant1Ue2DevTestTestComponentDeps2[1])
+	assert.Equal(t, "catalog/terraform/test-component", tenant1Ue2DevTestTestComponentDeps2[2])
+	assert.Equal(t, "globals/globals", tenant1Ue2DevTestTestComponentDeps2[3])
+	assert.Equal(t, "globals/tenant1-globals", tenant1Ue2DevTestTestComponentDeps2[4])
+	assert.Equal(t, "globals/ue2-globals", tenant1Ue2DevTestTestComponentDeps2[5])
+	assert.Equal(t, "tenant1/ue2/dev", tenant1Ue2DevTestTestComponentDeps2[6])
+
 	yamlConfig, err = yaml.Marshal(tenant1Ue2DevTestTestComponent)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
@@ -41,7 +65,7 @@ func TestComponentProcessor(t *testing.T) {
 	var tenant1Ue2DevTestTestComponentOverrideComponent map[string]interface{}
 	component = "test/test-component-override"
 	stack = "tenant1-ue2-dev"
-	tenant1Ue2DevTestTestComponentOverrideComponent, err = ProcessComponent(component, stack)
+	tenant1Ue2DevTestTestComponentOverrideComponent, err = ProcessComponentInStack(component, stack)
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentOverrideComponentBackend := tenant1Ue2DevTestTestComponentOverrideComponent["backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentOverrideComponentBaseComponent := tenant1Ue2DevTestTestComponentOverrideComponent["component"].(string)
