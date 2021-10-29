@@ -349,7 +349,9 @@ func ProcessConfig(
 
 				componentBackend := map[interface{}]interface{}{}
 				if i, ok2 := componentMap["backend"]; ok2 {
-					componentBackend = i.(map[interface{}]interface{})[backendType].(map[interface{}]interface{})
+					if componentBackendSection, componentBackendSectionExist := i.(map[interface{}]interface{})[backendType]; componentBackendSectionExist {
+						componentBackend = componentBackendSection.(map[interface{}]interface{})
+					}
 				}
 
 				componentTerraformCommand := "terraform"
