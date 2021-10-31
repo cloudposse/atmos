@@ -81,6 +81,7 @@ type ConfigAndStacksInfo struct {
 	SubCommand              string
 	ComponentVarsSection    map[interface{}]interface{}
 	ComponentBackendSection map[interface{}]interface{}
+	ComponentBackendType    string
 	AdditionalArgsAndFlags  []string
 	GlobalOptions           []string
 	TerraformDir            string

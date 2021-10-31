@@ -69,10 +69,16 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
 	var componentBackendSection map[interface{}]interface{}
+	var componentBackendType string
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		componentSection, componentVarsSection, componentBackendSection, err = findComponentConfig(stack, stacksMap, "terraform", component)
+		componentSection,
+			componentVarsSection,
+			componentBackendSection,
+			componentBackendType,
+			_, _,
+			err = findComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
 			return err
 		}
@@ -104,7 +110,12 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		}
 
 		for stackName := range stacksMap {
-			componentSection, componentVarsSection, componentBackendSection, err = findComponentConfig(stackName, stacksMap, "terraform", component)
+			componentSection,
+				componentVarsSection,
+				componentBackendSection,
+				componentBackendType,
+				_, _,
+				err = findComponentConfig(stackName, stacksMap, "terraform", component)
 			if err != nil {
 				continue
 			}
@@ -152,17 +163,15 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if componentBackendType == "" {
+		return errors.New(fmt.Sprintf("\n'backend_type' is missing for the '%s' component.\n", component))
+	}
+
 	if componentBackendSection == nil {
 		return errors.New(fmt.Sprintf("\nCould not find 'backend' config for the '%s' component.\n", component))
 	}
 
-	var componentBackendConfig = map[string]interface{}{
-		"terraform": map[string]interface{}{
-			"backend": map[string]interface{}{
-				"s3": componentBackendSection,
-			},
-		},
-	}
+	var componentBackendConfig = generateComponentBackendConfig(componentBackendType, componentBackendSection)
 
 	color.Cyan("\nComponent backend config:\n\n")
 	err = utils.PrintAsJSON(componentBackendConfig)

@@ -27,7 +27,7 @@ var (
 				BasePath:                "./components/terraform",
 				ApplyAutoApprove:        false,
 				DeployRunInit:           true,
-				AutoGenerateBackendFile: true,
+				AutoGenerateBackendFile: false,
 			},
 			Helmfile: Helmfile{
 				BasePath:              "./components/helmfile",

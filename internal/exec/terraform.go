@@ -97,8 +97,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto generate backend file
+	var backendFileName string
 	if c.Config.Components.Terraform.AutoGenerateBackendFile == true {
-		var backendFileName string
+		fmt.Println()
 		if len(info.ComponentFolderPrefix) == 0 {
 			backendFileName = fmt.Sprintf("%s/%s/backend.tf.json",
 				c.Config.Components.Terraform.BasePath,
@@ -113,7 +114,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 		color.Cyan("Writing backend config to file:")
 		fmt.Println(backendFileName)
-		err = utils.WriteToFileAsJSON(backendFileName, info.ComponentBackendSection, 0644)
+		var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
+		err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
 		if err != nil {
 			return err
 		}
