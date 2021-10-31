@@ -96,6 +96,29 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Auto generate backend file
+	if c.Config.Components.Terraform.AutoGenerateBackendFile == true {
+		var backendFileName string
+		if len(info.ComponentFolderPrefix) == 0 {
+			backendFileName = fmt.Sprintf("%s/%s/backend.tf.json",
+				c.Config.Components.Terraform.BasePath,
+				finalComponent,
+			)
+		} else {
+			backendFileName = fmt.Sprintf("%s/%s/%s/backend.tf.json",
+				c.Config.Components.Terraform.BasePath,
+				info.ComponentFolderPrefix,
+				finalComponent,
+			)
+		}
+		color.Cyan("Writing backend config to file:")
+		fmt.Println(backendFileName)
+		err = utils.WriteToFileAsJSON(backendFileName, info.ComponentBackendSection, 0644)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Run `terraform init`
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
