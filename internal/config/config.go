@@ -78,7 +78,8 @@ func InitConfig() error {
 
 	if g.LogVerbose {
 		color.Cyan("\nProcessing and merging configurations in the following order:\n")
-		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments\n")
+		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments")
+		fmt.Println()
 	}
 
 	v := viper.New()
