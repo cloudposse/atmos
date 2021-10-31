@@ -154,7 +154,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		workspaceName = info.ContextPrefix
 	}
 
-	allArgsAndFlags := append([]string{info.SubCommand}, info.AdditionalArgsAndFlags...)
+	allArgsAndFlags := []string{info.SubCommand}
 
 	switch info.SubCommand {
 	case "plan":
@@ -167,6 +167,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
 	}
+
+	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace`
 	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
