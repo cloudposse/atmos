@@ -26,6 +26,7 @@ var (
 		g.StackDirFlag,
 		g.GlobalOptionsFlag,
 		g.DeployRunInitFlag,
+		g.AutoGenerateBackendFileFlag,
 	}
 )
 
@@ -157,6 +158,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
+	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
@@ -471,6 +473,19 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.DeployRunInit = deployRunInitFlagParts[1]
+		}
+
+		if arg == g.AutoGenerateBackendFileFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.AutoGenerateBackendFile = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.AutoGenerateBackendFileFlag) {
+			var autoGenerateBackendFileFlagParts = strings.Split(arg, "=")
+			if len(autoGenerateBackendFileFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
 		}
 
 		for _, f := range commonFlags {
