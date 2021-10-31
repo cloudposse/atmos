@@ -293,6 +293,16 @@ func ProcessConfig(
 		globalBackendSection = i.(map[interface{}]interface{})
 	}
 
+	// Global remote state backend
+	globalRemoteStateBackendType := ""
+	globalRemoteStateBackendSection := map[interface{}]interface{}{}
+	if i, ok := globalTerraformSection["remote_state_backend_type"]; ok {
+		globalRemoteStateBackendType = i.(string)
+	}
+	if i, ok := globalTerraformSection["remote_state_backend"]; ok {
+		globalRemoteStateBackendSection = i.(map[interface{}]interface{})
+	}
+
 	// Helmfile section
 	if i, ok := globalHelmfileSection["vars"]; ok {
 		helmfileVars = i.(map[interface{}]interface{})
@@ -354,7 +364,17 @@ func ProcessConfig(
 					componentBackendSection = i.(map[interface{}]interface{})
 				}
 
-				componentTerraformCommand := "terraform"
+				// Component remote state backend
+				componentRemoteStateBackendType := ""
+				componentRemoteStateBackendSection := map[interface{}]interface{}{}
+				if i, ok2 := componentMap["remote_state_backend_type"]; ok2 {
+					componentRemoteStateBackendType = i.(string)
+				}
+				if i, ok2 := componentMap["remote_state_backend"]; ok2 {
+					componentRemoteStateBackendSection = i.(map[interface{}]interface{})
+				}
+
+				componentTerraformCommand := ""
 				if i, ok2 := componentMap["command"]; ok2 {
 					componentTerraformCommand = i.(string)
 				}
@@ -366,6 +386,8 @@ func ProcessConfig(
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
 				baseComponentBackendSection := map[interface{}]interface{}{}
+				baseComponentRemoteStateBackendType := ""
+				baseComponentRemoteStateBackendSection := map[interface{}]interface{}{}
 
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
@@ -393,6 +415,14 @@ func ProcessConfig(
 							baseComponentBackendSection = i.(map[interface{}]interface{})
 						}
 
+						// Base component remote state backend
+						if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
+							baseComponentRemoteStateBackendType = i.(string)
+						}
+						if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
+							baseComponentRemoteStateBackendSection = i.(map[interface{}]interface{})
+						}
+
 						if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
 							baseComponentTerraformCommand = baseComponentCommandSection.(string)
 						}
@@ -417,6 +447,7 @@ func ProcessConfig(
 					return nil, err
 				}
 
+				// Final backend
 				finalComponentBackendType := globalBackendType
 				if len(baseComponentBackendType) > 0 {
 					finalComponentBackendType = baseComponentBackendType
@@ -435,9 +466,32 @@ func ProcessConfig(
 					finalComponentBackend = i.(map[interface{}]interface{})
 				}
 
-				finalComponentTerraformCommand := componentTerraformCommand
+				// Final remote state backend
+				finalComponentRemoteStateBackendType := globalRemoteStateBackendType
+				if len(baseComponentRemoteStateBackendType) > 0 {
+					finalComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
+				}
+				if len(componentRemoteStateBackendType) > 0 {
+					finalComponentRemoteStateBackendType = componentRemoteStateBackendType
+				}
+
+				finalComponentRemoteStateBackendSection, err := m.Merge([]map[interface{}]interface{}{globalRemoteStateBackendSection, baseComponentRemoteStateBackendSection, componentRemoteStateBackendSection})
+				if err != nil {
+					return nil, err
+				}
+
+				finalComponentRemoteStateBackend := map[interface{}]interface{}{}
+				if i, ok2 := finalComponentRemoteStateBackendSection[finalComponentRemoteStateBackendType]; ok2 {
+					finalComponentRemoteStateBackend = i.(map[interface{}]interface{})
+				}
+
+				// Final binary to execute
+				finalComponentTerraformCommand := "terraform"
 				if len(baseComponentTerraformCommand) > 0 {
 					finalComponentTerraformCommand = baseComponentTerraformCommand
+				}
+				if len(componentTerraformCommand) > 0 {
+					finalComponentTerraformCommand = componentTerraformCommand
 				}
 
 				comp := map[string]interface{}{}
@@ -446,6 +500,8 @@ func ProcessConfig(
 				comp["env"] = finalComponentEnv
 				comp["backend_type"] = finalComponentBackendType
 				comp["backend"] = finalComponentBackend
+				comp["remote_state_backend_type"] = finalComponentRemoteStateBackendType
+				comp["remote_state_backend"] = finalComponentRemoteStateBackend
 				comp["command"] = finalComponentTerraformCommand
 
 				if baseComponentName != "" {

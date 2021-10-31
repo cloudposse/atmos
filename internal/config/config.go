@@ -24,9 +24,10 @@ var (
 	defaultConfig = Configuration{
 		Components: Components{
 			Terraform: Terraform{
-				BasePath:         "./components/terraform",
-				ApplyAutoApprove: false,
-				DeployRunInit:    true,
+				BasePath:                "./components/terraform",
+				ApplyAutoApprove:        false,
+				DeployRunInit:           true,
+				AutoGenerateBackendFile: false,
 			},
 			Helmfile: Helmfile{
 				BasePath:              "./components/helmfile",
@@ -77,7 +78,8 @@ func InitConfig() error {
 
 	if g.LogVerbose {
 		color.Cyan("\nProcessing and merging configurations in the following order:\n")
-		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments\n")
+		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments")
+		fmt.Println()
 	}
 
 	v := viper.New()
@@ -183,6 +185,14 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		}
 		Config.Components.Terraform.DeployRunInit = deployRunInitBool
 		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
+	}
+	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
+		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
+		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
 	}
 
 	// Check config

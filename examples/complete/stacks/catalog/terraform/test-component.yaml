@@ -12,6 +12,9 @@ components:
       backend:
         s3:
           workspace_key_prefix: test-test-component
+      remote_state_backend:
+        s3:
+          workspace_key_prefix: test-test-component
       settings:
         spacelift:
           workspace_enabled: true

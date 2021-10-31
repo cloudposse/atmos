@@ -96,6 +96,31 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Auto generate backend file
+	var backendFileName string
+	if c.Config.Components.Terraform.AutoGenerateBackendFile == true {
+		fmt.Println()
+		if len(info.ComponentFolderPrefix) == 0 {
+			backendFileName = fmt.Sprintf("%s/%s/backend.tf.json",
+				c.Config.Components.Terraform.BasePath,
+				finalComponent,
+			)
+		} else {
+			backendFileName = fmt.Sprintf("%s/%s/%s/backend.tf.json",
+				c.Config.Components.Terraform.BasePath,
+				info.ComponentFolderPrefix,
+				finalComponent,
+			)
+		}
+		color.Cyan("Writing backend config to file:")
+		fmt.Println(backendFileName)
+		var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
+		err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Run `terraform init`
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
@@ -154,7 +179,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		workspaceName = info.ContextPrefix
 	}
 
-	allArgsAndFlags := append([]string{info.SubCommand}, info.AdditionalArgsAndFlags...)
+	allArgsAndFlags := []string{info.SubCommand}
 
 	switch info.SubCommand {
 	case "plan":
@@ -167,6 +192,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
 	}
+
+	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace`
 	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)

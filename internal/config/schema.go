@@ -1,9 +1,10 @@
 package config
 
 type Terraform struct {
-	BasePath         string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	ApplyAutoApprove bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
-	DeployRunInit    bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
+	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
+	DeployRunInit           bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
+	AutoGenerateBackendFile bool   `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
 }
 
 type Helmfile struct {
@@ -56,15 +57,16 @@ type Context struct {
 }
 
 type ArgsAndFlagsInfo struct {
-	AdditionalArgsAndFlags []string
-	SubCommand             string
-	ComponentFromArg       string
-	GlobalOptions          []string
-	TerraformDir           string
-	HelmfileDir            string
-	ConfigDir              string
-	StacksDir              string
-	DeployRunInit          string
+	AdditionalArgsAndFlags  []string
+	SubCommand              string
+	ComponentFromArg        string
+	GlobalOptions           []string
+	TerraformDir            string
+	HelmfileDir             string
+	ConfigDir               string
+	StacksDir               string
+	DeployRunInit           string
+	AutoGenerateBackendFile string
 }
 
 type ConfigAndStacksInfo struct {
@@ -79,6 +81,7 @@ type ConfigAndStacksInfo struct {
 	SubCommand              string
 	ComponentVarsSection    map[interface{}]interface{}
 	ComponentBackendSection map[interface{}]interface{}
+	ComponentBackendType    string
 	AdditionalArgsAndFlags  []string
 	GlobalOptions           []string
 	TerraformDir            string
@@ -88,4 +91,5 @@ type ConfigAndStacksInfo struct {
 	Context                 Context
 	ContextPrefix           string
 	DeployRunInit           string
+	AutoGenerateBackendFile string
 }

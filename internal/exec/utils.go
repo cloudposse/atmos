@@ -26,16 +26,17 @@ var (
 		g.StackDirFlag,
 		g.GlobalOptionsFlag,
 		g.DeployRunInitFlag,
+		g.AutoGenerateBackendFileFlag,
 	}
 )
 
-// checkStackConfig checks stack schema and return component info
-func checkStackConfig(
+// findComponentConfig finds component config sections
+func findComponentConfig(
 	stack string,
 	stacksMap map[string]interface{},
 	componentType string,
 	component string,
-) (map[string]interface{}, map[interface{}]interface{}, map[interface{}]interface{}, string, string, error) {
+) (map[string]interface{}, map[interface{}]interface{}, map[interface{}]interface{}, string, string, string, error) {
 
 	var stackSection map[interface{}]interface{}
 	var componentsSection map[string]interface{}
@@ -43,27 +44,40 @@ func checkStackConfig(
 	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
 	var componentBackendSection map[interface{}]interface{}
+	var componentBackendType string
 	var baseComponentPath string
 	var command string
 	var ok bool
 
+	if len(stack) == 0 {
+		return nil, nil, nil, "", "", "", errors.New("stack must be provided and must not be empty")
+	}
+	if len(component) == 0 {
+		return nil, nil, nil, "", "", "", errors.New("component must be provided and must not be empty")
+	}
+	if len(componentType) == 0 {
+		return nil, nil, nil, "", "", "", errors.New("component type must be provided and must not be empty")
+	}
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
+		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
+		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
+		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, "", "", errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
+	}
+	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
+		componentBackendType = ""
 	}
 	if baseComponentPath, ok = componentSection["component"].(string); !ok {
 		baseComponentPath = ""
@@ -72,54 +86,7 @@ func checkStackConfig(
 		command = ""
 	}
 
-	return componentSection, componentVarsSection, componentBackendSection, baseComponentPath, command, nil
-}
-
-// findComponentConfig finds component config sections
-func findComponentConfig(
-	stack string,
-	stacksMap map[string]interface{},
-	componentType string,
-	component string,
-) (map[string]interface{}, map[interface{}]interface{}, map[interface{}]interface{}, error) {
-
-	var stackSection map[interface{}]interface{}
-	var componentsSection map[string]interface{}
-	var componentTypeSection map[string]interface{}
-	var componentSection map[string]interface{}
-	var componentVarsSection map[interface{}]interface{}
-	var componentBackendSection map[interface{}]interface{}
-	var ok bool
-
-	if len(stack) == 0 {
-		return nil, nil, nil, errors.New("stack must be provided and must not be empty")
-	}
-	if len(component) == 0 {
-		return nil, nil, nil, errors.New("component must be provided and must not be empty")
-	}
-	if len(componentType) == 0 {
-		return nil, nil, nil, errors.New("component type must be provided and must not be empty")
-	}
-	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
-	}
-	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
-	}
-	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
-	}
-	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
-	}
-	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
-	}
-	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
-		componentBackendSection = nil
-	}
-
-	return componentSection, componentVarsSection, componentBackendSection, nil
+	return componentSection, componentVarsSection, componentBackendSection, componentBackendType, baseComponentPath, command, nil
 }
 
 // processConfigAndStacks processes CLI config and stacks
@@ -157,6 +124,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
+	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
@@ -210,11 +178,11 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		_, configAndStacksInfo.ComponentVarsSection, _, configAndStacksInfo.BaseComponentPath, configAndStacksInfo.Command, err = checkStackConfig(
-			configAndStacksInfo.Stack,
-			stacksMap,
-			componentType,
-			configAndStacksInfo.ComponentFromArg)
+		_, configAndStacksInfo.ComponentVarsSection,
+			configAndStacksInfo.ComponentBackendSection,
+			configAndStacksInfo.ComponentBackendType,
+			configAndStacksInfo.BaseComponentPath,
+			configAndStacksInfo.Command, err = findComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -249,11 +217,11 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 
 		for stackName := range stacksMap {
-			_, configAndStacksInfo.ComponentVarsSection, _, configAndStacksInfo.BaseComponentPath, configAndStacksInfo.Command, err = checkStackConfig(
-				stackName,
-				stacksMap,
-				componentType,
-				configAndStacksInfo.ComponentFromArg)
+			_, configAndStacksInfo.ComponentVarsSection,
+				configAndStacksInfo.ComponentBackendSection,
+				configAndStacksInfo.ComponentBackendType,
+				configAndStacksInfo.BaseComponentPath,
+				configAndStacksInfo.Command, err = findComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
 				continue
 			}
@@ -473,6 +441,19 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.DeployRunInit = deployRunInitFlagParts[1]
 		}
 
+		if arg == g.AutoGenerateBackendFileFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.AutoGenerateBackendFile = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.AutoGenerateBackendFileFlag) {
+			var autoGenerateBackendFileFlagParts = strings.Split(arg, "=")
+			if len(autoGenerateBackendFileFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
+		}
+
 		for _, f := range commonFlags {
 			if arg == f {
 				indexesToRemove = append(indexesToRemove, i)
@@ -563,4 +544,14 @@ func replaceContextTokens(context c.Context, pattern string) string {
 				"{environment}", context.Environment, 1),
 			"{tenant}", context.Tenant, 1),
 		"{stage}", context.Stage, 1)
+}
+
+func generateComponentBackendConfig(backendType string, backendConfig map[interface{}]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"terraform": map[string]interface{}{
+			"backend": map[string]interface{}{
+				backendType: backendConfig,
+			},
+		},
+	}
 }
