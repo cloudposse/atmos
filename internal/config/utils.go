@@ -10,6 +10,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+)
+
+var (
+	// Mutex to serialize reading YAML config files
+	readYAMLConfigFileLock = &sync.Mutex{}
 )
 
 // findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
@@ -32,7 +38,9 @@ func findAllStackConfigsInPaths(
 		}
 
 		// Find all matches in the glob
+		readYAMLConfigFileLock.Lock()
 		matches, err := doublestar.Glob(pathWithExt)
+		readYAMLConfigFileLock.Unlock()
 		if err != nil {
 			return nil, nil, false, err
 		}
