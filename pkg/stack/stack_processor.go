@@ -9,7 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
 	"path"
 	"path/filepath"
 	"sort"
@@ -20,9 +19,6 @@ import (
 var (
 	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
 	processYAMLConfigFilesLock = &sync.Mutex{}
-
-	// Mutex to serialize reading YAML config files
-	readYAMLConfigFileLock = &sync.Mutex{}
 )
 
 // ProcessYAMLConfigFiles takes a list of paths to YAML config files, processes and deep-merges all imports,
@@ -119,14 +115,12 @@ func ProcessYAMLConfigFile(
 
 	var configs []map[interface{}]interface{}
 
-	readYAMLConfigFileLock.Lock()
-	stackYamlConfig, err := ioutil.ReadFile(filePath)
-	readYAMLConfigFileLock.Unlock()
+	stackYamlConfig, err := getFileContent(filePath)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	stackMapConfig, err := c.YAMLToMapOfInterfaces(string(stackYamlConfig))
+	stackMapConfig, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -156,9 +150,7 @@ func ProcessYAMLConfigFile(
 			}
 
 			// Find all import matches in the glob
-			readYAMLConfigFileLock.Lock()
 			importMatches, err := doublestar.Glob(impWithExtPath)
-			readYAMLConfigFileLock.Unlock()
 			if err != nil {
 				return nil, nil, err
 			}
