@@ -14,12 +14,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-)
-
-var (
-	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
-	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
 // ProcessYAMLConfigFiles takes a list of paths to YAML config files, processes and deep-merges all imports,
@@ -33,76 +27,57 @@ func ProcessYAMLConfigFiles(
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]interface{}{}
-	var errorResult error
-	var wg sync.WaitGroup
-	wg.Add(count)
 
 	for i, filePath := range filePaths {
-		go func(i int, p string) {
-			defer wg.Done()
+		stackBasePath := basePath
+		if len(stackBasePath) < 1 {
+			stackBasePath = path.Dir(filePath)
+		}
 
-			stackBasePath := basePath
-			if len(stackBasePath) < 1 {
-				stackBasePath = path.Dir(p)
-			}
+		config, importsConfig, err := ProcessYAMLConfigFile(stackBasePath, filePath, map[string]map[interface{}]interface{}{})
+		if err != nil {
+			return nil, nil, err
+		}
 
-			config, importsConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[interface{}]interface{}{})
+		var imports []string
+		for k := range importsConfig {
+			imports = append(imports, k)
+		}
+
+		uniqueImports := utils.UniqueStrings(imports)
+		sort.Strings(uniqueImports)
+
+		componentStackMap := map[string]map[string][]string{}
+		if processStackDeps {
+			componentStackMap, err = CreateComponentStackMap(stackBasePath, filePath)
 			if err != nil {
-				errorResult = err
-				return
+				return nil, nil, err
 			}
+		}
 
-			var imports []string
-			for k := range importsConfig {
-				imports = append(imports, k)
-			}
+		finalConfig, err := ProcessConfig(stackBasePath, filePath, config, processStackDeps, processComponentDeps, "", componentStackMap, importsConfig)
+		if err != nil {
+			return nil, nil, err
+		}
 
-			uniqueImports := utils.UniqueStrings(imports)
-			sort.Strings(uniqueImports)
+		finalConfig["imports"] = uniqueImports
 
-			componentStackMap := map[string]map[string][]string{}
-			if processStackDeps {
-				componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
-				if err != nil {
-					errorResult = err
-					return
-				}
-			}
+		yamlConfig, err := yaml.Marshal(finalConfig)
+		if err != nil {
+			return nil, nil, err
+		}
 
-			finalConfig, err := ProcessConfig(stackBasePath, p, config, processStackDeps, processComponentDeps, "", componentStackMap, importsConfig)
-			if err != nil {
-				errorResult = err
-				return
-			}
+		stackName := strings.TrimSuffix(
+			strings.TrimSuffix(
+				utils.TrimBasePathFromPath(stackBasePath+"/", filePath),
+				g.DefaultStackConfigFileExtension),
+			".yml",
+		)
 
-			finalConfig["imports"] = uniqueImports
-
-			yamlConfig, err := yaml.Marshal(finalConfig)
-			if err != nil {
-				errorResult = err
-				return
-			}
-
-			stackName := strings.TrimSuffix(
-				strings.TrimSuffix(
-					utils.TrimBasePathFromPath(stackBasePath+"/", p),
-					g.DefaultStackConfigFileExtension),
-				".yml",
-			)
-
-			processYAMLConfigFilesLock.Lock()
-			defer processYAMLConfigFilesLock.Unlock()
-
-			listResult[i] = string(yamlConfig)
-			mapResult[stackName] = finalConfig
-		}(i, filePath)
+		listResult[i] = string(yamlConfig)
+		mapResult[stackName] = finalConfig
 	}
 
-	wg.Wait()
-
-	if errorResult != nil {
-		return nil, nil, errorResult
-	}
 	return listResult, mapResult, nil
 }
 
