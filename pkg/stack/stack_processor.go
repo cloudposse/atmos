@@ -2,7 +2,6 @@ package stack
 
 import (
 	"fmt"
-	"github.com/bmatcuk/doublestar"
 	g "github.com/cloudposse/atmos/internal/globals"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -150,7 +149,7 @@ func ProcessYAMLConfigFile(
 			}
 
 			// Find all import matches in the glob
-			importMatches, err := doublestar.Glob(impWithExtPath)
+			importMatches, err := GetGlobMatches(impWithExtPath)
 			if err != nil {
 				return nil, nil, err
 			}
