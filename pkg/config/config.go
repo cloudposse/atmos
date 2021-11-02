@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	g "github.com/cloudposse/atmos/internal/globals"
+	g "github.com/cloudposse/atmos/pkg/globals"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"

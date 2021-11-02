@@ -2,7 +2,7 @@ package component
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/internal/config"
+	"github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	"github.com/pkg/errors"
 	"strings"
@@ -10,22 +10,22 @@ import (
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
 func ProcessComponentInStack(component string, stack string) (map[string]interface{}, error) {
-	var configAndStacksInfo c.ConfigAndStacksInfo
+	var configAndStacksInfo config.ConfigAndStacksInfo
 	configAndStacksInfo.Stack = stack
 
-	err := c.InitConfig()
+	err := config.InitConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	err = c.ProcessConfig(configAndStacksInfo)
+	err = config.ProcessConfig(configAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
 
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.ProcessedConfig.StacksBaseAbsolutePath,
-		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		config.ProcessedConfig.StacksBaseAbsolutePath,
+		config.ProcessedConfig.StackConfigFilesAbsolutePaths,
 		true,
 		true)
 
@@ -37,7 +37,7 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 	var componentVarsSection map[interface{}]interface{}
 
 	// Check and process stacks
-	if c.ProcessedConfig.StackType == "Directory" {
+	if config.ProcessedConfig.StackType == "Directory" {
 		componentSection, componentVarsSection, _, err = findComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
 			componentSection, componentVarsSection, _, err = findComponentConfig(stack, stacksMap, "helmfile", component)
@@ -46,12 +46,12 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 			}
 		}
 	} else {
-		if len(c.Config.Stacks.NamePattern) < 1 {
+		if len(config.Config.Stacks.NamePattern) < 1 {
 			return nil, errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		}
 
 		stackParts := strings.Split(stack, "-")
-		stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
+		stackNamePatternParts := strings.Split(config.Config.Stacks.NamePattern, "-")
 
 		var tenant string
 		var environment string
@@ -115,7 +115,7 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 				"Are the component and stack names correct? Did you forget an import?",
 				component,
 				stack,
-				c.Config.Stacks.NamePattern,
+				config.Config.Stacks.NamePattern,
 			))
 		}
 	}
@@ -141,21 +141,21 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 func ProcessComponentFromContext(component string, tenant string, environment string, stage string) (map[string]interface{}, error) {
 	var stack string
 
-	err := c.InitConfig()
+	err := config.InitConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	if len(c.Config.Stacks.NamePattern) < 1 {
+	if len(config.Config.Stacks.NamePattern) < 1 {
 		return nil, errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	}
 
-	stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
+	stackNamePatternParts := strings.Split(config.Config.Stacks.NamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
 		if part == "{tenant}" {
 			if len(tenant) == 0 {
-				return nil, errors.New(fmt.Sprintf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", c.Config.Stacks.NamePattern))
+				return nil, errors.New(fmt.Sprintf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", config.Config.Stacks.NamePattern))
 			}
 			if len(stack) == 0 {
 				stack = tenant
@@ -164,7 +164,7 @@ func ProcessComponentFromContext(component string, tenant string, environment st
 			}
 		} else if part == "{environment}" {
 			if len(environment) == 0 {
-				return nil, errors.New(fmt.Sprintf("stack name pattern '%s' includes '{environment}', but environment is not provided", c.Config.Stacks.NamePattern))
+				return nil, errors.New(fmt.Sprintf("stack name pattern '%s' includes '{environment}', but environment is not provided", config.Config.Stacks.NamePattern))
 			}
 			if len(stack) == 0 {
 				stack = environment
@@ -173,7 +173,7 @@ func ProcessComponentFromContext(component string, tenant string, environment st
 			}
 		} else if part == "{stage}" {
 			if len(stage) == 0 {
-				return nil, errors.New(fmt.Sprintf("stack name pattern '%s' includes '{stage}', but stage is not provided", c.Config.Stacks.NamePattern))
+				return nil, errors.New(fmt.Sprintf("stack name pattern '%s' includes '{stage}', but stage is not provided", config.Config.Stacks.NamePattern))
 			}
 			if len(stack) == 0 {
 				stack = stage
