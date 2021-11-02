@@ -105,7 +105,6 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				stack = stackName
 				break
 			}
 		}

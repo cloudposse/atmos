@@ -2,14 +2,12 @@ package stack
 
 import (
 	"fmt"
-	"github.com/bmatcuk/doublestar"
 	g "github.com/cloudposse/atmos/internal/globals"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
 	"path"
 	"path/filepath"
 	"sort"
@@ -116,12 +114,12 @@ func ProcessYAMLConfigFile(
 
 	var configs []map[interface{}]interface{}
 
-	stackYamlConfig, err := ioutil.ReadFile(filePath)
+	stackYamlConfig, err := getFileContent(filePath)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	stackMapConfig, err := c.YAMLToMapOfInterfaces(string(stackYamlConfig))
+	stackMapConfig, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -151,7 +149,7 @@ func ProcessYAMLConfigFile(
 			}
 
 			// Find all import matches in the glob
-			importMatches, err := doublestar.Glob(impWithExtPath)
+			importMatches, err := GetGlobMatches(impWithExtPath)
 			if err != nil {
 				return nil, nil, err
 			}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/bmatcuk/doublestar"
 	g "github.com/cloudposse/atmos/internal/globals"
+	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"os"
@@ -32,7 +33,7 @@ func findAllStackConfigsInPaths(
 		}
 
 		// Find all matches in the glob
-		matches, err := doublestar.Glob(pathWithExt)
+		matches, err := s.GetGlobMatches(pathWithExt)
 		if err != nil {
 			return nil, nil, false, err
 		}
