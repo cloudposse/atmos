@@ -3,8 +3,8 @@ package exec
 import (
 	"errors"
 	"fmt"
-	c "github.com/cloudposse/atmos/internal/config"
-	g "github.com/cloudposse/atmos/internal/globals"
+	"github.com/cloudposse/atmos/pkg/config"
+	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
@@ -90,8 +90,8 @@ func findComponentConfig(
 }
 
 // processConfigAndStacks processes CLI config and stacks
-func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
-	var configAndStacksInfo c.ConfigAndStacksInfo
+func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (config.ConfigAndStacksInfo, error) {
+	var configAndStacksInfo config.ConfigAndStacksInfo
 
 	if len(args) < 1 {
 		return configAndStacksInfo, errors.New("invalid number of arguments")
@@ -132,20 +132,20 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	// Process and merge CLI configurations
-	err = c.InitConfig()
+	err = config.InitConfig()
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
-	err = c.ProcessConfig(configAndStacksInfo)
+	err = config.ProcessConfig(configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.ProcessedConfig.StacksBaseAbsolutePath,
-		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		config.ProcessedConfig.StacksBaseAbsolutePath,
+		config.ProcessedConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true)
 
@@ -157,27 +157,27 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	if g.LogVerbose {
 		fmt.Println()
 		var msg string
-		if c.ProcessedConfig.StackType == "Directory" {
+		if config.ProcessedConfig.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
 			msg = "Found config files:"
 		}
 		color.Cyan(msg)
-		err = utils.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		err = utils.PrintAsYAML(config.ProcessedConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
 	}
 
-	if len(c.Config.Stacks.NamePattern) < 1 {
+	if len(config.Config.Stacks.NamePattern) < 1 {
 		return configAndStacksInfo,
 			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	}
 
-	stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
+	stackNamePatternParts := strings.Split(config.Config.Stacks.NamePattern, "-")
 
 	// Check and process stacks
-	if c.ProcessedConfig.StackType == "Directory" {
+	if config.ProcessedConfig.StackType == "Directory" {
 		_, configAndStacksInfo.ComponentVarsSection,
 			configAndStacksInfo.ComponentBackendSection,
 			configAndStacksInfo.ComponentBackendType,
@@ -196,7 +196,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			return configAndStacksInfo,
 				errors.New(fmt.Sprintf("Stack '%s' does not match the stack name pattern '%s'",
 					configAndStacksInfo.Stack,
-					c.Config.Stacks.NamePattern))
+					config.Config.Stacks.NamePattern))
 		}
 
 		var tenant string
@@ -267,7 +267,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 					"Are the component and stack names correct? Did you forget an import?",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
-					c.Config.Stacks.NamePattern,
+					config.Config.Stacks.NamePattern,
 				))
 		}
 	}
@@ -316,7 +316,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			if len(configAndStacksInfo.Context.Tenant) == 0 {
 				return configAndStacksInfo,
 					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
-						c.Config.Stacks.NamePattern,
+						config.Config.Stacks.NamePattern,
 						configAndStacksInfo.Stack,
 					))
 			}
@@ -329,7 +329,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			if len(configAndStacksInfo.Context.Environment) == 0 {
 				return configAndStacksInfo,
 					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack %s does not have an environment defined",
-						c.Config.Stacks.NamePattern,
+						config.Config.Stacks.NamePattern,
 						configAndStacksInfo.Stack,
 					))
 			}
@@ -342,7 +342,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			if len(configAndStacksInfo.Context.Stage) == 0 {
 				return configAndStacksInfo,
 					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
-						c.Config.Stacks.NamePattern,
+						config.Config.Stacks.NamePattern,
 						configAndStacksInfo.Stack,
 					))
 			}
@@ -359,8 +359,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 }
 
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags
-func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error) {
-	var info c.ArgsAndFlagsInfo
+func processArgsAndFlags(inputArgsAndFlags []string) (config.ArgsAndFlagsInfo, error) {
+	var info config.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 
@@ -509,8 +509,8 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	return cmd.Run()
 }
 
-func getContextFromVars(vars map[interface{}]interface{}) c.Context {
-	var context c.Context
+func getContextFromVars(vars map[interface{}]interface{}) config.Context {
+	var context config.Context
 
 	if namespace, ok := vars["namespace"].(string); ok {
 		context.Namespace = namespace
@@ -535,7 +535,7 @@ func getContextFromVars(vars map[interface{}]interface{}) c.Context {
 	return context
 }
 
-func replaceContextTokens(context c.Context, pattern string) string {
+func replaceContextTokens(context config.Context, pattern string) string {
 	return strings.Replace(
 		strings.Replace(
 			strings.Replace(

@@ -3,7 +3,7 @@ package config
 import (
 	"errors"
 	"github.com/bmatcuk/doublestar"
-	g "github.com/cloudposse/atmos/internal/globals"
+	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"

@@ -3,7 +3,7 @@ package stack
 import (
 	"fmt"
 	"github.com/bmatcuk/doublestar"
-	g "github.com/cloudposse/atmos/internal/globals"
+	g "github.com/cloudposse/atmos/pkg/globals"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"io/ioutil"
 	"os"

@@ -2,8 +2,8 @@ package stack
 
 import (
 	"fmt"
-	g "github.com/cloudposse/atmos/internal/globals"
 	c "github.com/cloudposse/atmos/pkg/convert"
+	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"

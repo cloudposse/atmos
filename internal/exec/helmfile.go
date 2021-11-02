@@ -4,7 +4,7 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/internal/config"
+	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
