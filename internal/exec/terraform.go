@@ -125,6 +125,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
 		info.SubCommand == "workspace" ||
+		info.SubCommand == "clean" ||
 		(info.SubCommand == "deploy" && c.Config.Components.Terraform.DeployRunInit == false) {
 		runTerraformInit = false
 	}
