@@ -2,10 +2,6 @@ package stack
 
 import (
 	"fmt"
-	"github.com/bmatcuk/doublestar/v4"
-	g "github.com/cloudposse/atmos/pkg/globals"
-	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 	"io/ioutil"
 	"os"
 	"path"
@@ -13,6 +9,11 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/bmatcuk/doublestar/v4"
+	g "github.com/cloudposse/atmos/pkg/globals"
+	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/fatih/color"
 )
 
 var (

@@ -2,17 +2,18 @@ package stack
 
 import (
 	"fmt"
+	"path"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+
 	c "github.com/cloudposse/atmos/pkg/convert"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"path"
-	"path/filepath"
-	"sort"
-	"strings"
-	"sync"
 )
 
 var (
