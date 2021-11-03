@@ -138,13 +138,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Handle `terraform deploy` custom command
 	if info.SubCommand == "deploy" {
 		info.SubCommand = "apply"
-		if !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if info.UseTerraformPlan == false && !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
 
 	// Handle Config.Components.Terraform.ApplyAutoApprove flag
-	if info.SubCommand == "apply" && c.Config.Components.Terraform.ApplyAutoApprove == true {
+	if info.SubCommand == "apply" && c.Config.Components.Terraform.ApplyAutoApprove == true && info.UseTerraformPlan == false {
 		if !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
@@ -189,7 +189,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
 	case "apply":
-		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		if info.UseTerraformPlan == true {
+			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
+		} else {
+			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		}
 		break
 	}
 

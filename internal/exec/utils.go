@@ -27,6 +27,7 @@ var (
 		g.GlobalOptionsFlag,
 		g.DeployRunInitFlag,
 		g.AutoGenerateBackendFileFlag,
+		g.FromPlanFlag,
 	}
 )
 
@@ -125,6 +126,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
+	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
@@ -452,6 +454,10 @@ func processArgsAndFlags(inputArgsAndFlags []string) (config.ArgsAndFlagsInfo, e
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
+		}
+
+		if arg == g.FromPlanFlag {
+			info.UseTerraformPlan = true
 		}
 
 		for _, f := range commonFlags {
