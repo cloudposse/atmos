@@ -8,7 +8,7 @@ import (
 var describeCmd = &cobra.Command{
 	Use:                "describe",
 	Short:              "describe",
-	Long:               `This command shows configuration for stacks and components`,
+	Long:               `This command shows configuration for CLI, stacks and components`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 

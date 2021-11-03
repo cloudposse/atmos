@@ -125,6 +125,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
 		info.SubCommand == "workspace" ||
+		info.SubCommand == "clean" ||
 		(info.SubCommand == "deploy" && c.Config.Components.Terraform.DeployRunInit == false) {
 		runTerraformInit = false
 	}
@@ -138,13 +139,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Handle `terraform deploy` custom command
 	if info.SubCommand == "deploy" {
 		info.SubCommand = "apply"
-		if !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if info.UseTerraformPlan == false && !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
 
 	// Handle Config.Components.Terraform.ApplyAutoApprove flag
-	if info.SubCommand == "apply" && c.Config.Components.Terraform.ApplyAutoApprove == true {
+	if info.SubCommand == "apply" && c.Config.Components.Terraform.ApplyAutoApprove == true && info.UseTerraformPlan == false {
 		if !utils.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
@@ -189,19 +190,27 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
 	case "apply":
-		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		if info.UseTerraformPlan == true {
+			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
+		} else {
+			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		}
 		break
 	}
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace`
-	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
-	if err != nil {
-		err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, nil)
+	if info.SubCommand != "clean" {
+		err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
 		if err != nil {
-			return err
+			err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, nil)
+			if err != nil {
+				return err
+			}
 		}
+	} else {
+		return errors.New("terraform clean not implemented")
 	}
 
 	// Check if the terraform command requires a user interaction,

@@ -18,3 +18,5 @@ build:
 
 deps:
 	go mod download
+
+.PHONY: lint build deps

@@ -155,10 +155,18 @@ func ProcessYAMLConfigFile(
 			}
 
 			if importMatches == nil {
-				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nNo matches found for the import '%s'",
+				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nNo matches found for the import '%s' using the pattern '%s'",
 					filePath,
-					strings.Replace(impWithExt, basePath+"/", "", 1))
-				return nil, nil, errors.New(errorMessage)
+					imp,
+					impWithExtPath)
+
+				importMatches, err = GetGlobMatches(impWithExtPath)
+				if err != nil {
+					return nil, nil, err
+				}
+				if importMatches == nil {
+					return nil, nil, errors.New(errorMessage)
+				}
 			}
 
 			for _, importFile := range importMatches {

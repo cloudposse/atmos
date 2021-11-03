@@ -16,6 +16,8 @@ const (
 	StackDirFlag                = "--stacks-dir"
 	DeployRunInitFlag           = "--deploy-run-init"
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
+
+	FromPlanFlag = "--from-plan"
 )
 
 var (

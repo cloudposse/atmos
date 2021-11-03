@@ -67,6 +67,7 @@ type ArgsAndFlagsInfo struct {
 	StacksDir               string
 	DeployRunInit           string
 	AutoGenerateBackendFile string
+	UseTerraformPlan        bool
 }
 
 type ConfigAndStacksInfo struct {
@@ -92,4 +93,5 @@ type ConfigAndStacksInfo struct {
 	ContextPrefix           string
 	DeployRunInit           string
 	AutoGenerateBackendFile string
+	UseTerraformPlan        bool
 }
