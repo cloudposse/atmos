@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/cloudposse/atmos/cmd"
-	"github.com/fatih/color"
 	"os"
+
+	cmd "github.com/cloudposse/atmos/cmd"
+	"github.com/fatih/color"
 )
 
 func main() {

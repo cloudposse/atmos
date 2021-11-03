@@ -2,9 +2,10 @@ package stack
 
 import (
 	"fmt"
-	"github.com/bmatcuk/doublestar"
+	"github.com/bmatcuk/doublestar/v4"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/fatih/color"
 	"io/ioutil"
 	"os"
 	"path"
@@ -231,16 +232,25 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		return strings.Split(fmt.Sprintf("%s", existingMatches), ","), nil
 	}
 
-	matches, err := doublestar.Glob(pattern)
+	base, cleanPattern := doublestar.SplitPattern(pattern)
+	f := os.DirFS(base)
+
+	matches, err := doublestar.Glob(f, cleanPattern)
 	if err != nil {
 		return nil, err
 	}
 
 	if matches == nil {
+		color.Red(fmt.Sprintf("Import of %s (-> %s + %s) failed to find a match.", pattern, base, cleanPattern))
 		return nil, nil
 	}
 
-	getGlobMatchesSyncMap.Store(pattern, strings.Join(matches, ","))
+	var fullMatches []string
+	for _, match := range matches {
+		fullMatches = append(fullMatches, base+"/"+match)
+	}
 
-	return matches, nil
+	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
+
+	return fullMatches, nil
 }
