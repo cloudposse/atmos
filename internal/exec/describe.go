@@ -2,7 +2,7 @@ package exec
 
 import (
 	"fmt"
-	"github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -24,15 +24,15 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var configAndStacksInfo config.ConfigAndStacksInfo
+	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.Stack = stack
 
-	err = config.InitConfig()
+	err = c.InitConfig()
 	if err != nil {
 		return err
 	}
 
-	err = config.ProcessConfig(configAndStacksInfo)
+	err = c.ProcessConfig(configAndStacksInfo)
 	if err != nil {
 		return err
 	}
@@ -43,22 +43,22 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	if g.LogVerbose {
 		fmt.Println()
 		var msg string
-		if config.ProcessedConfig.StackType == "Directory" {
+		if c.ProcessedConfig.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
 			msg = "Found config files:"
 		}
 		color.Cyan(msg)
 
-		err = u.PrintAsYAML(config.ProcessedConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return err
 		}
 	}
 
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		config.ProcessedConfig.StacksBaseAbsolutePath,
-		config.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		c.ProcessedConfig.StacksBaseAbsolutePath,
+		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
 		true,
 		true)
 
@@ -70,7 +70,7 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	var componentVarsSection map[interface{}]interface{}
 
 	// Check and process stacks
-	if config.ProcessedConfig.StackType == "Directory" {
+	if c.ProcessedConfig.StackType == "Directory" {
 		componentSection,
 			componentVarsSection,
 			_, _, _, _,
@@ -89,12 +89,12 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 			color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
 		}
 
-		if len(config.Config.Stacks.NamePattern) < 1 {
+		if len(c.Config.Stacks.NamePattern) < 1 {
 			return errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		}
 
 		stackParts := strings.Split(stack, "-")
-		stackNamePatternParts := strings.Split(config.Config.Stacks.NamePattern, "-")
+		stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
 
 		var tenant string
 		var environment string
@@ -168,7 +168,7 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 				"Are the component and stack names correct? Did you forget an import?",
 				component,
 				stack,
-				config.Config.Stacks.NamePattern,
+				c.Config.Stacks.NamePattern,
 			))
 		}
 	}
@@ -178,6 +178,34 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	}
 
 	err = u.PrintAsYAML(componentSection)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ExecuteDescribeConfig executes `describe config` command
+func ExecuteDescribeConfig(cmd *cobra.Command, args []string) error {
+	flags := cmd.Flags()
+
+	format, err := flags.GetString("format")
+	if err != nil {
+		return err
+	}
+
+	err = c.InitConfig()
+	if err != nil {
+		return err
+	}
+
+	if format == "json" {
+		err = u.PrintAsJSON(c.Config)
+	} else if format == "yaml" {
+		err = u.PrintAsYAML(c.Config)
+	} else {
+		err = errors.New("invalid flag '--format'. Accepted values are 'json' or 'yaml'")
+	}
 	if err != nil {
 		return err
 	}
