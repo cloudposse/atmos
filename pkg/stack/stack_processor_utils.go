@@ -248,7 +248,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 	var fullMatches []string
 	for _, match := range matches {
-		fullMatches = append(fullMatches, base+"/"+match)
+		fullMatches = append(fullMatches, path.Join(base, match))
 	}
 
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
