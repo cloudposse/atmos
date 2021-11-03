@@ -201,12 +201,16 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace`
-	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
-	if err != nil {
-		err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, nil)
+	if info.SubCommand != "clean" {
+		err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
 		if err != nil {
-			return err
+			err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, nil)
+			if err != nil {
+				return err
+			}
 		}
+	} else {
+		return errors.New("terraform clean not implemented")
 	}
 
 	// Check if the terraform command requires a user interaction,
