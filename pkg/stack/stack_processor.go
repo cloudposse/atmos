@@ -6,6 +6,7 @@ import (
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"path"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -154,11 +156,24 @@ func ProcessYAMLConfigFile(
 				return nil, nil, err
 			}
 
+			// There seems to be some underlying issues with `doublestar.Glob` not returning any matches (and no error) in concurrent execution
+			// Check if `doublestar.Glob` returned any matches.
+			// If not, try it again
 			if importMatches == nil {
-				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nNo matches found for the import '%s'",
+				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nNo matches found for the import '%s' using the pattern '%s'",
 					filePath,
-					strings.Replace(impWithExt, basePath+"/", "", 1))
-				return nil, nil, errors.New(errorMessage)
+					imp,
+					impWithExtPath)
+				color.Red(errorMessage)
+
+				time.Sleep(1 * time.Second)
+				importMatches, err = GetGlobMatches(impWithExtPath)
+				if err != nil {
+					return nil, nil, err
+				}
+				if importMatches == nil {
+					return nil, nil, errors.New(errorMessage)
+				}
 			}
 
 			for _, importFile := range importMatches {
