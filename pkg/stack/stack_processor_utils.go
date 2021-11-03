@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -240,6 +241,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	// Check if `doublestar.Glob` returned any matches.
 	// If not, try it again
 	if matches == nil {
+		time.Sleep(1 * time.Second)
 		matches, err = doublestar.Glob(pattern)
 		if err != nil {
 			return nil, err
