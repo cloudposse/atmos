@@ -6,7 +6,6 @@ import (
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"path"
@@ -164,8 +163,6 @@ func ProcessYAMLConfigFile(
 					filePath,
 					imp,
 					impWithExtPath)
-				color.Red(errorMessage)
-
 				time.Sleep(1 * time.Second)
 				importMatches, err = GetGlobMatches(impWithExtPath)
 				if err != nil {
