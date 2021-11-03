@@ -235,6 +235,21 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// There seems to be some underlying issues with `doublestar.Glob` not returning any matches (and no error) in concurrent execution
+	// Check if `doublestar.Glob` returned any matches.
+	// If not, try it again
+	if matches == nil {
+		matches, err = doublestar.Glob(pattern)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if matches == nil {
+		return nil, nil
+	}
+
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(matches, ","))
 
 	return matches, nil
