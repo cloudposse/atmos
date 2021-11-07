@@ -13,8 +13,8 @@ import (
 	"strings"
 )
 
-// findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
-func findAllStackConfigsInPaths(
+// findAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
+func findAllStackConfigsInPathsForStack(
 	stack string,
 	includeStackPaths []string,
 	excludeStackPaths []string,

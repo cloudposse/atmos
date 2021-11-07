@@ -2,6 +2,7 @@ package spacelift
 
 import (
 	"fmt"
+	c "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
@@ -17,10 +18,22 @@ func CreateSpaceliftStacks(
 	processComponentDeps bool,
 	processImports bool,
 	stackConfigPathTemplate string) (map[string]interface{}, error) {
-	var _, mapResult, err = s.ProcessYAMLConfigFiles(basePath, filePaths, processStackDeps, processComponentDeps)
+
+	basePathFinal := basePath
+	filePathsFinal := filePaths
+
+	if filePaths == nil && len(filePaths) == 0 {
+		err := c.InitConfig()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	_, mapResult, err := s.ProcessYAMLConfigFiles(basePathFinal, filePathsFinal, processStackDeps, processComponentDeps)
 	if err != nil {
 		return nil, err
 	}
+
 	return TransformStackConfigToSpaceliftStacks(mapResult, stackConfigPathTemplate, processImports)
 }
 

@@ -237,7 +237,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
-	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := findAllStackConfigsInPaths(
+	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := findAllStackConfigsInPathsForStack(
 		configAndStacksInfo.Stack,
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
