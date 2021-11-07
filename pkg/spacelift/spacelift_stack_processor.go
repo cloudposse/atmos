@@ -331,6 +331,12 @@ func TransformStackConfigToSpaceliftStacks(
 						componentStacks = i.([]string)
 					}
 
+					context := c.GetContextFromVars(componentVars)
+					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
+					if err != nil {
+						return nil, err
+					}
+
 					spaceliftConfig["component"] = component
 					spaceliftConfig["stack"] = stackName
 					spaceliftConfig["imports"] = imports
@@ -396,12 +402,6 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
-
-					context := c.GetContextFromVars(componentVars)
-					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
-					if err != nil {
-						return nil, err
-					}
 					labels = append(labels, fmt.Sprintf("folder:%s", strings.Replace(contextPrefix, "-", "/", -1)))
 
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
