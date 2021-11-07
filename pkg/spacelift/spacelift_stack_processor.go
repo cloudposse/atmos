@@ -393,20 +393,12 @@ func TransformStackConfigToSpaceliftStacks(
 
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
 
-					if len(stackNamePattern) == 0 {
-						stackFolder := stackName
-						if !strings.Contains(stackName, "/") {
-							stackFolder = strings.Replace(stackName, "-", "/", -1)
-						}
-						labels = append(labels, fmt.Sprintf("folder:%s", stackFolder))
-					} else {
-						context := c.GetContextFromVars(componentVars)
-						contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
-						if err != nil {
-							return nil, err
-						}
-						labels = append(labels, fmt.Sprintf("folder:%s", contextPrefix))
+					context := c.GetContextFromVars(componentVars)
+					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
+					if err != nil {
+						return nil, err
 					}
+					labels = append(labels, fmt.Sprintf("folder:%s", contextPrefix))
 
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
