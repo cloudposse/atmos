@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	g "github.com/cloudposse/atmos/pkg/globals"
-	"github.com/cloudposse/atmos/pkg/utils"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -209,14 +209,14 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	ProcessedConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
-	includeStackAbsPaths, err := utils.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
 	ProcessedConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
-	excludeStackAbsPaths, err := utils.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
+	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}
@@ -294,7 +294,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 
 	if g.LogVerbose {
 		color.Cyan("\nFinal CLI configuration:")
-		err = utils.PrintAsYAML(Config)
+		err = u.PrintAsYAML(Config)
 		if err != nil {
 			return err
 		}
@@ -307,7 +307,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
-	if !utils.FileExists(path) {
+	if !u.FileExists(path) {
 		if g.LogVerbose {
 			fmt.Println(fmt.Sprintf("No config found in %s", path))
 		}
