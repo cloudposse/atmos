@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"github.com/bmatcuk/doublestar/v4"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
@@ -199,4 +200,99 @@ func processLogsConfig() error {
 		g.LogVerbose = logVerboseBool
 	}
 	return nil
+}
+
+// GetContextFromVars creates a context object from the provided variables
+func GetContextFromVars(vars map[interface{}]interface{}) Context {
+	var context Context
+
+	if namespace, ok := vars["namespace"].(string); ok {
+		context.Namespace = namespace
+	}
+
+	if tenant, ok := vars["tenant"].(string); ok {
+		context.Tenant = tenant
+	}
+
+	if environment, ok := vars["environment"].(string); ok {
+		context.Environment = environment
+	}
+
+	if stage, ok := vars["stage"].(string); ok {
+		context.Stage = stage
+	}
+
+	if region, ok := vars["region"].(string); ok {
+		context.Region = region
+	}
+
+	return context
+}
+
+// GetContextPrefix calculates context prefix
+func GetContextPrefix(stack string, context Context, stackNamePattern string) (string, error) {
+	if len(stackNamePattern) == 0 {
+		return "",
+			errors.New(fmt.Sprintf("Stack name pattern must be provided"))
+	}
+
+	contextPrefix := ""
+	stackNamePatternParts := strings.Split(stackNamePattern, "-")
+
+	for _, part := range stackNamePatternParts {
+		if part == "{tenant}" {
+			if len(context.Tenant) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
+						stackNamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Tenant
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Tenant
+			}
+		} else if part == "{environment}" {
+			if len(context.Environment) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack %s does not have an environment defined",
+						stackNamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Environment
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Environment
+			}
+		} else if part == "{stage}" {
+			if len(context.Stage) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
+						Config.Stacks.NamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Stage
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Stage
+			}
+		}
+	}
+
+	return contextPrefix, nil
+}
+
+// ReplaceContextTokens replaces tokens in the context pattern
+func ReplaceContextTokens(context Context, pattern string) string {
+	return strings.Replace(
+		strings.Replace(
+			strings.Replace(
+				strings.Replace(pattern,
+					"{namespace}", context.Namespace, 1),
+				"{environment}", context.Environment, 1),
+			"{tenant}", context.Tenant, 1),
+		"{stage}", context.Stage, 1)
 }

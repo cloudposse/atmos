@@ -4,7 +4,7 @@ import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
-	"github.com/cloudposse/atmos/pkg/utils"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"strings"
 )
@@ -34,13 +34,14 @@ func CreateSpaceliftStacks(
 		return nil, err
 	}
 
-	return TransformStackConfigToSpaceliftStacks(mapResult, stackConfigPathTemplate, processImports)
+	return TransformStackConfigToSpaceliftStacks(mapResult, stackConfigPathTemplate, "", processImports)
 }
 
 // TransformStackConfigToSpaceliftStacks takes a map of stack configs and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
 	stacks map[string]interface{},
 	stackConfigPathTemplate string,
+	stackNamePattern string,
 	processImports bool) (map[string]interface{}, error) {
 
 	res := map[string]interface{}{}
@@ -78,7 +79,7 @@ func TransformStackConfigToSpaceliftStacks(
 			if terraformComponents, ok := componentsSection["terraform"]; ok {
 				terraformComponentsMap := terraformComponents.(map[string]interface{})
 
-				terraformComponentNamesInCurrentStack := utils.StringKeysFromMap(terraformComponentsMap)
+				terraformComponentNamesInCurrentStack := u.StringKeysFromMap(terraformComponentsMap)
 
 				for component, v := range terraformComponentsMap {
 					componentMap := v.(map[string]interface{})
@@ -203,13 +204,22 @@ func TransformStackConfigToSpaceliftStacks(
 
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
 
-					stackFolder := stackName
-					if !strings.Contains(stackName, "/") {
-						stackFolder = strings.Replace(stackName, "-", "/", -1)
+					if len(stackNamePattern) == 0 {
+						stackFolder := stackName
+						if !strings.Contains(stackName, "/") {
+							stackFolder = strings.Replace(stackName, "-", "/", -1)
+						}
+						labels = append(labels, fmt.Sprintf("folder:%s", stackFolder))
+					} else {
+						context := c.GetContextFromVars(componentVars)
+						contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
+						if err != nil {
+							return nil, err
+						}
+						labels = append(labels, fmt.Sprintf("folder:%s", contextPrefix))
 					}
-					labels = append(labels, fmt.Sprintf("folder:%s", stackFolder))
 
-					spaceliftConfig["labels"] = utils.UniqueStrings(labels)
+					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Add Spacelift stack config to the final map
 					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", stackName, component), "/", "-", -1)
@@ -231,9 +241,9 @@ func buildSpaceliftDependsOnStackName(
 ) (string, error) {
 	var spaceliftStackName string
 
-	if utils.SliceContainsString(allStackNames, dependsOn) {
+	if u.SliceContainsString(allStackNames, dependsOn) {
 		spaceliftStackName = dependsOn
-	} else if utils.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
+	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
 		spaceliftStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
 	} else {
 		errorMessage := errors.New(fmt.Sprintf("Component '%[1]s' in stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
