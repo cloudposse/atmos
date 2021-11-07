@@ -189,6 +189,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
+	case "import":
+		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		break
 	case "apply":
 		if info.UseTerraformPlan == true {
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)

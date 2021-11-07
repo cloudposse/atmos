@@ -1,0 +1,50 @@
+# CLI config is loaded from the following locations (from lowest to highest priority):
+# system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
+# home dir (~/.atmos)
+# current directory
+# ENV vars
+# Command-line arguments
+#
+# It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+# https://en.wikipedia.org/wiki/Glob_(programming)
+
+components:
+  terraform:
+    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` ENV var, or `--terraform-dir` command-line argument
+    # Supports both absolute and relative paths
+    base_path: "../../examples/complete/components/terraform"
+    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE` ENV var
+    apply_auto_approve: false
+    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT` ENV var, or `--deploy-run-init` command-line argument
+    deploy_run_init: true
+    # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE` ENV var, or `--auto-generate-backend-file` command-line argument
+    auto_generate_backend_file: false
+  helmfile:
+    # Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var, or `--helmfile-dir` command-line argument
+    # Supports both absolute and relative paths
+    base_path: "../../examples/complete/components/helmfile"
+    # Can also be set using `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH` ENV var
+    kubeconfig_path: "/dev/shm"
+    # Can also be set using `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN` ENV var
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    # Can also be set using `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN` ENV var
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+
+stacks:
+  # Can also be set using `ATMOS_STACKS_BASE_PATH` ENV var, or `--config-dir` and `--stacks-dir` command-line arguments
+  # Supports both absolute and relative paths
+  base_path: "../../examples/complete/stacks"
+  # Can also be set using `ATMOS_STACKS_INCLUDED_PATHS` ENV var (comma-separated values string)
+  included_paths:
+    - "**/*"
+  # Can also be set using `ATMOS_STACKS_EXCLUDED_PATHS` ENV var (comma-separated values string)
+  excluded_paths:
+    - "globals/**/*"
+    - "catalog/**/*"
+    - "**/*globals*"
+  # Can also be set using `ATMOS_STACKS_NAME_PATTERN` ENV var
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+logs:
+  verbose: false
+  colors: true
