@@ -206,11 +206,12 @@ func LegacyTransformStackConfigToSpaceliftStacks(
 
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
 
-					stackFolder := stackName
-					if !strings.Contains(stackName, "/") {
-						stackFolder = strings.Replace(stackName, "-", "/", -1)
+					// Split on the first `-` and get the two parts: environment and stage
+					stackNameParts := strings.SplitN(stackName, "-", 2)
+					stackNamePartsLen := len(stackNameParts)
+					if stackNamePartsLen == 2 {
+						labels = append(labels, fmt.Sprintf("folder:%s/%s", stackNameParts[0], stackNameParts[1]))
 					}
-					labels = append(labels, fmt.Sprintf("folder:%s", stackFolder))
 
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
