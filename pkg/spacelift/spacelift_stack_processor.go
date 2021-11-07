@@ -21,12 +21,14 @@ func CreateSpaceliftStacks(
 
 	basePathFinal := basePath
 	filePathsFinal := filePaths
+	stackNamePattern := ""
 
-	if filePaths == nil && len(filePaths) == 0 {
+	if filePaths == nil || len(filePaths) == 0 {
 		err := c.InitConfig()
 		if err != nil {
 			return nil, err
 		}
+		stackNamePattern = c.Config.Stacks.NamePattern
 	}
 
 	_, mapResult, err := s.ProcessYAMLConfigFiles(basePathFinal, filePathsFinal, processStackDeps, processComponentDeps)
@@ -34,7 +36,7 @@ func CreateSpaceliftStacks(
 		return nil, err
 	}
 
-	return TransformStackConfigToSpaceliftStacks(mapResult, stackConfigPathTemplate, "", processImports)
+	return TransformStackConfigToSpaceliftStacks(mapResult, stackConfigPathTemplate, stackNamePattern, processImports)
 }
 
 // TransformStackConfigToSpaceliftStacks takes a map of stack configs and transforms it to a map of Spacelift stacks
