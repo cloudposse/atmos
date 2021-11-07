@@ -337,8 +337,10 @@ func TransformStackConfigToSpaceliftStacks(
 						return nil, err
 					}
 
+					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", contextPrefix, component), "/", "-", -1)
+
 					spaceliftConfig["component"] = component
-					spaceliftConfig["stack"] = stackName
+					spaceliftConfig["stack"] = spaceliftStackName
 					spaceliftConfig["imports"] = imports
 					spaceliftConfig["vars"] = componentVars
 					spaceliftConfig["settings"] = componentSettings
@@ -368,9 +370,9 @@ func TransformStackConfigToSpaceliftStacks(
 					// workspace
 					var workspace string
 					if backendTypeName == "s3" && baseComponentName == "" {
-						workspace = stackName
+						workspace = contextPrefix
 					} else {
-						workspace = fmt.Sprintf("%s-%s", stackName, component)
+						workspace = fmt.Sprintf("%s-%s", contextPrefix, component)
 					}
 					spaceliftConfig["workspace"] = strings.Replace(workspace, "/", "-", -1)
 
@@ -389,7 +391,7 @@ func TransformStackConfigToSpaceliftStacks(
 						labels = append(labels, v.(string))
 					}
 					for _, v := range spaceliftDependsOn {
-						spaceliftStackName, err := buildSpaceliftDependsOnStackName(
+						spaceliftStackNameDependsOn, err := buildSpaceliftDependsOnStackName(
 							v.(string),
 							allStackNames,
 							stackName,
@@ -398,7 +400,7 @@ func TransformStackConfigToSpaceliftStacks(
 						if err != nil {
 							return nil, err
 						}
-						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackName))
+						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
 					}
 
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
@@ -407,7 +409,6 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Add Spacelift stack config to the final map
-					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", stackName, component), "/", "-", -1)
 					res[spaceliftStackName] = spaceliftConfig
 				}
 			}
