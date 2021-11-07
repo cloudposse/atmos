@@ -303,6 +303,82 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	return nil
 }
 
+// ProcessConfigForSpacelift processes config for Spacelift
+func ProcessConfigForSpacelift() error {
+	// Process ENV vars
+	err := processEnvVars()
+	if err != nil {
+		return err
+	}
+
+	// Check config
+	err = checkConfig()
+	if err != nil {
+		return err
+	}
+
+	// Convert stacks base path to absolute path
+	stacksBaseAbsPath, err := filepath.Abs(Config.Stacks.BasePath)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
+
+	// Convert the included stack paths to absolute paths
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
+
+	// Convert the excluded stack paths to absolute paths
+	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
+
+	// Convert terraform dir to absolute path
+	terraformDirAbsPath, err := filepath.Abs(Config.Components.Terraform.BasePath)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
+
+	// Convert helmfile dir to absolute path
+	helmfileDirAbsPath, err := filepath.Abs(Config.Components.Helmfile.BasePath)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
+
+	// If the specified stack name is a logical name, find all stack config files in the provided paths
+	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, err := findAllStackConfigsInPaths(
+		includeStackAbsPaths,
+		excludeStackAbsPaths,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if len(stackConfigFilesAbsolutePaths) < 1 {
+		j, err := yaml.Marshal(includeStackAbsPaths)
+		if err != nil {
+			return err
+		}
+		errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
+			"paths:\n%s\n\nCheck if 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
+			"files or ENV vars.", j)
+		return errors.New(errorMessage)
+	}
+
+	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
+
+	return nil
+}
+
 // https://github.com/NCAR/go-figure
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63

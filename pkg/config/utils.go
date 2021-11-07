@@ -88,6 +88,59 @@ func findAllStackConfigsInPathsForStack(
 	return absolutePaths, relativePaths, false, nil
 }
 
+// findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
+func findAllStackConfigsInPaths(
+	includeStackPaths []string,
+	excludeStackPaths []string,
+) ([]string, []string, error) {
+
+	var absolutePaths []string
+	var relativePaths []string
+
+	for _, p := range includeStackPaths {
+		pathWithExt := p
+
+		ext := filepath.Ext(p)
+		if ext == "" {
+			ext = g.DefaultStackConfigFileExtension
+			pathWithExt = p + ext
+		}
+
+		// Find all matches in the glob
+		matches, err := s.GetGlobMatches(pathWithExt)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Exclude files that match any of the excludePaths
+		if matches != nil && len(matches) > 0 {
+			for _, matchedFileAbsolutePath := range matches {
+				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
+				include := true
+
+				for _, excludePath := range excludeStackPaths {
+					excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
+					if err != nil {
+						color.Red("%s", err)
+						include = false
+						continue
+					} else if excludeMatch {
+						include = false
+						continue
+					}
+				}
+
+				if include == true {
+					absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
+					relativePaths = append(relativePaths, matchedFileRelativePath)
+				}
+			}
+		}
+	}
+
+	return absolutePaths, relativePaths, nil
+}
+
 func processEnvVars() error {
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
