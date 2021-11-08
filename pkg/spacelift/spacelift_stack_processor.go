@@ -240,7 +240,7 @@ func TransformStackConfigToSpaceliftStacks(
 	res := map[string]interface{}{}
 
 	var allStackNames []string
-	for stack, stackConfig := range stacks {
+	for stackName, stackConfig := range stacks {
 		config := stackConfig.(map[interface{}]interface{})
 
 		if i, ok := config["components"]; ok {
@@ -249,8 +249,20 @@ func TransformStackConfigToSpaceliftStacks(
 			if terraformComponents, ok := componentsSection["terraform"]; ok {
 				terraformComponentsMap := terraformComponents.(map[string]interface{})
 
-				for component := range terraformComponentsMap {
-					allStackNames = append(allStackNames, fmt.Sprintf("%s-%s", stack, component))
+				for component, v := range terraformComponentsMap {
+					componentMap := v.(map[string]interface{})
+					componentVars := map[interface{}]interface{}{}
+					if i, ok2 := componentMap["vars"]; ok2 {
+						componentVars = i.(map[interface{}]interface{})
+					}
+					context := c.GetContextFromVars(componentVars)
+					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
+					if err != nil {
+						return nil, err
+					}
+
+					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", contextPrefix, component), "/", "-", -1)
+					allStackNames = append(allStackNames, spaceliftStackName)
 				}
 			}
 		}
@@ -271,8 +283,6 @@ func TransformStackConfigToSpaceliftStacks(
 
 			if terraformComponents, ok := componentsSection["terraform"]; ok {
 				terraformComponentsMap := terraformComponents.(map[string]interface{})
-
-				terraformComponentNamesInCurrentStack := u.StringKeysFromMap(terraformComponentsMap)
 
 				for component, v := range terraformComponentsMap {
 					componentMap := v.(map[string]interface{})
@@ -390,6 +400,9 @@ func TransformStackConfigToSpaceliftStacks(
 					for _, v := range spaceliftExplicitLabels {
 						labels = append(labels, v.(string))
 					}
+
+					terraformComponentNamesInCurrentStack := u.StringKeysFromMap(terraformComponentsMap)
+
 					for _, v := range spaceliftDependsOn {
 						spaceliftStackNameDependsOn, err := buildSpaceliftDependsOnStackName(
 							v.(string),
