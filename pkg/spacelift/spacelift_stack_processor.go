@@ -182,7 +182,7 @@ func LegacyTransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["workspace"] = strings.Replace(workspace, "/", "-", -1)
 
 					// labels
-					labels := []string{}
+					var labels []string
 					for _, v := range imports {
 						labels = append(labels, fmt.Sprintf("import:"+stackConfigPathTemplate, v))
 					}
@@ -249,7 +249,7 @@ func TransformStackConfigToSpaceliftStacks(
 			if terraformComponents, ok := componentsSection["terraform"]; ok {
 				terraformComponentsMap := terraformComponents.(map[string]interface{})
 
-				for component, _ := range terraformComponentsMap {
+				for component := range terraformComponentsMap {
 					allStackNames = append(allStackNames, fmt.Sprintf("%s-%s", stack, component))
 				}
 			}
