@@ -53,24 +53,33 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
 
 	if info.SubCommand == "clean" {
-		tfDataDir := os.Getenv("TF_DATA_DIR")
-		if len(tfDataDir) > 0 {
-			color.Cyan("Found ENV var TF_DATA_DIR=%s", tfDataDir)
-			fmt.Println("Deleting 'TF_DATA_DIR' folder")
-			_ = os.RemoveAll(path.Join(componentPath, tfDataDir))
-		}
-
 		fmt.Println("Deleting '.terraform' folder")
 		_ = os.RemoveAll(path.Join(componentPath, ".terraform"))
 
 		fmt.Println("Deleting '.terraform.lock.hcl' file")
 		_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
 
-		fmt.Println(fmt.Sprintf("Deleting terraform varfile: %s", path.Join(componentPath, varFile)))
+		fmt.Println(fmt.Sprintf("Deleting terraform varfile: %s", varFile))
 		_ = os.Remove(path.Join(componentPath, varFile))
 
-		fmt.Println(fmt.Sprintf("Deleting terraform planfile: %s", path.Join(componentPath, planFile)))
+		fmt.Println(fmt.Sprintf("Deleting terraform planfile: %s", planFile))
 		_ = os.Remove(path.Join(componentPath, planFile))
+
+		tfDataDir := os.Getenv("TF_DATA_DIR")
+		if len(tfDataDir) > 0 && tfDataDir != "." && tfDataDir != "/" && tfDataDir != "./" {
+			color.Cyan("Found ENV var TF_DATA_DIR=%s", tfDataDir)
+			var userAnswer string
+			fmt.Println(fmt.Sprintf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)", tfDataDir))
+			fmt.Print("Enter a value: ")
+			count, err := fmt.Scanln(&userAnswer)
+			if count > 0 && err != nil {
+				return err
+			}
+			if userAnswer == "yes" {
+				fmt.Println(fmt.Sprintf("Deleting folder '%s'", tfDataDir))
+				_ = os.RemoveAll(tfDataDir)
+			}
+		}
 
 		fmt.Println()
 		return nil
