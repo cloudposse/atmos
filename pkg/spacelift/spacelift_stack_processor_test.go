@@ -15,18 +15,23 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 
 	var spaceliftStacks, err = CreateSpaceliftStacks("", nil, processStackDeps, processComponentDeps, processImports, stackConfigPathTemplate)
 	assert.Nil(t, err)
+	assert.Equal(t, 24, len(spaceliftStacks))
 
 	tenant1Ue2DevInfraVpcStack := spaceliftStacks["tenant1-ue2-dev-infra-vpc"].(map[string]interface{})
+	tenant1Ue2DevInfraVpcStackStackName := tenant1Ue2DevInfraVpcStack["stack"].(string)
 	tenant1Ue2DevInfraVpcStackBackend := tenant1Ue2DevInfraVpcStack["backend"].(map[interface{}]interface{})
 	tenant1Ue2DevInfraVpcStackBackendWorkspaceKeyPrefix := tenant1Ue2DevInfraVpcStackBackend["workspace_key_prefix"].(string)
+	assert.Equal(t, "tenant1-ue2-dev-infra-vpc", tenant1Ue2DevInfraVpcStackStackName)
 	assert.Equal(t, "infra-vpc", tenant1Ue2DevInfraVpcStackBackendWorkspaceKeyPrefix)
 
 	tenant1Ue2DevTestTestComponentOverrideComponent := spaceliftStacks["tenant1-ue2-dev-test-test-component-override"].(map[string]interface{})
+	tenant1Ue2DevTestTestComponentOverrideComponentStackName := tenant1Ue2DevTestTestComponentOverrideComponent["stack"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentBackend := tenant1Ue2DevTestTestComponentOverrideComponent["backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentOverrideComponentBaseComponent := tenant1Ue2DevTestTestComponentOverrideComponent["base_component"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentBackendWorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentDeps := tenant1Ue2DevTestTestComponentOverrideComponent["deps"].([]string)
 	tenant1Ue2DevTestTestComponentOverrideComponentLabels := tenant1Ue2DevTestTestComponentOverrideComponent["labels"].([]string)
+	assert.Equal(t, "tenant1-ue2-dev-test-test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentStackName)
 	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentOverrideComponentBackendWorkspaceKeyPrefix)
 	assert.Equal(t, "test/test-component", tenant1Ue2DevTestTestComponentOverrideComponentBaseComponent)
 	assert.Equal(t, 11, len(tenant1Ue2DevTestTestComponentOverrideComponentDeps))
@@ -74,6 +79,7 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 
 	var spaceliftStacks, err = CreateSpaceliftStacks(basePath, filePaths, processStackDeps, processComponentDeps, processImports, stackConfigPathTemplate)
 	assert.Nil(t, err)
+	assert.Equal(t, 24, len(spaceliftStacks))
 
 	tenant1Ue2DevInfraVpcStack := spaceliftStacks["tenant1-ue2-dev-infra-vpc"].(map[string]interface{})
 	tenant1Ue2DevInfraVpcStackBackend := tenant1Ue2DevInfraVpcStack["backend"].(map[interface{}]interface{})

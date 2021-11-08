@@ -401,13 +401,17 @@ func TransformStackConfigToSpaceliftStacks(
 						labels = append(labels, v.(string))
 					}
 
-					terraformComponentNamesInCurrentStack := u.StringKeysFromMap(terraformComponentsMap)
+					var terraformComponentNamesInCurrentStack []string
+
+					for v := range terraformComponentsMap {
+						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.Replace(v, "/", "-", -1))
+					}
 
 					for _, v := range spaceliftDependsOn {
 						spaceliftStackNameDependsOn, err := buildSpaceliftDependsOnStackName(
 							v.(string),
 							allStackNames,
-							stackName,
+							contextPrefix,
 							terraformComponentNamesInCurrentStack,
 							component)
 						if err != nil {
