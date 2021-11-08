@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"github.com/bmatcuk/doublestar/v4"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
@@ -13,8 +14,8 @@ import (
 	"strings"
 )
 
-// findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
-func findAllStackConfigsInPaths(
+// findAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
+func findAllStackConfigsInPathsForStack(
 	stack string,
 	includeStackPaths []string,
 	excludeStackPaths []string,
@@ -85,6 +86,59 @@ func findAllStackConfigsInPaths(
 	}
 
 	return absolutePaths, relativePaths, false, nil
+}
+
+// findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
+func findAllStackConfigsInPaths(
+	includeStackPaths []string,
+	excludeStackPaths []string,
+) ([]string, []string, error) {
+
+	var absolutePaths []string
+	var relativePaths []string
+
+	for _, p := range includeStackPaths {
+		pathWithExt := p
+
+		ext := filepath.Ext(p)
+		if ext == "" {
+			ext = g.DefaultStackConfigFileExtension
+			pathWithExt = p + ext
+		}
+
+		// Find all matches in the glob
+		matches, err := s.GetGlobMatches(pathWithExt)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Exclude files that match any of the excludePaths
+		if matches != nil && len(matches) > 0 {
+			for _, matchedFileAbsolutePath := range matches {
+				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
+				include := true
+
+				for _, excludePath := range excludeStackPaths {
+					excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
+					if err != nil {
+						color.Red("%s", err)
+						include = false
+						continue
+					} else if excludeMatch {
+						include = false
+						continue
+					}
+				}
+
+				if include == true {
+					absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
+					relativePaths = append(relativePaths, matchedFileRelativePath)
+				}
+			}
+		}
+	}
+
+	return absolutePaths, relativePaths, nil
 }
 
 func processEnvVars() error {
@@ -199,4 +253,99 @@ func processLogsConfig() error {
 		g.LogVerbose = logVerboseBool
 	}
 	return nil
+}
+
+// GetContextFromVars creates a context object from the provided variables
+func GetContextFromVars(vars map[interface{}]interface{}) Context {
+	var context Context
+
+	if namespace, ok := vars["namespace"].(string); ok {
+		context.Namespace = namespace
+	}
+
+	if tenant, ok := vars["tenant"].(string); ok {
+		context.Tenant = tenant
+	}
+
+	if environment, ok := vars["environment"].(string); ok {
+		context.Environment = environment
+	}
+
+	if stage, ok := vars["stage"].(string); ok {
+		context.Stage = stage
+	}
+
+	if region, ok := vars["region"].(string); ok {
+		context.Region = region
+	}
+
+	return context
+}
+
+// GetContextPrefix calculates context prefix
+func GetContextPrefix(stack string, context Context, stackNamePattern string) (string, error) {
+	if len(stackNamePattern) == 0 {
+		return "",
+			errors.New(fmt.Sprintf("Stack name pattern must be provided"))
+	}
+
+	contextPrefix := ""
+	stackNamePatternParts := strings.Split(stackNamePattern, "-")
+
+	for _, part := range stackNamePatternParts {
+		if part == "{tenant}" {
+			if len(context.Tenant) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
+						stackNamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Tenant
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Tenant
+			}
+		} else if part == "{environment}" {
+			if len(context.Environment) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack %s does not have an environment defined",
+						stackNamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Environment
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Environment
+			}
+		} else if part == "{stage}" {
+			if len(context.Stage) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
+						Config.Stacks.NamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Stage
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Stage
+			}
+		}
+	}
+
+	return contextPrefix, nil
+}
+
+// ReplaceContextTokens replaces tokens in the context pattern
+func ReplaceContextTokens(context Context, pattern string) string {
+	return strings.Replace(
+		strings.Replace(
+			strings.Replace(
+				strings.Replace(pattern,
+					"{namespace}", context.Namespace, 1),
+				"{environment}", context.Environment, 1),
+			"{tenant}", context.Tenant, 1),
+		"{stage}", context.Stage, 1)
 }

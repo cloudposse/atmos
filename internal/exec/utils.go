@@ -3,7 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -91,8 +91,8 @@ func findComponentConfig(
 }
 
 // processConfigAndStacks processes CLI config and stacks
-func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (config.ConfigAndStacksInfo, error) {
-	var configAndStacksInfo config.ConfigAndStacksInfo
+func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
+	var configAndStacksInfo c.ConfigAndStacksInfo
 
 	if len(args) < 1 {
 		return configAndStacksInfo, errors.New("invalid number of arguments")
@@ -134,20 +134,20 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	// Process and merge CLI configurations
-	err = config.InitConfig()
+	err = c.InitConfig()
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
-	err = config.ProcessConfig(configAndStacksInfo)
+	err = c.ProcessConfig(configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		config.ProcessedConfig.StacksBaseAbsolutePath,
-		config.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		c.ProcessedConfig.StacksBaseAbsolutePath,
+		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true)
 
@@ -159,27 +159,27 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	if g.LogVerbose {
 		fmt.Println()
 		var msg string
-		if config.ProcessedConfig.StackType == "Directory" {
+		if c.ProcessedConfig.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
 			msg = "Found config files:"
 		}
 		color.Cyan(msg)
-		err = utils.PrintAsYAML(config.ProcessedConfig.StackConfigFilesRelativePaths)
+		err = utils.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
 	}
 
-	if len(config.Config.Stacks.NamePattern) < 1 {
+	if len(c.Config.Stacks.NamePattern) < 1 {
 		return configAndStacksInfo,
 			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	}
 
-	stackNamePatternParts := strings.Split(config.Config.Stacks.NamePattern, "-")
+	stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
 
 	// Check and process stacks
-	if config.ProcessedConfig.StackType == "Directory" {
+	if c.ProcessedConfig.StackType == "Directory" {
 		_, configAndStacksInfo.ComponentVarsSection,
 			configAndStacksInfo.ComponentBackendSection,
 			configAndStacksInfo.ComponentBackendType,
@@ -198,7 +198,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			return configAndStacksInfo,
 				errors.New(fmt.Sprintf("Stack '%s' does not match the stack name pattern '%s'",
 					configAndStacksInfo.Stack,
-					config.Config.Stacks.NamePattern))
+					c.Config.Stacks.NamePattern))
 		}
 
 		var tenant string
@@ -269,7 +269,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 					"Are the component and stack names correct? Did you forget an import?",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
-					config.Config.Stacks.NamePattern,
+					c.Config.Stacks.NamePattern,
 				))
 		}
 	}
@@ -310,59 +310,18 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	// Process context
-	configAndStacksInfo.Context = getContextFromVars(configAndStacksInfo.ComponentVarsSection)
-	contextPrefix := ""
-
-	for _, part := range stackNamePatternParts {
-		if part == "{tenant}" {
-			if len(configAndStacksInfo.Context.Tenant) == 0 {
-				return configAndStacksInfo,
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
-						config.Config.Stacks.NamePattern,
-						configAndStacksInfo.Stack,
-					))
-			}
-			if len(contextPrefix) == 0 {
-				contextPrefix = configAndStacksInfo.Context.Tenant
-			} else {
-				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Tenant
-			}
-		} else if part == "{environment}" {
-			if len(configAndStacksInfo.Context.Environment) == 0 {
-				return configAndStacksInfo,
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack %s does not have an environment defined",
-						config.Config.Stacks.NamePattern,
-						configAndStacksInfo.Stack,
-					))
-			}
-			if len(contextPrefix) == 0 {
-				contextPrefix = configAndStacksInfo.Context.Environment
-			} else {
-				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Environment
-			}
-		} else if part == "{stage}" {
-			if len(configAndStacksInfo.Context.Stage) == 0 {
-				return configAndStacksInfo,
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
-						config.Config.Stacks.NamePattern,
-						configAndStacksInfo.Stack,
-					))
-			}
-			if len(contextPrefix) == 0 {
-				contextPrefix = configAndStacksInfo.Context.Stage
-			} else {
-				contextPrefix = contextPrefix + "-" + configAndStacksInfo.Context.Stage
-			}
-		}
+	configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+	configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
+	if err != nil {
+		return configAndStacksInfo, err
 	}
 
-	configAndStacksInfo.ContextPrefix = contextPrefix
 	return configAndStacksInfo, nil
 }
 
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags
-func processArgsAndFlags(inputArgsAndFlags []string) (config.ArgsAndFlagsInfo, error) {
-	var info config.ArgsAndFlagsInfo
+func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error) {
+	var info c.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 
@@ -513,43 +472,6 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	fmt.Println(cmd.String())
 	fmt.Println()
 	return cmd.Run()
-}
-
-func getContextFromVars(vars map[interface{}]interface{}) config.Context {
-	var context config.Context
-
-	if namespace, ok := vars["namespace"].(string); ok {
-		context.Namespace = namespace
-	}
-
-	if tenant, ok := vars["tenant"].(string); ok {
-		context.Tenant = tenant
-	}
-
-	if environment, ok := vars["environment"].(string); ok {
-		context.Environment = environment
-	}
-
-	if stage, ok := vars["stage"].(string); ok {
-		context.Stage = stage
-	}
-
-	if region, ok := vars["region"].(string); ok {
-		context.Region = region
-	}
-
-	return context
-}
-
-func replaceContextTokens(context config.Context, pattern string) string {
-	return strings.Replace(
-		strings.Replace(
-			strings.Replace(
-				strings.Replace(pattern,
-					"{namespace}", context.Namespace, 1),
-				"{environment}", context.Environment, 1),
-			"{tenant}", context.Tenant, 1),
-		"{stage}", context.Stage, 1)
 }
 
 func generateComponentBackendConfig(backendType string, backendConfig map[interface{}]interface{}) map[string]interface{} {

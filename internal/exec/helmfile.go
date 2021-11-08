@@ -69,15 +69,15 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		info.SubCommand = "sync"
 	}
 
-	context := getContextFromVars(info.ComponentVarsSection)
+	context := c.GetContextFromVars(info.ComponentVarsSection)
 
 	// Prepare AWS profile
-	helmAwsProfile := replaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
+	helmAwsProfile := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
 	color.Cyan(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
 	// Download kubeconfig by running `aws eks update-kubeconfig`
 	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
-	clusterName := replaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
+	clusterName := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
 	color.Cyan(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
 	err = execCommand("aws",

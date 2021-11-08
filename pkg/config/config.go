@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	g "github.com/cloudposse/atmos/pkg/globals"
-	"github.com/cloudposse/atmos/pkg/utils"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -209,14 +209,14 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	ProcessedConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
-	includeStackAbsPaths, err := utils.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
 	ProcessedConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
-	excludeStackAbsPaths, err := utils.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
+	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}
@@ -237,7 +237,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
-	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := findAllStackConfigsInPaths(
+	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := findAllStackConfigsInPathsForStack(
 		configAndStacksInfo.Stack,
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
@@ -294,7 +294,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 
 	if g.LogVerbose {
 		color.Cyan("\nFinal CLI configuration:")
-		err = utils.PrintAsYAML(Config)
+		err = u.PrintAsYAML(Config)
 		if err != nil {
 			return err
 		}
@@ -303,11 +303,87 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	return nil
 }
 
+// ProcessConfigForSpacelift processes config for Spacelift
+func ProcessConfigForSpacelift() error {
+	// Process ENV vars
+	err := processEnvVars()
+	if err != nil {
+		return err
+	}
+
+	// Check config
+	err = checkConfig()
+	if err != nil {
+		return err
+	}
+
+	// Convert stacks base path to absolute path
+	stacksBaseAbsPath, err := filepath.Abs(Config.Stacks.BasePath)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
+
+	// Convert the included stack paths to absolute paths
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
+
+	// Convert the excluded stack paths to absolute paths
+	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
+
+	// Convert terraform dir to absolute path
+	terraformDirAbsPath, err := filepath.Abs(Config.Components.Terraform.BasePath)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
+
+	// Convert helmfile dir to absolute path
+	helmfileDirAbsPath, err := filepath.Abs(Config.Components.Helmfile.BasePath)
+	if err != nil {
+		return err
+	}
+	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
+
+	// If the specified stack name is a logical name, find all stack config files in the provided paths
+	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, err := findAllStackConfigsInPaths(
+		includeStackAbsPaths,
+		excludeStackAbsPaths,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if len(stackConfigFilesAbsolutePaths) < 1 {
+		j, err := yaml.Marshal(includeStackAbsPaths)
+		if err != nil {
+			return err
+		}
+		errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
+			"paths:\n%s\n\nCheck if 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
+			"files or ENV vars.", j)
+		return errors.New(errorMessage)
+	}
+
+	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
+
+	return nil
+}
+
 // https://github.com/NCAR/go-figure
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
-	if !utils.FileExists(path) {
+	if !u.FileExists(path) {
 		if g.LogVerbose {
 			fmt.Println(fmt.Sprintf("No config found in %s", path))
 		}

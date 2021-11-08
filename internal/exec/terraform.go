@@ -49,6 +49,42 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		))
 	}
 
+	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
+	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
+
+	if info.SubCommand == "clean" {
+		fmt.Println("Deleting '.terraform' folder")
+		_ = os.RemoveAll(path.Join(componentPath, ".terraform"))
+
+		fmt.Println("Deleting '.terraform.lock.hcl' file")
+		_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
+
+		fmt.Println(fmt.Sprintf("Deleting terraform varfile: %s", varFile))
+		_ = os.Remove(path.Join(componentPath, varFile))
+
+		fmt.Println(fmt.Sprintf("Deleting terraform planfile: %s", planFile))
+		_ = os.Remove(path.Join(componentPath, planFile))
+
+		tfDataDir := os.Getenv("TF_DATA_DIR")
+		if len(tfDataDir) > 0 && tfDataDir != "." && tfDataDir != "/" && tfDataDir != "./" {
+			color.Cyan("Found ENV var TF_DATA_DIR=%s", tfDataDir)
+			var userAnswer string
+			fmt.Println(fmt.Sprintf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)", tfDataDir))
+			fmt.Print("Enter a value: ")
+			count, err := fmt.Scanln(&userAnswer)
+			if count > 0 && err != nil {
+				return err
+			}
+			if userAnswer == "yes" {
+				fmt.Println(fmt.Sprintf("Deleting folder '%s'", tfDataDir))
+				_ = os.RemoveAll(tfDataDir)
+			}
+		}
+
+		fmt.Println()
+		return nil
+	}
+
 	// Write variables to a file
 	var varFileName, varFileNameFromArg string
 
@@ -66,19 +102,17 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		varFileName = varFileNameFromArg
 	} else {
 		if len(info.ComponentFolderPrefix) == 0 {
-			varFileName = fmt.Sprintf("%s/%s/%s-%s.terraform.tfvars.json",
+			varFileName = path.Join(
 				c.Config.Components.Terraform.BasePath,
 				finalComponent,
-				info.ContextPrefix,
-				info.Component,
+				varFile,
 			)
 		} else {
-			varFileName = fmt.Sprintf("%s/%s/%s/%s-%s.terraform.tfvars.json",
+			varFileName = path.Join(
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
 				finalComponent,
-				info.ContextPrefix,
-				info.Component,
+				varFile,
 			)
 		}
 	}
@@ -170,9 +204,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
-	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
-	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
-
 	var workspaceName string
 	if len(info.BaseComponent) > 0 {
 		workspaceName = fmt.Sprintf("%s-%s", info.ContextPrefix, info.Component)
@@ -189,6 +220,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
+	case "import":
+		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		break
 	case "apply":
 		if info.UseTerraformPlan == true {
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
@@ -201,16 +235,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace`
-	if info.SubCommand != "clean" {
-		err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
+	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
+	if err != nil {
+		err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, nil)
 		if err != nil {
-			err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, nil)
-			if err != nil {
-				return err
-			}
+			return err
 		}
-	} else {
-		return errors.New("terraform clean not implemented")
 	}
 
 	// Check if the terraform command requires a user interaction,
