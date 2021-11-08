@@ -53,17 +53,24 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
 
 	if info.SubCommand == "clean" {
-		fmt.Println(fmt.Sprintf("Deleting terraform varfile: %s", path.Join(componentPath, varFile)))
-		_ = os.Remove(path.Join(componentPath, varFile))
-
-		fmt.Println(fmt.Sprintf("Deleting terraform planfile: %s", path.Join(componentPath, planFile)))
-		_ = os.Remove(path.Join(componentPath, planFile))
+		tfDataDir := os.Getenv("TF_DATA_DIR")
+		if len(tfDataDir) > 0 {
+			color.Cyan("Found ENV var TF_DATA_DIR=%s", tfDataDir)
+			fmt.Println("Deleting 'TF_DATA_DIR' folder")
+			_ = os.RemoveAll(path.Join(componentPath, tfDataDir))
+		}
 
 		fmt.Println("Deleting '.terraform' folder")
 		_ = os.RemoveAll(path.Join(componentPath, ".terraform"))
 
 		fmt.Println("Deleting '.terraform.lock.hcl' file")
 		_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
+
+		fmt.Println(fmt.Sprintf("Deleting terraform varfile: %s", path.Join(componentPath, varFile)))
+		_ = os.Remove(path.Join(componentPath, varFile))
+
+		fmt.Println(fmt.Sprintf("Deleting terraform planfile: %s", path.Join(componentPath, planFile)))
+		_ = os.Remove(path.Join(componentPath, planFile))
 
 		fmt.Println()
 		return nil
