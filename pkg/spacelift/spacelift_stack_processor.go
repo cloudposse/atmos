@@ -347,10 +347,8 @@ func TransformStackConfigToSpaceliftStacks(
 						return nil, err
 					}
 
-					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", contextPrefix, component), "/", "-", -1)
-
 					spaceliftConfig["component"] = component
-					spaceliftConfig["stack"] = spaceliftStackName
+					spaceliftConfig["stack"] = contextPrefix
 					spaceliftConfig["imports"] = imports
 					spaceliftConfig["vars"] = componentVars
 					spaceliftConfig["settings"] = componentSettings
@@ -426,6 +424,7 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Add Spacelift stack config to the final map
+					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", contextPrefix, component), "/", "-", -1)
 					res[spaceliftStackName] = spaceliftConfig
 				}
 			}
