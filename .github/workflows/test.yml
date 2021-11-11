@@ -1,0 +1,63 @@
+name: Tests
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - "README.md"
+  release:
+    types: [created]
+    paths-ignore:
+      - "README.md"
+
+jobs:
+  # ensure the code builds...
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2.1.3
+        with:
+          go-version: "1.16"
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2.3.3
+
+      - name: Get dependencies
+        run: |
+          make deps
+
+      - name: Build
+        run: |
+          make build
+
+      - name: Version
+        run: |
+          make version
+
+  # run acceptance tests
+  test:
+    name: Test
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2.1.3
+        with:
+          go-version: "1.16"
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2.3.3
+
+      - name: Get dependencies
+        run: |
+          make deps
+
+      - name: Acceptance tests
+        timeout-minutes: 10
+        run: |
+          make testacc
