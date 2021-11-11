@@ -462,7 +462,9 @@ func ProcessConfig(
 					finalComponentBackendType = componentBackendType
 				}
 
-				finalComponentBackendSection, err := m.Merge([]map[interface{}]interface{}{globalBackendSection, baseComponentBackendSection, componentBackendSection})
+				finalComponentBackendSection, err := m.Merge([]map[interface{}]interface{}{globalBackendSection,
+					baseComponentBackendSection,
+					componentBackendSection})
 				if err != nil {
 					return nil, err
 				}
@@ -473,7 +475,10 @@ func ProcessConfig(
 				}
 
 				// Final remote state backend
-				finalComponentRemoteStateBackendType := globalRemoteStateBackendType
+				finalComponentRemoteStateBackendType := finalComponentBackendType
+				if len(globalRemoteStateBackendType) > 0 {
+					finalComponentRemoteStateBackendType = globalRemoteStateBackendType
+				}
 				if len(baseComponentRemoteStateBackendType) > 0 {
 					finalComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 				}
@@ -481,13 +486,23 @@ func ProcessConfig(
 					finalComponentRemoteStateBackendType = componentRemoteStateBackendType
 				}
 
-				finalComponentRemoteStateBackendSection, err := m.Merge([]map[interface{}]interface{}{globalRemoteStateBackendSection, baseComponentRemoteStateBackendSection, componentRemoteStateBackendSection})
+				finalComponentRemoteStateBackendSection, err := m.Merge([]map[interface{}]interface{}{globalRemoteStateBackendSection,
+					baseComponentRemoteStateBackendSection,
+					componentRemoteStateBackendSection})
+				if err != nil {
+					return nil, err
+				}
+
+				// Merge `backend` and `remote_state_backend` sections
+				// This will allow keeping `remote_state_backend` section DRY
+				finalComponentRemoteStateBackendSectionMerged, err := m.Merge([]map[interface{}]interface{}{finalComponentBackendSection,
+					finalComponentRemoteStateBackendSection})
 				if err != nil {
 					return nil, err
 				}
 
 				finalComponentRemoteStateBackend := map[interface{}]interface{}{}
-				if i, ok2 := finalComponentRemoteStateBackendSection[finalComponentRemoteStateBackendType]; ok2 {
+				if i, ok2 := finalComponentRemoteStateBackendSectionMerged[finalComponentRemoteStateBackendType]; ok2 {
 					finalComponentRemoteStateBackend = i.(map[interface{}]interface{})
 				}
 

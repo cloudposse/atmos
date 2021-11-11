@@ -13,19 +13,13 @@ terraform:
       dynamodb_table: "eg-ue2-root-tfstate-lock"
       acl: "bucket-owner-full-control"
       region: "us-east-2"
+      role_arn: null
     remote:
     vault:
 
-  remote_state_backend_type: s3 # s3, remote, vault, static, etc.
   remote_state_backend:
     s3:
-      encrypt: true
-      bucket: "eg-ue2-root-tfstate"
-      key: "terraform.tfstate"
-      dynamodb_table: "eg-ue2-root-tfstate-lock"
-      profile: "eg-gbl-root-terraform"
-      acl: "bucket-owner-full-control"
-      region: "us-east-2"
+      role_arn: "arn:aws:iam::123456789012:role/eg-gbl-root-terraform"
 
 helmfile:
   vars: {}

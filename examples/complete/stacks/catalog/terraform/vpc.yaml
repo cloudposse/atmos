@@ -4,9 +4,6 @@ components:
       backend:
         s3:
           workspace_key_prefix: infra-vpc
-      remote_state_backend:
-        s3:
-          workspace_key_prefix: infra-vpc
       settings:
         spacelift:
           workspace_enabled: true
