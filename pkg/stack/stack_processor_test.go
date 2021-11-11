@@ -61,27 +61,43 @@ func TestStackProcessor(t *testing.T) {
 
 	infraVpcComponent := terraformComponents["infra/vpc"].(map[interface{}]interface{})
 	infraVpcComponentBackend := infraVpcComponent["backend"].(map[interface{}]interface{})
-	infraVpcComponentBackendType := infraVpcComponent["backend_type"].(string)
+	infraVpcComponentBackendType := infraVpcComponent["backend_type"]
 	infraVpcComponentRemoteSateBackend := infraVpcComponent["remote_state_backend"].(map[interface{}]interface{})
-	infraVpcComponentRemoteSateBackendType := infraVpcComponent["remote_state_backend_type"].(string)
-	infraVpcComponentBackendWorkspaceKeyPrefix := infraVpcComponentBackend["workspace_key_prefix"].(string)
-	infraVpcComponentRemoteStateBackendWorkspaceKeyPrefix := infraVpcComponentRemoteSateBackend["workspace_key_prefix"].(string)
+	infraVpcComponentRemoteSateBackendType := infraVpcComponent["remote_state_backend_type"]
+	infraVpcComponentBackendWorkspaceKeyPrefix := infraVpcComponentBackend["workspace_key_prefix"]
+	infraVpcComponentRemoteStateBackendWorkspaceKeyPrefix := infraVpcComponentRemoteSateBackend["workspace_key_prefix"]
 	assert.Equal(t, "infra-vpc", infraVpcComponentBackendWorkspaceKeyPrefix)
 	assert.Equal(t, "infra-vpc", infraVpcComponentRemoteStateBackendWorkspaceKeyPrefix)
 	assert.Equal(t, "s3", infraVpcComponentBackendType)
 	assert.Equal(t, "s3", infraVpcComponentRemoteSateBackendType)
 
+	testTestComponent := terraformComponents["test/test-component"].(map[interface{}]interface{})
+	testTestComponentBackend := testTestComponent["backend"].(map[interface{}]interface{})
+	testTestComponentBackendType := testTestComponent["backend_type"]
+	testTestComponentBackendWorkspaceKeyPrefix := testTestComponentBackend["workspace_key_prefix"]
+	testTestComponentBackendRoleArn := testTestComponentBackend["role_arn"]
+	testTestComponentRemoteStateBackend := testTestComponent["remote_state_backend"].(map[interface{}]interface{})
+	testTestComponentRemoteStateBackendType := testTestComponent["remote_state_backend_type"]
+	testTestComponentRemoteStateBackendWorkspaceKeyPrefix := testTestComponentRemoteStateBackend["workspace_key_prefix"]
+	testTestComponentRemoteStateBackendRoleArn := testTestComponentRemoteStateBackend["role_arn"]
+	assert.Equal(t, "test-test-component", testTestComponentBackendWorkspaceKeyPrefix)
+	assert.Equal(t, "test-test-component", testTestComponentRemoteStateBackendWorkspaceKeyPrefix)
+	assert.Equal(t, "s3", testTestComponentBackendType)
+	assert.Equal(t, "s3", testTestComponentRemoteStateBackendType)
+	assert.Equal(t, nil, testTestComponentBackendRoleArn)
+	assert.Equal(t, "arn:aws:iam::123456789012:role/eg-gbl-root-terraform", testTestComponentRemoteStateBackendRoleArn)
+
 	testTestComponentOverrideComponent := terraformComponents["test/test-component-override"].(map[interface{}]interface{})
 	testTestComponentOverrideComponentBackend := testTestComponentOverrideComponent["backend"].(map[interface{}]interface{})
-	testTestComponentOverrideComponentBackendType := testTestComponentOverrideComponent["backend_type"].(string)
-	testTestComponentOverrideComponentBackendWorkspaceKeyPrefix := testTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
+	testTestComponentOverrideComponentBackendType := testTestComponentOverrideComponent["backend_type"]
+	testTestComponentOverrideComponentBackendWorkspaceKeyPrefix := testTestComponentOverrideComponentBackend["workspace_key_prefix"]
 	testTestComponentOverrideComponentRemoteStateBackend := testTestComponentOverrideComponent["remote_state_backend"].(map[interface{}]interface{})
 	testTestComponentOverrideComponentRemoteStateBackendVal1 := testTestComponentOverrideComponentRemoteStateBackend["val1"].(bool)
-	testTestComponentOverrideComponentRemoteStateBackendVal2 := testTestComponentOverrideComponentRemoteStateBackend["val2"].(string)
+	testTestComponentOverrideComponentRemoteStateBackendVal2 := testTestComponentOverrideComponentRemoteStateBackend["val2"]
 	testTestComponentOverrideComponentRemoteStateBackendVal3 := testTestComponentOverrideComponentRemoteStateBackend["val3"].(int)
 	testTestComponentOverrideComponentRemoteStateBackendVal4 := testTestComponentOverrideComponentRemoteStateBackend["val4"]
-	testTestComponentOverrideComponentRemoteStateBackendType := testTestComponentOverrideComponent["remote_state_backend_type"].(string)
-	testTestComponentOverrideComponentBaseComponent := testTestComponentOverrideComponent["component"].(string)
+	testTestComponentOverrideComponentRemoteStateBackendType := testTestComponentOverrideComponent["remote_state_backend_type"]
+	testTestComponentOverrideComponentBaseComponent := testTestComponentOverrideComponent["component"]
 	assert.Equal(t, "test-test-component", testTestComponentOverrideComponentBackendWorkspaceKeyPrefix)
 	assert.Equal(t, "test/test-component", testTestComponentOverrideComponentBaseComponent)
 	assert.Equal(t, "s3", testTestComponentOverrideComponentBackendType)
