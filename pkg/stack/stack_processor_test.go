@@ -74,12 +74,16 @@ func TestStackProcessor(t *testing.T) {
 	testTestComponent := terraformComponents["test/test-component"].(map[interface{}]interface{})
 	testTestComponentBackend := testTestComponent["backend"].(map[interface{}]interface{})
 	testTestComponentBackendType := testTestComponent["backend_type"]
+	testTestComponentBackendBucket := testTestComponentBackend["bucket"]
 	testTestComponentBackendWorkspaceKeyPrefix := testTestComponentBackend["workspace_key_prefix"]
 	testTestComponentBackendRoleArn := testTestComponentBackend["role_arn"]
 	testTestComponentRemoteStateBackend := testTestComponent["remote_state_backend"].(map[interface{}]interface{})
 	testTestComponentRemoteStateBackendType := testTestComponent["remote_state_backend_type"]
+	testTestComponentRemoteStateBackendBucket := testTestComponentRemoteStateBackend["bucket"]
 	testTestComponentRemoteStateBackendWorkspaceKeyPrefix := testTestComponentRemoteStateBackend["workspace_key_prefix"]
 	testTestComponentRemoteStateBackendRoleArn := testTestComponentRemoteStateBackend["role_arn"]
+	assert.Equal(t, "eg-ue2-root-tfstate", testTestComponentBackendBucket)
+	assert.Equal(t, "eg-ue2-root-tfstate", testTestComponentRemoteStateBackendBucket)
 	assert.Equal(t, "test-test-component", testTestComponentBackendWorkspaceKeyPrefix)
 	assert.Equal(t, "test-test-component", testTestComponentRemoteStateBackendWorkspaceKeyPrefix)
 	assert.Equal(t, "s3", testTestComponentBackendType)
@@ -91,6 +95,7 @@ func TestStackProcessor(t *testing.T) {
 	testTestComponentOverrideComponentBackend := testTestComponentOverrideComponent["backend"].(map[interface{}]interface{})
 	testTestComponentOverrideComponentBackendType := testTestComponentOverrideComponent["backend_type"]
 	testTestComponentOverrideComponentBackendWorkspaceKeyPrefix := testTestComponentOverrideComponentBackend["workspace_key_prefix"]
+	testTestComponentOverrideComponentBackendBucket := testTestComponentOverrideComponentBackend["bucket"]
 	testTestComponentOverrideComponentRemoteStateBackend := testTestComponentOverrideComponent["remote_state_backend"].(map[interface{}]interface{})
 	testTestComponentOverrideComponentRemoteStateBackendVal1 := testTestComponentOverrideComponentRemoteStateBackend["val1"].(bool)
 	testTestComponentOverrideComponentRemoteStateBackendVal2 := testTestComponentOverrideComponentRemoteStateBackend["val2"]
@@ -99,6 +104,7 @@ func TestStackProcessor(t *testing.T) {
 	testTestComponentOverrideComponentRemoteStateBackendType := testTestComponentOverrideComponent["remote_state_backend_type"]
 	testTestComponentOverrideComponentBaseComponent := testTestComponentOverrideComponent["component"]
 	assert.Equal(t, "test-test-component", testTestComponentOverrideComponentBackendWorkspaceKeyPrefix)
+	assert.Equal(t, "eg-ue2-root-tfstate", testTestComponentOverrideComponentBackendBucket)
 	assert.Equal(t, "test/test-component", testTestComponentOverrideComponentBaseComponent)
 	assert.Equal(t, "s3", testTestComponentOverrideComponentBackendType)
 	assert.Equal(t, "static", testTestComponentOverrideComponentRemoteStateBackendType)
