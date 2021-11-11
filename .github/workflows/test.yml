@@ -4,10 +4,13 @@ on:
     types: [opened, synchronize, reopened]
     paths-ignore:
       - "README.md"
+
   release:
     types: [created]
     paths-ignore:
       - "README.md"
+
+  workflow_dispatch:
 
 jobs:
   # ensure the code builds...
