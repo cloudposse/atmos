@@ -12,9 +12,6 @@ components:
       backend:
         s3:
           workspace_key_prefix: top-level-component1
-      remote_state_backend:
-        s3:
-          workspace_key_prefix: top-level-component1
       settings:
         spacelift:
           workspace_enabled: true
