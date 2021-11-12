@@ -9,11 +9,12 @@ import:
 components:
   terraform:
     "test/test-component":
-      backend:
-        s3:
-          workspace_key_prefix: test-test-component
       settings:
         spacelift:
           workspace_enabled: true
       vars:
         enabled: true
+      env:
+        TEST_ENV_VAR1: "val1"
+        TEST_ENV_VAR2: "val2"
+        TEST_ENV_VAR3: "val3"

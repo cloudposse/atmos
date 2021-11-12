@@ -131,19 +131,21 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto generate backend file
-	var backendFileName string
 	if c.Config.Components.Terraform.AutoGenerateBackendFile == true {
+		var backendFileName string
 		fmt.Println()
 		if len(info.ComponentFolderPrefix) == 0 {
-			backendFileName = fmt.Sprintf("%s/%s/backend.tf.json",
+			backendFileName = path.Join(
 				c.Config.Components.Terraform.BasePath,
 				finalComponent,
+				"backend.tf.json",
 			)
 		} else {
-			backendFileName = fmt.Sprintf("%s/%s/%s/backend.tf.json",
+			backendFileName = path.Join(
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
 				finalComponent,
+				"backend.tf.json",
 			)
 		}
 		color.Cyan("Writing backend config to file:")
@@ -167,7 +169,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if info.SubCommand == "workspace" {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
-		err = execCommand(info.Command, initCommandWithArguments, componentPath, nil)
+		err = execCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList)
 		if err != nil {
 			return err
 		}
@@ -201,11 +203,20 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, finalComponent)
+		workingDir = path.Join(c.Config.Components.Terraform.BasePath, finalComponent)
 	} else {
-		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
+		workingDir = path.Join(c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	}
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
+
+	// Print ENV vars if they are found in the component stack config
+	if len(info.ComponentEnvList) > 0 {
+		fmt.Println()
+		color.Cyan("Using ENV vars:\n")
+		for _, v := range info.ComponentEnvList {
+			fmt.Println(v)
+		}
+	}
 
 	var workspaceName string
 	if len(info.BaseComponent) > 0 {
@@ -238,9 +249,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace`
-	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
+	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, info.ComponentEnvList)
 	if err != nil {
-		err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, nil)
+		err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, info.ComponentEnvList)
 		if err != nil {
 			return err
 		}
@@ -264,7 +275,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute the command
 	if info.SubCommand != "workspace" {
-		err = execCommand(info.Command, allArgsAndFlags, componentPath, nil)
+		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList)
 		if err != nil {
 			return err
 		}
@@ -274,11 +285,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if info.SubCommand != "plan" {
 		planFilePath := fmt.Sprintf("%s/%s", workingDir, planFile)
 		_ = os.Remove(planFilePath)
-	}
-
-	err = os.Remove(varFileName)
-	if err != nil {
-		color.Yellow("Error deleting terraform varfile: %s\n", err)
 	}
 
 	return nil

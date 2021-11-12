@@ -16,6 +16,10 @@ components:
       component: "test/test-component"
       # Other variables can be overridden here
       vars: {}
+      env:
+        TEST_ENV_VAR1: "val1-override"
+        TEST_ENV_VAR3: "val3-override"
+        TEST_ENV_VAR4: "val4"
       # Override remote state backend for this component
       remote_state_backend_type: static # s3, remote, vault, static, etc.
       remote_state_backend:

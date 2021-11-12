@@ -118,9 +118,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, info.Component)
+		workingDir = path.Join(c.Config.Components.Helmfile.BasePath, info.Component)
 	} else {
-		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
+		workingDir = path.Join(c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
 	}
 	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
@@ -135,7 +135,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Prepare ENV vars
-	envVars := []string{
+	envVars := append(info.ComponentEnvList, []string{
 		fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
 		fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
 		fmt.Sprintf("NAMESPACE=%s", context.Namespace),
@@ -144,6 +144,11 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Sprintf("STAGE=%s", context.Stage),
 		fmt.Sprintf("REGION=%s", context.Region),
 		fmt.Sprintf("STACK=%s", info.Stack),
+	}...)
+
+	color.Cyan("Using ENV vars:\n")
+	for _, v := range envVars {
+		fmt.Println(v)
 	}
 
 	err = execCommand(info.Command, allArgsAndFlags, componentPath, envVars)

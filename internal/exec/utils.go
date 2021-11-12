@@ -37,13 +37,14 @@ func findComponentConfig(
 	stacksMap map[string]interface{},
 	componentType string,
 	component string,
-) (map[string]interface{}, map[interface{}]interface{}, map[interface{}]interface{}, string, string, string, error) {
+) (map[string]interface{}, map[interface{}]interface{}, map[interface{}]interface{}, map[interface{}]interface{}, string, string, string, error) {
 
 	var stackSection map[interface{}]interface{}
 	var componentsSection map[string]interface{}
 	var componentTypeSection map[string]interface{}
 	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
+	var componentEnvSection map[interface{}]interface{}
 	var componentBackendSection map[interface{}]interface{}
 	var componentBackendType string
 	var baseComponentPath string
@@ -51,28 +52,28 @@ func findComponentConfig(
 	var ok bool
 
 	if len(stack) == 0 {
-		return nil, nil, nil, "", "", "", errors.New("stack must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", errors.New("stack must be provided and must not be empty")
 	}
 	if len(component) == 0 {
-		return nil, nil, nil, "", "", "", errors.New("component must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", errors.New("component must be provided and must not be empty")
 	}
 	if len(componentType) == 0 {
-		return nil, nil, nil, "", "", "", errors.New("component type must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", errors.New("component type must be provided and must not be empty")
 	}
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
+		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
+		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
+		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
@@ -86,8 +87,18 @@ func findComponentConfig(
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
 	}
+	if componentEnvSection, ok = componentSection["env"].(map[interface{}]interface{}); !ok {
+		componentEnvSection = map[interface{}]interface{}{}
+	}
 
-	return componentSection, componentVarsSection, componentBackendSection, componentBackendType, baseComponentPath, command, nil
+	return componentSection,
+		componentVarsSection,
+		componentEnvSection,
+		componentBackendSection,
+		componentBackendType,
+		baseComponentPath,
+		command,
+		nil
 }
 
 // processConfigAndStacks processes CLI config and stacks
@@ -181,6 +192,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
 		_, configAndStacksInfo.ComponentVarsSection,
+			configAndStacksInfo.ComponentEnvSection,
 			configAndStacksInfo.ComponentBackendSection,
 			configAndStacksInfo.ComponentBackendType,
 			configAndStacksInfo.BaseComponentPath,
@@ -188,6 +200,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		if err != nil {
 			return configAndStacksInfo, err
 		}
+
+		configAndStacksInfo.ComponentEnvList = convertEnvVars(configAndStacksInfo.ComponentEnvSection)
 	} else {
 		if g.LogVerbose {
 			color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
@@ -220,6 +234,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 		for stackName := range stacksMap {
 			_, configAndStacksInfo.ComponentVarsSection,
+				configAndStacksInfo.ComponentEnvSection,
 				configAndStacksInfo.ComponentBackendSection,
 				configAndStacksInfo.ComponentBackendType,
 				configAndStacksInfo.BaseComponentPath,
@@ -227,6 +242,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			if err != nil {
 				continue
 			}
+
+			configAndStacksInfo.ComponentEnvList = convertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			tenantFound = true
 			environmentFound = true
@@ -468,9 +485,10 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
-	color.Cyan("\nExecuting command:\n")
-	fmt.Println(cmd.String())
+
 	fmt.Println()
+	color.Cyan("Executing command:\n")
+	fmt.Println(cmd.String())
 	return cmd.Run()
 }
 
@@ -482,4 +500,15 @@ func generateComponentBackendConfig(backendType string, backendConfig map[interf
 			},
 		},
 	}
+}
+
+// Convert ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...]
+func convertEnvVars(envVarsMap map[interface{}]interface{}) []string {
+	res := []string{}
+	if envVarsMap != nil {
+		for k, v := range envVarsMap {
+			res = append(res, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	return res
 }

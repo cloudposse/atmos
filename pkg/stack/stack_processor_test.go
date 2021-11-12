@@ -113,6 +113,14 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, 3, testTestComponentOverrideComponentRemoteStateBackendVal3)
 	assert.Equal(t, nil, testTestComponentOverrideComponentRemoteStateBackendVal4)
 
+	topLevelComponent1 := terraformComponents["top-level-component1"].(map[interface{}]interface{})
+	topLevelComponent1Backend := topLevelComponent1["backend"].(map[interface{}]interface{})
+	topLevelComponent1RemoteSateBackend := topLevelComponent1["remote_state_backend"].(map[interface{}]interface{})
+	topLevelComponent1BackendWorkspaceKeyPrefix := topLevelComponent1Backend["workspace_key_prefix"]
+	topLevelComponent1RemoteStateBackendWorkspaceKeyPrefix := topLevelComponent1RemoteSateBackend["workspace_key_prefix"]
+	assert.Equal(t, "top-level-component1", topLevelComponent1BackendWorkspaceKeyPrefix)
+	assert.Equal(t, "top-level-component1", topLevelComponent1RemoteStateBackendWorkspaceKeyPrefix)
+
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
