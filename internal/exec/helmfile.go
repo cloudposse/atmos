@@ -118,9 +118,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Helmfile.BasePath, info.Component)
+		workingDir = path.Join(c.Config.Components.Helmfile.BasePath, info.Component)
 	} else {
-		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
+		workingDir = path.Join(c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
 	}
 	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
