@@ -81,6 +81,8 @@ type ConfigAndStacksInfo struct {
 	Command                 string
 	SubCommand              string
 	ComponentVarsSection    map[interface{}]interface{}
+	ComponentEnvSection     map[interface{}]interface{}
+	ComponentEnvList        []string
 	ComponentBackendSection map[interface{}]interface{}
 	ComponentBackendType    string
 	AdditionalArgsAndFlags  []string

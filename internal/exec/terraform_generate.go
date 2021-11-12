@@ -75,6 +75,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	if config.ProcessedConfig.StackType == "Directory" {
 		componentSection,
 			componentVarsSection,
+			_,
 			componentBackendSection,
 			componentBackendType,
 			_, _,
@@ -112,6 +113,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		for stackName := range stacksMap {
 			componentSection,
 				componentVarsSection,
+				_,
 				componentBackendSection,
 				componentBackendType,
 				_, _,

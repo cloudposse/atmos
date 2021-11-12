@@ -167,7 +167,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if info.SubCommand == "workspace" {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
-		err = execCommand(info.Command, initCommandWithArguments, componentPath, nil)
+		err = execCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList)
 		if err != nil {
 			return err
 		}
@@ -207,6 +207,15 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
+	// Print ENV vars if they are found in the component stack config
+	if len(info.ComponentEnvList) > 0 {
+		fmt.Println()
+		color.Cyan("Using ENV vars:\n")
+		for _, v := range info.ComponentEnvList {
+			fmt.Println(v)
+		}
+	}
+
 	var workspaceName string
 	if len(info.BaseComponent) > 0 {
 		workspaceName = fmt.Sprintf("%s-%s", info.ContextPrefix, info.Component)
@@ -238,9 +247,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace`
-	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, nil)
+	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, info.ComponentEnvList)
 	if err != nil {
-		err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, nil)
+		err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, info.ComponentEnvList)
 		if err != nil {
 			return err
 		}
@@ -264,7 +273,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute the command
 	if info.SubCommand != "workspace" {
-		err = execCommand(info.Command, allArgsAndFlags, componentPath, nil)
+		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList)
 		if err != nil {
 			return err
 		}
