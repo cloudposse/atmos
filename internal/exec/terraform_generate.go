@@ -85,7 +85,9 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
-		color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
+		if g.LogVerbose == true {
+			color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
+		}
 
 		if len(config.Config.Stacks.NamePattern) < 1 {
 			return errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
@@ -149,7 +151,9 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 			}
 
 			if tenantFound == true && environmentFound == true && stageFound == true {
-				color.Green("Found stack config for the '%s' component in the '%s' stack\n\n", component, stackName)
+				if g.LogVerbose == true {
+					color.Green("Found stack config for the '%s' component in the '%s' stack\n\n", component, stackName)
+				}
 				stack = stackName
 				break
 			}

@@ -203,9 +203,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = fmt.Sprintf("%s/%s", c.Config.Components.Terraform.BasePath, finalComponent)
+		workingDir = path.Join(c.Config.Components.Terraform.BasePath, finalComponent)
 	} else {
-		workingDir = fmt.Sprintf("%s/%s/%s", c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
+		workingDir = path.Join(c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	}
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
@@ -285,11 +285,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if info.SubCommand != "plan" {
 		planFilePath := fmt.Sprintf("%s/%s", workingDir, planFile)
 		_ = os.Remove(planFilePath)
-	}
-
-	err = os.Remove(varFileName)
-	if err != nil {
-		color.Yellow("Error deleting terraform varfile: %s\n", err)
 	}
 
 	return nil
