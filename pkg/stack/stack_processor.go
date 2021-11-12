@@ -342,7 +342,8 @@ func ProcessConfig(
 		if allTerraformComponents, ok := globalComponentsSection["terraform"]; ok {
 			allTerraformComponentsMap := allTerraformComponents.(map[interface{}]interface{})
 
-			for component, v := range allTerraformComponentsMap {
+			for cmp, v := range allTerraformComponentsMap {
+				component := cmp.(string)
 				componentMap := v.(map[interface{}]interface{})
 
 				componentVars := map[interface{}]interface{}{}
@@ -433,7 +434,7 @@ func ProcessConfig(
 							baseComponentTerraformCommand = baseComponentCommandSection.(string)
 						}
 					} else {
-						return nil, errors.New("Terraform component '" + component.(string) + "' defines attribute 'component: " +
+						return nil, errors.New("Terraform component '" + component + "' defines attribute 'component: " +
 							baseComponentName + "', " + "but `" + baseComponentName + "' is not defined in the stack '" + stack + "'")
 					}
 				}
@@ -530,7 +531,7 @@ func ProcessConfig(
 				}
 
 				if processStackDeps == true {
-					componentStacks, err := FindComponentStacks("terraform", component.(string), baseComponentName, componentStackMap)
+					componentStacks, err := FindComponentStacks("terraform", component, baseComponentName, componentStackMap)
 					if err != nil {
 						return nil, err
 					}
@@ -540,7 +541,7 @@ func ProcessConfig(
 				}
 
 				if processComponentDeps == true {
-					componentDeps, err := FindComponentDependencies(stackName, "terraform", component.(string), baseComponentName, importsConfig)
+					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponentName, importsConfig)
 					if err != nil {
 						return nil, err
 					}
@@ -549,7 +550,7 @@ func ProcessConfig(
 					comp["deps"] = []string{}
 				}
 
-				terraformComponents[component.(string)] = comp
+				terraformComponents[component] = comp
 			}
 		}
 	}
@@ -559,7 +560,8 @@ func ProcessConfig(
 		if allHelmfileComponents, ok := globalComponentsSection["helmfile"]; ok {
 			allHelmfileComponentsMap := allHelmfileComponents.(map[interface{}]interface{})
 
-			for component, v := range allHelmfileComponentsMap {
+			for cmp, v := range allHelmfileComponentsMap {
+				component := cmp.(string)
 				componentMap := v.(map[interface{}]interface{})
 
 				componentVars := map[interface{}]interface{}{}
@@ -604,7 +606,7 @@ func ProcessConfig(
 				comp["command"] = componentHelmfileCommand
 
 				if processStackDeps == true {
-					componentStacks, err := FindComponentStacks("helmfile", component.(string), "", componentStackMap)
+					componentStacks, err := FindComponentStacks("helmfile", component, "", componentStackMap)
 					if err != nil {
 						return nil, err
 					}
@@ -614,7 +616,7 @@ func ProcessConfig(
 				}
 
 				if processComponentDeps == true {
-					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component.(string), "", importsConfig)
+					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, "", importsConfig)
 					if err != nil {
 						return nil, err
 					}
@@ -623,7 +625,7 @@ func ProcessConfig(
 					comp["deps"] = []string{}
 				}
 
-				helmfileComponents[component.(string)] = comp
+				helmfileComponents[component] = comp
 			}
 		}
 	}
