@@ -475,6 +475,19 @@ func ProcessConfig(
 					finalComponentBackend = i.(map[interface{}]interface{})
 				}
 
+				// Check if `backend` section has `workspace_key_prefix` for `s3` backend type
+				// If it does not, use the component name instead
+				// It will also be propagated to `remote_state_backend` section of `s3` type
+				if finalComponentBackendType == "s3" {
+					if _, ok2 := finalComponentBackend["workspace_key_prefix"].(string); !ok2 {
+						workspaceKeyPrefixComponent := component
+						if baseComponentName != "" {
+							workspaceKeyPrefixComponent = baseComponentName
+						}
+						finalComponentBackend["workspace_key_prefix"] = strings.Replace(workspaceKeyPrefixComponent, "/", "-", -1)
+					}
+				}
+
 				// Final remote state backend
 				finalComponentRemoteStateBackendType := finalComponentBackendType
 				if len(globalRemoteStateBackendType) > 0 {
