@@ -502,6 +502,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[interf
 	}
 }
 
+// Convert ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...]
 func convertEnvVars(envVarsMap map[interface{}]interface{}) []string {
 	res := []string{}
 	if envVarsMap != nil {
