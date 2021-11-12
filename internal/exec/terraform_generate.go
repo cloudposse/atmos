@@ -9,6 +9,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"path"
 	"strings"
 )
 
@@ -175,7 +176,8 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	var componentBackendConfig = generateComponentBackendConfig(componentBackendType, componentBackendSection)
 
-	color.Cyan("\nComponent backend config:\n\n")
+	fmt.Println()
+	color.Cyan("Component backend config:\n\n")
 	err = utils.PrintAsJSON(componentBackendConfig)
 	if err != nil {
 		return err
@@ -199,12 +201,17 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		finalComponent = component
 	}
 
-	// Write backend to file
-	var varFileName = fmt.Sprintf("%s/%s/backend.tf.json", config.Config.Components.Terraform.BasePath, finalComponent)
+	// Write backend config to file
+	var backendFileName = path.Join(
+		config.Config.Components.Terraform.BasePath,
+		finalComponent,
+		"backend.tf.json",
+	)
 
-	color.Cyan("\nWriting backend config to file:")
-	fmt.Println(varFileName)
-	err = utils.WriteToFileAsJSON(varFileName, componentBackendConfig, 0644)
+	fmt.Println()
+	color.Cyan("Writing backend config to file:")
+	fmt.Println(backendFileName)
+	err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
 	if err != nil {
 		return err
 	}
