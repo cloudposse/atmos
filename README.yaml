@@ -92,6 +92,29 @@ introduction: |-
 
   For example, maybe you have your own existing CLI tools (e.g. using `terragrunt`). In this case, you may want to start by developing your own CLI.
 
+  ## Install
+
+  ### OSX
+
+  From Homebrew directly
+
+  ```
+  brew install atmos
+  ```
+  
+  ### Go
+  
+  Get the latest version
+  
+  ```
+  go install github.com/cloudposse/atmos
+  ```
+  
+  Get a specific version
+  
+  ```
+  go install github.com/cloudposse/atmos@v1.3.9
+  ```
 
   ## Usage
 
