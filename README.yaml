@@ -92,6 +92,11 @@ introduction: |-
 
   For example, maybe you have your own existing CLI tools (e.g. using `terragrunt`). In this case, you may want to start by developing your own CLI.
 
+  ## Install
+
+  ```
+  brew install atmos
+  ```
 
   ## Usage
 
