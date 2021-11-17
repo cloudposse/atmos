@@ -10,7 +10,6 @@ jobs:
   build:
     name: 'Build CLI and attach to GitHub release'
     runs-on: ubuntu-latest
-
     steps:
       # Checkout the repo
       - name: 'Checkout'
@@ -37,7 +36,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   homebrew:
-    name: Bump Homebrew formula
+    name: "Bump Homebrew formula"
     runs-on: ubuntu-latest
     steps:
       - uses: mislav/bump-homebrew-formula-action@v1
