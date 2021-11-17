@@ -102,6 +102,20 @@ introduction: |-
   brew install atmos
   ```
   
+  ### cloudposse/packages
+  
+  Using apk
+  
+  ```
+  apk add atmos@cloudposse~=$(ATMOS_VERSION}
+  ```
+  
+  Using deb
+  
+  ```
+  apt install atmos@cloudposse~=$(ATMOS_VERSION}
+  ```
+  
   ### Go
   
   Get the latest version
@@ -111,9 +125,23 @@ introduction: |-
   ```
   
   Get a specific version
-  
+ 
+  NOTE: Since the version is passed in via `-ldflags`, the specific version will return `0.0.1` when running `atmos version`.
+ 
   ```
   go install github.com/cloudposse/atmos@v1.3.9
+  ```
+ 
+  ## Build from source
+  
+  ```
+  make build
+  ```
+  
+  or run this and replace `$version` with the version that should be returned with `atmos version`.
+  
+  ```
+  go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/cmd.Version=$version'"
   ```
 
   ## Usage
