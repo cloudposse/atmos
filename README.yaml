@@ -104,18 +104,24 @@ introduction: |-
   
   ### cloudposse/packages
   
-  Using apk
+  Using container
+
+  ```
+  ARG ATMOS_VERSION
+  ```
+  
+  If using debian, then `RUN` this
+  
+  ```
+  apt-get install atmos@="$(ATMOS_VERSION}-*"
+  ```
+  
+  If using alpine, then `RUN` this
   
   ```
   apk add atmos@cloudposse~=$(ATMOS_VERSION}
   ```
-  
-  Using deb
-  
-  ```
-  apt install atmos@cloudposse~=$(ATMOS_VERSION}
-  ```
-  
+
   ### Go
   
   Get the latest version
