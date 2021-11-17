@@ -130,27 +130,21 @@ brew install atmos
 
 ### cloudposse/packages
 
-Using container
+On Debian, run:
 
 ```
-ARG ATMOS_VERSION
+apt install atmos@="<ATMOS_VERSION>-*"
 ```
 
-If using debian, then `RUN` this
+On Alpine, run:
 
 ```
-apt-get install atmos@="$(ATMOS_VERSION}-*"
-```
-
-If using alpine, then `RUN` this
-
-```
-apk add atmos@cloudposse~=$(ATMOS_VERSION}
+apk add atmos@cloudposse~=<ATMOS_VERSION>
 ```
 
 ### Go
 
-Get the latest version
+Install the latest version
 
 ```
 go install github.com/cloudposse/atmos
@@ -158,7 +152,7 @@ go install github.com/cloudposse/atmos
 
 Get a specific version
 
-NOTE: Since the version is passed in via `-ldflags`, the specific version will return `0.0.1` when running `atmos version`.
+__NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1` when running `atmos version`.
 
 ```
 go install github.com/cloudposse/atmos@v1.3.9
