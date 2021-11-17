@@ -118,6 +118,57 @@ This is ideal when you have your own workflows that you want to develop in addit
 
 For example, maybe you have your own existing CLI tools (e.g. using `terragrunt`). In this case, you may want to start by developing your own CLI.
 
+## Install
+
+### OSX
+
+From Homebrew directly
+
+```
+brew install atmos
+```
+
+### cloudposse/packages
+
+On Debian, run:
+
+```
+apt install atmos@="<ATMOS_VERSION>-*"
+```
+
+On Alpine, run:
+
+```
+apk add atmos@cloudposse~=<ATMOS_VERSION>
+```
+
+### Go
+
+Install the latest version
+
+```
+go install github.com/cloudposse/atmos
+```
+
+Get a specific version
+
+__NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1` when running `atmos version`.
+
+```
+go install github.com/cloudposse/atmos@v1.3.9
+```
+
+## Build from source
+
+```
+make build
+```
+
+or run this and replace `$version` with the version that should be returned with `atmos version`.
+
+```
+go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/cmd.Version=$version'"
+```
 
 ## Usage
 
