@@ -23,7 +23,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(info.Stack) < 1 {
-		return errors.New("the specified stack does not exist")
+		return errors.New("stack must be specified")
 	}
 
 	err = checkTerraformConfig()
@@ -39,7 +39,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		finalComponent = info.Component
 	}
 
-	// Check if the component exists
+	// Check if the component exists as Terraform component
 	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {

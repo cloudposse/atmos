@@ -21,7 +21,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(info.Stack) < 1 {
-		return errors.New("the specified stack does not exist")
+		return errors.New("stack must be specified")
 	}
 
 	err = checkHelmfileConfig()
@@ -29,6 +29,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Check if the component exists as helmfile component
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.Component)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
