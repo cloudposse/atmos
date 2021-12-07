@@ -644,7 +644,8 @@ type BaseComponentConfig struct {
 }
 
 // findBaseComponentConfig finds base component config
-func findBaseComponentConfig(allTerraformComponentsMap map[interface{}]interface{},
+func findBaseComponentConfig(
+	allTerraformComponentsMap map[interface{}]interface{},
 	component string,
 	stack string,
 	baseComponentName string) (BaseComponentConfig, error) {
