@@ -386,6 +386,7 @@ func ProcessConfig(
 					componentTerraformCommand = i.(string)
 				}
 
+				// Process base component(s)
 				baseComponentVars := map[interface{}]interface{}{}
 				baseComponentSettings := map[interface{}]interface{}{}
 				baseComponentEnv := map[interface{}]interface{}{}
@@ -399,44 +400,19 @@ func ProcessConfig(
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
 
-					if baseComponentSection, baseComponentSectionExist := allTerraformComponentsMap[baseComponentName]; baseComponentSectionExist {
-						baseComponentMap := baseComponentSection.(map[interface{}]interface{})
-
-						if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
-							baseComponentVars = baseComponentVarsSection.(map[interface{}]interface{})
-						}
-
-						if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
-							baseComponentSettings = baseComponentSettingsSection.(map[interface{}]interface{})
-						}
-
-						if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
-							baseComponentEnv = baseComponentEnvSection.(map[interface{}]interface{})
-						}
-
-						// Base component backend
-						if i, ok2 := baseComponentMap["backend_type"]; ok2 {
-							baseComponentBackendType = i.(string)
-						}
-						if i, ok2 := baseComponentMap["backend"]; ok2 {
-							baseComponentBackendSection = i.(map[interface{}]interface{})
-						}
-
-						// Base component remote state backend
-						if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
-							baseComponentRemoteStateBackendType = i.(string)
-						}
-						if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
-							baseComponentRemoteStateBackendSection = i.(map[interface{}]interface{})
-						}
-
-						if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
-							baseComponentTerraformCommand = baseComponentCommandSection.(string)
-						}
-					} else {
-						return nil, errors.New("Terraform component '" + component + "' defines attribute 'component: " +
-							baseComponentName + "', " + "but `" + baseComponentName + "' is not defined in the stack '" + stack + "'")
+					baseComponentConfig, err := findBaseComponentConfig(allTerraformComponentsMap, component, stack, baseComponentName)
+					if err != nil {
+						return nil, err
 					}
+
+					baseComponentVars = baseComponentConfig.BaseComponentVars
+					baseComponentSettings = baseComponentConfig.BaseComponentSettings
+					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentTerraformCommand = baseComponentConfig.BaseComponentTerraformCommand
+					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
+					baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
+					baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
+					baseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
 				}
 
 				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformVars, baseComponentVars, componentVars})
@@ -651,4 +627,90 @@ func ProcessConfig(
 	}
 
 	return result, nil
+}
+
+type BaseComponentConfig struct {
+	BaseComponentVars                      map[interface{}]interface{}
+	BaseComponentSettings                  map[interface{}]interface{}
+	BaseComponentEnv                       map[interface{}]interface{}
+	FinalBaseComponentName                 string
+	BaseComponentTerraformCommand          string
+	BaseComponentBackendType               string
+	BaseComponentBackendSection            map[interface{}]interface{}
+	BaseComponentRemoteStateBackendType    string
+	BaseComponentRemoteStateBackendSection map[interface{}]interface{}
+	BaseComponentInheritanceChain          []string
+}
+
+// findBaseComponentConfig finds base component config
+func findBaseComponentConfig(allTerraformComponentsMap map[interface{}]interface{},
+	component string,
+	stack string,
+	baseComponentName string) (BaseComponentConfig, error) {
+
+	var baseComponentConfig BaseComponentConfig
+	var baseComponentVars map[interface{}]interface{}
+	var baseComponentSettings map[interface{}]interface{}
+	var baseComponentEnv map[interface{}]interface{}
+	var finalBaseComponentName string
+	var baseComponentTerraformCommand string
+	var baseComponentBackendType string
+	var baseComponentBackendSection map[interface{}]interface{}
+	var baseComponentRemoteStateBackendType string
+	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
+
+	if baseComponentSection, baseComponentSectionExist := allTerraformComponentsMap[baseComponentName]; baseComponentSectionExist {
+		baseComponentMap := baseComponentSection.(map[interface{}]interface{})
+
+		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
+			baseComponentVars = baseComponentVarsSection.(map[interface{}]interface{})
+		}
+
+		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
+			baseComponentSettings = baseComponentSettingsSection.(map[interface{}]interface{})
+		}
+
+		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
+			baseComponentEnv = baseComponentEnvSection.(map[interface{}]interface{})
+		}
+
+		// Base component backend
+		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
+			baseComponentBackendType = i.(string)
+		}
+		if i, ok2 := baseComponentMap["backend"]; ok2 {
+			baseComponentBackendSection = i.(map[interface{}]interface{})
+		}
+
+		// Base component remote state backend
+		if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
+			baseComponentRemoteStateBackendType = i.(string)
+		}
+		if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
+			baseComponentRemoteStateBackendSection = i.(map[interface{}]interface{})
+		}
+
+		// Base component `command`
+		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
+			baseComponentTerraformCommand = baseComponentCommandSection.(string)
+		}
+	} else {
+		return baseComponentConfig, errors.New("Terraform component '" + component + "' defines attribute 'component: " +
+			baseComponentName + "', " + "but `" + baseComponentName + "' is not defined in the stack '" + stack + "'")
+	}
+
+	baseComponentConfig = BaseComponentConfig{
+		BaseComponentVars:                      baseComponentVars,
+		BaseComponentSettings:                  baseComponentSettings,
+		BaseComponentEnv:                       baseComponentEnv,
+		FinalBaseComponentName:                 finalBaseComponentName,
+		BaseComponentTerraformCommand:          baseComponentTerraformCommand,
+		BaseComponentBackendType:               baseComponentBackendType,
+		BaseComponentBackendSection:            baseComponentBackendSection,
+		BaseComponentRemoteStateBackendType:    baseComponentRemoteStateBackendType,
+		BaseComponentRemoteStateBackendSection: baseComponentRemoteStateBackendSection,
+		BaseComponentInheritanceChain:          nil,
+	}
+
+	return baseComponentConfig, nil
 }
