@@ -408,6 +408,7 @@ func ProcessConfig(
 					baseComponentVars = baseComponentConfig.BaseComponentVars
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentName = baseComponentConfig.FinalBaseComponentName
 					baseComponentTerraformCommand = baseComponentConfig.BaseComponentTerraformCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 					baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
@@ -698,6 +699,8 @@ func findBaseComponentConfig(allTerraformComponentsMap map[interface{}]interface
 		return baseComponentConfig, errors.New("Terraform component '" + component + "' defines attribute 'component: " +
 			baseComponentName + "', " + "but `" + baseComponentName + "' is not defined in the stack '" + stack + "'")
 	}
+
+	finalBaseComponentName = baseComponentName
 
 	baseComponentConfig = BaseComponentConfig{
 		BaseComponentVars:                      baseComponentVars,
