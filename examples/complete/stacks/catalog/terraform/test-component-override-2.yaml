@@ -19,7 +19,6 @@ components:
       env:
         TEST_ENV_VAR1: "val1-override-2"
         TEST_ENV_VAR2: "val2-override-2"
-        TEST_ENV_VAR3: "val3-override-2"
         TEST_ENV_VAR4: "val4-override-2"
       # Override remote state backend for this component
       remote_state_backend_type: static # s3, remote, vault, static, etc.
