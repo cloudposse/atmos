@@ -4,9 +4,9 @@ components:
       vars:
         service_1_name: "service-1-override-2"
         service_1_map:
-          a: 5
           b: 6
           c: 7
+          d: 8
         service_1_list:
           - 5
           - 6
