@@ -71,29 +71,30 @@ type ArgsAndFlagsInfo struct {
 }
 
 type ConfigAndStacksInfo struct {
-	Stack                   string
-	ComponentFromArg        string
-	ComponentFolderPrefix   string
-	ComponentNamePrefix     string
-	Component               string
-	BaseComponentPath       string
-	BaseComponent           string
-	Command                 string
-	SubCommand              string
-	ComponentVarsSection    map[interface{}]interface{}
-	ComponentEnvSection     map[interface{}]interface{}
-	ComponentEnvList        []string
-	ComponentBackendSection map[interface{}]interface{}
-	ComponentBackendType    string
-	AdditionalArgsAndFlags  []string
-	GlobalOptions           []string
-	TerraformDir            string
-	HelmfileDir             string
-	ConfigDir               string
-	StacksDir               string
-	Context                 Context
-	ContextPrefix           string
-	DeployRunInit           string
-	AutoGenerateBackendFile string
-	UseTerraformPlan        bool
+	Stack                     string
+	ComponentFromArg          string
+	ComponentFolderPrefix     string
+	ComponentNamePrefix       string
+	Component                 string
+	BaseComponentPath         string
+	BaseComponent             string
+	Command                   string
+	SubCommand                string
+	ComponentVarsSection      map[interface{}]interface{}
+	ComponentEnvSection       map[interface{}]interface{}
+	ComponentEnvList          []string
+	ComponentBackendSection   map[interface{}]interface{}
+	ComponentBackendType      string
+	AdditionalArgsAndFlags    []string
+	GlobalOptions             []string
+	TerraformDir              string
+	HelmfileDir               string
+	ConfigDir                 string
+	StacksDir                 string
+	Context                   Context
+	ContextPrefix             string
+	DeployRunInit             string
+	AutoGenerateBackendFile   string
+	UseTerraformPlan          bool
+	ComponentInheritanceChain []string
 }

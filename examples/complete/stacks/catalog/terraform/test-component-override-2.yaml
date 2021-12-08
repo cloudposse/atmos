@@ -1,0 +1,30 @@
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+# https://en.wikipedia.org/wiki/Glob_(programming)
+# https://pkg.go.dev/gopkg.in/godo.v2/glob
+# https://github.com/bmatcuk/doublestar
+# File extensions are optional (if not specified, `.yaml` is used by default)
+import:
+  - catalog/terraform/services/service-?-override-2.*
+
+components:
+  terraform:
+    "test/test-component-override-2":
+      # Specify terraform binary to run
+      command: "/usr/local/bin/terraform"
+      # By using `component` attribute, `test-component-override` inherits from `test-component` and can override its variables
+      # In this example, variables for each service are overridden in `catalog/services/service-?-override.*`
+      component: "test/test-component-override"
+      # Other variables can be overridden here
+      vars: {}
+      env:
+        TEST_ENV_VAR1: "val1-override-2"
+        TEST_ENV_VAR2: "val2-override-2"
+        TEST_ENV_VAR4: "val4-override-2"
+      # Override remote state backend for this component
+      remote_state_backend_type: static # s3, remote, vault, static, etc.
+      remote_state_backend:
+        static:
+          val1: true
+          val2: "5"
+          val3: 7
+          val4: null

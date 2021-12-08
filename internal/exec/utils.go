@@ -37,7 +37,16 @@ func findComponentConfig(
 	stacksMap map[string]interface{},
 	componentType string,
 	component string,
-) (map[string]interface{}, map[interface{}]interface{}, map[interface{}]interface{}, map[interface{}]interface{}, string, string, string, error) {
+) (map[string]interface{},
+	map[interface{}]interface{},
+	map[interface{}]interface{},
+	map[interface{}]interface{},
+	string,
+	string,
+	string,
+	[]string,
+	error,
+) {
 
 	var stackSection map[interface{}]interface{}
 	var componentsSection map[string]interface{}
@@ -49,31 +58,32 @@ func findComponentConfig(
 	var componentBackendType string
 	var baseComponentPath string
 	var command string
+	var componentInheritanceChain []string
 	var ok bool
 
 	if len(stack) == 0 {
-		return nil, nil, nil, nil, "", "", "", errors.New("stack must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", nil, errors.New("stack must be provided and must not be empty")
 	}
 	if len(component) == 0 {
-		return nil, nil, nil, nil, "", "", "", errors.New("component must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", nil, errors.New("component must be provided and must not be empty")
 	}
 	if len(componentType) == 0 {
-		return nil, nil, nil, nil, "", "", "", errors.New("component type must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", nil, errors.New("component type must be provided and must not be empty")
 	}
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
+		return nil, nil, nil, nil, "", "", "", nil, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
+		return nil, nil, nil, nil, "", "", "", nil, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
+		return nil, nil, nil, nil, "", "", "", nil, errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, nil, "", "", "", nil, errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, nil, "", "", "", nil, errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
@@ -90,6 +100,9 @@ func findComponentConfig(
 	if componentEnvSection, ok = componentSection["env"].(map[interface{}]interface{}); !ok {
 		componentEnvSection = map[interface{}]interface{}{}
 	}
+	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
+		componentInheritanceChain = []string{}
+	}
 
 	return componentSection,
 		componentVarsSection,
@@ -98,6 +111,7 @@ func findComponentConfig(
 		componentBackendType,
 		baseComponentPath,
 		command,
+		componentInheritanceChain,
 		nil
 }
 
@@ -196,7 +210,9 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			configAndStacksInfo.ComponentBackendSection,
 			configAndStacksInfo.ComponentBackendType,
 			configAndStacksInfo.BaseComponentPath,
-			configAndStacksInfo.Command, err = findComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
+			configAndStacksInfo.Command,
+			configAndStacksInfo.ComponentInheritanceChain,
+			err = findComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -238,7 +254,9 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				configAndStacksInfo.ComponentBackendSection,
 				configAndStacksInfo.ComponentBackendType,
 				configAndStacksInfo.BaseComponentPath,
-				configAndStacksInfo.Command, err = findComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
+				configAndStacksInfo.Command,
+				configAndStacksInfo.ComponentInheritanceChain,
+				err = findComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
 				continue
 			}
