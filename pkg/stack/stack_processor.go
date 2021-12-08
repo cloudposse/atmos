@@ -401,7 +401,7 @@ func ProcessConfig(
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
 
-					err := findBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName)
+					err := processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName)
 					if err != nil {
 						return nil, err
 					}
@@ -409,7 +409,7 @@ func ProcessConfig(
 					baseComponentVars = baseComponentConfig.BaseComponentVars
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
-					baseComponentName = baseComponentConfig.FinalBaseComponentName
+					baseComponentName = baseComponentConfig.BaseComponentName
 					baseComponentTerraformCommand = baseComponentConfig.BaseComponentTerraformCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 					baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
@@ -635,7 +635,7 @@ type BaseComponentConfig struct {
 	BaseComponentVars                      map[interface{}]interface{}
 	BaseComponentSettings                  map[interface{}]interface{}
 	BaseComponentEnv                       map[interface{}]interface{}
-	FinalBaseComponentName                 string
+	BaseComponentName                      string
 	BaseComponentTerraformCommand          string
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[interface{}]interface{}
@@ -644,26 +644,36 @@ type BaseComponentConfig struct {
 	BaseComponentInheritanceChain          []string
 }
 
-// findBaseComponentConfig finds base component config
-func findBaseComponentConfig(
+// processBaseComponentConfig processes base component(s) config
+func processBaseComponentConfig(
 	baseComponentConfig *BaseComponentConfig,
 	allTerraformComponentsMap map[interface{}]interface{},
 	component string,
 	stack string,
-	baseComponentName string) error {
+	baseComponent string) error {
 
 	var baseComponentVars map[interface{}]interface{}
 	var baseComponentSettings map[interface{}]interface{}
 	var baseComponentEnv map[interface{}]interface{}
-	var finalBaseComponentName string
 	var baseComponentTerraformCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[interface{}]interface{}
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
+	var baseComponentMap map[interface{}]interface{}
 
-	if baseComponentSection, baseComponentSectionExist := allTerraformComponentsMap[baseComponentName]; baseComponentSectionExist {
-		baseComponentMap := baseComponentSection.(map[interface{}]interface{})
+	if baseComponentSection, baseComponentSectionExist := allTerraformComponentsMap[baseComponent]; baseComponentSectionExist {
+		baseComponentMap = baseComponentSection.(map[interface{}]interface{})
+
+		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+			return processBaseComponentConfig(
+				baseComponentConfig,
+				allTerraformComponentsMap,
+				baseComponent,
+				stack,
+				baseComponentOfBaseComponent.(string),
+			)
+		}
 
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
 			baseComponentVars = baseComponentVarsSection.(map[interface{}]interface{})
@@ -697,52 +707,50 @@ func findBaseComponentConfig(
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
 			baseComponentTerraformCommand = baseComponentCommandSection.(string)
 		}
+
+		merged, err := m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentVars, baseComponentVars})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentVars = merged
+
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentSettings = merged
+
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentEnv = merged
+
+		baseComponentConfig.BaseComponentName = baseComponent
+
+		baseComponentConfig.BaseComponentTerraformCommand = baseComponentTerraformCommand
+
+		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
+
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentBackendSection = merged
+
+		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
+
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRemoteStateBackendSection = merged
+
+		baseComponentConfig.BaseComponentInheritanceChain = append(baseComponentConfig.BaseComponentInheritanceChain, baseComponent)
 	} else {
 		return errors.New("Terraform component '" + component + "' defines attribute 'component: " +
-			baseComponentName + "', " + "but `" + baseComponentName + "' is not defined in the stack '" + stack + "'")
+			baseComponent + "', " + "but `" + baseComponent + "' is not defined in the stack '" + stack + "'")
 	}
-
-	finalBaseComponentName = baseComponentName
-
-	merged, err := m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentVars, baseComponentVars})
-	if err != nil {
-		return err
-	}
-	baseComponentConfig.BaseComponentVars = merged
-
-	merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
-	if err != nil {
-		return err
-	}
-	baseComponentConfig.BaseComponentSettings = merged
-
-	merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
-	if err != nil {
-		return err
-	}
-	baseComponentConfig.BaseComponentEnv = merged
-
-	baseComponentConfig.FinalBaseComponentName = finalBaseComponentName
-
-	baseComponentConfig.BaseComponentTerraformCommand = baseComponentTerraformCommand
-
-	baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
-
-	merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
-	if err != nil {
-		return err
-	}
-	baseComponentConfig.BaseComponentBackendSection = merged
-
-	baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
-
-	merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
-	if err != nil {
-		return err
-	}
-	baseComponentConfig.BaseComponentRemoteStateBackendSection = merged
-
-	baseComponentConfig.BaseComponentInheritanceChain = append(baseComponentConfig.BaseComponentInheritanceChain, baseComponentName)
 
 	return nil
 }
