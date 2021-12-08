@@ -124,6 +124,20 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "top-level-component1", topLevelComponent1BackendWorkspaceKeyPrefix)
 	assert.Equal(t, "top-level-component1", topLevelComponent1RemoteStateBackendWorkspaceKeyPrefix)
 
+	testTestComponentOverrideComponent2 := terraformComponents["test/test-component-override-2"].(map[interface{}]interface{})
+	testTestComponentOverrideComponentBackend2 := testTestComponentOverrideComponent2["backend"].(map[interface{}]interface{})
+	testTestComponentOverrideComponentBackendType2 := testTestComponentOverrideComponent2["backend_type"]
+	testTestComponentOverrideComponentBackendWorkspaceKeyPrefix2 := testTestComponentOverrideComponentBackend2["workspace_key_prefix"]
+	testTestComponentOverrideComponentBackendBucket2 := testTestComponentOverrideComponentBackend2["bucket"]
+	testTestComponentOverrideComponentBaseComponent2 := testTestComponentOverrideComponent2["component"]
+	testTestComponentOverrideInheritance2 := testTestComponentOverrideComponent2["inheritance"].([]interface{})
+	assert.Equal(t, "test-test-component", testTestComponentOverrideComponentBackendWorkspaceKeyPrefix2)
+	assert.Equal(t, "eg-ue2-root-tfstate", testTestComponentOverrideComponentBackendBucket2)
+	assert.Equal(t, "test/test-component", testTestComponentOverrideComponentBaseComponent2)
+	assert.Equal(t, "s3", testTestComponentOverrideComponentBackendType2)
+	assert.Equal(t, "test/test-component-override", testTestComponentOverrideInheritance2[0])
+	assert.Equal(t, "test/test-component", testTestComponentOverrideInheritance2[1])
+
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
