@@ -402,7 +402,7 @@ func ProcessConfig(
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
 
-					err := processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName)
+					err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName)
 					if err != nil {
 						return nil, err
 					}

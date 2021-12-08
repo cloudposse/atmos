@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"path"
+	"strings"
 )
 
 const (
@@ -198,6 +199,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponentPath) > 0 {
 		fmt.Println("Base component: " + info.BaseComponentPath)
+	}
+	if len(info.ComponentInheritanceChain) > 0 {
+		fmt.Println("Inheritance: " + strings.Join(info.ComponentInheritanceChain, " -> "))
 	}
 	fmt.Println("Stack: " + info.Stack)
 
