@@ -341,6 +341,11 @@ func TransformStackConfigToSpaceliftStacks(
 						componentStacks = i.([]string)
 					}
 
+					componentInheritance := []string{}
+					if i, ok2 := componentMap["inheritance"]; ok2 {
+						componentInheritance = i.([]string)
+					}
+
 					context := c.GetContextFromVars(componentVars)
 					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
 					if err != nil {
@@ -355,6 +360,7 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["env"] = componentEnv
 					spaceliftConfig["deps"] = componentDeps
 					spaceliftConfig["stacks"] = componentStacks
+					spaceliftConfig["inheritance"] = componentInheritance
 
 					baseComponentName := ""
 					if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {

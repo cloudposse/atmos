@@ -669,20 +669,19 @@ func processBaseComponentConfig(
 		baseComponentMap = baseComponentSection.(map[interface{}]interface{})
 
 		// First, process the base component of this base component
-		// TODO: Review/fix this for some edge cases of stacks config
-		//if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
-		//	err := processBaseComponentConfig(
-		//		baseComponentConfig,
-		//		allTerraformComponentsMap,
-		//		baseComponent,
-		//		stack,
-		//		baseComponentOfBaseComponent.(string),
-		//	)
-		//
-		//	if err != nil {
-		//		return err
-		//	}
-		//}
+		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+			err := processBaseComponentConfig(
+				baseComponentConfig,
+				allTerraformComponentsMap,
+				baseComponent,
+				stack,
+				baseComponentOfBaseComponent.(string),
+			)
+
+			if err != nil {
+				return err
+			}
+		}
 
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
 			baseComponentVars = baseComponentVarsSection.(map[interface{}]interface{})
