@@ -1,0 +1,5 @@
+components:
+  helmfile:
+    "infra/infra-server-override":
+      vars:
+        installed: true
