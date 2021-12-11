@@ -3,3 +3,4 @@ components:
     "infra/infra-server":
       vars:
         installed: true
+        a: "1"

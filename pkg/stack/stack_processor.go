@@ -411,7 +411,7 @@ func ProcessConfig(
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
 					baseComponentName = baseComponentConfig.FinalBaseComponentName
-					baseComponentTerraformCommand = baseComponentConfig.BaseComponentTerraformCommand
+					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 					baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 					baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
@@ -573,34 +573,73 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
-				componentHelmfileCommand := "helmfile"
+				componentHelmfileCommand := ""
 				if i, ok2 := componentMap["command"]; ok2 {
 					componentHelmfileCommand = i.(string)
 				}
 
-				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, componentVars})
+				// Process base component(s)
+				baseComponentVars := map[interface{}]interface{}{}
+				baseComponentSettings := map[interface{}]interface{}{}
+				baseComponentEnv := map[interface{}]interface{}{}
+				baseComponentName := ""
+				baseComponentHelmfileCommand := ""
+				var baseComponentConfig BaseComponentConfig
+				var componentInheritanceChain []string
+
+				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
+					baseComponentName = baseComponent.(string)
+
+					err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, baseComponentName)
+					if err != nil {
+						return nil, err
+					}
+
+					baseComponentVars = baseComponentConfig.BaseComponentVars
+					baseComponentSettings = baseComponentConfig.BaseComponentSettings
+					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentName = baseComponentConfig.FinalBaseComponentName
+					baseComponentHelmfileCommand = baseComponentConfig.BaseComponentCommand
+					componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
+				}
+
+				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, baseComponentVars, componentVars})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, componentSettings})
+				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, baseComponentSettings, componentSettings})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, componentEnv})
+				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, baseComponentEnv, componentEnv})
 				if err != nil {
 					return nil, err
+				}
+
+				// Final binary to execute
+				finalComponentHelmfileCommand := "helmfile"
+				if len(baseComponentHelmfileCommand) > 0 {
+					finalComponentHelmfileCommand = baseComponentHelmfileCommand
+				}
+				if len(componentHelmfileCommand) > 0 {
+					finalComponentHelmfileCommand = componentHelmfileCommand
 				}
 
 				comp := map[string]interface{}{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
 				comp["env"] = finalComponentEnv
-				comp["command"] = componentHelmfileCommand
+				comp["command"] = finalComponentHelmfileCommand
+				comp["inheritance"] = componentInheritanceChain
+
+				if baseComponentName != "" {
+					comp["component"] = baseComponentName
+				}
 
 				if processStackDeps == true {
-					componentStacks, err := FindComponentStacks("helmfile", component, "", componentStackMap)
+					componentStacks, err := FindComponentStacks("helmfile", component, baseComponentName, componentStackMap)
 					if err != nil {
 						return nil, err
 					}
@@ -610,7 +649,7 @@ func ProcessConfig(
 				}
 
 				if processComponentDeps == true {
-					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, "", importsConfig)
+					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponentName, importsConfig)
 					if err != nil {
 						return nil, err
 					}
@@ -639,7 +678,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings                  map[interface{}]interface{}
 	BaseComponentEnv                       map[interface{}]interface{}
 	FinalBaseComponentName                 string
-	BaseComponentTerraformCommand          string
+	BaseComponentCommand                   string
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[interface{}]interface{}
 	BaseComponentRemoteStateBackendType    string
@@ -658,7 +697,7 @@ func processBaseComponentConfig(
 	var baseComponentVars map[interface{}]interface{}
 	var baseComponentSettings map[interface{}]interface{}
 	var baseComponentEnv map[interface{}]interface{}
-	var baseComponentTerraformCommand string
+	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[interface{}]interface{}
 	var baseComponentRemoteStateBackendType string
@@ -713,7 +752,7 @@ func processBaseComponentConfig(
 
 		// Base component `command`
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
-			baseComponentTerraformCommand = baseComponentCommandSection.(string)
+			baseComponentCommand = baseComponentCommandSection.(string)
 		}
 
 		if len(baseComponentConfig.FinalBaseComponentName) == 0 {
@@ -738,7 +777,7 @@ func processBaseComponentConfig(
 		}
 		baseComponentConfig.BaseComponentEnv = merged
 
-		baseComponentConfig.BaseComponentTerraformCommand = baseComponentTerraformCommand
+		baseComponentConfig.BaseComponentCommand = baseComponentCommand
 
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
