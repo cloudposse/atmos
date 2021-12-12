@@ -708,6 +708,10 @@ func processBaseComponentConfig(
 	stack string,
 	baseComponent string) error {
 
+	if component == baseComponent {
+		return nil
+	}
+
 	var baseComponentVars map[interface{}]interface{}
 	var baseComponentSettings map[interface{}]interface{}
 	var baseComponentEnv map[interface{}]interface{}
