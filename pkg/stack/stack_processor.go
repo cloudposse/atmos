@@ -689,7 +689,7 @@ type BaseComponentConfig struct {
 // processBaseComponentConfig processes base component(s) config
 func processBaseComponentConfig(
 	baseComponentConfig *BaseComponentConfig,
-	allTerraformComponentsMap map[interface{}]interface{},
+	allComponentsMap map[interface{}]interface{},
 	component string,
 	stack string,
 	baseComponent string) error {
@@ -704,14 +704,14 @@ func processBaseComponentConfig(
 	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
 	var baseComponentMap map[interface{}]interface{}
 
-	if baseComponentSection, baseComponentSectionExist := allTerraformComponentsMap[baseComponent]; baseComponentSectionExist {
+	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
 		baseComponentMap = baseComponentSection.(map[interface{}]interface{})
 
 		// First, process the base component of this base component
 		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
 			err := processBaseComponentConfig(
 				baseComponentConfig,
-				allTerraformComponentsMap,
+				allComponentsMap,
 				baseComponent,
 				stack,
 				baseComponentOfBaseComponent.(string),
