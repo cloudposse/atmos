@@ -59,15 +59,24 @@ func ProcessYAMLConfigFiles(
 			sort.Strings(uniqueImports)
 
 			componentStackMap := map[string]map[string][]string{}
-			if processStackDeps {
-				componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
-				if err != nil {
-					errorResult = err
-					return
-				}
-			}
+			// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
+			// TODO: review it to use the new `atmos.yaml CLI config
+			//if processStackDeps {
+			//	componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
+			//	if err != nil {
+			//		errorResult = err
+			//		return
+			//	}
+			//}
 
-			finalConfig, err := ProcessConfig(stackBasePath, p, config, processStackDeps, processComponentDeps, "", componentStackMap, importsConfig)
+			finalConfig, err := ProcessConfig(stackBasePath,
+				p,
+				config,
+				processStackDeps,
+				processComponentDeps,
+				"",
+				componentStackMap,
+				importsConfig)
 			if err != nil {
 				errorResult = err
 				return
@@ -208,7 +217,8 @@ func ProcessConfig(
 	processComponentDeps bool,
 	componentTypeFilter string,
 	componentStackMap map[string]map[string][]string,
-	importsConfig map[string]map[interface{}]interface{}) (map[interface{}]interface{}, error) {
+	importsConfig map[string]map[interface{}]interface{},
+) (map[interface{}]interface{}, error) {
 
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
@@ -524,15 +534,17 @@ func ProcessConfig(
 					comp["component"] = baseComponentName
 				}
 
-				if processStackDeps == true {
-					componentStacks, err := FindComponentStacks("terraform", component, baseComponentName, componentStackMap)
-					if err != nil {
-						return nil, err
-					}
-					comp["stacks"] = componentStacks
-				} else {
-					comp["stacks"] = []string{}
-				}
+				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
+				// TODO: review it to use the new `atmos.yaml CLI config
+				//if processStackDeps == true {
+				//	componentStacks, err := FindComponentStacks("terraform", component, baseComponentName, componentStackMap)
+				//	if err != nil {
+				//		return nil, err
+				//	}
+				//	comp["stacks"] = componentStacks
+				//} else {
+				//	comp["stacks"] = []string{}
+				//}
 
 				if processComponentDeps == true {
 					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponentName, importsConfig)
@@ -638,15 +650,17 @@ func ProcessConfig(
 					comp["component"] = baseComponentName
 				}
 
-				if processStackDeps == true {
-					componentStacks, err := FindComponentStacks("helmfile", component, baseComponentName, componentStackMap)
-					if err != nil {
-						return nil, err
-					}
-					comp["stacks"] = componentStacks
-				} else {
-					comp["stacks"] = []string{}
-				}
+				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
+				// TODO: review it to use the new `atmos.yaml CLI config
+				//if processStackDeps == true {
+				//	componentStacks, err := FindComponentStacks("helmfile", component, baseComponentName, componentStackMap)
+				//	if err != nil {
+				//		return nil, err
+				//	}
+				//	comp["stacks"] = componentStacks
+				//} else {
+				//	comp["stacks"] = []string{}
+				//}
 
 				if processComponentDeps == true {
 					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponentName, importsConfig)
