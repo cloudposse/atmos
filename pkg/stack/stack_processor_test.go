@@ -143,6 +143,8 @@ func TestStackProcessor(t *testing.T) {
 	infraInfraServerOverrideComponent := helmfileComponents["infra/infra-server-override"].(map[interface{}]interface{})
 	infraInfraServerOverrideComponentCommand := infraInfraServerOverrideComponent["command"]
 	infraInfraServerOverrideComponentDeps := infraInfraServerOverrideComponent["deps"].([]interface{})
+	infraInfraServerOverrideComponentVars := infraInfraServerOverrideComponent["vars"].(map[interface{}]interface{})
+	infraInfraServerOverrideComponentVarsA := infraInfraServerOverrideComponentVars["a"]
 	infraInfraServerOverrideComponentInheritance := infraInfraServerOverrideComponent["inheritance"].([]interface{})
 	assert.Equal(t, "helmfile", infraInfraServerOverrideComponentCommand)
 	assert.Equal(t, "catalog/helmfile/infra-server", infraInfraServerOverrideComponentDeps[0])
@@ -152,6 +154,7 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "globals/ue2-globals", infraInfraServerOverrideComponentDeps[4])
 	assert.Equal(t, "tenant1/ue2/dev", infraInfraServerOverrideComponentDeps[5])
 	assert.Equal(t, "infra/infra-server", infraInfraServerOverrideComponentInheritance[0])
+	assert.Equal(t, "1_override", infraInfraServerOverrideComponentVarsA)
 
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)
