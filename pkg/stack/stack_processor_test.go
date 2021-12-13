@@ -38,29 +38,31 @@ func TestStackProcessor(t *testing.T) {
 	mapConfig2 := mapResult["tenant1/ue2/dev"]
 	assert.Equal(t, len(imports), len(mapConfig2.(map[interface{}]interface{})["imports"].([]string)))
 
-	assert.Equal(t, 19, len(imports))
+	assert.Equal(t, 20, len(imports))
 	assert.Equal(t, "catalog/helmfile/echo-server", imports[0])
 	assert.Equal(t, "catalog/helmfile/infra-server", imports[1])
-	assert.Equal(t, "catalog/terraform/services/service-1", imports[2])
-	assert.Equal(t, "catalog/terraform/services/service-1-override", imports[3])
-	assert.Equal(t, "catalog/terraform/services/service-1-override-2", imports[4])
-	assert.Equal(t, "catalog/terraform/services/service-2", imports[5])
-	assert.Equal(t, "catalog/terraform/services/service-2-override", imports[6])
-	assert.Equal(t, "catalog/terraform/services/service-2-override-2", imports[7])
-	assert.Equal(t, "catalog/terraform/services/top-level-service-1", imports[8])
-	assert.Equal(t, "catalog/terraform/services/top-level-service-2", imports[9])
-	assert.Equal(t, "catalog/terraform/tenant1-ue2-dev", imports[10])
-	assert.Equal(t, "catalog/terraform/test-component", imports[11])
-	assert.Equal(t, "catalog/terraform/test-component-override", imports[12])
-	assert.Equal(t, "catalog/terraform/test-component-override-2", imports[13])
-	assert.Equal(t, "catalog/terraform/top-level-component1", imports[14])
-	assert.Equal(t, "catalog/terraform/vpc", imports[15])
-	assert.Equal(t, "globals/globals", imports[16])
-	assert.Equal(t, "globals/tenant1-globals", imports[17])
-	assert.Equal(t, "globals/ue2-globals", imports[18])
+	assert.Equal(t, "catalog/helmfile/infra-server-override", imports[2])
+	assert.Equal(t, "catalog/terraform/services/service-1", imports[3])
+	assert.Equal(t, "catalog/terraform/services/service-1-override", imports[4])
+	assert.Equal(t, "catalog/terraform/services/service-1-override-2", imports[5])
+	assert.Equal(t, "catalog/terraform/services/service-2", imports[6])
+	assert.Equal(t, "catalog/terraform/services/service-2-override", imports[7])
+	assert.Equal(t, "catalog/terraform/services/service-2-override-2", imports[8])
+	assert.Equal(t, "catalog/terraform/services/top-level-service-1", imports[9])
+	assert.Equal(t, "catalog/terraform/services/top-level-service-2", imports[10])
+	assert.Equal(t, "catalog/terraform/tenant1-ue2-dev", imports[11])
+	assert.Equal(t, "catalog/terraform/test-component", imports[12])
+	assert.Equal(t, "catalog/terraform/test-component-override", imports[13])
+	assert.Equal(t, "catalog/terraform/test-component-override-2", imports[14])
+	assert.Equal(t, "catalog/terraform/top-level-component1", imports[15])
+	assert.Equal(t, "catalog/terraform/vpc", imports[16])
+	assert.Equal(t, "globals/globals", imports[17])
+	assert.Equal(t, "globals/tenant1-globals", imports[18])
+	assert.Equal(t, "globals/ue2-globals", imports[19])
 
 	components := mapConfig1["components"].(map[interface{}]interface{})
 	terraformComponents := components["terraform"].(map[interface{}]interface{})
+	helmfileComponents := components["helmfile"].(map[interface{}]interface{})
 
 	infraVpcComponent := terraformComponents["infra/vpc"].(map[interface{}]interface{})
 	infraVpcComponentBackend := infraVpcComponent["backend"].(map[interface{}]interface{})
@@ -124,20 +126,35 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "top-level-component1", topLevelComponent1BackendWorkspaceKeyPrefix)
 	assert.Equal(t, "top-level-component1", topLevelComponent1RemoteStateBackendWorkspaceKeyPrefix)
 
-	// TODO: uncomment after the inheritance chain is fixed
-	//testTestComponentOverrideComponent2 := terraformComponents["test/test-component-override-2"].(map[interface{}]interface{})
-	//testTestComponentOverrideComponentBackend2 := testTestComponentOverrideComponent2["backend"].(map[interface{}]interface{})
-	//testTestComponentOverrideComponentBackendType2 := testTestComponentOverrideComponent2["backend_type"]
-	//testTestComponentOverrideComponentBackendWorkspaceKeyPrefix2 := testTestComponentOverrideComponentBackend2["workspace_key_prefix"]
-	//testTestComponentOverrideComponentBackendBucket2 := testTestComponentOverrideComponentBackend2["bucket"]
-	//testTestComponentOverrideComponentBaseComponent2 := testTestComponentOverrideComponent2["component"]
-	//testTestComponentOverrideInheritance2 := testTestComponentOverrideComponent2["inheritance"].([]interface{})
-	//assert.Equal(t, "test-test-component", testTestComponentOverrideComponentBackendWorkspaceKeyPrefix2)
-	//assert.Equal(t, "eg-ue2-root-tfstate", testTestComponentOverrideComponentBackendBucket2)
-	//assert.Equal(t, "test/test-component", testTestComponentOverrideComponentBaseComponent2)
-	//assert.Equal(t, "s3", testTestComponentOverrideComponentBackendType2)
-	//assert.Equal(t, "test/test-component-override", testTestComponentOverrideInheritance2[0])
-	//assert.Equal(t, "test/test-component", testTestComponentOverrideInheritance2[1])
+	testTestComponentOverrideComponent2 := terraformComponents["test/test-component-override-2"].(map[interface{}]interface{})
+	testTestComponentOverrideComponentBackend2 := testTestComponentOverrideComponent2["backend"].(map[interface{}]interface{})
+	testTestComponentOverrideComponentBackendType2 := testTestComponentOverrideComponent2["backend_type"]
+	testTestComponentOverrideComponentBackendWorkspaceKeyPrefix2 := testTestComponentOverrideComponentBackend2["workspace_key_prefix"]
+	testTestComponentOverrideComponentBackendBucket2 := testTestComponentOverrideComponentBackend2["bucket"]
+	testTestComponentOverrideComponentBaseComponent2 := testTestComponentOverrideComponent2["component"]
+	testTestComponentOverrideInheritance2 := testTestComponentOverrideComponent2["inheritance"].([]interface{})
+	assert.Equal(t, "test-test-component", testTestComponentOverrideComponentBackendWorkspaceKeyPrefix2)
+	assert.Equal(t, "eg-ue2-root-tfstate", testTestComponentOverrideComponentBackendBucket2)
+	assert.Equal(t, "test/test-component", testTestComponentOverrideComponentBaseComponent2)
+	assert.Equal(t, "s3", testTestComponentOverrideComponentBackendType2)
+	assert.Equal(t, "test/test-component-override", testTestComponentOverrideInheritance2[0])
+	assert.Equal(t, "test/test-component", testTestComponentOverrideInheritance2[1])
+
+	infraInfraServerOverrideComponent := helmfileComponents["infra/infra-server-override"].(map[interface{}]interface{})
+	infraInfraServerOverrideComponentCommand := infraInfraServerOverrideComponent["command"]
+	infraInfraServerOverrideComponentDeps := infraInfraServerOverrideComponent["deps"].([]interface{})
+	infraInfraServerOverrideComponentVars := infraInfraServerOverrideComponent["vars"].(map[interface{}]interface{})
+	infraInfraServerOverrideComponentVarsA := infraInfraServerOverrideComponentVars["a"]
+	infraInfraServerOverrideComponentInheritance := infraInfraServerOverrideComponent["inheritance"].([]interface{})
+	assert.Equal(t, "helmfile", infraInfraServerOverrideComponentCommand)
+	assert.Equal(t, "catalog/helmfile/infra-server", infraInfraServerOverrideComponentDeps[0])
+	assert.Equal(t, "catalog/helmfile/infra-server-override", infraInfraServerOverrideComponentDeps[1])
+	assert.Equal(t, "globals/globals", infraInfraServerOverrideComponentDeps[2])
+	assert.Equal(t, "globals/tenant1-globals", infraInfraServerOverrideComponentDeps[3])
+	assert.Equal(t, "globals/ue2-globals", infraInfraServerOverrideComponentDeps[4])
+	assert.Equal(t, "tenant1/ue2/dev", infraInfraServerOverrideComponentDeps[5])
+	assert.Equal(t, "infra/infra-server", infraInfraServerOverrideComponentInheritance[0])
+	assert.Equal(t, "1_override", infraInfraServerOverrideComponentVarsA)
 
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)

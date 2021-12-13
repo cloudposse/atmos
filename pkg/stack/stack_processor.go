@@ -59,15 +59,24 @@ func ProcessYAMLConfigFiles(
 			sort.Strings(uniqueImports)
 
 			componentStackMap := map[string]map[string][]string{}
-			if processStackDeps {
-				componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
-				if err != nil {
-					errorResult = err
-					return
-				}
-			}
+			// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
+			// TODO: review it to use the new `atmos.yaml CLI config
+			//if processStackDeps {
+			//	componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
+			//	if err != nil {
+			//		errorResult = err
+			//		return
+			//	}
+			//}
 
-			finalConfig, err := ProcessConfig(stackBasePath, p, config, processStackDeps, processComponentDeps, "", componentStackMap, importsConfig)
+			finalConfig, err := ProcessConfig(stackBasePath,
+				p,
+				config,
+				processStackDeps,
+				processComponentDeps,
+				"",
+				componentStackMap,
+				importsConfig)
 			if err != nil {
 				errorResult = err
 				return
@@ -208,7 +217,8 @@ func ProcessConfig(
 	processComponentDeps bool,
 	componentTypeFilter string,
 	componentStackMap map[string]map[string][]string,
-	importsConfig map[string]map[interface{}]interface{}) (map[interface{}]interface{}, error) {
+	importsConfig map[string]map[interface{}]interface{},
+) (map[interface{}]interface{}, error) {
 
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
@@ -411,7 +421,7 @@ func ProcessConfig(
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
 					baseComponentName = baseComponentConfig.FinalBaseComponentName
-					baseComponentTerraformCommand = baseComponentConfig.BaseComponentTerraformCommand
+					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 					baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 					baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
@@ -524,15 +534,17 @@ func ProcessConfig(
 					comp["component"] = baseComponentName
 				}
 
-				if processStackDeps == true {
-					componentStacks, err := FindComponentStacks("terraform", component, baseComponentName, componentStackMap)
-					if err != nil {
-						return nil, err
-					}
-					comp["stacks"] = componentStacks
-				} else {
-					comp["stacks"] = []string{}
-				}
+				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
+				// TODO: review it to use the new `atmos.yaml CLI config
+				//if processStackDeps == true {
+				//	componentStacks, err := FindComponentStacks("terraform", component, baseComponentName, componentStackMap)
+				//	if err != nil {
+				//		return nil, err
+				//	}
+				//	comp["stacks"] = componentStacks
+				//} else {
+				//	comp["stacks"] = []string{}
+				//}
 
 				if processComponentDeps == true {
 					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponentName, importsConfig)
@@ -573,44 +585,85 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
-				componentHelmfileCommand := "helmfile"
+				componentHelmfileCommand := ""
 				if i, ok2 := componentMap["command"]; ok2 {
 					componentHelmfileCommand = i.(string)
 				}
 
-				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, componentVars})
+				// Process base component(s)
+				baseComponentVars := map[interface{}]interface{}{}
+				baseComponentSettings := map[interface{}]interface{}{}
+				baseComponentEnv := map[interface{}]interface{}{}
+				baseComponentName := ""
+				baseComponentHelmfileCommand := ""
+				var baseComponentConfig BaseComponentConfig
+				var componentInheritanceChain []string
+
+				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
+					baseComponentName = baseComponent.(string)
+
+					err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, baseComponentName)
+					if err != nil {
+						return nil, err
+					}
+
+					baseComponentVars = baseComponentConfig.BaseComponentVars
+					baseComponentSettings = baseComponentConfig.BaseComponentSettings
+					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentName = baseComponentConfig.FinalBaseComponentName
+					baseComponentHelmfileCommand = baseComponentConfig.BaseComponentCommand
+					componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
+				}
+
+				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, baseComponentVars, componentVars})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, componentSettings})
+				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, baseComponentSettings, componentSettings})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, componentEnv})
+				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, baseComponentEnv, componentEnv})
 				if err != nil {
 					return nil, err
+				}
+
+				// Final binary to execute
+				finalComponentHelmfileCommand := "helmfile"
+				if len(baseComponentHelmfileCommand) > 0 {
+					finalComponentHelmfileCommand = baseComponentHelmfileCommand
+				}
+				if len(componentHelmfileCommand) > 0 {
+					finalComponentHelmfileCommand = componentHelmfileCommand
 				}
 
 				comp := map[string]interface{}{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
 				comp["env"] = finalComponentEnv
-				comp["command"] = componentHelmfileCommand
+				comp["command"] = finalComponentHelmfileCommand
+				comp["inheritance"] = componentInheritanceChain
 
-				if processStackDeps == true {
-					componentStacks, err := FindComponentStacks("helmfile", component, "", componentStackMap)
-					if err != nil {
-						return nil, err
-					}
-					comp["stacks"] = componentStacks
-				} else {
-					comp["stacks"] = []string{}
+				if baseComponentName != "" {
+					comp["component"] = baseComponentName
 				}
 
+				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
+				// TODO: review it to use the new `atmos.yaml CLI config
+				//if processStackDeps == true {
+				//	componentStacks, err := FindComponentStacks("helmfile", component, baseComponentName, componentStackMap)
+				//	if err != nil {
+				//		return nil, err
+				//	}
+				//	comp["stacks"] = componentStacks
+				//} else {
+				//	comp["stacks"] = []string{}
+				//}
+
 				if processComponentDeps == true {
-					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, "", importsConfig)
+					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponentName, importsConfig)
 					if err != nil {
 						return nil, err
 					}
@@ -639,7 +692,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings                  map[interface{}]interface{}
 	BaseComponentEnv                       map[interface{}]interface{}
 	FinalBaseComponentName                 string
-	BaseComponentTerraformCommand          string
+	BaseComponentCommand                   string
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[interface{}]interface{}
 	BaseComponentRemoteStateBackendType    string
@@ -650,39 +703,42 @@ type BaseComponentConfig struct {
 // processBaseComponentConfig processes base component(s) config
 func processBaseComponentConfig(
 	baseComponentConfig *BaseComponentConfig,
-	allTerraformComponentsMap map[interface{}]interface{},
+	allComponentsMap map[interface{}]interface{},
 	component string,
 	stack string,
 	baseComponent string) error {
 
+	if component == baseComponent {
+		return nil
+	}
+
 	var baseComponentVars map[interface{}]interface{}
 	var baseComponentSettings map[interface{}]interface{}
 	var baseComponentEnv map[interface{}]interface{}
-	var baseComponentTerraformCommand string
+	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[interface{}]interface{}
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
 	var baseComponentMap map[interface{}]interface{}
 
-	if baseComponentSection, baseComponentSectionExist := allTerraformComponentsMap[baseComponent]; baseComponentSectionExist {
+	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
 		baseComponentMap = baseComponentSection.(map[interface{}]interface{})
 
 		// First, process the base component of this base component
-		// TODO: Review/fix this for some edge cases of stacks config
-		//if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
-		//	err := processBaseComponentConfig(
-		//		baseComponentConfig,
-		//		allTerraformComponentsMap,
-		//		baseComponent,
-		//		stack,
-		//		baseComponentOfBaseComponent.(string),
-		//	)
-		//
-		//	if err != nil {
-		//		return err
-		//	}
-		//}
+		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+			err := processBaseComponentConfig(
+				baseComponentConfig,
+				allComponentsMap,
+				baseComponent,
+				stack,
+				baseComponentOfBaseComponent.(string),
+			)
+
+			if err != nil {
+				return err
+			}
+		}
 
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
 			baseComponentVars = baseComponentVarsSection.(map[interface{}]interface{})
@@ -714,7 +770,7 @@ func processBaseComponentConfig(
 
 		// Base component `command`
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
-			baseComponentTerraformCommand = baseComponentCommandSection.(string)
+			baseComponentCommand = baseComponentCommandSection.(string)
 		}
 
 		if len(baseComponentConfig.FinalBaseComponentName) == 0 {
@@ -739,7 +795,7 @@ func processBaseComponentConfig(
 		}
 		baseComponentConfig.BaseComponentEnv = merged
 
-		baseComponentConfig.BaseComponentTerraformCommand = baseComponentTerraformCommand
+		baseComponentConfig.BaseComponentCommand = baseComponentCommand
 
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
