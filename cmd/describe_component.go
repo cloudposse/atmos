@@ -10,7 +10,7 @@ import (
 // describeComponentCmd describes configuration for components
 var describeComponentCmd = &cobra.Command{
 	Use:                "component",
-	Short:              "describe component",
+	Short:              "Execute 'describe component' command",
 	Long:               `This command shows configuration for components`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {

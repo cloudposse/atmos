@@ -8,7 +8,7 @@ import (
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
 	Short: "Universal Tool for DevOps and Cloud Automation",
-	Long:  `'atmos'' is universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Long:  `'atmos'' is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

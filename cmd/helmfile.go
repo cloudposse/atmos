@@ -10,7 +10,7 @@ import (
 // terraformCmd represents the base command for all terraform sub-commands
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
-	Short:              "helmfile command",
+	Short:              "Execute 'helmfile' commands",
 	Long:               `This command runs helmfile sub-commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {

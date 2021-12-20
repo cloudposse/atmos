@@ -11,7 +11,7 @@ import (
 // describeComponentCmd describes configuration for components
 var describeConfigCmd = &cobra.Command{
 	Use:                "config",
-	Short:              "describe config",
+	Short:              "Execute 'describe config' command",
 	Long:               `This command shows CLI configuration`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
