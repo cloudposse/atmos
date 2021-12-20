@@ -277,6 +277,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check `region` for `terraform import`
+	if info.SubCommand == "import" {
+		if region, regionExist := info.ComponentVarsSection["region"].(string); regionExist {
+			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
+		}
+	}
+
 	// Execute the command
 	if info.SubCommand != "workspace" {
 		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList)
