@@ -158,7 +158,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
-		return configAndStacksInfo, errors.New("'component' is required")
+		message := fmt.Sprintf("'component' is required. Usage: atmos %s <component> <arguments_and_flags>", argsAndFlagsInfo.SubCommand)
+		return configAndStacksInfo, errors.New(message)
 	}
 
 	// Process and merge CLI configurations
@@ -486,15 +487,22 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 		}
 	}
 
-	// Handle the legacy command `terraform write varfile`
-	if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
-		info.SubCommand = "write varfile"
-		info.ComponentFromArg = additionalArgsAndFlags[2]
-		info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
-	} else {
-		info.SubCommand = additionalArgsAndFlags[0]
-		info.ComponentFromArg = additionalArgsAndFlags[1]
-		info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+	if info.NeedHelp == false {
+		if len(additionalArgsAndFlags) > 0 {
+			// Handle the legacy command `terraform write varfile`
+			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
+				info.SubCommand = "write varfile"
+				info.ComponentFromArg = additionalArgsAndFlags[2]
+				info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
+			} else {
+				info.SubCommand = additionalArgsAndFlags[0]
+				info.ComponentFromArg = additionalArgsAndFlags[1]
+				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+			}
+		} else {
+			message := "invalid number of arguments. Usage: atmos <command> <component> <arguments_and_flags>"
+			return info, errors.New(message)
+		}
 	}
 
 	info.GlobalOptions = globalOptions
