@@ -97,4 +97,5 @@ type ConfigAndStacksInfo struct {
 	AutoGenerateBackendFile   string
 	UseTerraformPlan          bool
 	ComponentInheritanceChain []string
+	Help                      bool
 }

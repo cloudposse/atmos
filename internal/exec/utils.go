@@ -129,6 +129,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
 	flags := cmd.Flags()
 
 	configAndStacksInfo.Stack, err = flags.GetString("stack")
