@@ -11,7 +11,7 @@ import (
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
 	Short:              "Execute 'terraform' commands",
-	Long:               `This command runs terraform sub-commands`,
+	Long:               `This command runs terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraform(cmd, args)
@@ -25,7 +25,7 @@ var terraformCmd = &cobra.Command{
 func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
-	terraformCmd.PersistentFlags().StringP("stack", "s", "", "")
+	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
 
 	err := terraformCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

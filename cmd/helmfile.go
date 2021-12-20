@@ -11,7 +11,7 @@ import (
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
 	Short:              "Execute 'helmfile' commands",
-	Long:               `This command runs helmfile sub-commands`,
+	Long:               `This command runs helmfile commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteHelmfile(cmd, args)
