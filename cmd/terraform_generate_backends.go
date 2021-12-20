@@ -32,5 +32,5 @@ func init() {
 		os.Exit(1)
 	}
 
-	terraformGenerateCmd.AddCommand(terraformGenerateBackendsCmd)
+	// terraformGenerateCmd.AddCommand(terraformGenerateBackendsCmd)
 }

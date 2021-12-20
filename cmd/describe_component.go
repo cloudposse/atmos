@@ -24,7 +24,7 @@ var describeComponentCmd = &cobra.Command{
 
 func init() {
 	describeComponentCmd.DisableFlagParsing = false
-	describeComponentCmd.PersistentFlags().StringP("stack", "s", "", "")
+	describeComponentCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe component <component> -s <stack>")
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
