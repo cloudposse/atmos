@@ -132,13 +132,6 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo, err
 	}
 
-	flags := cmd.Flags()
-
-	configAndStacksInfo.Stack, err = flags.GetString("stack")
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
 	argsAndFlagsInfo, err := processArgsAndFlags(args)
 	if err != nil {
 		return configAndStacksInfo, err
@@ -156,9 +149,31 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
 
+	// Check if `-h` or `--help` flags are specified
+	if argsAndFlagsInfo.NeedHelp == true {
+		subCommand := ""
+		if len(configAndStacksInfo.SubCommand) > 0 {
+			subCommand = configAndStacksInfo.SubCommand
+		}
+		message := fmt.Sprintf("Help for atmos %s %s", componentType, subCommand)
+		return configAndStacksInfo, errors.New(message)
+	}
+
+	flags := cmd.Flags()
+	configAndStacksInfo.Stack, err = flags.GetString("stack")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	// Check if stack was provided
+	if len(configAndStacksInfo.Stack) < 1 {
+		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", componentType)
+		return configAndStacksInfo, errors.New(message)
+	}
+
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
-		message := fmt.Sprintf("'component' is required. Usage: atmos %s <component> <arguments_and_flags>", argsAndFlagsInfo.SubCommand)
+		message := fmt.Sprintf("'component' is required. Usage: atmos %s <command> <component> <arguments_and_flags>", componentType)
 		return configAndStacksInfo, errors.New(message)
 	}
 
