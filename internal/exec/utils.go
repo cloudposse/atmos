@@ -28,6 +28,8 @@ var (
 		g.DeployRunInitFlag,
 		g.AutoGenerateBackendFileFlag,
 		g.FromPlanFlag,
+		g.HelpFlag1,
+		g.HelpFlag2,
 	}
 )
 
@@ -453,6 +455,10 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 
 		if arg == g.FromPlanFlag {
 			info.UseTerraformPlan = true
+		}
+
+		if arg == g.HelpFlag1 || arg == g.HelpFlag2 {
+			info.NeedHelp = true
 		}
 
 		for _, f := range commonFlags {
