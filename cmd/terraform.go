@@ -26,12 +26,5 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
-
-	err := terraformCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		color.Red("%s\n\n", err)
-		os.Exit(1)
-	}
-
 	RootCmd.AddCommand(terraformCmd)
 }
