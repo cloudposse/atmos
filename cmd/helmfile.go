@@ -1,10 +1,12 @@
 package cmd
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
+	"os"
+
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"os"
+
+	e "github.com/cloudposse/atmos/internal/exec"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -24,7 +26,7 @@ var helmfileCmd = &cobra.Command{
 
 func init() {
 	// https://github.com/spf13/cobra/issues/739
-	helmfileCmd.DisableFlagParsing = true
+	//helmfileCmd.DisableFlagParsing = true  // This breaks the help for this command
 	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "")
 
 	err := helmfileCmd.MarkPersistentFlagRequired("stack")
