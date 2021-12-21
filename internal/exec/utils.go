@@ -28,6 +28,8 @@ var (
 		g.DeployRunInitFlag,
 		g.AutoGenerateBackendFileFlag,
 		g.FromPlanFlag,
+		g.HelpFlag1,
+		g.HelpFlag2,
 	}
 )
 
@@ -129,12 +131,6 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-	flags := cmd.Flags()
-
-	configAndStacksInfo.Stack, err = flags.GetString("stack")
-	if err != nil {
-		return configAndStacksInfo, err
-	}
 
 	argsAndFlagsInfo, err := processArgsAndFlags(args)
 	if err != nil {
@@ -152,10 +148,33 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
+	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
+
+	// Check if `-h` or `--help` flags are specified
+	if argsAndFlagsInfo.NeedHelp == true {
+		err = processHelp(componentType, argsAndFlagsInfo.SubCommand)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
+		return configAndStacksInfo, nil
+	}
+
+	flags := cmd.Flags()
+	configAndStacksInfo.Stack, err = flags.GetString("stack")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	// Check if stack was provided
+	if len(configAndStacksInfo.Stack) < 1 {
+		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", componentType)
+		return configAndStacksInfo, errors.New(message)
+	}
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
-		return configAndStacksInfo, errors.New("'component' is required")
+		message := fmt.Sprintf("'component' is required. Usage: atmos %s <command> <component> <arguments_and_flags>", componentType)
+		return configAndStacksInfo, errors.New(message)
 	}
 
 	// Process and merge CLI configurations
@@ -454,6 +473,10 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.UseTerraformPlan = true
 		}
 
+		if arg == g.HelpFlag1 || arg == g.HelpFlag2 {
+			info.NeedHelp = true
+		}
+
 		for _, f := range commonFlags {
 			if arg == f {
 				indexesToRemove = append(indexesToRemove, i)
@@ -479,18 +502,30 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 		}
 	}
 
-	// Handle the legacy command `terraform write varfile`
-	if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
-		info.SubCommand = "write varfile"
-		info.ComponentFromArg = additionalArgsAndFlags[2]
-		info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
-	} else {
-		info.SubCommand = additionalArgsAndFlags[0]
-		info.ComponentFromArg = additionalArgsAndFlags[1]
-		info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+	info.GlobalOptions = globalOptions
+
+	if info.NeedHelp == true {
+		if len(additionalArgsAndFlags) > 0 {
+			info.SubCommand = additionalArgsAndFlags[0]
+		}
+		return info, nil
 	}
 
-	info.GlobalOptions = globalOptions
+	if len(additionalArgsAndFlags) > 1 {
+		// Handle the legacy command `terraform write varfile`
+		if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
+			info.SubCommand = "write varfile"
+			info.ComponentFromArg = additionalArgsAndFlags[2]
+			info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
+		} else {
+			info.SubCommand = additionalArgsAndFlags[0]
+			info.ComponentFromArg = additionalArgsAndFlags[1]
+			info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+		}
+	} else {
+		message := "invalid number of arguments. Usage: atmos <command> <component> <arguments_and_flags>"
+		return info, errors.New(message)
+	}
 
 	return info, nil
 }

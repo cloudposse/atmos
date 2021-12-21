@@ -9,7 +9,7 @@ var Version = "0.0.1"
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "version command",
+	Short: "Print the CLI version",
 	Long:  `This command prints the CLI version`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println(Version)

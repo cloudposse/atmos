@@ -68,6 +68,7 @@ type ArgsAndFlagsInfo struct {
 	DeployRunInit           string
 	AutoGenerateBackendFile string
 	UseTerraformPlan        bool
+	NeedHelp                bool
 }
 
 type ConfigAndStacksInfo struct {
@@ -97,4 +98,5 @@ type ConfigAndStacksInfo struct {
 	AutoGenerateBackendFile   string
 	UseTerraformPlan          bool
 	ComponentInheritanceChain []string
+	NeedHelp                  bool
 }

@@ -18,6 +18,9 @@ const (
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
 
 	FromPlanFlag = "--from-plan"
+
+	HelpFlag1 = "-h"
+	HelpFlag2 = "--help"
 )
 
 var (

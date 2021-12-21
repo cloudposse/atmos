@@ -10,8 +10,8 @@ import (
 // terraformCmd represents the base command for all terraform sub-commands
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
-	Short:              "helmfile command",
-	Long:               `This command runs helmfile sub-commands`,
+	Short:              "Execute 'helmfile' commands",
+	Long:               `This command runs helmfile commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteHelmfile(cmd, args)
@@ -25,13 +25,6 @@ var helmfileCmd = &cobra.Command{
 func init() {
 	// https://github.com/spf13/cobra/issues/739
 	helmfileCmd.DisableFlagParsing = true
-	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "")
-
-	err := helmfileCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		color.Red("%s\n\n", err)
-		os.Exit(1)
-	}
-
+	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile <helmfile_command> <component> -s <stack>")
 	RootCmd.AddCommand(helmfileCmd)
 }

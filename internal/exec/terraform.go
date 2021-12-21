@@ -23,6 +23,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if info.NeedHelp == true {
+		return nil
+	}
+
 	if len(info.Stack) < 1 {
 		return errors.New("stack must be specified")
 	}
@@ -274,6 +278,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 		if errorMessage != "" {
 			return errors.New(errorMessage)
+		}
+	}
+
+	// Check `region` for `terraform import`
+	if info.SubCommand == "import" {
+		if region, regionExist := info.ComponentVarsSection["region"].(string); regionExist {
+			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
 		}
 	}
 
