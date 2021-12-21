@@ -23,6 +23,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if info.NeedHelp == true {
+		return nil
+	}
+
 	if len(info.Stack) < 1 {
 		return errors.New("stack must be specified")
 	}

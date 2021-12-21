@@ -148,15 +148,15 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
+	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp == true {
-		subCommand := ""
-		if len(configAndStacksInfo.SubCommand) > 0 {
-			subCommand = configAndStacksInfo.SubCommand
+		err = processHelp(componentType, argsAndFlagsInfo.SubCommand)
+		if err != nil {
+			return configAndStacksInfo, err
 		}
-		message := fmt.Sprintf("Help for atmos %s %s", componentType, subCommand)
-		return configAndStacksInfo, errors.New(message)
+		return configAndStacksInfo, nil
 	}
 
 	flags := cmd.Flags()
