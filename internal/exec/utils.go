@@ -502,25 +502,30 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 		}
 	}
 
-	if info.NeedHelp == false {
+	info.GlobalOptions = globalOptions
+
+	if info.NeedHelp == true {
 		if len(additionalArgsAndFlags) > 0 {
-			// Handle the legacy command `terraform write varfile`
-			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
-				info.SubCommand = "write varfile"
-				info.ComponentFromArg = additionalArgsAndFlags[2]
-				info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
-			} else {
-				info.SubCommand = additionalArgsAndFlags[0]
-				info.ComponentFromArg = additionalArgsAndFlags[1]
-				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
-			}
-		} else {
-			message := "invalid number of arguments. Usage: atmos <command> <component> <arguments_and_flags>"
-			return info, errors.New(message)
+			info.SubCommand = additionalArgsAndFlags[0]
 		}
+		return info, nil
 	}
 
-	info.GlobalOptions = globalOptions
+	if len(additionalArgsAndFlags) > 1 {
+		// Handle the legacy command `terraform write varfile`
+		if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
+			info.SubCommand = "write varfile"
+			info.ComponentFromArg = additionalArgsAndFlags[2]
+			info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
+		} else {
+			info.SubCommand = additionalArgsAndFlags[0]
+			info.ComponentFromArg = additionalArgsAndFlags[1]
+			info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+		}
+	} else {
+		message := "invalid number of arguments. Usage: atmos <command> <component> <arguments_and_flags>"
+		return info, errors.New(message)
+	}
 
 	return info, nil
 }
