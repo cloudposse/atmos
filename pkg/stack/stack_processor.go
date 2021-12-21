@@ -2,17 +2,18 @@ package stack
 
 import (
 	"fmt"
+	"path"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+
 	c "github.com/cloudposse/atmos/pkg/convert"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"path"
-	"path/filepath"
-	"sort"
-	"strings"
-	"sync"
 )
 
 var (
@@ -476,6 +477,28 @@ func ProcessConfig(
 						}
 						finalComponentBackend["workspace_key_prefix"] = strings.Replace(workspaceKeyPrefixComponent, "/", "-", -1)
 					}
+				}
+
+				// Check if component `backend` section has `key` for `azurerm` backend type
+				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique tf state key
+				// The backend state file will be formated like so: {global key name}/{component name}.terraform.tfstate
+				if finalComponentBackendType == "azurerm" {
+					if azurerm, ok2 := componentBackendSection["azurerm"].(map[interface{}]interface{}); !ok2 {
+						if _, ok2 := azurerm["key"].(string); !ok2 {
+							azureKeyPrefixComponent := component
+							baseKeyName := ""
+							if baseComponentName != "" {
+								azureKeyPrefixComponent = baseComponentName
+							}
+							if azurerm, ok2 := globalBackendSection["azurerm"].(map[interface{}]interface{}); ok2 {
+								baseKeyName = azurerm["key"].(string)
+							}
+							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
+							finalComponentBackend["key"] = fmt.Sprintf("%s/%s.terraform.tfstate", baseKeyName, componentKeyName)
+
+						}
+					}
+
 				}
 
 				// Final remote state backend
