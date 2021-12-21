@@ -16,7 +16,7 @@ func processHelp(componentType string, command string) error {
 		if componentType == "terraform" {
 			fmt.Println()
 			color.Cyan("Differences from native terraform:")
-			fmt.Println(" - before executing other 'terraform' commands, `atmos` calls 'terraform init'")
+			fmt.Println(" - before executing other 'terraform' commands, 'atmos' calls 'terraform init'")
 			fmt.Println(" - 'atmos' supports 'terraform deploy' command which calls 'terraform plan' and then 'terraform apply'")
 			fmt.Println(" - 'terraform deploy' command supports '--deploy-run-init=true/false' flag to enable/disable running 'terraform init' " +
 				"before executing the command")
@@ -25,9 +25,9 @@ func processHelp(componentType string, command string) error {
 				"will use the previously generated 'planfile' instead of generating a new 'varfile'")
 			fmt.Println(" - 'atmos' supports 'terraform clean' command which deletes the '.terraform' folder, '.terraform.lock.hcl' lock file, " +
 				"and the previously generated 'planfile' and 'varfile' for the specified component and stack")
-			fmt.Println(" - 'atmos terraform workspace' command first calls 'terraform init -reconfigure', then `terraform workspace select', " +
+			fmt.Println(" - 'atmos terraform workspace' command first calls 'terraform init -reconfigure', then 'terraform workspace select', " +
 				"and if the workspace was not created before, it then calls 'terraform workspace new'")
-			fmt.Println(" - 'atmos terraform import' looks for `region` in the variables for the specified component and stack, and if it finds it, " +
+			fmt.Println(" - 'atmos terraform import' looks for 'region' in the variables for the specified component and stack, and if it finds it, " +
 				"sets 'AWS_REGION=<region>' ENV var before executing the command")
 		}
 
