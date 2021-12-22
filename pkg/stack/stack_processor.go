@@ -481,7 +481,7 @@ func ProcessConfig(
 
 				// Check if component `backend` section has `key` for `azurerm` backend type
 				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique tf state key
-				// The backend state file will be formated like so: {global key name}/{component name}.terraform.tfstate
+				// The backend state file will be formatted like so: {global key name}/{component name}.terraform.tfstate
 				if finalComponentBackendType == "azurerm" {
 					if azurerm, ok2 := componentBackendSection["azurerm"].(map[interface{}]interface{}); !ok2 {
 						if _, ok2 := azurerm["key"].(string); !ok2 {
@@ -498,7 +498,6 @@ func ProcessConfig(
 
 						}
 					}
-
 				}
 
 				// Final remote state backend
