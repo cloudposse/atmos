@@ -4,7 +4,7 @@ vars:
 terraform:
   vars: {}
 
-  backend_type: s3 # s3, remote, vault, static, etc.
+  backend_type: s3 # s3, remote, vault, static, azurerm, etc.
   backend:
     s3:
       encrypt: true
@@ -14,6 +14,12 @@ terraform:
       acl: "bucket-owner-full-control"
       region: "us-east-2"
       role_arn: null
+    azurerm:
+      subscription_id: 88888-8888-8888-8888-8888888888
+      resource_group_name: rg-terraform-state
+      storage_account_name: staterraformstate
+      container_name: dev-tfstate
+      key: dev.atmos
     remote:
     vault:
 
