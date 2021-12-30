@@ -10,8 +10,16 @@ import (
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
 func ProcessComponentInStack(component string, stack string) (map[string]interface{}, error) {
+	return ProcessComponentInStackWithPath(component, stack, "")
+}
+
+func ProcessComponentInStackWithPath(component string, stack string, basePath string) (map[string]interface{}, error) {
 	var configAndStacksInfo config.ConfigAndStacksInfo
 	configAndStacksInfo.Stack = stack
+
+	if len(basePath) > 0 {
+		configAndStacksInfo.ConfigDir = basePath
+	}
 
 	err := config.InitConfig()
 	if err != nil {
@@ -139,6 +147,10 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 
 // ProcessComponentFromContext accepts context (tenant, environment, stage) and returns the component configuration in the stack
 func ProcessComponentFromContext(component string, tenant string, environment string, stage string) (map[string]interface{}, error) {
+	return ProcessComponentFromContextWithPath(component, tenant, environment, stage, "")
+}
+
+func ProcessComponentFromContextWithPath(component string, tenant string, environment string, stage string, basePath string) (map[string]interface{}, error) {
 	var stack string
 
 	err := config.InitConfig()
@@ -183,7 +195,7 @@ func ProcessComponentFromContext(component string, tenant string, environment st
 		}
 	}
 
-	return ProcessComponentInStack(component, stack)
+	return ProcessComponentInStackWithPath(component, stack, basePath)
 }
 
 // findComponentConfig finds component config sections
