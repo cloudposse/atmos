@@ -817,18 +817,21 @@ func processBaseComponentConfig(
 			baseComponentConfig.FinalBaseComponentName = baseComponent
 		}
 
+		// Base component `vars`
 		merged, err := m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentVars, baseComponentVars})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentVars = merged
 
+		// Base component `settings`
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentSettings = merged
 
+		// Base component `env`
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
 		if err != nil {
 			return err
@@ -836,15 +839,16 @@ func processBaseComponentConfig(
 		baseComponentConfig.BaseComponentEnv = merged
 
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
-
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
+		// Base component `backend`
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentBackendSection = merged
 
+		// Base component `backend_type`
 		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
