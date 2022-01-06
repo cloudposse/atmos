@@ -16,6 +16,10 @@ components:
       component: "test/test-component"
       # Other variables can be overridden here
       vars: {}
+      # Explicitly prohibit the component from being deployed
+      # `terraform apply` and `terraform deploy` will fail with an error
+      # All other terraform commands on this component will succeed
+      deployable: false
       env:
         TEST_ENV_VAR1: "val1-override"
         TEST_ENV_VAR3: "val3-override"
