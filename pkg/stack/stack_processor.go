@@ -549,6 +549,20 @@ func ProcessConfig(
 					finalComponentTerraformCommand = componentTerraformCommand
 				}
 
+				// If the component is not deployable (`deployable: false`), remove `settings.spacelift.workspace_enabled` from the map).
+				// This will prevent derived components from inheriting `settings.spacelift.workspace_enabled=false` of not-deployable component
+				// Also, removing `settings.spacelift.workspace_enabled` will effectively make it `false`
+				// and `spacelift_stack_processor` will not create a Spacelift stack for the component.
+				if componentIsDeployable == false {
+					if i, ok2 := finalComponentSettings["spacelift"]; ok2 {
+						spaceliftSettings := i.(map[interface{}]interface{})
+
+						if _, ok3 := spaceliftSettings["workspace_enabled"]; ok3 {
+							delete(spaceliftSettings, "workspace_enabled")
+						}
+					}
+				}
+
 				comp := map[string]interface{}{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
