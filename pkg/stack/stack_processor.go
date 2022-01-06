@@ -397,6 +397,13 @@ func ProcessConfig(
 					componentTerraformCommand = i.(string)
 				}
 
+				// Check if the component can be deployed (`deployable` attribute)
+				// This is per component, not deep-merged and not inherited from base components and globals
+				componentIsDeployable := true
+				if i, ok2 := componentMap["deployable"]; ok2 {
+					componentIsDeployable = i.(bool)
+				}
+
 				// Process base component(s)
 				baseComponentVars := map[interface{}]interface{}{}
 				baseComponentSettings := map[interface{}]interface{}{}
@@ -413,6 +420,7 @@ func ProcessConfig(
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
 
+					// Process the base components recursively to find `componentInheritanceChain`
 					err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName)
 					if err != nil {
 						return nil, err
@@ -551,6 +559,7 @@ func ProcessConfig(
 				comp["remote_state_backend"] = finalComponentRemoteStateBackend
 				comp["command"] = finalComponentTerraformCommand
 				comp["inheritance"] = componentInheritanceChain
+				comp["deployable"] = componentIsDeployable
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
@@ -612,6 +621,13 @@ func ProcessConfig(
 					componentHelmfileCommand = i.(string)
 				}
 
+				// Check if the component can be deployed (`deployable` attribute)
+				// This is per component, not deep-merged and not inherited from base components and globals
+				componentIsDeployable := true
+				if i, ok2 := componentMap["deployable"]; ok2 {
+					componentIsDeployable = i.(bool)
+				}
+
 				// Process base component(s)
 				baseComponentVars := map[interface{}]interface{}{}
 				baseComponentSettings := map[interface{}]interface{}{}
@@ -621,6 +637,7 @@ func ProcessConfig(
 				var baseComponentConfig BaseComponentConfig
 				var componentInheritanceChain []string
 
+				// Process the base components recursively to find `componentInheritanceChain`
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
 
@@ -667,6 +684,7 @@ func ProcessConfig(
 				comp["env"] = finalComponentEnv
 				comp["command"] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
+				comp["deployable"] = componentIsDeployable
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName

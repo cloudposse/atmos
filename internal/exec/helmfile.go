@@ -33,7 +33,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Check if the component exists as helmfile component
+	// Check if the component is allowed to be provisioned (`deployable` attribute)
+	if (info.SubCommand == "sync" || info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsDeployable == false {
+		return errors.New(fmt.Sprintf("Component '%s' cannot be provisioned since it's explicitly disabled from beign deployed "+
+			"with 'deployable: false' attribute", info.Component))
+	}
+
+	// Check if the component exists as a helmfile component
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.Component)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
