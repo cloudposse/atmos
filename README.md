@@ -77,8 +77,8 @@ We use it extensively for automating cloud infrastructure and [Kubernetes](https
    - ... and many more
 
 In essence, it's a tool that orchestrates the other CLI tools in a consistent and self-explaining manner.
-It's a superset of all other tools and task runners (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc)
-and intended to be used to tie everything together, so you can provide a simple CLI interface for your organization.
+It's a superset of all other tools and task runners (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc.)
+and is intended to be used to tie everything together, so you can provide a simple CLI interface for your organization.
 
 Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
 
@@ -86,37 +86,7 @@ Moreover, `atmos` is not only a command-line interface for managing clouds and c
 - Provides separation of configuration and code (so the same code could be easily deployed to different regions, environments and stages)
 - It can be extended to include new features, commands, and workflows
 - The commands have a clean, consistent and easy to understand syntax
-- The CLI can be compiled into a binary and included in other tools and containers for DevOps, cloud automation and CI/CD
 - The CLI code is modular and self-documenting
-
-
-## CLI Structure
-
-The CLI is built with [variant2](https://github.com/mumoshu/variant2) using [HCL syntax](https://www.terraform.io/docs/configuration/index.html).
-
-`*.variant` files are combined like Terraform files.
-
-See `variant` docs for more information on [writing commands](https://github.com/mumoshu/variant2#writing-commands).
-
-The CLI code consists of self-documenting [modules](atmos/modules) (separating the files into modules is done for cleanliness):
-
-  - utils - a collection of utilities to use in other modules
-  - shell - `shell` commands and helpers for the other modules
-  - terraform - `terraform` commands (`plan`, `apply`, `deploy`, `destroy`, `import`, etc.)
-  - helm - `helm` commands (e.g. `list`)
-  - helmfile - `helmfile` commands (`diff`, `apply`, `deploy`, `destroy`, `sync`, `lint`, etc.)
-  - kubeconfig - commands to download and manage `kubeconfig` from EKS clusters
-  - istio - commands to manage `istio` using `istio-operator` and `helmfile`
-  - workflow - commands to construct and execute cloud automation workflows
-
-
-## Developing Your Own CLI
-
-One way to use this project is by writing your own custom CLI that leverages our atmos.
-
-This is ideal when you have your own workflows that you want to develop in addition to using the ones we've developed for you.
-
-For example, maybe you have your own existing CLI tools (e.g. using `terragrunt`). In this case, you may want to start by developing your own CLI.
 
 ## Install
 
@@ -152,7 +122,8 @@ go install github.com/cloudposse/atmos
 
 Get a specific version
 
-__NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1` when running `atmos version`.
+__NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, 
+the CLI will return `0.0.1` when running `atmos version`.
 
 ```
 go install github.com/cloudposse/atmos@v1.3.9
@@ -173,11 +144,6 @@ go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/cmd.Version
 ## Usage
 
 There are a number of ways you can leverage this project:
-
-  1. As a **standalone CLI** - you can use our CLI without any modification and get immediate gratification
-  2. As a **library** - you can import our `variant` modules into your own CLI and expand the workflows for your needs
-  3. As a **Docker image** - you can use our [Docker image](example/Dockerfile) the way you would the `cli` and run the workflows
-
 
 ## Recommended Layout
 
@@ -218,91 +184,22 @@ Our recommended filesystem layout looks like this:
 
 ## Example
 
-The [example](example) folder contains a complete solution that shows how to:
+The [example](examples/complete) folder contains a complete solution that shows how to:
 
   - Structure the Terraform and helmfile components
-  - Configure the CLI top-level module [main.variant](example/cli/main.variant)
-  - Add [stack configurations](example/stacks) for the Terraform and helmfile components (to provision them to different environments and stages)
-  - Create a [Dockerfile](example/Dockerfile) with commands to build and include the CLI into the container
-  - Combine many CLI commands into workflows and run the workflows to provision resources
-
-In the example, we show how to create and provision (using the CLI) the following resources for three different environments/stages:
-
-  - VPCs for `dev`, `staging` and `prod` stages in the `us-east-2` region (which we refer to as `ue2` environment)
-  - EKS clusters in the `ue2` environment for `dev`, `staging` and `prod`
-  - `nginx-ingress` helmfile to be deployed on all EKS clusters
+  - Configure the CLI
+  - Add [stack configurations](examples/complete/stacks) for the Terraform and helmfile components (to provision them to different environments and stages)
 
 
 ## CLI Configuration
-
-  The CLI top-level module [main.variant](example/cli/main.variant) contains the global settings (options) for the CLI, including the location of the Terraform components,
-  helmfiles, and stack configurations.
-
-  It's configured for that particular example project, but can be changed to reflect the desired project structure.
-
-In the example we have the following:
-
-  - The terraform components are in the `components/terraform` folder - we set that global option in [main.variant](example/cli/main.variant)
-  ```hcl
-    option "terraform-dir" {
-      default     = "./components/terraform"
-      description = "Terraform components directory"
-      type        = string
-    }
-  ```
-
-  - The helmfiles are in the `components/helmfile` folder - we set that global option in [main.variant](example/cli/main.variant)
-  ```hcl
-    option "helmfile-dir" {
-      default     = "./components/helmfile"
-      description = "Helmfile components directory"
-      type        = string
-    }
-  ```
-
-  - The stack configurations (Terraform and helmfile variables) are in the [stacks](example/stacks) folder - we set that global option in [main.variant](example/cli/main.variant)
-  ```hcl
-    option "config-dir" {
-      default     = "./stacks"
-      description = "Stacks config directory"
-      type        = string
-    }
-  ```
-
-[main.variant](example/cli/main.variant) also includes the `imports` statement that imports all the required modules from the `atmos` repo.
-
-__NOTE:__ For the example, we import all the CLI modules, but they could be included selectively depending on a particular usage.
-
-  ```hcl
-      imports = [
-        "git::https://git@github.com/cloudposse/atmos@modules/utils?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/shell?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/kubeconfig?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/terraform?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/helmfile?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/helm?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/workflow?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/istio?ref=master",
-        "git::https://git@github.com/cloudposse/atmos@modules/vendir?ref=master"
-    ]
-  ```
-
-__NOTE:__ `imports` statement supports `https`, `http`, and `ssh` protocols.
-
-__NOTE:__ The global options from [main.variant](example/cli/main.variant) are propagated to all the downloaded modules,
-so they need to be specified only in one place - in the top-level module.
-
-When we build the Docker image, all the modules from the `imports` statement are downloaded, combined with the top-level module [main.variant](example/cli/main.variant),
-and compiled into a binary, which then included in the Docker container.
-
 
 ## Centralized Project Configuration
 
 `atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
-In our example, all the code (Terraform and helmfiles) is in the [components](example/components) folder.
+In our example, all the code (Terraform and helmfiles) is in the [components](examples/complete/components) folder.
 
-The centralized stack configurations (variables for the Terraform and helmfile components) are in the [stacks](example/stacks) folder.
+The centralized stack configurations (variables for the Terraform and helmfile components) are in the [stacks](examples/complete/stacks) folder.
 
 In the example, all stack configuration files are broken down by environments and stages and use the predefined format `$environment-$stage.yaml`.
 
@@ -323,9 +220,6 @@ __NOTE:__ The stack configuration structure and the file names described above a
 You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire solution)
 into a stack config using the `import` directive.
 
-__NOTE:__ Currently `atmos` supports 10 levels of imports, e.g. you can import another config into a stack config, which in turn can import yet another config, etc.
-See [stacks](example/stacks) for more details.
-
 Stack configuration files have a predefined format:
 
   ```yaml
@@ -344,7 +238,7 @@ Stack configuration files have a predefined format:
     components:
       terraform:
         vpc:
-          command: "/usr/bin/terraform-0.13"
+          command: "/usr/bin/terraform-0.15"
           backend:
             s3:
               workspace_key_prefix: "vpc"
@@ -360,9 +254,6 @@ Stack configuration files have a predefined format:
         nginx-ingress:
           vars:
             installed: true
-
-    workflows:
-      deploy-all:
   ```
 
 It has the following main sections:
@@ -372,7 +263,6 @@ It has the following main sections:
   - `terraform` - (optional) configuration (variables) for all Terraform components
   - `helmfile` - (optional) configuration (variables) for all helmfile components
   - `components` - (required) configuration for the Terraform and helmfile components
-  - `workflows` - (optional) workflow definitions for the stack (see [Workflows](#Workflows) section below for the more detailed description of workflows)
 
 The `components` section consists of the following:
 
@@ -389,16 +279,6 @@ To run the example, execute the following commands in a terminal:
 
   - `cd example`
   - `make all` - it will build the Docker image, build the CLI tool inside the image, and then start the container
-
-Note that the name of the CLI executable is configurable.
-
-In the [Dockerfile](example/Dockerfile) for the example, we've chosen the name `atmos`, but it could be any name you want, for example
-`ops`, `cli`, `ops-exe`, etc. The name of the CLI executable is configured using `ARG CLI_NAME=atmos` in the Dockerfile.
-
-After the container starts, run `atmos help` to see the available commands and available flags.
-
-__NOTE:__ We use the Cloud Posse [geodesic](https://github.com/cloudposse/geodesic) image as the base image for the container.
-This is not strictly a requirement, but our base image ships with all the standard tools for cloud automation that we depend on (e.g. `terraform`, `helm`, `helmfile`, etc).
 
 
 ## Provision Terraform Component
@@ -527,19 +407,6 @@ execute the following command:
 
 
 
-## Share the Love
-
-Like this project? Please give it a ★ on [our GitHub](https://github.com/cloudposse/atmos)! (it helps us **a lot**)
-
-Are you using this project or any of our other projects? Consider [leaving a testimonial][testimonial]. =)
-
-
-
-## Related Projects
-
-Check out these related projects.
-
-- [variant2](https://github.com/mumoshu/variant2) - Turn your bash scripts into a modern, single-executable CLI app today
 
 ## Help
 
@@ -612,7 +479,7 @@ In general, PRs are welcome. We follow the typical "fork-and-pull" Git workflow.
 
 ## Copyright
 
-Copyright © 2017-2021 [Cloud Posse, LLC](https://cpco.io/copyright)
+Copyright © 2017-2022 [Cloud Posse, LLC](https://cpco.io/copyright)
 
 
 
