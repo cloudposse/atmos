@@ -552,7 +552,8 @@ func ProcessConfig(
 				// If the component is not deployable (`deployable: false`), remove `settings.spacelift.workspace_enabled` from the map).
 				// This will prevent derived components from inheriting `settings.spacelift.workspace_enabled=false` of not-deployable component
 				// Also, removing `settings.spacelift.workspace_enabled` will effectively make it `false`
-				// and `spacelift_stack_processor` will not create a Spacelift stack for the component.
+				// and `spacelift_stack_processor` will not create a Spacelift stack for the component
+				// even if `settings.spacelift.workspace_enabled` was set to `true`
 				if componentIsDeployable == false {
 					if i, ok2 := finalComponentSettings["spacelift"]; ok2 {
 						spaceliftSettings := i.(map[interface{}]interface{})

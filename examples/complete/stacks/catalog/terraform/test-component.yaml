@@ -13,6 +13,12 @@ components:
       settings:
         spacelift:
           workspace_enabled: true
+      # Setting `deployable: false` explicitly prohibits the component from being deployed
+      # and Spacelift stack from being created for the component (even if `settings.spacelift.workspace_enabled: true`)
+      # `terraform apply` and `terraform deploy` will fail with an error
+      # All other terraform commands on this component will succeed
+      # If `deployable` attribute is not specified, it defaults to `true`
+      deployable: true
       vars:
         enabled: true
       env:
