@@ -372,6 +372,13 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
+				// Component metadata.
+				// This is per component, not deep-merged and not inherited from base components and globals.
+				componentMetadata := map[interface{}]interface{}{}
+				if i, ok2 := componentMap["metadata"]; ok2 {
+					componentMetadata = i.(map[interface{}]interface{})
+				}
+
 				// Component backend
 				componentBackendType := ""
 				componentBackendSection := map[interface{}]interface{}{}
@@ -395,13 +402,6 @@ func ProcessConfig(
 				componentTerraformCommand := ""
 				if i, ok2 := componentMap["command"]; ok2 {
 					componentTerraformCommand = i.(string)
-				}
-
-				// Check if the component can be deployed (`deployable` attribute)
-				// This is per component, not deep-merged and not inherited from base components and globals
-				componentIsDeployable := true
-				if i, ok2 := componentMap["deployable"]; ok2 {
-					componentIsDeployable = i.(bool)
 				}
 
 				// Process base component(s)
@@ -549,12 +549,19 @@ func ProcessConfig(
 					finalComponentTerraformCommand = componentTerraformCommand
 				}
 
-				// If the component is not deployable (`deployable: false`), remove `settings.spacelift.workspace_enabled` from the map).
-				// This will prevent derived components from inheriting `settings.spacelift.workspace_enabled=false` of not-deployable component
+				// If the component is not deployable (`metadata.type: abstract`), remove `settings.spacelift.workspace_enabled` from the map).
+				// This will prevent the derived components from inheriting `settings.spacelift.workspace_enabled=false` of not-deployable components.
 				// Also, removing `settings.spacelift.workspace_enabled` will effectively make it `false`
-				// and `spacelift_stack_processor` will not create a Spacelift stack for the component
-				// even if `settings.spacelift.workspace_enabled` was set to `true`
-				if componentIsDeployable == false {
+				// and `spacelift_stack_processor` will not create a Spacelift stack for the abstract component
+				// even if `settings.spacelift.workspace_enabled` was set to `true`.
+				// This is per component, not deep-merged and not inherited from base components and globals.
+				componentIsAbstract := false
+				if componentType, componentTypeAttributeExists := componentMetadata["type"].(string); componentTypeAttributeExists {
+					if componentType == "abstract" {
+						componentIsAbstract = true
+					}
+				}
+				if componentIsAbstract == true {
 					if i, ok2 := finalComponentSettings["spacelift"]; ok2 {
 						spaceliftSettings := i.(map[interface{}]interface{})
 
@@ -574,14 +581,14 @@ func ProcessConfig(
 				comp["remote_state_backend"] = finalComponentRemoteStateBackend
 				comp["command"] = finalComponentTerraformCommand
 				comp["inheritance"] = componentInheritanceChain
-				comp["deployable"] = componentIsDeployable
+				comp["metadata"] = componentMetadata
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
 				}
 
 				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-				// TODO: review it to use the new `atmos.yaml CLI config
+				// TODO: review it to use the new `atmos.yaml` CLI config
 				//if processStackDeps == true {
 				//	componentStacks, err := FindComponentStacks("terraform", component, baseComponentName, componentStackMap)
 				//	if err != nil {
@@ -631,16 +638,16 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
+				// Component metadata.
+				// This is per component, not deep-merged and not inherited from base components and globals.
+				componentMetadata := map[interface{}]interface{}{}
+				if i, ok2 := componentMap["metadata"]; ok2 {
+					componentMetadata = i.(map[interface{}]interface{})
+				}
+
 				componentHelmfileCommand := ""
 				if i, ok2 := componentMap["command"]; ok2 {
 					componentHelmfileCommand = i.(string)
-				}
-
-				// Check if the component can be deployed (`deployable` attribute)
-				// This is per component, not deep-merged and not inherited from base components and globals
-				componentIsDeployable := true
-				if i, ok2 := componentMap["deployable"]; ok2 {
-					componentIsDeployable = i.(bool)
 				}
 
 				// Process base component(s)
@@ -699,14 +706,14 @@ func ProcessConfig(
 				comp["env"] = finalComponentEnv
 				comp["command"] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
-				comp["deployable"] = componentIsDeployable
+				comp["metadata"] = componentMetadata
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
 				}
 
 				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-				// TODO: review it to use the new `atmos.yaml CLI config
+				// TODO: review it to use the new `atmos.yaml` CLI config
 				//if processStackDeps == true {
 				//	componentStacks, err := FindComponentStacks("helmfile", component, baseComponentName, componentStackMap)
 				//	if err != nil {
