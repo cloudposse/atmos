@@ -13,12 +13,14 @@ components:
       settings:
         spacelift:
           workspace_enabled: true
-      # Setting `deployable: false` explicitly prohibits the component from being deployed
-      # and Spacelift stack from being created for the component (even if `settings.spacelift.workspace_enabled: true`)
-      # `terraform apply` and `terraform deploy` will fail with an error
-      # All other terraform commands on this component will succeed
-      # If `deployable` attribute is not specified, it defaults to `true`
-      deployable: true
+      # Setting `metadata.type: abstract` makes the component `abstract` (similar to OOP abstract classes, which can't be instantiated),
+      # explicitly prohibiting the component from being deployed,
+      # and a Spacelift stack from being created for the component (even if `settings.spacelift.workspace_enabled: true`).
+      # `terraform apply` and `terraform deploy` will fail with an error that the component cannot be provisioned.
+      # All other terraform commands on this component will succeed.
+      # If `metadata.type` attribute is not specified, it defaults to `real` (which means the component can be provisioned).
+      metadata:
+        type: abstract
       vars:
         enabled: true
       env:
