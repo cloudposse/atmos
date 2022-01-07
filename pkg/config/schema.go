@@ -99,5 +99,5 @@ type ConfigAndStacksInfo struct {
 	UseTerraformPlan          bool
 	ComponentInheritanceChain []string
 	NeedHelp                  bool
-	ComponentIsDeployable     bool
+	ComponentIsAbstract       bool
 }

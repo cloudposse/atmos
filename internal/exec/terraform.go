@@ -45,7 +45,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the component is allowed to be provisioned (`deployable` attribute)
-	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsDeployable == false {
+	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract == false {
 		return errors.New(fmt.Sprintf("Component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"with 'deployable: false' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}

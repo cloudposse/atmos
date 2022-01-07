@@ -237,7 +237,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			configAndStacksInfo.BaseComponentPath,
 			configAndStacksInfo.Command,
 			configAndStacksInfo.ComponentInheritanceChain,
-			configAndStacksInfo.ComponentIsDeployable,
+			configAndStacksInfo.ComponentIsAbstract,
 			err = findComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -282,7 +282,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				configAndStacksInfo.BaseComponentPath,
 				configAndStacksInfo.Command,
 				configAndStacksInfo.ComponentInheritanceChain,
-				configAndStacksInfo.ComponentIsDeployable,
+				configAndStacksInfo.ComponentIsAbstract,
 				err = findComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
 				continue
