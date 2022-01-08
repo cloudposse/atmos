@@ -372,6 +372,13 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
+				// Component metadata.
+				// This is per component, not deep-merged and not inherited from base components and globals.
+				componentMetadata := map[interface{}]interface{}{}
+				if i, ok2 := componentMap["metadata"]; ok2 {
+					componentMetadata = i.(map[interface{}]interface{})
+				}
+
 				// Component backend
 				componentBackendType := ""
 				componentBackendSection := map[interface{}]interface{}{}
@@ -413,6 +420,7 @@ func ProcessConfig(
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
 
+					// Process the base components recursively to find `componentInheritanceChain`
 					err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName)
 					if err != nil {
 						return nil, err
@@ -481,24 +489,23 @@ func ProcessConfig(
 
 				// Check if component `backend` section has `key` for `azurerm` backend type
 				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique tf state key
-				// The backend state file will be formated like so: {global key name}/{component name}.terraform.tfstate
+				// The backend state file will be formatted like so: {global key name}/{component name}.terraform.tfstate
 				if finalComponentBackendType == "azurerm" {
-					if azurerm, ok2 := componentBackendSection["azurerm"].(map[interface{}]interface{}); !ok2 {
-						if _, ok2 := azurerm["key"].(string); !ok2 {
+					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[interface{}]interface{}); !componentAzurermExists {
+						if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
 							azureKeyPrefixComponent := component
 							baseKeyName := ""
 							if baseComponentName != "" {
 								azureKeyPrefixComponent = baseComponentName
 							}
-							if azurerm, ok2 := globalBackendSection["azurerm"].(map[interface{}]interface{}); ok2 {
-								baseKeyName = azurerm["key"].(string)
+							if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[interface{}]interface{}); globalAzurermExists {
+								baseKeyName = globalAzurerm["key"].(string)
 							}
 							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
 							finalComponentBackend["key"] = fmt.Sprintf("%s/%s.terraform.tfstate", baseKeyName, componentKeyName)
 
 						}
 					}
-
 				}
 
 				// Final remote state backend
@@ -542,6 +549,28 @@ func ProcessConfig(
 					finalComponentTerraformCommand = componentTerraformCommand
 				}
 
+				// If the component is not deployable (`metadata.type: abstract`), remove `settings.spacelift.workspace_enabled` from the map).
+				// This will prevent the derived components from inheriting `settings.spacelift.workspace_enabled=false` of not-deployable components.
+				// Also, removing `settings.spacelift.workspace_enabled` will effectively make it `false`
+				// and `spacelift_stack_processor` will not create a Spacelift stack for the abstract component
+				// even if `settings.spacelift.workspace_enabled` was set to `true`.
+				// This is per component, not deep-merged and not inherited from base components and globals.
+				componentIsAbstract := false
+				if componentType, componentTypeAttributeExists := componentMetadata["type"].(string); componentTypeAttributeExists {
+					if componentType == "abstract" {
+						componentIsAbstract = true
+					}
+				}
+				if componentIsAbstract == true {
+					if i, ok2 := finalComponentSettings["spacelift"]; ok2 {
+						spaceliftSettings := i.(map[interface{}]interface{})
+
+						if _, ok3 := spaceliftSettings["workspace_enabled"]; ok3 {
+							delete(spaceliftSettings, "workspace_enabled")
+						}
+					}
+				}
+
 				comp := map[string]interface{}{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
@@ -552,13 +581,14 @@ func ProcessConfig(
 				comp["remote_state_backend"] = finalComponentRemoteStateBackend
 				comp["command"] = finalComponentTerraformCommand
 				comp["inheritance"] = componentInheritanceChain
+				comp["metadata"] = componentMetadata
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
 				}
 
 				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-				// TODO: review it to use the new `atmos.yaml CLI config
+				// TODO: review it to use the new `atmos.yaml` CLI config
 				//if processStackDeps == true {
 				//	componentStacks, err := FindComponentStacks("terraform", component, baseComponentName, componentStackMap)
 				//	if err != nil {
@@ -608,6 +638,13 @@ func ProcessConfig(
 					componentEnv = i.(map[interface{}]interface{})
 				}
 
+				// Component metadata.
+				// This is per component, not deep-merged and not inherited from base components and globals.
+				componentMetadata := map[interface{}]interface{}{}
+				if i, ok2 := componentMap["metadata"]; ok2 {
+					componentMetadata = i.(map[interface{}]interface{})
+				}
+
 				componentHelmfileCommand := ""
 				if i, ok2 := componentMap["command"]; ok2 {
 					componentHelmfileCommand = i.(string)
@@ -622,6 +659,7 @@ func ProcessConfig(
 				var baseComponentConfig BaseComponentConfig
 				var componentInheritanceChain []string
 
+				// Process the base components recursively to find `componentInheritanceChain`
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
 
@@ -668,13 +706,14 @@ func ProcessConfig(
 				comp["env"] = finalComponentEnv
 				comp["command"] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
+				comp["metadata"] = componentMetadata
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
 				}
 
 				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-				// TODO: review it to use the new `atmos.yaml CLI config
+				// TODO: review it to use the new `atmos.yaml` CLI config
 				//if processStackDeps == true {
 				//	componentStacks, err := FindComponentStacks("helmfile", component, baseComponentName, componentStackMap)
 				//	if err != nil {
@@ -800,18 +839,21 @@ func processBaseComponentConfig(
 			baseComponentConfig.FinalBaseComponentName = baseComponent
 		}
 
+		// Base component `vars`
 		merged, err := m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentVars, baseComponentVars})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentVars = merged
 
+		// Base component `settings`
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentSettings = merged
 
+		// Base component `env`
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
 		if err != nil {
 			return err
@@ -819,15 +861,16 @@ func processBaseComponentConfig(
 		baseComponentConfig.BaseComponentEnv = merged
 
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
-
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
+		// Base component `backend`
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentBackendSection = merged
 
+		// Base component `backend_type`
 		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})

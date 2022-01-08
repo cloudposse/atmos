@@ -33,7 +33,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Check if the component exists as helmfile component
+	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
+	if (info.SubCommand == "sync" || info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
+		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
+			"with 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
+	}
+
+	// Check if the component exists as a helmfile component
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.Component)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
