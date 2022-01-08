@@ -62,7 +62,7 @@ func findComponentConfig(
 	var baseComponentPath string
 	var command string
 	var componentInheritanceChain []string
-	var componentIsDeployable bool
+	var componentIsAbstract bool
 	var ok bool
 
 	if len(stack) == 0 {
@@ -107,8 +107,13 @@ func findComponentConfig(
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
-	if componentIsDeployable, ok = componentSection["deployable"].(bool); !ok {
-		componentIsDeployable = true
+	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
+		componentMetadata := componentMetadataSection.(map[interface{}]interface{})
+		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
+			if componentMetadataType == "abstract" {
+				componentIsAbstract = true
+			}
+		}
 	}
 
 	return componentSection,
@@ -119,7 +124,7 @@ func findComponentConfig(
 		baseComponentPath,
 		command,
 		componentInheritanceChain,
-		componentIsDeployable,
+		componentIsAbstract,
 		nil
 }
 

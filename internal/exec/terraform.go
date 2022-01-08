@@ -44,10 +44,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		finalComponent = info.Component
 	}
 
-	// Check if the component is allowed to be provisioned (`deployable` attribute)
-	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract == false {
-		return errors.New(fmt.Sprintf("Component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"with 'deployable: false' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
+	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
+	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
+		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
+			"with 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}
 
 	// Check if the component (or base component) exists as Terraform component
