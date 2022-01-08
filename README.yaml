@@ -24,7 +24,11 @@ categories:
   - kubernetes
   - aws
 
-description: Universal Tool for DevOps and Cloud Automation.
+description: |-
+  
+  `atmos` - Universal Tool for DevOps and Cloud Automation.
+  
+  ![atmos](docs/img/atmos-logo-256.png)
 
 introduction: |-
 
@@ -70,13 +74,13 @@ introduction: |-
   ### cloudposse/packages
   
   On Debian, run:
- 
+  
   ```
   apt install atmos@="<ATMOS_VERSION>-*"
   ```
   
   On Alpine, run:
- 
+  
   ```
   apk add atmos@cloudposse~=<ATMOS_VERSION>
   ```
@@ -90,14 +94,14 @@ introduction: |-
   ```
   
   Get a specific version
- 
+  
   __NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, 
   the CLI will return `0.0.1` when running `atmos version`.
 
   ```
   go install github.com/cloudposse/atmos@v1.3.9
   ```
- 
+  
   ## Build from source
   
   ```
