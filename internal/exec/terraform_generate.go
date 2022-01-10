@@ -2,7 +2,7 @@ package exec
 
 import (
 	"fmt"
-	"github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -25,15 +25,15 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var configAndStacksInfo config.ConfigAndStacksInfo
+	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.Stack = stack
 
-	err = config.InitConfig()
+	err = c.InitConfig()
 	if err != nil {
 		return err
 	}
 
-	err = config.ProcessConfig(configAndStacksInfo)
+	err = c.ProcessConfig(configAndStacksInfo)
 	if err != nil {
 		return err
 	}
@@ -44,22 +44,22 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	if g.LogVerbose {
 		fmt.Println()
 		var msg string
-		if config.ProcessedConfig.StackType == "Directory" {
+		if c.ProcessedConfig.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
 			msg = "Found config files:"
 		}
 		color.Cyan(msg)
 
-		err = utils.PrintAsYAML(config.ProcessedConfig.StackConfigFilesRelativePaths)
+		err = utils.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return err
 		}
 	}
 
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		config.ProcessedConfig.StacksBaseAbsolutePath,
-		config.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		c.ProcessedConfig.StacksBaseAbsolutePath,
+		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
 		false,
 		false)
 
@@ -73,7 +73,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	var componentBackendType string
 
 	// Check and process stacks
-	if config.ProcessedConfig.StackType == "Directory" {
+	if c.ProcessedConfig.StackType == "Directory" {
 		componentSection,
 			componentVarsSection,
 			_,
@@ -89,12 +89,12 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 			color.Cyan("Searching for stack config where the component '%s' is defined\n", component)
 		}
 
-		if len(config.Config.Stacks.NamePattern) < 1 {
+		if len(c.Config.Stacks.NamePattern) < 1 {
 			return errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		}
 
 		stackParts := strings.Split(stack, "-")
-		stackNamePatternParts := strings.Split(config.Config.Stacks.NamePattern, "-")
+		stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
 
 		var tenant string
 		var environment string
@@ -165,7 +165,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 				"Are the component and stack names correct? Did you forget an import?",
 				component,
 				stack,
-				config.Config.Stacks.NamePattern,
+				c.Config.Stacks.NamePattern,
 			))
 		}
 	}
@@ -207,7 +207,8 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	// Write backend config to file
 	var backendFileName = path.Join(
-		config.Config.Components.Terraform.BasePath,
+		c.Config.BasePath,
+		c.Config.Components.Terraform.BasePath,
 		finalComponent,
 		"backend.tf.json",
 	)

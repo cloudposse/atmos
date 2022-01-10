@@ -50,21 +50,23 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write variables to a file
+	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
 	var varFileName string
+
 	if len(info.ComponentFolderPrefix) == 0 {
-		varFileName = fmt.Sprintf("%s/%s/%s-%s.helmfile.vars.yaml",
+		varFileName = path.Join(
+			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
 			info.Component,
-			info.ContextPrefix,
-			info.Component,
+			varFile,
 		)
 	} else {
-		varFileName = fmt.Sprintf("%s/%s/%s/%s-%s.helmfile.vars.yaml",
+		varFileName = path.Join(
+			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
 			info.ComponentFolderPrefix,
 			info.Component,
-			info.ContextPrefix,
-			info.Component,
+			varFile,
 		)
 	}
 
@@ -129,13 +131,11 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = path.Join(c.Config.Components.Helmfile.BasePath, info.Component)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.Component)
 	} else {
-		workingDir = path.Join(c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
 	}
 	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
-
-	varFile := fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}
