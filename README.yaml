@@ -2,6 +2,8 @@ name: atmos
 
 license: APACHE2
 
+logo: docs/img/atmos-logo-128.png
+
 github_repo: cloudposse/atmos
 
 badges:
@@ -27,8 +29,6 @@ categories:
 description: |-
   
   `atmos` - Universal Tool for DevOps and Cloud Automation.
-  
-  ![atmos](docs/img/atmos-logo-128.png)
 
 introduction: |-
 
@@ -65,7 +65,7 @@ introduction: |-
 
   ### OSX
 
-  From Homebrew directly
+  From Homebrew directly:
 
   ```
   brew install atmos
@@ -73,28 +73,27 @@ introduction: |-
   
   ### cloudposse/packages
   
-  On Debian, run:
-  Add the Cloud Posse package repository hosted by cloudsmith.
+  On Debian:
   
- ```
-# Add CloudPosse package repo
-apt-get update && apt-get install -y apt-utils curl
-curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
-```
   ```
-  apt install atmos@="<ATMOS_VERSION>-*"
+  # Add the Cloud Posse package repository hosted by Cloudsmith
+  apt-get update && apt-get install -y apt-utils curl
+  curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+  
+  # Install atmos
+  apt-get install atmos@="<ATMOS_VERSION>-*"
   ```
   
-  On Alpine, run:
-  Install the Cloud Posse package repository hosted by cloudsmith.
+  On Alpine:
 
-```
-curl -sSL https://apk.cloudposse.com/install.sh | bash
-```
   ```
+  # Install the Cloud Posse package repository hosted by Cloudsmith
+  curl -sSL https://apk.cloudposse.com/install.sh | bash
+  
+  # Install atmos
   apk add atmos@cloudposse~=<ATMOS_VERSION>
   ```
-
+ 
   ### Go
   
   Install the latest version
