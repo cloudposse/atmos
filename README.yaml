@@ -86,7 +86,11 @@ curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.d
   ```
   
   On Alpine, run:
-  
+  Install the Cloud Posse package repository hosted by cloudsmith.
+
+```
+curl -sSL https://apk.cloudposse.com/install.sh | bash
+```
   ```
   apk add atmos@cloudposse~=<ATMOS_VERSION>
   ```
