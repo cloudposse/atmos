@@ -114,12 +114,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	} else {
 		if len(info.ComponentFolderPrefix) == 0 {
 			varFileName = path.Join(
+				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
 				finalComponent,
 				varFile,
 			)
 		} else {
 			varFileName = path.Join(
+				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
 				finalComponent,
@@ -147,12 +149,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 		if len(info.ComponentFolderPrefix) == 0 {
 			backendFileName = path.Join(
+				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
 				finalComponent,
 				"backend.tf.json",
 			)
 		} else {
 			backendFileName = path.Join(
+				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
 				finalComponent,
@@ -217,9 +221,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = path.Join(c.Config.Components.Terraform.BasePath, finalComponent)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, finalComponent)
 	} else {
-		workingDir = path.Join(c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	}
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 

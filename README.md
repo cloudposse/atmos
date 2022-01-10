@@ -28,7 +28,9 @@
 
 -->
 
-Universal Tool for DevOps and Cloud Automation.
+![atmos](docs/img/atmos-logo-128.svg)
+
+`atmos` - Universal Tool for DevOps and Cloud Automation.
 
 ---
 
@@ -92,23 +94,32 @@ Moreover, `atmos` is not only a command-line interface for managing clouds and c
 
 ### OSX
 
-From Homebrew directly
+From Homebrew directly:
 
 ```
 brew install atmos
 ```
 
-### cloudposse/packages
+### Linux
 
-On Debian, run:
-
-```
-apt install atmos@="<ATMOS_VERSION>-*"
-```
-
-On Alpine, run:
+On Debian:
 
 ```
+# Add the Cloud Posse package repository hosted by Cloudsmith
+apt-get update && apt-get install -y apt-utils curl
+curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+
+# Install atmos
+apt-get install atmos@="<ATMOS_VERSION>-*"
+```
+
+On Alpine:
+
+```
+# Install the Cloud Posse package repository hosted by Cloudsmith
+curl -sSL https://apk.cloudposse.com/install.sh | bash
+
+# Install atmos
 apk add atmos@cloudposse~=<ATMOS_VERSION>
 ```
 

@@ -2,6 +2,8 @@ name: atmos
 
 license: APACHE2
 
+logo: docs/img/atmos-logo-128.svg
+
 github_repo: cloudposse/atmos
 
 badges:
@@ -24,7 +26,9 @@ categories:
   - kubernetes
   - aws
 
-description: Universal Tool for DevOps and Cloud Automation.
+description: |-
+  
+  `atmos` - Universal Tool for DevOps and Cloud Automation.
 
 introduction: |-
 
@@ -61,26 +65,35 @@ introduction: |-
 
   ### OSX
 
-  From Homebrew directly
+  From Homebrew directly:
 
   ```
   brew install atmos
   ```
   
-  ### cloudposse/packages
+  ### Linux
   
-  On Debian, run:
- 
+  On Debian:
+  
   ```
-  apt install atmos@="<ATMOS_VERSION>-*"
+  # Add the Cloud Posse package repository hosted by Cloudsmith
+  apt-get update && apt-get install -y apt-utils curl
+  curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+  
+  # Install atmos
+  apt-get install atmos@="<ATMOS_VERSION>-*"
   ```
   
-  On Alpine, run:
- 
+  On Alpine:
+
   ```
+  # Install the Cloud Posse package repository hosted by Cloudsmith
+  curl -sSL https://apk.cloudposse.com/install.sh | bash
+  
+  # Install atmos
   apk add atmos@cloudposse~=<ATMOS_VERSION>
   ```
-
+ 
   ### Go
   
   Install the latest version
@@ -90,14 +103,14 @@ introduction: |-
   ```
   
   Get a specific version
- 
+  
   __NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, 
   the CLI will return `0.0.1` when running `atmos version`.
 
   ```
   go install github.com/cloudposse/atmos@v1.3.9
   ```
- 
+  
   ## Build from source
   
   ```

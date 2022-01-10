@@ -32,6 +32,7 @@ type Logs struct {
 }
 
 type Configuration struct {
+	BasePath   string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components Components
 	Stacks     Stacks
 	Logs       Logs
@@ -65,6 +66,7 @@ type ArgsAndFlagsInfo struct {
 	HelmfileDir             string
 	ConfigDir               string
 	StacksDir               string
+	BasePath                string
 	DeployRunInit           string
 	AutoGenerateBackendFile string
 	UseTerraformPlan        bool
@@ -88,6 +90,7 @@ type ConfigAndStacksInfo struct {
 	ComponentBackendType      string
 	AdditionalArgsAndFlags    []string
 	GlobalOptions             []string
+	BasePath                  string
 	TerraformDir              string
 	HelmfileDir               string
 	ConfigDir                 string
