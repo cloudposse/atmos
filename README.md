@@ -31,7 +31,7 @@
 
 `atmos` - Universal Tool for DevOps and Cloud Automation.
 
-![atmos](docs/img/atmos-logo-256.png)
+![atmos](docs/img/atmos-logo-128.png)
 
 ---
 
