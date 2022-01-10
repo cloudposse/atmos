@@ -22,22 +22,23 @@ import (
 var (
 	// Default values
 	defaultConfig = Configuration{
+		BasePath: ".",
 		Components: Components{
 			Terraform: Terraform{
-				BasePath:                "./components/terraform",
+				BasePath:                "components/terraform",
 				ApplyAutoApprove:        false,
 				DeployRunInit:           true,
 				AutoGenerateBackendFile: false,
 			},
 			Helmfile: Helmfile{
-				BasePath:              "./components/helmfile",
+				BasePath:              "components/helmfile",
 				KubeconfigPath:        "/dev/shm",
 				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
 				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 			},
 		},
 		Stacks: Stacks{
-			BasePath: "./stacks",
+			BasePath: "stacks",
 			IncludedPaths: []string{
 				"**/*",
 			},
@@ -162,6 +163,10 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	}
 
 	// Process command-line args
+	if len(configAndStacksInfo.BasePath) > 0 {
+		Config.BasePath = configAndStacksInfo.BasePath
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
+	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		Config.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
 		color.Cyan(fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
@@ -202,7 +207,8 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	}
 
 	// Convert stacks base path to absolute path
-	stacksBaseAbsPath, err := filepath.Abs(Config.Stacks.BasePath)
+	stacksBasePath := path.Join(Config.BasePath, Config.Stacks.BasePath)
+	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
 		return err
 	}
@@ -223,14 +229,16 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	ProcessedConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert terraform dir to absolute path
-	terraformDirAbsPath, err := filepath.Abs(Config.Components.Terraform.BasePath)
+	terraformBasePath := path.Join(Config.BasePath, Config.Components.Terraform.BasePath)
+	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
 		return err
 	}
 	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert helmfile dir to absolute path
-	helmfileDirAbsPath, err := filepath.Abs(Config.Components.Helmfile.BasePath)
+	helmfileBasePath := path.Join(Config.BasePath, Config.Components.Helmfile.BasePath)
+	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return err
 	}
@@ -253,7 +261,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 			return err
 		}
 		errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
-			"paths:\n%s\n\nCheck if 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
+			"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
 			"files or ENV vars.", j)
 		return errors.New(errorMessage)
 	}
@@ -318,7 +326,8 @@ func ProcessConfigForSpacelift() error {
 	}
 
 	// Convert stacks base path to absolute path
-	stacksBaseAbsPath, err := filepath.Abs(Config.Stacks.BasePath)
+	stacksBasePath := path.Join(Config.BasePath, Config.Stacks.BasePath)
+	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
 		return err
 	}
@@ -339,14 +348,16 @@ func ProcessConfigForSpacelift() error {
 	ProcessedConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert terraform dir to absolute path
-	terraformDirAbsPath, err := filepath.Abs(Config.Components.Terraform.BasePath)
+	terraformBasePath := path.Join(Config.BasePath, Config.Components.Terraform.BasePath)
+	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
 		return err
 	}
 	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert helmfile dir to absolute path
-	helmfileDirAbsPath, err := filepath.Abs(Config.Components.Helmfile.BasePath)
+	helmfileBasePath := path.Join(Config.BasePath, Config.Components.Helmfile.BasePath)
+	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return err
 	}
@@ -368,7 +379,7 @@ func ProcessConfigForSpacelift() error {
 			return err
 		}
 		errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
-			"paths:\n%s\n\nCheck if 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
+			"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
 			"files or ENV vars.", j)
 		return errors.New(errorMessage)
 	}
