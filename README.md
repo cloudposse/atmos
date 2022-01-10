@@ -100,7 +100,7 @@ From Homebrew directly:
 brew install atmos
 ```
 
-### cloudposse/packages
+### Linux
 
 On Debian:
 
