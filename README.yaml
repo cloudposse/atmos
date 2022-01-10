@@ -74,7 +74,13 @@ introduction: |-
   ### cloudposse/packages
   
   On Debian, run:
+  Add the Cloud Posse package repository hosted by cloudsmith.
   
+ ```
+# Add CloudPosse package repo
+apt-get update && apt-get install -y apt-utils curl
+curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+```
   ```
   apt install atmos@="<ATMOS_VERSION>-*"
   ```
