@@ -8,11 +8,20 @@
 # It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
 # https://en.wikipedia.org/wiki/Glob_(programming)
 
+# Base path for components and stacks configurations.
+# Can also be set using `ATMOS_BASE_PATH` ENV var, or `--base-path` command-line argument.
+# Supports both absolute and relative paths.
+# If not provided or is an empty string, `components.terraform.base_path`, `components.helmfile.base_path` and `stacks.base_path`
+# are independent settings (supporting both absolute and relative paths).
+# If `base_path` is provided, `components.terraform.base_path`, `components.helmfile.base_path` and `stacks.base_path`
+# are considered paths relative to `base_path`.
+base_path: "../../examples/complete"
+
 components:
   terraform:
     # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` ENV var, or `--terraform-dir` command-line argument
     # Supports both absolute and relative paths
-    base_path: "../../examples/complete/components/terraform"
+    base_path: "components/terraform"
     # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE` ENV var
     apply_auto_approve: false
     # Can also be set using `ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT` ENV var, or `--deploy-run-init` command-line argument
@@ -22,7 +31,7 @@ components:
   helmfile:
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var, or `--helmfile-dir` command-line argument
     # Supports both absolute and relative paths
-    base_path: "../../examples/complete/components/helmfile"
+    base_path: "components/helmfile"
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH` ENV var
     kubeconfig_path: "/dev/shm"
     # Can also be set using `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN` ENV var
@@ -33,7 +42,7 @@ components:
 stacks:
   # Can also be set using `ATMOS_STACKS_BASE_PATH` ENV var, or `--config-dir` and `--stacks-dir` command-line arguments
   # Supports both absolute and relative paths
-  base_path: "../../examples/complete/stacks"
+  base_path: "stacks"
   # Can also be set using `ATMOS_STACKS_INCLUDED_PATHS` ENV var (comma-separated values string)
   included_paths:
     - "**/*"
