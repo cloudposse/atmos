@@ -24,6 +24,7 @@ var (
 		g.HelmfileDirFlag,
 		g.ConfigDirFlag,
 		g.StackDirFlag,
+		g.BasePathFlag,
 		g.GlobalOptionsFlag,
 		g.DeployRunInitFlag,
 		g.AutoGenerateBackendFileFlag,
@@ -152,6 +153,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.SubCommand = argsAndFlagsInfo.SubCommand
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
+	configAndStacksInfo.BasePath = argsAndFlagsInfo.BasePath
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
@@ -454,6 +456,19 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.ConfigDir = stacksDirFlagParts[1]
+		}
+
+		if arg == g.BasePathFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.BasePath = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.BasePathFlag) {
+			var stacksDirFlagParts = strings.Split(arg, "=")
+			if len(stacksDirFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.BasePath = stacksDirFlagParts[1]
 		}
 
 		if arg == g.DeployRunInitFlag {

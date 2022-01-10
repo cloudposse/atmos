@@ -142,6 +142,12 @@ func findAllStackConfigsInPaths(
 }
 
 func processEnvVars() error {
+	basePath := os.Getenv("ATMOS_BASE_PATH")
+	if len(basePath) > 0 {
+		color.Cyan("Found ENV var ATMOS_BASE_PATH=%s", basePath)
+		Config.BasePath = basePath
+	}
+
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
 		color.Cyan("Found ENV var ATMOS_STACKS_BASE_PATH=%s", stacksBasePath)

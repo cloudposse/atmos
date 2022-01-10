@@ -6,14 +6,16 @@ const (
 	SystemDirConfigFilePath         = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar            = "LOCALAPPDATA"
 
-	// Custom flag to specify helmfile `GLOBAL OPTIONS`
+	// GlobalOptionsFlag is a custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference
 	GlobalOptionsFlag = "--global-options"
 
-	TerraformDirFlag            = "--terraform-dir"
-	HelmfileDirFlag             = "--helmfile-dir"
-	ConfigDirFlag               = "--config-dir"
-	StackDirFlag                = "--stacks-dir"
+	TerraformDirFlag = "--terraform-dir"
+	HelmfileDirFlag  = "--helmfile-dir"
+	ConfigDirFlag    = "--config-dir"
+	StackDirFlag     = "--stacks-dir"
+	BasePathFlag     = "--base-path"
+
 	DeployRunInitFlag           = "--deploy-run-init"
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
 
