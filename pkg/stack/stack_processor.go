@@ -12,6 +12,7 @@ import (
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/utils"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 )
@@ -927,7 +928,7 @@ func processBaseComponentConfig(
 		}
 		baseComponentConfig.BaseComponentRemoteStateBackendSection = merged
 
-		baseComponentConfig.ComponentInheritanceChain = append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...)
+		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {
 		return errors.New("Terraform component '" + component + "' inherits from the base component '" +
 			baseComponent + "', " + "but `" + baseComponent + "' is not defined in the stack '" + stack + "'")
