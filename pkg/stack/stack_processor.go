@@ -418,8 +418,8 @@ func ProcessConfig(
 				var componentInheritanceChain []string
 
 				// Deprecated way of specifying inheritance with the top-level `component` attribute
-				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
-					baseComponentName = baseComponent.(string)
+				if baseComponent, baseComponentExist := componentMap["component"].(string); baseComponentExist {
+					baseComponentName = baseComponent
 
 					// Process the base components recursively to find `componentInheritanceChain`
 					err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName)
@@ -450,8 +450,37 @@ func ProcessConfig(
 				// will deep-merge all the base components of `componentA` (each component overriding its base),
 				// then all the base components of `componentB` (each component overriding its base),
 				// then the two results are deep-merged together (`componentB` inheritance chain will override values from `componentA' inheritance chain).
-				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"]; baseComponentFromMetadataExist {
-					baseComponentName = baseComponentFromMetadata.(string)
+				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"].(string); baseComponentFromMetadataExist {
+					baseComponentName = baseComponentFromMetadata
+				}
+				if inheritList, inheritListExist := componentMetadata["inherit"].([]string); inheritListExist {
+					for _, v := range inheritList {
+						if baseComponent, baseComponentExist := allTerraformComponentsMap[v].(string); baseComponentExist {
+							// Process the base components recursively to find `componentInheritanceChain`
+							err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponent)
+							if err != nil {
+								return nil, err
+							}
+
+							baseComponentVars = baseComponentConfig.BaseComponentVars
+							baseComponentSettings = baseComponentConfig.BaseComponentSettings
+							baseComponentEnv = baseComponentConfig.BaseComponentEnv
+							baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
+							baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
+							baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
+							baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
+							baseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
+							componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
+						} else {
+							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' declares that it inherits from the '%[3]s' component "+
+								"(using 'metadata.inherit'), but '%[3]s' does not exist in the stack '%[2]s'",
+								component,
+								stack,
+								v,
+							)
+							return nil, errors.New(errorMessage)
+						}
+					}
 				}
 
 				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformVars, baseComponentVars, componentVars})
