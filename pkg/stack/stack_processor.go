@@ -447,7 +447,7 @@ func ProcessConfig(
 				// It uses a method similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance.
 				//
 				// In the case of multiple base components, it is processed left to right, in the order by which it was declared.
-				// For example: `metadata.inherit: [componentA, componentB]`
+				// For example: `metadata.inherits: [componentA, componentB]`
 				// will deep-merge all the base components of `componentA` (each component overriding its base),
 				// then all the base components of `componentB` (each component overriding its base),
 				// then the two results are deep-merged together (`componentB` inheritance chain will override values from `componentA' inheritance chain).
@@ -455,13 +455,13 @@ func ProcessConfig(
 					baseComponentName = baseComponentFromMetadata
 				}
 
-				if inheritList, inheritListExist := componentMetadata["inherit"].([]interface{}); inheritListExist {
+				if inheritList, inheritListExist := componentMetadata["inherits"].([]interface{}); inheritListExist {
 					for _, v := range inheritList {
 						base := v.(string)
 
 						if _, ok2 := allTerraformComponentsMap[base]; !ok2 {
 							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
-								"(using 'metadata.inherit'), but '%[3]s' does not exist in the stack '%[2]s'",
+								"(using 'metadata.inherits'), but '%[3]s' does not exist in the stack '%[2]s'",
 								component,
 								stackName,
 								base,

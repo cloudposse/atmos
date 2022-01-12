@@ -32,7 +32,7 @@ components:
         # 3. `mixin-2` overrides `mixin-1` and its base components (all the way up its inheritance chain).
         # 4. This `test/test-component-override-3` overrides `mixin-2` and its base components (all the way up its inheritance chain).
         # Inheritance: test/test-component-override-3 -> mixin-2 -> mixin-1 -> test/test-component-override-2 -> test/test-component-override -> test/test-component
-        inherit:
+        inherits:
           - "test/test-component-override"
           - "test/test-component-override-2"
           - "mixin-1"
