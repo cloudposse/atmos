@@ -38,7 +38,7 @@ func TestStackProcessor(t *testing.T) {
 	mapConfig2 := mapResult["tenant1/ue2/dev"]
 	assert.Equal(t, len(imports), len(mapConfig2.(map[interface{}]interface{})["imports"].([]string)))
 
-	assert.Equal(t, 20, len(imports))
+	assert.Equal(t, 21, len(imports))
 	assert.Equal(t, "catalog/helmfile/echo-server", imports[0])
 	assert.Equal(t, "catalog/helmfile/infra-server", imports[1])
 	assert.Equal(t, "catalog/helmfile/infra-server-override", imports[2])
@@ -54,11 +54,12 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "catalog/terraform/test-component", imports[12])
 	assert.Equal(t, "catalog/terraform/test-component-override", imports[13])
 	assert.Equal(t, "catalog/terraform/test-component-override-2", imports[14])
-	assert.Equal(t, "catalog/terraform/top-level-component1", imports[15])
-	assert.Equal(t, "catalog/terraform/vpc", imports[16])
-	assert.Equal(t, "globals/globals", imports[17])
-	assert.Equal(t, "globals/tenant1-globals", imports[18])
-	assert.Equal(t, "globals/ue2-globals", imports[19])
+	assert.Equal(t, "catalog/terraform/test-component-override-3", imports[15])
+	assert.Equal(t, "catalog/terraform/top-level-component1", imports[16])
+	assert.Equal(t, "catalog/terraform/vpc", imports[17])
+	assert.Equal(t, "globals/globals", imports[18])
+	assert.Equal(t, "globals/tenant1-globals", imports[19])
+	assert.Equal(t, "globals/ue2-globals", imports[20])
 
 	components := mapConfig1["components"].(map[interface{}]interface{})
 	terraformComponents := components["terraform"].(map[interface{}]interface{})

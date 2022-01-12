@@ -125,7 +125,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
 	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponent) > 0 {
-		fmt.Println("Base component: " + info.BaseComponent)
+		fmt.Println("Helmfile component: " + info.BaseComponent)
 	}
 	fmt.Println("Stack: " + info.Stack)
 

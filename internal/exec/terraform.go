@@ -212,7 +212,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
 	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponentPath) > 0 {
-		fmt.Println("Base component: " + info.BaseComponentPath)
+		fmt.Println("Terraform component: " + info.BaseComponentPath)
 	}
 	if len(info.ComponentInheritanceChain) > 0 {
 		fmt.Println("Inheritance: " + info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> "))

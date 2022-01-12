@@ -453,33 +453,36 @@ func ProcessConfig(
 				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"].(string); baseComponentFromMetadataExist {
 					baseComponentName = baseComponentFromMetadata
 				}
-				if inheritList, inheritListExist := componentMetadata["inherit"].([]string); inheritListExist {
-					for _, v := range inheritList {
-						if baseComponent, baseComponentExist := allTerraformComponentsMap[v].(string); baseComponentExist {
-							// Process the base components recursively to find `componentInheritanceChain`
-							err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponent)
-							if err != nil {
-								return nil, err
-							}
 
-							baseComponentVars = baseComponentConfig.BaseComponentVars
-							baseComponentSettings = baseComponentConfig.BaseComponentSettings
-							baseComponentEnv = baseComponentConfig.BaseComponentEnv
-							baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
-							baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
-							baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
-							baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
-							baseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
-							componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
-						} else {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' declares that it inherits from the '%[3]s' component "+
+				if inheritList, inheritListExist := componentMetadata["inherit"].([]interface{}); inheritListExist {
+					for _, v := range inheritList {
+						base := v.(string)
+
+						if _, ok2 := allTerraformComponentsMap[base]; !ok2 {
+							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
 								"(using 'metadata.inherit'), but '%[3]s' does not exist in the stack '%[2]s'",
 								component,
-								stack,
-								v,
+								stackName,
+								base,
 							)
 							return nil, errors.New(errorMessage)
 						}
+
+						// Process the base components recursively to find `componentInheritanceChain`
+						err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, base)
+						if err != nil {
+							return nil, err
+						}
+
+						baseComponentVars = baseComponentConfig.BaseComponentVars
+						baseComponentSettings = baseComponentConfig.BaseComponentSettings
+						baseComponentEnv = baseComponentConfig.BaseComponentEnv
+						baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
+						baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
+						baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
+						baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
+						baseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
+						componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 					}
 				}
 
@@ -926,7 +929,7 @@ func processBaseComponentConfig(
 
 		baseComponentConfig.ComponentInheritanceChain = append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...)
 	} else {
-		return errors.New("Terraform component '" + component + "' defines attribute 'component: " +
+		return errors.New("Terraform component '" + component + "' inherits from the base component '" +
 			baseComponent + "', " + "but `" + baseComponent + "' is not defined in the stack '" + stack + "'")
 	}
 

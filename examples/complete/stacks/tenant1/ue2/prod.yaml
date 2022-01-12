@@ -5,6 +5,7 @@ import:
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
   - catalog/terraform/test-component-override-2
+  - catalog/terraform/test-component-override-3
   - catalog/terraform/vpc
   - catalog/helmfile/echo-server
   - catalog/helmfile/infra-server
