@@ -21,13 +21,14 @@ components:
       metadata:
         # `real` is implicit, you don't need to specify it; `abstract` makes the component protected from being deployed
         type: real
-        # Terraform component
+        # Terraform component. Must exist in `components/terraform` folder.
         component: "test/test-component"
-        # Multiple inheritance
-        # All base components and mixins are processed in the order they are specified in the `inherit` list
-        # `test/test-component-override-2` overrides `test/test-component-override` and its base components (all the way up its inheritance chain)
-        # `mixin-1` overrides `test/test-component-override-2` (all the way up its inheritance chain)
-        # `mixin-2` overrides `mixin-1` (all the way up its inheritance chain)
+        # Multiple inheritance. It's a down-top/left-right matrix (similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance).
+        # All base components and mixins are processed and deep-merged in the order they are specified in the `inherit` list:
+        # 1. `test/test-component-override-2` overrides `test/test-component-override` and its base components (all the way up its inheritance chain).
+        # 2. `mixin-1` overrides `test/test-component-override-2` and its base components (all the way up its inheritance chain).
+        # 3. `mixin-2` overrides `mixin-1` and its base components (all the way up its inheritance chain).
+        # 4. This `test/test-component-override-3` overrides `mixin-2` and its base components (all the way up its inheritance chain).
         # Inheritance: test/test-component-override-3 -> mixin-2 -> mixin-1 -> test/test-component-override-2 -> test/test-component-override -> test/test-component
         inherit:
           - "test/test-component-override"
