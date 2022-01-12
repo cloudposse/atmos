@@ -405,10 +405,10 @@ func ProcessConfig(
 				}
 
 				// Process base component(s)
+				baseComponentName := ""
 				baseComponentVars := map[interface{}]interface{}{}
 				baseComponentSettings := map[interface{}]interface{}{}
 				baseComponentEnv := map[interface{}]interface{}{}
-				baseComponentName := ""
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
 				baseComponentBackendSection := map[interface{}]interface{}{}
@@ -417,6 +417,7 @@ func ProcessConfig(
 				var baseComponentConfig BaseComponentConfig
 				var componentInheritanceChain []string
 
+				// Deprecated way of specifying inheritance with the top-level `component` attribute
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName = baseComponent.(string)
 
@@ -436,6 +437,21 @@ func ProcessConfig(
 					baseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
 					baseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
 					componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
+				}
+
+				// Multiple inheritance (and multiple-inheritance chain) using `metadata.component` and `metadata.inherit`.
+				// `metadata.component` points to the component implementation (e.g. in `components/terraform` folder),
+				//  it does not specify inheritance (it overrides the deprecated top-level `component` attribute).
+				// `metadata.inherit` is a list of component names from which the current component inherits.
+				// It uses a method similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance.
+				//
+				// In the case of multiple base components, it is processed left to right, in the order by which it was declared.
+				// For example: `metadata.inherit: [componentA, componentB]`
+				// will deep-merge all the base components of `componentA` (each component overriding its base),
+				// then all the base components of `componentB` (each component overriding its base),
+				// then the two results are deep-merged together (`componentB` inheritance chain will override values from `componentA' inheritance chain).
+				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"]; baseComponentFromMetadataExist {
+					baseComponentName = baseComponentFromMetadata.(string)
 				}
 
 				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformVars, baseComponentVars, componentVars})
