@@ -24,6 +24,7 @@ components:
         # Terraform component.
         # Must exist in `components/terraform` folder.
         # If not specified, it's assumed that this component `test/test-component-override-3` is also a Terraform component
+        # in `components/terraform/test/test-component-override-3` folder
         component: "test/test-component"
         # Multiple inheritance. It's a down-top/left-right matrix (similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance).
         # All base components and mixins are processed and deep-merged in the order they are specified in the `inherit` list:
