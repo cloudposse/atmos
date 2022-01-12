@@ -1,0 +1,7 @@
+components:
+  terraform:
+    "mixin/test-2":
+      vars:
+        service_1_name: "mixin-2"
+      metadata:
+        type: abstract
