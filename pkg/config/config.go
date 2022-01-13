@@ -22,7 +22,7 @@ import (
 var (
 	// Default values
 	defaultConfig = Configuration{
-		BasePath: ".",
+		BasePath: "",
 		Components: Components{
 			Terraform: Terraform{
 				BasePath:                "components/terraform",
