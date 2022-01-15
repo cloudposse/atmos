@@ -620,7 +620,7 @@ func execTerraformShellCommand(
 	fmt.Println(fmt.Sprintf("Working directory: %s", workingDir))
 	fmt.Println(fmt.Sprintf("Terraform workspace: %s", workspaceName))
 	fmt.Println()
-	color.Cyan("Setting ENV vars in the shell:\n")
+	color.Cyan("Setting the ENV vars in the shell:\n")
 	for _, v := range componentEnvList {
 		fmt.Println(v)
 	}
