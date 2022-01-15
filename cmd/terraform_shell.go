@@ -7,11 +7,11 @@ import (
 	"os"
 )
 
-// terraformShellCmd configures an environment for a component in a stack and starts a new shell allowing executing plain terraform commands
+// terraformShellCmd configures an environment for a component in a stack and starts a new shell allowing executing all native terraform commands
 var terraformShellCmd = &cobra.Command{
 	Use:                "shell",
 	Short:              "Execute 'terraform shell' commands",
-	Long:               "This command configures an environment for a component in a stack and starts a new shell allowing executing plain terraform commands",
+	Long:               "This command configures an environment for a component in a stack and starts a new shell allowing executing all native terraform commands",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformShell(cmd, args)

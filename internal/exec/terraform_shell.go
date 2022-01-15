@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// ExecuteTerraformShell configures an environment for a component in a stack and starts a new shell allowing executing plain terraform commands
+// ExecuteTerraformShell configures an environment for a component in a stack and starts a new shell allowing executing all native terraform commands
 func ExecuteTerraformShell(cmd *cobra.Command, args []string) error {
 	info, err := processConfigAndStacks("terraform", cmd, args)
 	if err != nil {
