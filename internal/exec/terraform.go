@@ -295,7 +295,39 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute `terraform shell`
 	if info.SubCommand == "shell" {
-		fmt.Println("terraform shell")
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS=-var-file=%s", varFile))
+
+		fmt.Println()
+		color.Cyan("Starting a new interactive shell (type 'exit' to go back)")
+		fmt.Println(fmt.Sprintf("Working directory: %s", workingDir))
+		fmt.Println(fmt.Sprintf("Terraform workspace: %s", workspaceName))
+		fmt.Println()
+		color.Cyan("Setting ENV vars in the shell:\n")
+		for _, v := range info.ComponentEnvList {
+			fmt.Println(v)
+		}
+		fmt.Println()
+
+		// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
+		pa := os.ProcAttr{
+			Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+			Dir:   componentPath,
+			Env:   append(os.Environ(), info.ComponentEnvList...),
+		}
+
+		// Start a new shell
+		proc, err := os.StartProcess(os.Getenv("SHELL"), []string{"-fpl"}, &pa)
+		if err != nil {
+			return err
+		}
+
+		// Wait until user exits the shell
+		state, err := proc.Wait()
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Exited interactive shell: %s\n", state.String())
 		return nil
 	}
 
