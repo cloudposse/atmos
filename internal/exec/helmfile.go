@@ -43,7 +43,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.Component)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exist in %s",
+		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
 			info.Component,
 			path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix),
 		))

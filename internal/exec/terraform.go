@@ -44,20 +44,20 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		finalComponent = info.Component
 	}
 
-	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
-	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
-		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"with 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
-	}
-
 	// Check if the component (or base component) exists as Terraform component
 	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exist in %s",
+		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
 			finalComponent,
 			path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix),
 		))
+	}
+
+	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
+	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
+		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
+			"with 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}
 
 	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
@@ -130,7 +130,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	color.Cyan("Writing variables to file:")
+	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFileName)
 	err = utils.WriteToFileAsJSON(varFileName, info.ComponentVarsSection, 0644)
 	if err != nil {
@@ -163,7 +163,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				"backend.tf.json",
 			)
 		}
-		color.Cyan("Writing backend config to file:")
+		color.Cyan("Writing the backend config to file:")
 		fmt.Println(backendFileName)
 		var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 		err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
@@ -227,7 +227,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
-	// Print ENV vars if they are found in the component stack config
+	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
 		fmt.Println()
 		color.Cyan("Using ENV vars:\n")
