@@ -250,6 +250,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	case "import":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
+	case "refresh":
+		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		break
 	case "apply":
 		if info.UseTerraformPlan == true {
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
@@ -297,6 +300,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if info.SubCommand == "shell" {
 		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
 		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS_apply=-var-file=%s", varFile))
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS_refresh=-var-file=%s", varFile))
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS_import=-var-file=%s", varFile))
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 
 		fmt.Println()
 		color.Cyan("Starting a new interactive shell (type 'exit' to go back)")
