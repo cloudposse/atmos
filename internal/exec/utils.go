@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -634,9 +635,15 @@ func execTerraformShellCommand(
 	}
 
 	// Start a new shell
-	executableName := os.Getenv("SHELL")
+	executableName := ""
+	if runtime.GOOS == "windows" {
+		executableName = "cmd.exe"
+	} else {
+		executableName = os.Getenv("SHELL")
+	}
+
 	if len(executableName) == 0 {
-		return errors.New("can't find a shell to execute. ENV var 'SHELL' is not set")
+		return errors.New("can't find a shell to execute")
 	}
 
 	proc, err := os.StartProcess(executableName, []string{"-fpl"}, &pa)
