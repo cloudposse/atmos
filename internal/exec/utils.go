@@ -634,7 +634,12 @@ func execTerraformShellCommand(
 	}
 
 	// Start a new shell
-	proc, err := os.StartProcess(os.Getenv("SHELL"), []string{"-fpl"}, &pa)
+	executableName := os.Getenv("SHELL")
+	if len(executableName) == 0 {
+		return errors.New("can't find a shell to execute. ENV var 'SHELL' is not set")
+	}
+
+	proc, err := os.StartProcess(executableName, []string{"-fpl"}, &pa)
 	if err != nil {
 		return err
 	}
