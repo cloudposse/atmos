@@ -15,7 +15,7 @@ func processHelp(componentType string, command string) error {
 
 		if componentType == "terraform" {
 			fmt.Println()
-			color.Cyan("Differences from native terraform:")
+			color.Cyan("Additions and differences from native terraform:")
 			fmt.Println(" - before executing other 'terraform' commands, 'atmos' calls 'terraform init'")
 			fmt.Println(" - 'atmos terraform deploy' command executes 'terraform plan' and then 'terraform apply'")
 			fmt.Println(" - 'atmos terraform deploy' command supports '--deploy-run-init=true/false' flag to enable/disable running 'terraform init' " +
@@ -35,7 +35,7 @@ func processHelp(componentType string, command string) error {
 
 		if componentType == "helmfile" {
 			fmt.Println()
-			color.Cyan("Differences from native helmfile:")
+			color.Cyan("Additions and differences from native helmfile:")
 			fmt.Println(" - 'atmos helmfile' commands support '[global options]' in the command-line argument '--global-options'. " +
 				"Usage: atmos helmfile <command> <component> -s <stack> [command options] [arguments...] --global-options=\"--no-color --namespace=test\"")
 			fmt.Println(" - before executing the 'helmfile' commands, 'atmos' calls 'aws eks update-kubeconfig' to read kubeconfig from the EKS cluster " +
