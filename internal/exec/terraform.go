@@ -305,7 +305,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 
 		fmt.Println()
-		color.Cyan("Starting a new interactive shell (type 'exit' to go back)")
+		color.Cyan("Starting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
 		fmt.Println(fmt.Sprintf("Component: %s", info.ComponentFromArg))
 		fmt.Println(fmt.Sprintf("Stack: %s", info.Stack))
 		fmt.Println(fmt.Sprintf("Working directory: %s", workingDir))
