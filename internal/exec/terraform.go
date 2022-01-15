@@ -60,8 +60,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			"with 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}
 
-	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
-	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
+	varFile := fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
+	planFile := fmt.Sprintf("%s-%s-%s.planfile", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
 
 	if info.SubCommand == "clean" {
 		fmt.Println("Deleting '.terraform' folder")
@@ -293,7 +293,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Execute the command
+	// Execute `terraform shell`
+	if info.SubCommand == "shell" {
+		fmt.Println("terraform shell")
+		return nil
+	}
+
+	// Execute the provided command
 	if info.SubCommand != "workspace" {
 		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList)
 		if err != nil {
