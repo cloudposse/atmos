@@ -295,10 +295,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute `terraform shell`
 	if info.SubCommand == "shell" {
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS=-var-file=%s", varFile))
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_CLI_ARGS_apply=-var-file=%s", varFile))
 
 		fmt.Println()
 		color.Cyan("Starting a new interactive shell (type 'exit' to go back)")
+		fmt.Println(fmt.Sprintf("Component: %s", info.ComponentFromArg))
+		fmt.Println(fmt.Sprintf("Stack: %s", info.Stack))
 		fmt.Println(fmt.Sprintf("Working directory: %s", workingDir))
 		fmt.Println(fmt.Sprintf("Terraform workspace: %s", workspaceName))
 		fmt.Println()
