@@ -219,12 +219,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("Stack: " + info.Stack)
 
-	var workingDir string
-	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, finalComponent)
-	} else {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
-	}
+	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
 	// Print ENV vars if they are found in the component's stack config
