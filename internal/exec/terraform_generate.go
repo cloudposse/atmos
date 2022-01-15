@@ -67,19 +67,20 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var componentSection map[string]interface{}
 	var componentVarsSection map[interface{}]interface{}
 	var componentBackendSection map[interface{}]interface{}
 	var componentBackendType string
+	var baseComponentName string
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		componentSection,
+		_,
 			componentVarsSection,
 			_,
 			componentBackendSection,
 			componentBackendType,
-			_, _, _, _,
+			baseComponentName,
+			_, _, _,
 			err = findComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
 			return err
@@ -114,12 +115,13 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		}
 
 		for stackName := range stacksMap {
-			componentSection,
+			_,
 				componentVarsSection,
 				_,
 				componentBackendSection,
 				componentBackendType,
-				_, _, _, _,
+				baseComponentName,
+				_, _, _,
 				err = findComponentConfig(stackName, stacksMap, "terraform", component)
 			if err != nil {
 				continue
@@ -192,15 +194,9 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		return errors.New(fmt.Sprintf("\nBackend config for the '%s' component is missing 'workspace_key_prefix'\n", component))
 	}
 
-	// Find if the component has a base component
-	var baseComponent string
-	if baseComponentSection, ok := componentSection["component"].(string); ok {
-		baseComponent = baseComponentSection
-	}
-
 	var finalComponent string
-	if len(baseComponent) > 0 {
-		finalComponent = baseComponent
+	if len(baseComponentName) > 0 {
+		finalComponent = baseComponentName
 	} else {
 		finalComponent = component
 	}

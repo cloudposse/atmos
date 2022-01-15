@@ -60,7 +60,7 @@ func findComponentConfig(
 	var componentEnvSection map[interface{}]interface{}
 	var componentBackendSection map[interface{}]interface{}
 	var componentBackendType string
-	var baseComponentPath string
+	var baseComponentName string
 	var command string
 	var componentInheritanceChain []string
 	var componentIsAbstract bool
@@ -96,9 +96,6 @@ func findComponentConfig(
 	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
 		componentBackendType = ""
 	}
-	if baseComponentPath, ok = componentSection["component"].(string); !ok {
-		baseComponentPath = ""
-	}
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
 	}
@@ -108,12 +105,18 @@ func findComponentConfig(
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
+	if baseComponentName, ok = componentSection["component"].(string); !ok {
+		baseComponentName = ""
+	}
 	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
 		componentMetadata := componentMetadataSection.(map[interface{}]interface{})
 		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
 			if componentMetadataType == "abstract" {
 				componentIsAbstract = true
 			}
+		}
+		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
+			baseComponentName = componentMetadataComponent
 		}
 	}
 
@@ -122,7 +125,7 @@ func findComponentConfig(
 		componentEnvSection,
 		componentBackendSection,
 		componentBackendType,
-		baseComponentPath,
+		baseComponentName,
 		command,
 		componentInheritanceChain,
 		componentIsAbstract,
