@@ -44,24 +44,24 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		finalComponent = info.Component
 	}
 
+	// Check if the component (or base component) exists as Terraform component
+	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
+	componentPathExists, err := utils.IsDirectory(componentPath)
+	if err != nil || !componentPathExists {
+		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
+			finalComponent,
+			path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix),
+		))
+	}
+
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
 	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
 		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"with 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}
 
-	// Check if the component (or base component) exists as Terraform component
-	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
-	componentPathExists, err := utils.IsDirectory(componentPath)
-	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exist in %s",
-			finalComponent,
-			path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix),
-		))
-	}
-
-	varFile := fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
-	planFile := fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
+	varFile := fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
+	planFile := fmt.Sprintf("%s-%s-%s.planfile", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
 
 	if info.SubCommand == "clean" {
 		fmt.Println("Deleting '.terraform' folder")
@@ -130,7 +130,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	color.Cyan("Writing variables to file:")
+	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFileName)
 	err = utils.WriteToFileAsJSON(varFileName, info.ComponentVarsSection, 0644)
 	if err != nil {
@@ -163,7 +163,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				"backend.tf.json",
 			)
 		}
-		color.Cyan("Writing backend config to file:")
+		color.Cyan("Writing the backend config to file:")
 		fmt.Println(backendFileName)
 		var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 		err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
@@ -219,15 +219,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("Stack: " + info.Stack)
 
-	var workingDir string
-	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, finalComponent)
-	} else {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
-	}
+	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
-	// Print ENV vars if they are found in the component stack config
+	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
 		fmt.Println()
 		color.Cyan("Using ENV vars:\n")
@@ -253,6 +248,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
 	case "import":
+		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		break
+	case "refresh":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
 	case "apply":
@@ -298,7 +296,24 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Execute the command
+	// Execute `terraform shell` command
+	if info.SubCommand == "shell" {
+		err = execTerraformShellCommand(
+			info.ComponentFromArg,
+			info.Stack,
+			info.ComponentEnvList,
+			varFile,
+			workingDir,
+			workspaceName,
+			componentPath,
+		)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Execute the provided command
 	if info.SubCommand != "workspace" {
 		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList)
 		if err != nil {

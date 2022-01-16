@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -60,7 +61,7 @@ func findComponentConfig(
 	var componentEnvSection map[interface{}]interface{}
 	var componentBackendSection map[interface{}]interface{}
 	var componentBackendType string
-	var baseComponentPath string
+	var baseComponentName string
 	var command string
 	var componentInheritanceChain []string
 	var componentIsAbstract bool
@@ -96,9 +97,6 @@ func findComponentConfig(
 	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
 		componentBackendType = ""
 	}
-	if baseComponentPath, ok = componentSection["component"].(string); !ok {
-		baseComponentPath = ""
-	}
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
 	}
@@ -108,12 +106,18 @@ func findComponentConfig(
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
+	if baseComponentName, ok = componentSection["component"].(string); !ok {
+		baseComponentName = ""
+	}
 	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
 		componentMetadata := componentMetadataSection.(map[interface{}]interface{})
 		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
 			if componentMetadataType == "abstract" {
 				componentIsAbstract = true
 			}
+		}
+		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
+			baseComponentName = componentMetadataComponent
 		}
 	}
 
@@ -122,7 +126,7 @@ func findComponentConfig(
 		componentEnvSection,
 		componentBackendSection,
 		componentBackendType,
-		baseComponentPath,
+		baseComponentName,
 		command,
 		componentInheritanceChain,
 		componentIsAbstract,
@@ -583,7 +587,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[interf
 	}
 }
 
-// Convert ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...]
+// convertEnvVars convert ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...]
 func convertEnvVars(envVarsMap map[interface{}]interface{}) []string {
 	res := []string{}
 	if envVarsMap != nil {
@@ -592,4 +596,67 @@ func convertEnvVars(envVarsMap map[interface{}]interface{}) []string {
 		}
 	}
 	return res
+}
+
+// execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
+func execTerraformShellCommand(
+	component string,
+	stack string,
+	componentEnvList []string,
+	varFile string,
+	workingDir string,
+	workspaceName string,
+	componentPath string) error {
+
+	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
+	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_apply=-var-file=%s", varFile))
+	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_refresh=-var-file=%s", varFile))
+	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_import=-var-file=%s", varFile))
+	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
+
+	fmt.Println()
+	color.Cyan("Starting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
+	fmt.Println(fmt.Sprintf("Component: %s", component))
+	fmt.Println(fmt.Sprintf("Stack: %s", stack))
+	fmt.Println(fmt.Sprintf("Working directory: %s", workingDir))
+	fmt.Println(fmt.Sprintf("Terraform workspace: %s", workspaceName))
+	fmt.Println()
+	color.Cyan("Setting the ENV vars in the shell:\n")
+	for _, v := range componentEnvList {
+		fmt.Println(v)
+	}
+	fmt.Println()
+
+	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
+	pa := os.ProcAttr{
+		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		Dir:   componentPath,
+		Env:   append(os.Environ(), componentEnvList...),
+	}
+
+	// Start a new shell
+	executableName := ""
+	if runtime.GOOS == "windows" {
+		executableName = "cmd.exe"
+	} else {
+		executableName = os.Getenv("SHELL")
+	}
+
+	if len(executableName) == 0 {
+		return errors.New("can't find a shell to execute")
+	}
+
+	proc, err := os.StartProcess(executableName, []string{"-fpl"}, &pa)
+	if err != nil {
+		return err
+	}
+
+	// Wait until user exits the shell
+	state, err := proc.Wait()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Exited shell: %s\n", state.String())
+	return nil
 }
