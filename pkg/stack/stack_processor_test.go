@@ -159,6 +159,11 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "infra/infra-server", infraInfraServerOverrideComponentInheritance[0])
 	assert.Equal(t, "1_override", infraInfraServerOverrideComponentVarsA)
 
+	testTestComponentOverrideComponent3 := terraformComponents["test/test-component-override-3"].(map[interface{}]interface{})
+	testTestComponentOverrideComponent3Metadata := testTestComponentOverrideComponent3["metadata"].(map[interface{}]interface{})
+	testTestComponentOverrideComponent3TerraformWorkspace := testTestComponentOverrideComponent3Metadata["terraform_workspace"]
+	assert.Equal(t, "test-component-override-3-workspace", testTestComponentOverrideComponent3TerraformWorkspace)
+
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
