@@ -50,6 +50,7 @@ func findComponentConfig(
 	string,
 	[]string,
 	bool,
+	map[interface{}]interface{},
 	error,
 ) {
 
@@ -65,31 +66,32 @@ func findComponentConfig(
 	var command string
 	var componentInheritanceChain []string
 	var componentIsAbstract bool
+	var componentMetadata map[interface{}]interface{}
 	var ok bool
 
 	if len(stack) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, errors.New("stack must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("stack must be provided and must not be empty")
 	}
 	if len(component) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, errors.New("component must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component must be provided and must not be empty")
 	}
 	if len(componentType) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, errors.New("component type must be provided and must not be empty")
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component type must be provided and must not be empty")
 	}
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
@@ -110,7 +112,7 @@ func findComponentConfig(
 		baseComponentName = ""
 	}
 	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
-		componentMetadata := componentMetadataSection.(map[interface{}]interface{})
+		componentMetadata = componentMetadataSection.(map[interface{}]interface{})
 		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
 			if componentMetadataType == "abstract" {
 				componentIsAbstract = true
@@ -130,6 +132,7 @@ func findComponentConfig(
 		command,
 		componentInheritanceChain,
 		componentIsAbstract,
+		componentMetadata,
 		nil
 }
 
@@ -249,6 +252,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			configAndStacksInfo.Command,
 			configAndStacksInfo.ComponentInheritanceChain,
 			configAndStacksInfo.ComponentIsAbstract,
+			configAndStacksInfo.ComponentMetadataSection,
 			err = findComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -294,6 +298,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				configAndStacksInfo.Command,
 				configAndStacksInfo.ComponentInheritanceChain,
 				configAndStacksInfo.ComponentIsAbstract,
+				configAndStacksInfo.ComponentMetadataSection,
 				err = findComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
 				continue
@@ -387,6 +392,11 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
 	if err != nil {
 		return configAndStacksInfo, err
+	}
+
+	// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
+	if componentTerraformWorkspace, componentTerraformWorkspaceExist := configAndStacksInfo.ComponentMetadataSection["terraform_workspace"].(string); componentTerraformWorkspaceExist {
+		configAndStacksInfo.TerraformWorkspace = componentTerraformWorkspace
 	}
 
 	return configAndStacksInfo, nil
