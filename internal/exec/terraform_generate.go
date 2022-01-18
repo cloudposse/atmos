@@ -80,7 +80,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 			componentBackendSection,
 			componentBackendType,
 			baseComponentName,
-			_, _, _,
+			_, _, _, _,
 			err = findComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
 			return err
@@ -121,7 +121,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 				componentBackendSection,
 				componentBackendType,
 				baseComponentName,
-				_, _, _,
+				_, _, _, _,
 				err = findComponentConfig(stackName, stacksMap, "terraform", component)
 			if err != nil {
 				continue

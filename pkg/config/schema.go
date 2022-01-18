@@ -103,4 +103,6 @@ type ConfigAndStacksInfo struct {
 	ComponentInheritanceChain []string
 	NeedHelp                  bool
 	ComponentIsAbstract       bool
+	ComponentMetadataSection  map[interface{}]interface{}
+	TerraformWorkspace        string
 }

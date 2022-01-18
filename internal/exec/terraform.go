@@ -232,7 +232,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	var workspaceName string
-	if len(info.BaseComponent) > 0 {
+	if len(info.TerraformWorkspace) > 0 {
+		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
+		workspaceName = info.TerraformWorkspace
+	} else if len(info.BaseComponent) > 0 {
 		workspaceName = fmt.Sprintf("%s-%s", info.ContextPrefix, info.Component)
 	} else {
 		workspaceName = info.ContextPrefix

@@ -73,12 +73,12 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	if c.ProcessedConfig.StackType == "Directory" {
 		componentSection,
 			componentVarsSection,
-			_, _, _, _, _, _, _,
+			_, _, _, _, _, _, _, _,
 			err = findComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
 			componentSection,
 				componentVarsSection,
-				_, _, _, _, _, _, _,
+				_, _, _, _, _, _, _, _,
 				err = findComponentConfig(stack, stacksMap, "helmfile", component)
 			if err != nil {
 				return err
@@ -116,12 +116,12 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		for stackName := range stacksMap {
 			componentSection,
 				componentVarsSection,
-				_, _, _, _, _, _, _,
+				_, _, _, _, _, _, _, _,
 				err = findComponentConfig(stackName, stacksMap, "terraform", component)
 			if err != nil {
 				componentSection,
 					componentVarsSection,
-					_, _, _, _, _, _, _,
+					_, _, _, _, _, _, _, _,
 					err = findComponentConfig(stackName, stacksMap, "helmfile", component)
 				if err != nil {
 					continue
