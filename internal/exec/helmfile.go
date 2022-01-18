@@ -50,10 +50,11 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write variables to a file
-	varFile := fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
+	var varFile string
 	var varFileName string
 
 	if len(info.ComponentFolderPrefix) == 0 {
+		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
 		varFileName = path.Join(
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
@@ -61,6 +62,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 			varFile,
 		)
 	} else {
+		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
 		varFileName = path.Join(
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
