@@ -276,11 +276,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace`
-	err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, info.ComponentEnvList)
-	if err != nil {
-		err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, info.ComponentEnvList)
+	if info.SubCommand != "init" {
+		err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, info.ComponentEnvList)
 		if err != nil {
-			return err
+			err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, info.ComponentEnvList)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
