@@ -15,7 +15,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -163,41 +162,15 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	}
 
 	// Process command-line args
-	if len(configAndStacksInfo.BasePath) > 0 {
-		Config.BasePath = configAndStacksInfo.BasePath
-		color.Cyan(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
+	err = processCommandLineArgs(configAndStacksInfo)
+	if err != nil {
+		return err
 	}
-	if len(configAndStacksInfo.TerraformDir) > 0 {
-		Config.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
-		color.Cyan(fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
-	}
-	if len(configAndStacksInfo.HelmfileDir) > 0 {
-		Config.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
-		color.Cyan(fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
-	}
-	if len(configAndStacksInfo.ConfigDir) > 0 {
-		Config.Stacks.BasePath = configAndStacksInfo.ConfigDir
-		color.Cyan(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
-	}
-	if len(configAndStacksInfo.StacksDir) > 0 {
-		Config.Stacks.BasePath = configAndStacksInfo.StacksDir
-		color.Cyan(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
-	}
-	if len(configAndStacksInfo.DeployRunInit) > 0 {
-		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
-		if err != nil {
-			return err
-		}
-		Config.Components.Terraform.DeployRunInit = deployRunInitBool
-		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
-	}
-	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
-		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
-		if err != nil {
-			return err
-		}
-		Config.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
-		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
+
+	// Process base path
+	err = processBasePath()
+	if err != nil {
+		return err
 	}
 
 	// Check config
@@ -280,6 +253,11 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	} else {
 		// The stack is a logical name
 		// Check if it matches the pattern specified in 'StackNamePattern'
+		if len(Config.Stacks.NamePattern) == 0 {
+			errorMessage := "\nStack name pattern must be provided and must be not empty. Check the CLI config in 'atmos.yaml'"
+			return errors.New(errorMessage)
+		}
+
 		stackParts := strings.Split(configAndStacksInfo.Stack, "-")
 		stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
 
@@ -292,7 +270,8 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 			}
 			ProcessedConfig.StackType = "Logical"
 		} else {
-			errorMessage := fmt.Sprintf("\nThe stack '%s' does not exist in the config directories, and it does not match the stack name pattern '%s'",
+			errorMessage := fmt.Sprintf("\nThe stack '%s' does not exist in the config directories, "+
+				"and it does not match the stack name pattern '%s'",
 				configAndStacksInfo.Stack,
 				Config.Stacks.NamePattern,
 			)
@@ -315,6 +294,12 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 func ProcessConfigForSpacelift() error {
 	// Process ENV vars
 	err := processEnvVars()
+	if err != nil {
+		return err
+	}
+
+	// Process base path
+	err = processBasePath()
 	if err != nil {
 		return err
 	}

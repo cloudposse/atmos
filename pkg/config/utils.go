@@ -9,6 +9,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -244,6 +245,83 @@ func checkConfig() error {
 		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	}
 
+	return nil
+}
+
+// processBasePath adjusts the current working dir by making it relative to the provided base path
+func processBasePath() error {
+	if len(Config.BasePath) > 0 && path.IsAbs(Config.BasePath) {
+		// Find the relative path from the current working dir to the provided base path (only if the provided base path is absolute).
+		// This will make the final (adjusted) path relative to the `stacks` and `components` folders,
+		// allowing executing `atmos` commands from any directory
+
+		// Get the current working dir
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		// Find the relative path to `Config.BasePath` from the current working dir
+		// https://pkg.go.dev/path/filepath#Rel
+		// func Rel(basepath, targpath string) (string, error)
+		// Rel returns a relative path that is lexically equivalent to targpath when joined to basepath with an intervening separator.
+		// That is, Join(basepath, Rel(basepath, targpath)) is equivalent to targpath itself.
+		// On success, the returned path will always be relative to basepath, even if basepath and targpath share no elements.
+		// An error is returned if targpath can't be made relative to basepath.
+		rel, err := filepath.Rel(wd, Config.BasePath)
+		if err != nil {
+			return err
+		}
+
+		if len(rel) > 0 {
+			abs, err := filepath.Abs(rel)
+			if err != nil {
+				return err
+			}
+			Config.BasePath = abs
+		}
+	}
+
+	return nil
+}
+
+func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
+	if len(configAndStacksInfo.BasePath) > 0 {
+		Config.BasePath = configAndStacksInfo.BasePath
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
+	}
+	if len(configAndStacksInfo.TerraformDir) > 0 {
+		Config.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
+	}
+	if len(configAndStacksInfo.HelmfileDir) > 0 {
+		Config.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
+	}
+	if len(configAndStacksInfo.ConfigDir) > 0 {
+		Config.Stacks.BasePath = configAndStacksInfo.ConfigDir
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
+	}
+	if len(configAndStacksInfo.StacksDir) > 0 {
+		Config.Stacks.BasePath = configAndStacksInfo.StacksDir
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
+	}
+	if len(configAndStacksInfo.DeployRunInit) > 0 {
+		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.DeployRunInit = deployRunInitBool
+		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
+	}
+	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
+		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
+		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
+	}
 	return nil
 }
 
