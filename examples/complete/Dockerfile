@@ -2,7 +2,7 @@
 ARG GEODESIC_VERSION=0.147.11
 ARG GEODESIC_OS=debian
 # https://github.com/cloudposse/atmos
-ARG ATMOS_VERSION=1.3.22
+ARG ATMOS_VERSION=1.3.23
 
 FROM cloudposse/geodesic:${GEODESIC_VERSION}-${GEODESIC_OS}
 
