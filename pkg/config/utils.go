@@ -249,6 +249,7 @@ func checkConfig() error {
 }
 
 // processBasePath adjusts the current working dir by making it relative to the provided base path
+// NOTE: this function is not in use, we leave it here (in utils) in case we need it in the future
 func processBasePath() error {
 	if len(Config.BasePath) > 0 && path.IsAbs(Config.BasePath) {
 		// Find the relative path from the current working dir to the provided base path (only if the provided base path is absolute).

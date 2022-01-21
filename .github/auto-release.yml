@@ -1,6 +1,8 @@
 name-template: 'v$RESOLVED_VERSION'
-tag-template: '$RESOLVED_VERSION'
+# https://golang.org/ref/mod#versions
+tag-template: 'v$RESOLVED_VERSION'
 version-template: '$MAJOR.$MINOR.$PATCH'
+
 version-resolver:
   major:
     labels:
