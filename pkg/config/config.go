@@ -167,12 +167,6 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Process base path
-	err = processBasePath()
-	if err != nil {
-		return err
-	}
-
 	// Check config
 	err = checkConfig()
 	if err != nil {
@@ -294,12 +288,6 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 func ProcessConfigForSpacelift() error {
 	// Process ENV vars
 	err := processEnvVars()
-	if err != nil {
-		return err
-	}
-
-	// Process base path
-	err = processBasePath()
 	if err != nil {
 		return err
 	}

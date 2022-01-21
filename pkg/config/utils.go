@@ -252,8 +252,7 @@ func checkConfig() error {
 func processBasePath() error {
 	if len(Config.BasePath) > 0 && path.IsAbs(Config.BasePath) {
 		// Find the relative path from the current working dir to the provided base path (only if the provided base path is absolute).
-		// This will make the final (adjusted) path relative to the `stacks` and `components` folders,
-		// allowing executing `atmos` commands from any directory
+		// This will make the final (adjusted) path relative to the `stacks` and `components` folders
 
 		// Get the current working dir
 		wd, err := os.Getwd()
