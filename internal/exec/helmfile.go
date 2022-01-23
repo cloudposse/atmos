@@ -33,20 +33,28 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	var finalComponent string
+
+	if len(info.BaseComponent) > 0 {
+		finalComponent = info.BaseComponent
+	} else {
+		finalComponent = info.Component
+	}
+
+	// Check if the component exists as a helmfile component
+	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
+	componentPathExists, err := utils.IsDirectory(componentPath)
+	if err != nil || !componentPathExists {
+		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
+			finalComponent,
+			path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix),
+		))
+	}
+
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
 	if (info.SubCommand == "sync" || info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
 		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"with 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
-	}
-
-	// Check if the component exists as a helmfile component
-	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.Component)
-	componentPathExists, err := utils.IsDirectory(componentPath)
-	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
-			info.Component,
-			path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix),
-		))
 	}
 
 	// Write variables to a file
@@ -58,7 +66,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		varFileName = path.Join(
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
-			info.Component,
+			finalComponent,
 			varFile,
 		)
 	} else {
@@ -67,7 +75,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
 			info.ComponentFolderPrefix,
-			info.Component,
+			finalComponent,
 			varFile,
 		)
 	}
