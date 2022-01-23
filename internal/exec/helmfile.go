@@ -141,9 +141,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.Component)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, finalComponent)
 	} else {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.Component)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, finalComponent)
 	}
 	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
