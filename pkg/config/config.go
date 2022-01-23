@@ -248,7 +248,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		// The stack is a logical name
 		// Check if it matches the pattern specified in 'StackNamePattern'
 		if len(Config.Stacks.NamePattern) == 0 {
-			errorMessage := "\nStack name pattern must be provided and must be not empty. Check the CLI config in 'atmos.yaml'"
+			errorMessage := "\nStack name pattern must be provided and must not be empty. Check the CLI config in 'atmos.yaml'"
 			return errors.New(errorMessage)
 		}
 
