@@ -9,7 +9,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -243,43 +242,6 @@ func checkConfig() error {
 
 	if len(Config.Stacks.IncludedPaths) < 1 {
 		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
-	}
-
-	return nil
-}
-
-// processBasePath adjusts the current working dir by making it relative to the provided base path
-// NOTE: this function is not in use, we leave it here (in utils) in case we need it in the future
-func processBasePath() error {
-	if len(Config.BasePath) > 0 && path.IsAbs(Config.BasePath) {
-		// Find the relative path from the current working dir to the provided base path (only if the provided base path is absolute).
-		// This will make the final (adjusted) path relative to the `stacks` and `components` folders
-
-		// Get the current working dir
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-
-		// Find the relative path to `Config.BasePath` from the current working dir
-		// https://pkg.go.dev/path/filepath#Rel
-		// func Rel(basepath, targpath string) (string, error)
-		// Rel returns a relative path that is lexically equivalent to targpath when joined to basepath with an intervening separator.
-		// That is, Join(basepath, Rel(basepath, targpath)) is equivalent to targpath itself.
-		// On success, the returned path will always be relative to basepath, even if basepath and targpath share no elements.
-		// An error is returned if targpath can't be made relative to basepath.
-		rel, err := filepath.Rel(wd, Config.BasePath)
-		if err != nil {
-			return err
-		}
-
-		if len(rel) > 0 {
-			abs, err := filepath.Abs(rel)
-			if err != nil {
-				return err
-			}
-			Config.BasePath = abs
-		}
 	}
 
 	return nil
