@@ -8,6 +8,8 @@ For local development inside a Docker container, start the Docker container and 
 ```bash
 cd /localhost/
 cd <path to the repo on localhost>
+# Set the base path to the `stacks` and `components` folders
+export ATMOS_BASE_PATH=$(pwd)
 ```
 
 Execute `atmos` commands from the container:
