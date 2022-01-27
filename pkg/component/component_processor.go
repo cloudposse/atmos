@@ -125,9 +125,18 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 		baseComponentName = baseComponent.(string)
 	}
 
+	// metadata
+	componentMetadata := map[interface{}]interface{}{}
+	if i, ok2 := componentSection["metadata"]; ok2 {
+		componentMetadata = i.(map[interface{}]interface{})
+	}
+
 	// workspace
 	var workspace string
-	if len(baseComponentName) == 0 {
+	// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
+	if componentTerraformWorkspace, componentTerraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); componentTerraformWorkspaceExist {
+		workspace = componentTerraformWorkspace
+	} else if len(baseComponentName) == 0 {
 		workspace = stack
 	} else {
 		workspace = fmt.Sprintf("%s-%s", stack, component)
