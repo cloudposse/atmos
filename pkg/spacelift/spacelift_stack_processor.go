@@ -381,9 +381,19 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 					spaceliftConfig["backend"] = componentBackend
 
+					// metadata
+					componentMetadata := map[interface{}]interface{}{}
+					if i, ok2 := componentMap["metadata"]; ok2 {
+						componentMetadata = i.(map[interface{}]interface{})
+					}
+					spaceliftConfig["metadata"] = componentMetadata
+
 					// workspace
 					var workspace string
-					if backendTypeName == "s3" && baseComponentName == "" {
+					// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
+					if componentTerraformWorkspace, componentTerraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); componentTerraformWorkspaceExist {
+						workspace = componentTerraformWorkspace
+					} else if backendTypeName == "s3" && baseComponentName == "" {
 						workspace = contextPrefix
 					} else {
 						workspace = fmt.Sprintf("%s-%s", contextPrefix, component)
