@@ -82,7 +82,7 @@ func TestComponentProcessor(t *testing.T) {
 	tenant1Ue2DevTestTestComponentOverrideComponentRemoteStateBackendVal2 := tenant1Ue2DevTestTestComponentOverrideComponentRemoteStateBackend["val2"].(string)
 	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentOverrideComponentBackendWorkspaceKeyPrefix)
 	assert.Equal(t, "test/test-component", tenant1Ue2DevTestTestComponentOverrideComponentBaseComponent)
-	assert.Equal(t, "tenant1-ue2-dev-test-test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentWorkspace)
+	assert.Equal(t, "test-component-override-workspace-override", tenant1Ue2DevTestTestComponentOverrideComponentWorkspace)
 	assert.Equal(t, 11, len(tenant1Ue2DevTestTestComponentOverrideComponentDeps))
 	assert.Equal(t, "catalog/terraform/services/service-1", tenant1Ue2DevTestTestComponentOverrideComponentDeps[0])
 	assert.Equal(t, "catalog/terraform/services/service-1-override", tenant1Ue2DevTestTestComponentOverrideComponentDeps[1])
