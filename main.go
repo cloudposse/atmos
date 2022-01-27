@@ -1,16 +1,13 @@
 package main
 
 import (
-	"os"
-
 	"github.com/cloudposse/atmos/cmd"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func main() {
 	err := cmd.Execute()
 	if err != nil {
-		color.Red("%s", err)
-		os.Exit(1)
+		u.PrintErrorToStdErrorAndExit(err)
 	}
 }

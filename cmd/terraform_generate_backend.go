@@ -2,9 +2,8 @@ package cmd
 
 import (
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 // terraformGenerateBackendCmd generates backend config for a terraform components
@@ -16,8 +15,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateBackend(cmd, args)
 		if err != nil {
-			color.Red("%s\n\n", err)
-			os.Exit(1)
+			u.PrintErrorToStdErrorAndExit(err)
 		}
 	},
 }
@@ -28,8 +26,7 @@ func init() {
 
 	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		color.Red("%s\n\n", err)
-		os.Exit(1)
+		u.PrintErrorToStdErrorAndExit(err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateBackendCmd)
