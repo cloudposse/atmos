@@ -579,7 +579,7 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	fmt.Println()
 	color.Cyan("Executing command:\n")

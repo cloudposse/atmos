@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"fmt"
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 // describeComponentCmd describes configuration for components
@@ -17,9 +15,7 @@ var describeConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeConfig(cmd, args)
 		if err != nil {
-			color.Red("%s\n", err)
-			fmt.Println()
-			os.Exit(1)
+			u.PrintErrorToStdErrorAndExit(err)
 		}
 	},
 }
