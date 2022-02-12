@@ -356,33 +356,38 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		configAndStacksInfo.Command = componentType
 	}
 
+	// Print component variables
 	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
 	err = utils.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
+	fmt.Println(configAndStacksInfo.ComponentFromArg)
+	fmt.Println(configAndStacksInfo.BaseComponentPath)
+
+	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""
-	configAndStacksInfo.ComponentNamePrefix = ""
-
-	finalComponentPathParts := strings.Split(configAndStacksInfo.ComponentFromArg, "/")
-	finalComponentPathPartsLength := len(finalComponentPathParts)
-
-	if finalComponentPathPartsLength > 1 {
-		componentFromArgPartsWithoutLast := finalComponentPathParts[:finalComponentPathPartsLength-1]
+	componentPathParts := strings.Split(configAndStacksInfo.ComponentFromArg, "/")
+	componentPathPartsLength := len(componentPathParts)
+	if componentPathPartsLength > 1 {
+		componentFromArgPartsWithoutLast := componentPathParts[:componentPathPartsLength-1]
 		configAndStacksInfo.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
-		configAndStacksInfo.ComponentNamePrefix = strings.Join(componentFromArgPartsWithoutLast, "-")
-		configAndStacksInfo.Component = finalComponentPathParts[finalComponentPathPartsLength-1]
+		configAndStacksInfo.Component = componentPathParts[componentPathPartsLength-1]
 	} else {
 		configAndStacksInfo.Component = configAndStacksInfo.ComponentFromArg
 	}
 
+	// Process base component path and name
 	if len(configAndStacksInfo.BaseComponentPath) > 0 {
 		baseComponentPathParts := strings.Split(configAndStacksInfo.BaseComponentPath, "/")
 		baseComponentPathPartsLength := len(baseComponentPathParts)
 		if baseComponentPathPartsLength > 1 {
+			baseComponentFromArgPartsWithoutLast := baseComponentPathParts[:componentPathPartsLength-1]
+			configAndStacksInfo.ComponentFolderPrefix = strings.Join(baseComponentFromArgPartsWithoutLast, "/")
 			configAndStacksInfo.BaseComponent = baseComponentPathParts[baseComponentPathPartsLength-1]
 		} else {
+			configAndStacksInfo.ComponentFolderPrefix = ""
 			configAndStacksInfo.BaseComponent = configAndStacksInfo.BaseComponentPath
 		}
 	}
