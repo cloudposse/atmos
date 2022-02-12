@@ -77,7 +77,6 @@ type ConfigAndStacksInfo struct {
 	Stack                     string
 	ComponentFromArg          string
 	ComponentFolderPrefix     string
-	ComponentNamePrefix       string
 	Component                 string
 	BaseComponentPath         string
 	BaseComponent             string
