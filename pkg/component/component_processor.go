@@ -2,9 +2,8 @@ package component
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/internal/exec"
+	e "github.com/cloudposse/atmos/internal/exec"
 	c "github.com/cloudposse/atmos/pkg/config"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	"github.com/pkg/errors"
 	"strings"
 )
@@ -12,147 +11,15 @@ import (
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
 func ProcessComponentInStack(component string, stack string) (map[string]interface{}, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
+	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
+	configAndStacksInfo.ComponentType = "terraform"
 
-	err := c.InitConfig()
+	configAndStacksInfo, err := e.ProcessStacks(configAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
-
-	err = c.ProcessConfig(configAndStacksInfo)
-	if err != nil {
-		return nil, err
-	}
-
-	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.ProcessedConfig.StacksBaseAbsolutePath,
-		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
-		true,
-		true)
-
-	if err != nil {
-		return nil, err
-	}
-
-	var componentSection map[string]interface{}
-	var componentVarsSection map[interface{}]interface{}
-
-	// Check and process stacks
-	if c.ProcessedConfig.StackType == "Directory" {
-		componentSection, componentVarsSection,
-			_, _, _, _, _, _, _, _,
-			err = u.FindComponentConfig(stack, stacksMap, "terraform", component)
-		if err != nil {
-			componentSection, componentVarsSection,
-				_, _, _, _, _, _, _, _,
-				err = u.FindComponentConfig(stack, stacksMap, "helmfile", component)
-			if err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		if len(c.Config.Stacks.NamePattern) < 1 {
-			return nil, errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-		}
-
-		stackParts := strings.Split(stack, "-")
-		stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
-
-		var tenant string
-		var environment string
-		var stage string
-		var tenantFound bool
-		var environmentFound bool
-		var stageFound bool
-
-		for i, part := range stackNamePatternParts {
-			if part == "{tenant}" {
-				tenant = stackParts[i]
-			} else if part == "{environment}" {
-				environment = stackParts[i]
-			} else if part == "{stage}" {
-				stage = stackParts[i]
-			}
-		}
-
-		for stackName := range stacksMap {
-			componentSection, componentVarsSection,
-				_, _, _, _, _, _, _, _,
-				err = u.FindComponentConfig(stackName, stacksMap, "terraform", component)
-			if err != nil {
-				componentSection, componentVarsSection,
-					_, _, _, _, _, _, _, _,
-					err = u.FindComponentConfig(stackName, stacksMap, "helmfile", component)
-				if err != nil {
-					continue
-				}
-			}
-
-			tenantFound = true
-			environmentFound = true
-			stageFound = true
-
-			// Search for tenant in stack
-			if len(tenant) > 0 {
-				if tenantInStack, ok := componentVarsSection["tenant"].(string); !ok || tenantInStack != tenant {
-					tenantFound = false
-				}
-			}
-
-			// Search for environment in stack
-			if len(environment) > 0 {
-				if environmentInStack, ok := componentVarsSection["environment"].(string); !ok || environmentInStack != environment {
-					environmentFound = false
-				}
-			}
-
-			// Search for stage in stack
-			if len(stage) > 0 {
-				if stageInStack, ok := componentVarsSection["stage"].(string); !ok || stageInStack != stage {
-					stageFound = false
-				}
-			}
-
-			if tenantFound == true && environmentFound == true && stageFound == true {
-				break
-			}
-		}
-
-		if tenantFound == false || environmentFound == false || stageFound == false {
-			return nil, errors.New(fmt.Sprintf("\nCould not find config for the component '%s' in the stack '%s'.\n"+
-				"Check that all attributes in the stack name pattern '%s' are defined in stack config files.\n"+
-				"Are the component and stack names correct? Did you forget an import?",
-				component,
-				stack,
-				c.Config.Stacks.NamePattern,
-			))
-		}
-	}
-
-	baseComponentName := ""
-	if baseComponent, baseComponentExist := componentSection["component"]; baseComponentExist {
-		baseComponentName = baseComponent.(string)
-	}
-
-	// metadata
-	componentMetadata := map[interface{}]interface{}{}
-	if i, ok2 := componentSection["metadata"]; ok2 {
-		componentMetadata = i.(map[interface{}]interface{})
-	}
-
-	// workspace
-	var workspace string
-	// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
-	if componentTerraformWorkspace, componentTerraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); componentTerraformWorkspaceExist {
-		workspace = componentTerraformWorkspace
-	} else if len(baseComponentName) == 0 {
-		workspace = stack
-	} else {
-		workspace = fmt.Sprintf("%s-%s", stack, component)
-	}
-	componentSection["workspace"] = strings.Replace(workspace, "/", "-", -1)
-
-	return componentSection, nil
+	return configAndStacksInfo.ComponentSection, nil
 }
 
 // ProcessComponentFromContext accepts context (tenant, environment, stage) and returns the component configuration in the stack

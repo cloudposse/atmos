@@ -158,6 +158,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 
 	configAndStacksInfo.AdditionalArgsAndFlags = argsAndFlagsInfo.AdditionalArgsAndFlags
 	configAndStacksInfo.SubCommand = argsAndFlagsInfo.SubCommand
+	configAndStacksInfo.ComponentType = componentType
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
 	configAndStacksInfo.BasePath = argsAndFlagsInfo.BasePath
