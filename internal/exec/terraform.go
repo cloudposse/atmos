@@ -225,7 +225,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if len(info.ComponentInheritanceChain) > 0 {
 		fmt.Println("Inheritance: " + info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> "))
 	}
-	fmt.Println("Stack: " + info.Stack)
+
+	if info.Stack == info.StackFromArg {
+		fmt.Println("Stack: " + info.StackFromArg)
+	} else {
+		fmt.Println("Stack: " + info.StackFromArg)
+		fmt.Println("Stack dir: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
+	}
 
 	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))

@@ -137,7 +137,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	if len(info.BaseComponent) > 0 {
 		fmt.Println("Helmfile component: " + info.BaseComponent)
 	}
-	fmt.Println("Stack: " + info.Stack)
+
+	if info.Stack == info.StackFromArg {
+		fmt.Println("Stack: " + info.StackFromArg)
+	} else {
+		fmt.Println("Stack: " + info.StackFromArg)
+		fmt.Println("Stack dir: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
+	}
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {

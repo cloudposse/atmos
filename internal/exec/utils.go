@@ -204,6 +204,8 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacks
 		return configAndStacksInfo, errors.New(message)
 	}
 
+	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
+
 	// Process and merge CLI configurations
 	err := c.InitConfig()
 	if err != nil {
