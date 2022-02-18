@@ -239,16 +239,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	var workspaceName string
-	if len(info.TerraformWorkspace) > 0 {
-		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
-		workspaceName = info.TerraformWorkspace
-	} else if len(info.BaseComponent) > 0 {
-		workspaceName = fmt.Sprintf("%s-%s", info.ContextPrefix, info.Component)
-	} else {
-		workspaceName = info.ContextPrefix
-	}
-
 	allArgsAndFlags := []string{info.SubCommand}
 
 	switch info.SubCommand {
@@ -277,9 +267,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Run `terraform workspace`
 	if info.SubCommand != "init" {
-		err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, info.ComponentEnvList)
+		err = execCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList)
 		if err != nil {
-			err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, info.ComponentEnvList)
+			err = execCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList)
 			if err != nil {
 				return err
 			}
@@ -317,7 +307,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			info.ComponentEnvList,
 			varFile,
 			workingDir,
-			workspaceName,
+			info.TerraformWorkspace,
 			componentPath,
 		)
 		if err != nil {

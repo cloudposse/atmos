@@ -401,10 +401,18 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo, err
 	}
 
+	// workspace
+	var workspace string
 	// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
 	if componentTerraformWorkspace, componentTerraformWorkspaceExist := configAndStacksInfo.ComponentMetadataSection["terraform_workspace"].(string); componentTerraformWorkspaceExist {
-		configAndStacksInfo.TerraformWorkspace = componentTerraformWorkspace
+		workspace = componentTerraformWorkspace
+	} else if len(configAndStacksInfo.BaseComponent) == 0 {
+		workspace = configAndStacksInfo.ContextPrefix
+	} else {
+		workspace = fmt.Sprintf("%s-%s", configAndStacksInfo.ContextPrefix, configAndStacksInfo.Component)
 	}
+	configAndStacksInfo.TerraformWorkspace = workspace
+	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
 	return configAndStacksInfo, nil
 }
