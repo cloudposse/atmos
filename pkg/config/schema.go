@@ -74,6 +74,7 @@ type ArgsAndFlagsInfo struct {
 }
 
 type ConfigAndStacksInfo struct {
+	StackFromArg              string
 	Stack                     string
 	ComponentType             string
 	ComponentFromArg          string
