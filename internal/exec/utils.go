@@ -186,20 +186,25 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 		return configAndStacksInfo, err
 	}
 
+	return ProcessStacks(configAndStacksInfo)
+}
+
+// ProcessStacks processes stack config
+func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
 	if len(configAndStacksInfo.Stack) < 1 {
-		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", componentType)
+		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
 	}
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
-		message := fmt.Sprintf("'component' is required. Usage: atmos %s <command> <component> <arguments_and_flags>", componentType)
+		message := fmt.Sprintf("'component' is required. Usage: atmos %s <command> <component> <arguments_and_flags>", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
 	}
 
 	// Process and merge CLI configurations
-	err = c.InitConfig()
+	err := c.InitConfig()
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -255,7 +260,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 			configAndStacksInfo.ComponentInheritanceChain,
 			configAndStacksInfo.ComponentIsAbstract,
 			configAndStacksInfo.ComponentMetadataSection,
-			err = FindComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
+			err = FindComponentConfig(configAndStacksInfo.Stack, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -302,7 +307,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 				configAndStacksInfo.ComponentInheritanceChain,
 				configAndStacksInfo.ComponentIsAbstract,
 				configAndStacksInfo.ComponentMetadataSection,
-				err = FindComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
+				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
 				continue
 			}
@@ -356,7 +361,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	}
 
 	if len(configAndStacksInfo.Command) == 0 {
-		configAndStacksInfo.Command = componentType
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentType
 	}
 
 	// Print component variables
