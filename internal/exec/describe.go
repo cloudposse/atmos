@@ -74,12 +74,12 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		componentSection,
 			componentVarsSection,
 			_, _, _, _, _, _, _, _,
-			err = findComponentConfig(stack, stacksMap, "terraform", component)
+			err = FindComponentConfig(stack, stacksMap, "terraform", component)
 		if err != nil {
 			componentSection,
 				componentVarsSection,
 				_, _, _, _, _, _, _, _,
-				err = findComponentConfig(stack, stacksMap, "helmfile", component)
+				err = FindComponentConfig(stack, stacksMap, "helmfile", component)
 			if err != nil {
 				return err
 			}
@@ -117,12 +117,12 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 			componentSection,
 				componentVarsSection,
 				_, _, _, _, _, _, _, _,
-				err = findComponentConfig(stackName, stacksMap, "terraform", component)
+				err = FindComponentConfig(stackName, stacksMap, "terraform", component)
 			if err != nil {
 				componentSection,
 					componentVarsSection,
 					_, _, _, _, _, _, _, _,
-					err = findComponentConfig(stackName, stacksMap, "helmfile", component)
+					err = FindComponentConfig(stackName, stacksMap, "helmfile", component)
 				if err != nil {
 					continue
 				}

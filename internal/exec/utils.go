@@ -35,8 +35,8 @@ var (
 	}
 )
 
-// findComponentConfig finds component config sections
-func findComponentConfig(
+// FindComponentConfig finds component config sections
+func FindComponentConfig(
 	stack string,
 	stacksMap map[string]interface{},
 	componentType string,
@@ -253,7 +253,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			configAndStacksInfo.ComponentInheritanceChain,
 			configAndStacksInfo.ComponentIsAbstract,
 			configAndStacksInfo.ComponentMetadataSection,
-			err = findComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
+			err = FindComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -299,7 +299,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				configAndStacksInfo.ComponentInheritanceChain,
 				configAndStacksInfo.ComponentIsAbstract,
 				configAndStacksInfo.ComponentMetadataSection,
-				err = findComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
+				err = FindComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
 				continue
 			}
