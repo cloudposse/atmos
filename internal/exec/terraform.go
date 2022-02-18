@@ -18,7 +18,7 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	info, err := processConfigAndStacks("terraform", cmd, args)
+	info, err := processArgsConfigAndStacks("terraform", cmd, args)
 	if err != nil {
 		return err
 	}

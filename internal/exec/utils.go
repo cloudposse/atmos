@@ -136,8 +136,8 @@ func FindComponentConfig(
 		nil
 }
 
-// processConfigAndStacks processes CLI config and stacks
-func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
+// processArgsConfigAndStacks processes command-line args, CLI config and stacks
+func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 
 	if len(args) < 1 {
@@ -180,6 +180,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	flags := cmd.Flags()
+
 	configAndStacksInfo.Stack, err = flags.GetString("stack")
 	if err != nil {
 		return configAndStacksInfo, err
