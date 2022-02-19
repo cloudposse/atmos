@@ -712,6 +712,7 @@ func ProcessConfig(
 				if baseComponent, baseComponentExist := componentMap["component"].(string); baseComponentExist {
 					baseComponentName = baseComponent
 
+					// Process the base components recursively to find `componentInheritanceChain`
 					err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, baseComponentName)
 					if err != nil {
 						return nil, err

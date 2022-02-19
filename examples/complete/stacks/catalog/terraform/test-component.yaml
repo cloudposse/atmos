@@ -9,7 +9,6 @@ import:
 components:
   terraform:
     "test/test-component":
-      component: "test/test-component"
       settings:
         spacelift:
           workspace_enabled: true
