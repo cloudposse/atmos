@@ -9,21 +9,26 @@ import (
 )
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
-func ProcessComponentInStack(componentType string, component string, stack string) (map[string]interface{}, error) {
+func ProcessComponentInStack(component string, stack string) (map[string]interface{}, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
-	configAndStacksInfo.ComponentType = componentType
 
+	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err := e.ProcessStacks(configAndStacksInfo)
 	if err != nil {
-		return nil, err
+		configAndStacksInfo.ComponentType = "helmfile"
+		configAndStacksInfo, err = e.ProcessStacks(configAndStacksInfo)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	return configAndStacksInfo.ComponentSection, nil
 }
 
 // ProcessComponentFromContext accepts context (tenant, environment, stage) and returns the component configuration in the stack
-func ProcessComponentFromContext(componentType string, component string, tenant string, environment string, stage string) (map[string]interface{}, error) {
+func ProcessComponentFromContext(component string, tenant string, environment string, stage string) (map[string]interface{}, error) {
 	var stack string
 
 	err := c.InitConfig()
@@ -68,5 +73,5 @@ func ProcessComponentFromContext(componentType string, component string, tenant 
 		}
 	}
 
-	return ProcessComponentInStack(componentType, component, stack)
+	return ProcessComponentInStack(component, stack)
 }

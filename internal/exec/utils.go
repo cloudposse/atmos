@@ -374,9 +374,6 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacks
 		return configAndStacksInfo, err
 	}
 
-	fmt.Println(configAndStacksInfo.ComponentFromArg)
-	fmt.Println(configAndStacksInfo.BaseComponentPath)
-
 	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""
 	componentPathParts := strings.Split(configAndStacksInfo.ComponentFromArg, "/")
