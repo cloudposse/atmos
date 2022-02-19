@@ -79,7 +79,6 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentOverrideComponentBackend := tenant1Ue2DevTestTestComponentOverrideComponent["backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentOverrideComponentBaseComponent := tenant1Ue2DevTestTestComponentOverrideComponent["component"].(string)
-	tenant1Ue2DevTestTestComponentOverrideComponentTerraformWorkspace := tenant1Ue2DevTestTestComponentOverrideComponent["workspace"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentWorkspace := tenant1Ue2DevTestTestComponentOverrideComponent["workspace"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentBackendWorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentDeps := tenant1Ue2DevTestTestComponentOverrideComponent["deps"].([]string)
@@ -101,9 +100,18 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "globals/ue2-globals", tenant1Ue2DevTestTestComponentOverrideComponentDeps[9])
 	assert.Equal(t, "tenant1/ue2/dev", tenant1Ue2DevTestTestComponentOverrideComponentDeps[10])
 	assert.Equal(t, "2", tenant1Ue2DevTestTestComponentOverrideComponentRemoteStateBackendVal2)
-	assert.Equal(t, "test-component-override-workspace-override", tenant1Ue2DevTestTestComponentOverrideComponentTerraformWorkspace)
 
-	yamlConfig, err = yaml.Marshal(tenant1Ue2DevTestTestComponentOverrideComponent)
+	var tenant1Ue2DevTestTestComponentOverrideComponent2 map[string]interface{}
+	component = "test/test-component-override-2"
+	tenant = "tenant1"
+	environment = "ue2"
+	stage = "dev"
+	tenant1Ue2DevTestTestComponentOverrideComponent2, err = ProcessComponentFromContext("terraform", component, tenant, environment, stage)
+	assert.Nil(t, err)
+	tenant1Ue2DevTestTestComponentOverrideComponent2Workspace := tenant1Ue2DevTestTestComponentOverrideComponent2["workspace"].(string)
+	assert.Equal(t, "tenant1-ue2-dev-test-component-override-2", tenant1Ue2DevTestTestComponentOverrideComponent2Workspace)
+
+	yamlConfig, err = yaml.Marshal(tenant1Ue2DevTestTestComponentOverrideComponent2)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
 }
