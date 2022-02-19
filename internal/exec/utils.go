@@ -123,6 +123,10 @@ func FindComponentConfig(
 		}
 	}
 
+	if component == baseComponentName {
+		baseComponentName = ""
+	}
+
 	return componentSection,
 		componentVarsSection,
 		componentEnvSection,
