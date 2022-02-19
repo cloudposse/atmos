@@ -57,6 +57,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}
 
+	// Print component variables
+	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
+	err = utils.PrintAsYAML(info.ComponentVarsSection)
+	if err != nil {
+		return err
+	}
+
 	// Write variables to a file
 	var varFile string
 	var varFileName string
@@ -142,7 +149,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Println("Stack: " + info.StackFromArg)
 	} else {
 		fmt.Println("Stack: " + info.StackFromArg)
-		fmt.Println("Stack dir: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
+		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
 	}
 
 	var workingDir string

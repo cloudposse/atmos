@@ -104,6 +104,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Print component variables
+	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
+	err = utils.PrintAsYAML(info.ComponentVarsSection)
+	if err != nil {
+		return err
+	}
+
 	// Write variables to a file
 	var varFileName, varFileNameFromArg string
 
@@ -230,7 +237,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println("Stack: " + info.StackFromArg)
 	} else {
 		fmt.Println("Stack: " + info.StackFromArg)
-		fmt.Println("Stack dir: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
+		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
 	}
 
 	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)

@@ -367,13 +367,6 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacks
 		configAndStacksInfo.Command = configAndStacksInfo.ComponentType
 	}
 
-	// Print component variables
-	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
-	err = utils.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
 	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""
 	componentPathParts := strings.Split(configAndStacksInfo.ComponentFromArg, "/")
