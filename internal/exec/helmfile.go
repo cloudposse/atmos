@@ -87,7 +87,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	color.Cyan("Writing variables to file:")
+	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFileName)
 	err = utils.WriteToFileAsYAML(varFileName, info.ComponentVarsSection, 0644)
 	if err != nil {
