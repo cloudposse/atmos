@@ -78,10 +78,11 @@ type ConfigAndStacksInfo struct {
 	Stack                     string
 	ComponentType             string
 	ComponentFromArg          string
-	ComponentFolderPrefix     string
 	Component                 string
+	ComponentFolderPrefix     string
 	BaseComponentPath         string
 	BaseComponent             string
+	FinalComponent            string
 	Command                   string
 	SubCommand                string
 	ComponentSection          map[string]interface{}
