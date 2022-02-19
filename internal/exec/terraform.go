@@ -36,20 +36,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var finalComponent string
-
-	if len(info.BaseComponent) > 0 {
-		finalComponent = info.BaseComponent
-	} else {
-		finalComponent = info.Component
-	}
-
 	// Check if the component (or base component) exists as Terraform component
-	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
+	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
-			finalComponent,
+			info.FinalComponent,
 			path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix),
 		))
 	}
@@ -131,7 +123,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			varFileName = path.Join(
 				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
-				finalComponent,
+				info.FinalComponent,
 				varFile,
 			)
 		} else {
@@ -139,7 +131,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
-				finalComponent,
+				info.FinalComponent,
 				varFile,
 			)
 		}
@@ -166,7 +158,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			backendFileName = path.Join(
 				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
-				finalComponent,
+				info.FinalComponent,
 				"backend.tf.json",
 			)
 		} else {
@@ -174,7 +166,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
-				finalComponent,
+				info.FinalComponent,
 				"backend.tf.json",
 			)
 		}
@@ -240,7 +232,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
+	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, info.FinalComponent)
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
 	// Print ENV vars if they are found in the component's stack config

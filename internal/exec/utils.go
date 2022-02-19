@@ -393,6 +393,13 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacks
 		}
 	}
 
+	// Get the final component
+	if len(configAndStacksInfo.BaseComponent) > 0 {
+		configAndStacksInfo.FinalComponent = configAndStacksInfo.BaseComponent
+	} else {
+		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
+	}
+
 	// Process context
 	configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 	configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)

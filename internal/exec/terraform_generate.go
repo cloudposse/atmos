@@ -57,19 +57,12 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		return errors.New(fmt.Sprintf("\nBackend config for the '%s' component is missing 'workspace_key_prefix'\n", component))
 	}
 
-	var finalComponent string
-	if len(configAndStacksInfo.BaseComponent) > 0 {
-		finalComponent = configAndStacksInfo.BaseComponent
-	} else {
-		finalComponent = configAndStacksInfo.Component
-	}
-
 	// Write backend config to file
 	var backendFileName = path.Join(
 		c.Config.BasePath,
 		c.Config.Components.Terraform.BasePath,
 		configAndStacksInfo.ComponentFolderPrefix,
-		finalComponent,
+		configAndStacksInfo.FinalComponent,
 		"backend.tf.json",
 	)
 

@@ -33,20 +33,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var finalComponent string
-
-	if len(info.BaseComponent) > 0 {
-		finalComponent = info.BaseComponent
-	} else {
-		finalComponent = info.Component
-	}
-
 	// Check if the component exists as a helmfile component
-	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
+	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
-			finalComponent,
+			info.FinalComponent,
 			path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix),
 		))
 	}
@@ -73,7 +65,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		varFileName = path.Join(
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
-			finalComponent,
+			info.FinalComponent,
 			varFile,
 		)
 	} else {
@@ -82,7 +74,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
 			info.ComponentFolderPrefix,
-			finalComponent,
+			info.FinalComponent,
 			varFile,
 		)
 	}
@@ -154,9 +146,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, finalComponent)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.FinalComponent)
 	} else {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, finalComponent)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.FinalComponent)
 	}
 	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
