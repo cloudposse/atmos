@@ -109,7 +109,9 @@ func TestComponentProcessor(t *testing.T) {
 	tenant1Ue2DevTestTestComponentOverrideComponent2, err = ProcessComponentFromContext(component, tenant, environment, stage)
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentOverrideComponent2Workspace := tenant1Ue2DevTestTestComponentOverrideComponent2["workspace"].(string)
-	assert.Equal(t, "tenant1-ue2-dev-test-component-override-2", tenant1Ue2DevTestTestComponentOverrideComponent2Workspace)
+	tenant1Ue2DevTestTestComponentOverrideComponent2WorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
+	assert.Equal(t, "tenant1-ue2-dev-test-test-component-override-2", tenant1Ue2DevTestTestComponentOverrideComponent2Workspace)
+	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentOverrideComponent2WorkspaceKeyPrefix)
 
 	yamlConfig, err = yaml.Marshal(tenant1Ue2DevTestTestComponentOverrideComponent2)
 	assert.Nil(t, err)
