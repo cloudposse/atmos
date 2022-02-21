@@ -74,14 +74,18 @@ type ArgsAndFlagsInfo struct {
 }
 
 type ConfigAndStacksInfo struct {
+	StackFromArg              string
 	Stack                     string
+	ComponentType             string
 	ComponentFromArg          string
-	ComponentFolderPrefix     string
 	Component                 string
+	ComponentFolderPrefix     string
 	BaseComponentPath         string
 	BaseComponent             string
+	FinalComponent            string
 	Command                   string
 	SubCommand                string
+	ComponentSection          map[string]interface{}
 	ComponentVarsSection      map[interface{}]interface{}
 	ComponentEnvSection       map[interface{}]interface{}
 	ComponentEnvList          []string

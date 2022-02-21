@@ -15,7 +15,7 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	info, err := processConfigAndStacks("helmfile", cmd, args)
+	info, err := processArgsConfigAndStacks("helmfile", cmd, args)
 	if err != nil {
 		return err
 	}
@@ -33,20 +33,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var finalComponent string
-
-	if len(info.BaseComponent) > 0 {
-		finalComponent = info.BaseComponent
-	} else {
-		finalComponent = info.Component
-	}
-
 	// Check if the component exists as a helmfile component
-	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
+	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
-			finalComponent,
+			info.FinalComponent,
 			path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix),
 		))
 	}
@@ -55,6 +47,13 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	if (info.SubCommand == "sync" || info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
 		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
+	}
+
+	// Print component variables
+	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
+	err = utils.PrintAsYAML(info.ComponentVarsSection)
+	if err != nil {
+		return err
 	}
 
 	// Write variables to a file
@@ -66,7 +65,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		varFileName = path.Join(
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
-			finalComponent,
+			info.FinalComponent,
 			varFile,
 		)
 	} else {
@@ -75,12 +74,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
 			info.ComponentFolderPrefix,
-			finalComponent,
+			info.FinalComponent,
 			varFile,
 		)
 	}
 
-	color.Cyan("Writing variables to file:")
+	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFileName)
 	err = utils.WriteToFileAsYAML(varFileName, info.ComponentVarsSection, 0644)
 	if err != nil {
@@ -137,13 +136,19 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	if len(info.BaseComponent) > 0 {
 		fmt.Println("Helmfile component: " + info.BaseComponent)
 	}
-	fmt.Println("Stack: " + info.Stack)
+
+	if info.Stack == info.StackFromArg {
+		fmt.Println("Stack: " + info.StackFromArg)
+	} else {
+		fmt.Println("Stack: " + info.StackFromArg)
+		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
+	}
 
 	var workingDir string
 	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, finalComponent)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.FinalComponent)
 	} else {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, finalComponent)
+		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.FinalComponent)
 	}
 	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 

@@ -18,7 +18,7 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	info, err := processConfigAndStacks("terraform", cmd, args)
+	info, err := processArgsConfigAndStacks("terraform", cmd, args)
 	if err != nil {
 		return err
 	}
@@ -36,20 +36,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var finalComponent string
-
-	if len(info.BaseComponent) > 0 {
-		finalComponent = info.BaseComponent
-	} else {
-		finalComponent = info.Component
-	}
-
 	// Check if the component (or base component) exists as Terraform component
-	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, finalComponent)
+	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
-			finalComponent,
+			info.FinalComponent,
 			path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix),
 		))
 	}
@@ -104,6 +96,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Print component variables
+	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
+	err = utils.PrintAsYAML(info.ComponentVarsSection)
+	if err != nil {
+		return err
+	}
+
 	// Write variables to a file
 	var varFileName, varFileNameFromArg string
 
@@ -124,7 +123,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			varFileName = path.Join(
 				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
-				finalComponent,
+				info.FinalComponent,
 				varFile,
 			)
 		} else {
@@ -132,7 +131,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
-				finalComponent,
+				info.FinalComponent,
 				varFile,
 			)
 		}
@@ -159,7 +158,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			backendFileName = path.Join(
 				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
-				finalComponent,
+				info.FinalComponent,
 				"backend.tf.json",
 			)
 		} else {
@@ -167,7 +166,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 				c.Config.BasePath,
 				c.Config.Components.Terraform.BasePath,
 				info.ComponentFolderPrefix,
-				finalComponent,
+				info.FinalComponent,
 				"backend.tf.json",
 			)
 		}
@@ -225,9 +224,15 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if len(info.ComponentInheritanceChain) > 0 {
 		fmt.Println("Inheritance: " + info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> "))
 	}
-	fmt.Println("Stack: " + info.Stack)
 
-	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, finalComponent)
+	if info.Stack == info.StackFromArg {
+		fmt.Println("Stack: " + info.StackFromArg)
+	} else {
+		fmt.Println("Stack: " + info.StackFromArg)
+		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
+	}
+
+	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, info.FinalComponent)
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
 	// Print ENV vars if they are found in the component's stack config
@@ -237,16 +242,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		for _, v := range info.ComponentEnvList {
 			fmt.Println(v)
 		}
-	}
-
-	var workspaceName string
-	if len(info.TerraformWorkspace) > 0 {
-		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
-		workspaceName = info.TerraformWorkspace
-	} else if len(info.BaseComponent) > 0 {
-		workspaceName = fmt.Sprintf("%s-%s", info.ContextPrefix, info.Component)
-	} else {
-		workspaceName = info.ContextPrefix
 	}
 
 	allArgsAndFlags := []string{info.SubCommand}
@@ -277,9 +272,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Run `terraform workspace`
 	if info.SubCommand != "init" {
-		err = execCommand(info.Command, []string{"workspace", "select", workspaceName}, componentPath, info.ComponentEnvList)
+		err = execCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList)
 		if err != nil {
-			err = execCommand(info.Command, []string{"workspace", "new", workspaceName}, componentPath, info.ComponentEnvList)
+			err = execCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList)
 			if err != nil {
 				return err
 			}
@@ -317,7 +312,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			info.ComponentEnvList,
 			varFile,
 			workingDir,
-			workspaceName,
+			info.TerraformWorkspace,
 			componentPath,
 		)
 		if err != nil {

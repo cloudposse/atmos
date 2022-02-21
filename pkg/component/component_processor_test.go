@@ -20,6 +20,7 @@ func TestComponentProcessor(t *testing.T) {
 	tenant1Ue2DevTestTestComponentBackend := tenant1Ue2DevTestTestComponent["backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentRemoteStateBackend := tenant1Ue2DevTestTestComponent["remote_state_backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentBaseComponent := tenant1Ue2DevTestTestComponent["component"]
+	tenant1Ue2DevTestTestComponentTerraformWorkspace := tenant1Ue2DevTestTestComponent["workspace"].(string)
 	tenant1Ue2DevTestTestComponentWorkspace := tenant1Ue2DevTestTestComponent["workspace"].(string)
 	tenant1Ue2DevTestTestComponentBackendWorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentBackend["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentRemoteStateBackendWorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentRemoteStateBackend["workspace_key_prefix"].(string)
@@ -36,6 +37,7 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "globals/tenant1-globals", tenant1Ue2DevTestTestComponentDeps[4])
 	assert.Equal(t, "globals/ue2-globals", tenant1Ue2DevTestTestComponentDeps[5])
 	assert.Equal(t, "tenant1/ue2/dev", tenant1Ue2DevTestTestComponentDeps[6])
+	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevTestTestComponentTerraformWorkspace)
 
 	var tenant1Ue2DevTestTestComponent2 map[string]interface{}
 	component = "test/test-component"
@@ -47,6 +49,7 @@ func TestComponentProcessor(t *testing.T) {
 	tenant1Ue2DevTestTestComponentBackend2 := tenant1Ue2DevTestTestComponent2["backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentRemoteStateBackend2 := tenant1Ue2DevTestTestComponent2["remote_state_backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentBaseComponent2 := tenant1Ue2DevTestTestComponent2["component"]
+	tenant1Ue2DevTestTestComponentTerraformWorkspace2 := tenant1Ue2DevTestTestComponent2["workspace"].(string)
 	tenant1Ue2DevTestTestComponentWorkspace2 := tenant1Ue2DevTestTestComponent2["workspace"].(string)
 	tenant1Ue2DevTestTestComponentBackendWorkspaceKeyPrefix2 := tenant1Ue2DevTestTestComponentBackend2["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentRemoteStateBackendWorkspaceKeyPrefix2 := tenant1Ue2DevTestTestComponentRemoteStateBackend2["workspace_key_prefix"].(string)
@@ -63,6 +66,7 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "globals/tenant1-globals", tenant1Ue2DevTestTestComponentDeps2[4])
 	assert.Equal(t, "globals/ue2-globals", tenant1Ue2DevTestTestComponentDeps2[5])
 	assert.Equal(t, "tenant1/ue2/dev", tenant1Ue2DevTestTestComponentDeps2[6])
+	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevTestTestComponentTerraformWorkspace2)
 
 	yamlConfig, err = yaml.Marshal(tenant1Ue2DevTestTestComponent)
 	assert.Nil(t, err)
@@ -97,7 +101,19 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "tenant1/ue2/dev", tenant1Ue2DevTestTestComponentOverrideComponentDeps[10])
 	assert.Equal(t, "2", tenant1Ue2DevTestTestComponentOverrideComponentRemoteStateBackendVal2)
 
-	yamlConfig, err = yaml.Marshal(tenant1Ue2DevTestTestComponentOverrideComponent)
+	var tenant1Ue2DevTestTestComponentOverrideComponent2 map[string]interface{}
+	component = "test/test-component-override-2"
+	tenant = "tenant1"
+	environment = "ue2"
+	stage = "dev"
+	tenant1Ue2DevTestTestComponentOverrideComponent2, err = ProcessComponentFromContext(component, tenant, environment, stage)
+	assert.Nil(t, err)
+	tenant1Ue2DevTestTestComponentOverrideComponent2Workspace := tenant1Ue2DevTestTestComponentOverrideComponent2["workspace"].(string)
+	tenant1Ue2DevTestTestComponentOverrideComponent2WorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
+	assert.Equal(t, "tenant1-ue2-dev-test-test-component-override-2", tenant1Ue2DevTestTestComponentOverrideComponent2Workspace)
+	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentOverrideComponent2WorkspaceKeyPrefix)
+
+	yamlConfig, err = yaml.Marshal(tenant1Ue2DevTestTestComponentOverrideComponent2)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
 }

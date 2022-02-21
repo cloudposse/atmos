@@ -35,8 +35,8 @@ var (
 	}
 )
 
-// findComponentConfig finds component config sections
-func findComponentConfig(
+// FindComponentConfig finds component config sections
+func FindComponentConfig(
 	stack string,
 	stacksMap map[string]interface{},
 	componentType string,
@@ -123,6 +123,10 @@ func findComponentConfig(
 		}
 	}
 
+	if component == baseComponentName {
+		baseComponentName = ""
+	}
+
 	return componentSection,
 		componentVarsSection,
 		componentEnvSection,
@@ -136,8 +140,8 @@ func findComponentConfig(
 		nil
 }
 
-// processConfigAndStacks processes CLI config and stacks
-func processConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
+// processArgsConfigAndStacks processes command-line args, CLI config and stacks
+func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 
 	if len(args) < 1 {
@@ -158,6 +162,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	configAndStacksInfo.AdditionalArgsAndFlags = argsAndFlagsInfo.AdditionalArgsAndFlags
 	configAndStacksInfo.SubCommand = argsAndFlagsInfo.SubCommand
+	configAndStacksInfo.ComponentType = componentType
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
 	configAndStacksInfo.BasePath = argsAndFlagsInfo.BasePath
@@ -180,25 +185,33 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	flags := cmd.Flags()
+
 	configAndStacksInfo.Stack, err = flags.GetString("stack")
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
+	return ProcessStacks(configAndStacksInfo)
+}
+
+// ProcessStacks processes stack config
+func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
 	if len(configAndStacksInfo.Stack) < 1 {
-		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", componentType)
+		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
 	}
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
-		message := fmt.Sprintf("'component' is required. Usage: atmos %s <command> <component> <arguments_and_flags>", componentType)
+		message := fmt.Sprintf("'component' is required. Usage: atmos %s <command> <component> <arguments_and_flags>", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
 	}
 
+	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
+
 	// Process and merge CLI configurations
-	err = c.InitConfig()
+	err := c.InitConfig()
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -244,7 +257,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
-		_, configAndStacksInfo.ComponentVarsSection,
+		configAndStacksInfo.ComponentSection,
+			configAndStacksInfo.ComponentVarsSection,
 			configAndStacksInfo.ComponentEnvSection,
 			configAndStacksInfo.ComponentBackendSection,
 			configAndStacksInfo.ComponentBackendType,
@@ -253,7 +267,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 			configAndStacksInfo.ComponentInheritanceChain,
 			configAndStacksInfo.ComponentIsAbstract,
 			configAndStacksInfo.ComponentMetadataSection,
-			err = findComponentConfig(configAndStacksInfo.Stack, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
+			err = FindComponentConfig(configAndStacksInfo.Stack, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -290,7 +304,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 
 		for stackName := range stacksMap {
-			_, configAndStacksInfo.ComponentVarsSection,
+			configAndStacksInfo.ComponentSection,
+				configAndStacksInfo.ComponentVarsSection,
 				configAndStacksInfo.ComponentEnvSection,
 				configAndStacksInfo.ComponentBackendSection,
 				configAndStacksInfo.ComponentBackendType,
@@ -299,7 +314,7 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 				configAndStacksInfo.ComponentInheritanceChain,
 				configAndStacksInfo.ComponentIsAbstract,
 				configAndStacksInfo.ComponentMetadataSection,
-				err = findComponentConfig(stackName, stacksMap, componentType, configAndStacksInfo.ComponentFromArg)
+				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
 				continue
 			}
@@ -353,18 +368,8 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 	}
 
 	if len(configAndStacksInfo.Command) == 0 {
-		configAndStacksInfo.Command = componentType
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentType
 	}
-
-	// Print component variables
-	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack)
-	err = utils.PrintAsYAML(configAndStacksInfo.ComponentVarsSection)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	fmt.Println(configAndStacksInfo.ComponentFromArg)
-	fmt.Println(configAndStacksInfo.BaseComponentPath)
 
 	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""
@@ -392,6 +397,13 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		}
 	}
 
+	// Get the final component
+	if len(configAndStacksInfo.BaseComponent) > 0 {
+		configAndStacksInfo.FinalComponent = configAndStacksInfo.BaseComponent
+	} else {
+		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
+	}
+
 	// Process context
 	configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 	configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
@@ -399,10 +411,20 @@ func processConfigAndStacks(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo, err
 	}
 
+	// workspace
+	var workspace string
 	// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
 	if componentTerraformWorkspace, componentTerraformWorkspaceExist := configAndStacksInfo.ComponentMetadataSection["terraform_workspace"].(string); componentTerraformWorkspaceExist {
-		configAndStacksInfo.TerraformWorkspace = componentTerraformWorkspace
+		workspace = componentTerraformWorkspace
+	} else if len(configAndStacksInfo.BaseComponent) == 0 {
+		workspace = configAndStacksInfo.ContextPrefix
+	} else {
+		workspace = fmt.Sprintf("%s-%s", configAndStacksInfo.ContextPrefix, configAndStacksInfo.ComponentFromArg)
 	}
+
+	workspace = strings.Replace(workspace, "/", "-", -1)
+	configAndStacksInfo.TerraformWorkspace = workspace
+	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
 	return configAndStacksInfo, nil
 }
