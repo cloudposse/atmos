@@ -419,8 +419,10 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacks
 	} else if len(configAndStacksInfo.BaseComponent) == 0 {
 		workspace = configAndStacksInfo.ContextPrefix
 	} else {
-		workspace = fmt.Sprintf("%s-%s", configAndStacksInfo.ContextPrefix, configAndStacksInfo.Component)
+		workspace = fmt.Sprintf("%s-%s", configAndStacksInfo.ContextPrefix, configAndStacksInfo.ComponentFromArg)
 	}
+
+	workspace = strings.Replace(workspace, "/", "-", -1)
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 

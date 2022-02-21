@@ -31,11 +31,17 @@ func CreateSpaceliftStacks(
 		if err != nil {
 			return nil, err
 		}
+
 		err = c.ProcessConfigForSpacelift()
 		if err != nil {
 			return nil, err
 		}
-		_, stacks, err := s.ProcessYAMLConfigFiles(c.ProcessedConfig.StacksBaseAbsolutePath, c.ProcessedConfig.StackConfigFilesAbsolutePaths, processStackDeps, processComponentDeps)
+
+		_, stacks, err := s.ProcessYAMLConfigFiles(
+			c.ProcessedConfig.StacksBaseAbsolutePath,
+			c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+			processStackDeps,
+			processComponentDeps)
 		if err != nil {
 			return nil, err
 		}
