@@ -61,7 +61,8 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	assert.Contains(t, tenant1Ue2DevTestTestComponentOverrideComponentLabels, "deps:stacks/tenant1/ue2/dev.yaml")
 	assert.Contains(t, tenant1Ue2DevTestTestComponentOverrideComponentLabels, "folder:component/test/test-component-override")
 	assert.Contains(t, tenant1Ue2DevTestTestComponentOverrideComponentLabels, "folder:tenant1/ue2/dev")
-	assert.Contains(t, tenant1Ue2DevTestTestComponentOverrideComponentLabels, "test-component-override-workspace-override")
+
+	assert.Equal(t, "test-component-override-workspace-override", tenant1Ue2DevTestTestComponentOverrideTerraformWorkspace)
 
 	yamlSpaceliftStacks, err := yaml.Marshal(spaceliftStacks)
 	assert.Nil(t, err)
