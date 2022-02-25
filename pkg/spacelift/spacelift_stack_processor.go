@@ -443,14 +443,10 @@ func TransformStackConfigToSpaceliftStacks(
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
 					labels = append(labels, fmt.Sprintf("folder:%s", strings.Replace(contextPrefix, "-", "/", -1)))
 
-					// identify the stage
+					// identify add add a stage folder
 					stackNameParts := strings.SplitN(contextPrefix, "-", -1)
 					stackNamePartsLen := len(stackNameParts)
-					if stackNamePartsLen == 2 {
-						labels = append(labels, fmt.Sprintf("folder:stage/%s", stackNameParts[1]))
-					} else stackNamePartsLen == 3 {
-						labels = append(labels, fmt.Sprintf("folder:stage/%s", stackNameParts[2]))
-					}
+					labels = append(labels, fmt.Sprintf("folder:stage/%s", stackNameParts[stackNamePartsLen - 1]))
 
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
