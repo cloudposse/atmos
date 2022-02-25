@@ -444,7 +444,7 @@ func TransformStackConfigToSpaceliftStacks(
 					labels = append(labels, fmt.Sprintf("folder:%s", strings.Replace(contextPrefix, "-", "/", -1)))
 
 					// identify the stage
-					stackNameParts := strings.SplitN(stackName, "-", 2)
+					stackNameParts := strings.SplitN(contextPrefix, "-", -1)
 					stackNamePartsLen := len(stackNameParts)
 					if stackNamePartsLen == 2 {
 						labels = append(labels, fmt.Sprintf("folder:stage/%s", stackNameParts[1]))
