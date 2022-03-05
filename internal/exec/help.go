@@ -30,12 +30,14 @@ func processHelp(componentType string, command string) error {
 			fmt.Println(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, and if it finds it, " +
 				"sets 'AWS_REGION=<region>' ENV var before executing the command")
 			fmt.Println(" - 'atmos terraform generate backend' command generates the backend file for the component in the stack")
+			fmt.Println(" - 'atmos terraform generate varfile' command generates varfile for the component in the stack")
 			fmt.Println(" - 'atmos terraform shell' command configures an environment for the component in the stack and starts a new shell allowing executing all native terraform commands")
 		}
 
 		if componentType == "helmfile" {
 			fmt.Println()
 			color.Cyan("Additions and differences from native helmfile:")
+			fmt.Println(" - 'atmos helmfile generate varfile' command generates varfile for the component in the stack")
 			fmt.Println(" - 'atmos helmfile' commands support '[global options]' in the command-line argument '--global-options'. " +
 				"Usage: atmos helmfile <command> <component> -s <stack> [command options] [arguments...] --global-options=\"--no-color --namespace=test\"")
 			fmt.Println(" - before executing the 'helmfile' commands, 'atmos' calls 'aws eks update-kubeconfig' to read kubeconfig from the EKS cluster " +
