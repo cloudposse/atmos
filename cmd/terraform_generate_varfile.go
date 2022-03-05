@@ -10,7 +10,7 @@ import (
 var terraformGenerateVarfileCmd = &cobra.Command{
 	Use:                "varfile",
 	Short:              "Execute 'terraform generate varfile' command",
-	Long:               `This command generates varfile for a terraform component: atmos terraform generate varfile <component> -s <stack>`,
+	Long:               `This command generates varfile for a terraform component: atmos terraform generate varfile <component> -s <stack> -f <file>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateVarfile(cmd, args)
