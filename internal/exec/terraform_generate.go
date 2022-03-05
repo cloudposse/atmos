@@ -77,8 +77,3 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	return nil
 }
-
-// ExecuteTerraformGenerateBackends executes `terraform generate backends` command
-func ExecuteTerraformGenerateBackends(cmd *cobra.Command, args []string) error {
-	return nil
-}

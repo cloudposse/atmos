@@ -119,22 +119,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if len(varFileNameFromArg) > 0 {
 		varFileName = varFileNameFromArg
 	} else {
-		if len(info.ComponentFolderPrefix) == 0 {
-			varFileName = path.Join(
-				c.Config.BasePath,
-				c.Config.Components.Terraform.BasePath,
-				info.FinalComponent,
-				varFile,
-			)
-		} else {
-			varFileName = path.Join(
-				c.Config.BasePath,
-				c.Config.Components.Terraform.BasePath,
-				info.ComponentFolderPrefix,
-				info.FinalComponent,
-				varFile,
-			)
-		}
+		varFileName = path.Join(
+			c.Config.BasePath,
+			c.Config.Components.Terraform.BasePath,
+			info.ComponentFolderPrefix,
+			info.FinalComponent,
+			varFile,
+		)
 	}
 
 	color.Cyan("Writing the variables to file:")
@@ -152,24 +143,15 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Auto generate backend file
 	if c.Config.Components.Terraform.AutoGenerateBackendFile == true {
-		var backendFileName string
+		backendFileName := path.Join(
+			c.Config.BasePath,
+			c.Config.Components.Terraform.BasePath,
+			info.ComponentFolderPrefix,
+			info.FinalComponent,
+			"backend.tf.json",
+		)
+
 		fmt.Println()
-		if len(info.ComponentFolderPrefix) == 0 {
-			backendFileName = path.Join(
-				c.Config.BasePath,
-				c.Config.Components.Terraform.BasePath,
-				info.FinalComponent,
-				"backend.tf.json",
-			)
-		} else {
-			backendFileName = path.Join(
-				c.Config.BasePath,
-				c.Config.Components.Terraform.BasePath,
-				info.ComponentFolderPrefix,
-				info.FinalComponent,
-				"backend.tf.json",
-			)
-		}
 		color.Cyan("Writing the backend config to file:")
 		fmt.Println(backendFileName)
 		var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
