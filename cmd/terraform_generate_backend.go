@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// terraformGenerateBackendCmd generates backend config for a terraform components
+// terraformGenerateBackendCmd generates backend config for a terraform component
 var terraformGenerateBackendCmd = &cobra.Command{
 	Use:                "backend",
 	Short:              "Execute 'terraform generate backend' command",
