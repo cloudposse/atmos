@@ -58,11 +58,11 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Write variables to a file
 	var varFile string
-	var varFileName string
+	var varFilePath string
 
 	if len(info.ComponentFolderPrefix) == 0 {
 		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
-		varFileName = path.Join(
+		varFilePath = path.Join(
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
 			info.FinalComponent,
@@ -70,7 +70,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		)
 	} else {
 		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
-		varFileName = path.Join(
+		varFilePath = path.Join(
 			c.Config.BasePath,
 			c.Config.Components.Helmfile.BasePath,
 			info.ComponentFolderPrefix,
@@ -80,8 +80,8 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	color.Cyan("Writing the variables to file:")
-	fmt.Println(varFileName)
-	err = utils.WriteToFileAsYAML(varFileName, info.ComponentVarsSection, 0644)
+	fmt.Println(varFilePath)
+	err = utils.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cleanup
-	err = os.Remove(varFileName)
+	err = os.Remove(varFilePath)
 	if err != nil {
 		color.Yellow("Error deleting helmfile varfile: %s\n", err)
 	}

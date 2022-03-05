@@ -25,25 +25,25 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	var configAndStacksInfo c.ConfigAndStacksInfo
-	configAndStacksInfo.ComponentFromArg = component
-	configAndStacksInfo.Stack = stack
-	configAndStacksInfo.ComponentType = "terraform"
+	var info c.ConfigAndStacksInfo
+	info.ComponentFromArg = component
+	info.Stack = stack
+	info.ComponentType = "terraform"
 
-	configAndStacksInfo, err = ProcessStacks(configAndStacksInfo)
+	info, err = ProcessStacks(info)
 	if err != nil {
 		return err
 	}
 
-	if configAndStacksInfo.ComponentBackendType == "" {
+	if info.ComponentBackendType == "" {
 		return errors.New(fmt.Sprintf("\n'backend_type' is missing for the '%s' component.\n", component))
 	}
 
-	if configAndStacksInfo.ComponentBackendSection == nil {
+	if info.ComponentBackendSection == nil {
 		return errors.New(fmt.Sprintf("\nCould not find 'backend' config for the '%s' component.\n", component))
 	}
 
-	var componentBackendConfig = generateComponentBackendConfig(configAndStacksInfo.ComponentBackendType, configAndStacksInfo.ComponentBackendSection)
+	var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 
 	fmt.Println()
 	color.Cyan("Component backend config:\n\n")
@@ -53,23 +53,23 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the `backend` section has `workspace_key_prefix`
-	if _, ok := configAndStacksInfo.ComponentBackendSection["workspace_key_prefix"].(string); !ok {
+	if _, ok := info.ComponentBackendSection["workspace_key_prefix"].(string); !ok {
 		return errors.New(fmt.Sprintf("\nBackend config for the '%s' component is missing 'workspace_key_prefix'\n", component))
 	}
 
 	// Write backend config to file
-	var backendFileName = path.Join(
+	var backendFilePath = path.Join(
 		c.Config.BasePath,
 		c.Config.Components.Terraform.BasePath,
-		configAndStacksInfo.ComponentFolderPrefix,
-		configAndStacksInfo.FinalComponent,
+		info.ComponentFolderPrefix,
+		info.FinalComponent,
 		"backend.tf.json",
 	)
 
 	fmt.Println()
 	color.Cyan("Writing the backend config to file:")
-	fmt.Println(backendFileName)
-	err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+	fmt.Println(backendFilePath)
+	err = utils.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)
 	if err != nil {
 		return err
 	}
