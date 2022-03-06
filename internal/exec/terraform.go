@@ -52,16 +52,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}
 
-	var varFile string
-	var planFile string
-
-	if len(info.ComponentFolderPrefix) == 0 {
-		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
-		planFile = fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
-	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
-		planFile = fmt.Sprintf("%s-%s-%s.planfile", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
-	}
+	varFile := constructTerraformComponentVarfileName(info)
+	planFile := constructTerraformComponentPlanfileName(info)
 
 	if info.SubCommand == "clean" {
 		fmt.Println("Deleting '.terraform' folder")
@@ -119,13 +111,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = path.Join(
-			c.Config.BasePath,
-			c.Config.Components.Terraform.BasePath,
-			info.ComponentFolderPrefix,
-			info.FinalComponent,
-			varFile,
-		)
+		varFilePath = constructTerraformComponentVarfilePath(info)
 	}
 
 	color.Cyan("Writing the variables to file:")
@@ -144,10 +130,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Auto generate backend file
 	if c.Config.Components.Terraform.AutoGenerateBackendFile == true {
 		backendFileName := path.Join(
-			c.Config.BasePath,
-			c.Config.Components.Terraform.BasePath,
-			info.ComponentFolderPrefix,
-			info.FinalComponent,
+			constructTerraformComponentWorkingDir(info),
 			"backend.tf.json",
 		)
 
@@ -214,7 +197,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := path.Join(c.Config.BasePath, c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix, info.FinalComponent)
+	workingDir := constructTerraformComponentWorkingDir(info)
 	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
 
 	// Print ENV vars if they are found in the component's stack config
@@ -313,7 +296,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Clean up
 	if info.SubCommand != "plan" {
-		planFilePath := fmt.Sprintf("%s/%s", workingDir, planFile)
+		planFilePath := constructTerraformComponentPlanfilePath(info)
 		_ = os.Remove(planFilePath)
 	}
 

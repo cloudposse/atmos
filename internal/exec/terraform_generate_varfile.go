@@ -45,7 +45,7 @@ func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = constructTerraformVarfilePath(info)
+		varFilePath = constructTerraformComponentVarfilePath(info)
 	}
 
 	// Print the component variables

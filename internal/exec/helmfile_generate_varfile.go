@@ -45,7 +45,7 @@ func ExecuteHelmfileGenerateVarfile(cmd *cobra.Command, args []string) error {
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = constructHelmfileVarfilePath(info)
+		varFilePath = constructHelmfileComponentVarfilePath(info)
 	}
 
 	// Print the component variables

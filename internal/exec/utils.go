@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"os/exec"
-	"path"
 	"runtime"
 	"strings"
 )
@@ -697,44 +696,4 @@ func execTerraformShellCommand(
 
 	fmt.Printf("Exited shell: %s\n", state.String())
 	return nil
-}
-
-// constructTerraformVarfilePath constructs the varfile path for a terraform component in a stack
-func constructTerraformVarfilePath(info c.ConfigAndStacksInfo) string {
-	var varFile string
-	if len(info.ComponentFolderPrefix) == 0 {
-		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
-	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
-	}
-
-	varFilePath := path.Join(
-		c.Config.BasePath,
-		c.Config.Components.Terraform.BasePath,
-		info.ComponentFolderPrefix,
-		info.FinalComponent,
-		varFile,
-	)
-
-	return varFilePath
-}
-
-// constructHelmfileVarfilePath constructs the varfile path for a helmfile component in a stack
-func constructHelmfileVarfilePath(info c.ConfigAndStacksInfo) string {
-	var varFile string
-	if len(info.ComponentFolderPrefix) == 0 {
-		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
-	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
-	}
-
-	varFilePath := path.Join(
-		c.Config.BasePath,
-		c.Config.Components.Helmfile.BasePath,
-		info.ComponentFolderPrefix,
-		info.FinalComponent,
-		varFile,
-	)
-
-	return varFilePath
 }
