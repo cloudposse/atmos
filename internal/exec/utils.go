@@ -170,6 +170,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
+	configAndStacksInfo.WorkflowsDir = argsAndFlagsInfo.WorkflowsDir
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
@@ -536,6 +537,19 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
+		}
+
+		if arg == g.WorkflowDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.WorkflowsDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.WorkflowDirFlag) {
+			var workflowDirFlagParts = strings.Split(arg, "=")
+			if len(workflowDirFlagParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.WorkflowsDir = workflowDirFlagParts[1]
 		}
 
 		if arg == g.FromPlanFlag {

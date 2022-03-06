@@ -15,6 +15,7 @@ const (
 	ConfigDirFlag    = "--config-dir"
 	StackDirFlag     = "--stacks-dir"
 	BasePathFlag     = "--base-path"
+	WorkflowDirFlag  = "--workflows-dir"
 
 	DeployRunInitFlag           = "--deploy-run-init"
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
