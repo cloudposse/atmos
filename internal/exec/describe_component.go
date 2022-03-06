@@ -51,31 +51,3 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-
-// ExecuteDescribeConfig executes `describe config` command
-func ExecuteDescribeConfig(cmd *cobra.Command, args []string) error {
-	flags := cmd.Flags()
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-
-	err = c.InitConfig()
-	if err != nil {
-		return err
-	}
-
-	if format == "json" {
-		err = u.PrintAsJSON(c.Config)
-	} else if format == "yaml" {
-		err = u.PrintAsYAML(c.Config)
-	} else {
-		err = errors.New("invalid flag '--format'. Accepted values are 'json' or 'yaml'")
-	}
-	if err != nil {
-		return err
-	}
-
-	return nil
-}

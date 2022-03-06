@@ -57,31 +57,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write variables to a file
-	var varFile string
-	var varFileName string
-
-	if len(info.ComponentFolderPrefix) == 0 {
-		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
-		varFileName = path.Join(
-			c.Config.BasePath,
-			c.Config.Components.Helmfile.BasePath,
-			info.FinalComponent,
-			varFile,
-		)
-	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
-		varFileName = path.Join(
-			c.Config.BasePath,
-			c.Config.Components.Helmfile.BasePath,
-			info.ComponentFolderPrefix,
-			info.FinalComponent,
-			varFile,
-		)
-	}
+	varFile := constructHelmfileComponentVarfileName(info)
+	varFilePath := constructHelmfileComponentVarfilePath(info)
 
 	color.Cyan("Writing the variables to file:")
-	fmt.Println(varFileName)
-	err = utils.WriteToFileAsYAML(varFileName, info.ComponentVarsSection, 0644)
+	fmt.Println(varFilePath)
+	err = utils.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
 	if err != nil {
 		return err
 	}
@@ -144,12 +125,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
 	}
 
-	var workingDir string
-	if len(info.ComponentFolderPrefix) == 0 {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.FinalComponent)
-	} else {
-		workingDir = path.Join(c.Config.BasePath, c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix, info.FinalComponent)
-	}
+	workingDir := constructHelmfileComponentWorkingDir(info)
 	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
 	// Prepare arguments and flags
@@ -183,9 +159,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cleanup
-	err = os.Remove(varFileName)
+	err = os.Remove(varFilePath)
 	if err != nil {
-		color.Yellow("Error deleting helmfile varfile: %s\n", err)
+		color.Yellow("Error deleting the helmfile varfile: %s\n", err)
 	}
 
 	return nil
