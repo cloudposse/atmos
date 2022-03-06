@@ -7,7 +7,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"path"
 )
 
 // ExecuteTerraformGenerateVarfile executes `terraform generate varfile` command
@@ -46,20 +45,7 @@ func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		var varFile string
-		if len(info.ComponentFolderPrefix) == 0 {
-			varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
-		} else {
-			varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
-		}
-
-		varFilePath = path.Join(
-			c.Config.BasePath,
-			c.Config.Components.Terraform.BasePath,
-			info.ComponentFolderPrefix,
-			info.FinalComponent,
-			varFile,
-		)
+		varFilePath = constructTerraformVarfilePath(info)
 	}
 
 	// Print the component variables

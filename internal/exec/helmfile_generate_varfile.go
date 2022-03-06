@@ -7,7 +7,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"path"
 )
 
 // ExecuteHelmfileGenerateVarfile executes `helmfile generate varfile` command
@@ -46,20 +45,7 @@ func ExecuteHelmfileGenerateVarfile(cmd *cobra.Command, args []string) error {
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		var varFile string
-		if len(info.ComponentFolderPrefix) == 0 {
-			varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
-		} else {
-			varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
-		}
-
-		varFilePath = path.Join(
-			c.Config.BasePath,
-			c.Config.Components.Helmfile.BasePath,
-			info.ComponentFolderPrefix,
-			info.FinalComponent,
-			varFile,
-		)
+		varFilePath = constructHelmfileVarfilePath(info)
 	}
 
 	// Print the component variables
