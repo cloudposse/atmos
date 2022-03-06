@@ -37,7 +37,7 @@ func processHelp(componentType string, command string) error {
 		if componentType == "helmfile" {
 			fmt.Println()
 			color.Cyan("Additions and differences from native helmfile:")
-			fmt.Println(" - 'atmos helmfile generate varfile' command generates varfile for the component in the stack")
+			fmt.Println(" - 'atmos helmfile generate varfile' command generates a varfile for the component in the stack")
 			fmt.Println(" - 'atmos helmfile' commands support '[global options]' in the command-line argument '--global-options'. " +
 				"Usage: atmos helmfile <command> <component> -s <stack> [command options] [arguments...] --global-options=\"--no-color --namespace=test\"")
 			fmt.Println(" - before executing the 'helmfile' commands, 'atmos' calls 'aws eks update-kubeconfig' to read kubeconfig from the EKS cluster " +
