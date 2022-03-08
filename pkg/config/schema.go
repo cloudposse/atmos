@@ -116,3 +116,14 @@ type ConfigAndStacksInfo struct {
 	ComponentMetadataSection  map[interface{}]interface{}
 	TerraformWorkspace        string
 }
+
+type WorkflowStep struct {
+	Command string `yaml:"command" json:"command" mapstructure:"command"`
+	Stack   string `yaml:"stack" json:"stack" mapstructure:"stack"`
+	Type    string `yaml:"type" json:"type" mapstructure:"type"`
+}
+
+type Workflow struct {
+	Description string         `yaml:"description" json:"description" mapstructure:"description"`
+	Steps       []WorkflowStep `yaml:"steps" json:"steps" mapstructure:"steps"`
+}
