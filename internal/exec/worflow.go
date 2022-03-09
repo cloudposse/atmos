@@ -64,7 +64,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	}
 
 	if i, ok := yamlContent["workflows"]; !ok {
-		return errors.New("a workflow file must be a map with top-level 'workflows' key")
+		return errors.New("a workflow file must be a map with top-level 'workflows:' key")
 	} else {
 		workflowConfig = i
 	}
@@ -81,6 +81,11 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	err = u.PrintAsYAML(workflowDefinition)
+	if err != nil {
+		return err
+	}
+
+	err = executeWorkflowSteps(workflowDefinition)
 	if err != nil {
 		return err
 	}

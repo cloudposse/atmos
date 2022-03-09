@@ -30,21 +30,21 @@ workflows:
     description: Run 'terraform plan' on all components in the 'tenant1-ue2-dev' stack
     stack: tenant1-ue2-dev
     steps:
-      - command: echo "Running terraform plan on the component 'test/test-component' in the stack 'tenant1-ue2-dev'
+      - command: echo Running terraform plan on the component 'test/test-component' in the stack 'tenant1-ue2-dev'
         type: shell
       - command: terraform plan test/test-component
         # Type `atmos` is implicit, you don't have to specify it
         # Other supported types: 'shell'
         type: atmos
-      - command: echo "Running terraform plan on the component 'test/test-component-override' in the stack 'tenant1-ue2-dev'
+      - command: echo Running terraform plan on the component 'test/test-component-override' in the stack 'tenant1-ue2-dev'
         type: shell
       - command: terraform plan test/test-component-override
         type: atmos
-      - command: echo "Running terraform plan on the component 'test/test-component-override-2' in the stack 'tenant1-ue2-dev'
+      - command: echo Running terraform plan on the component 'test/test-component-override-2' in the stack 'tenant1-ue2-dev'
         type: shell
       - command: terraform plan test/test-component-override-2
         type: atmos
-      - command: echo "Running terraform plan on the component 'test/test-component-override-3' in the stack 'tenant1-ue2-dev'
+      - command: echo Running terraform plan on the component 'test/test-component-override-3' in the stack 'tenant1-ue2-dev'
         type: shell
       - command: terraform plan test/test-component-override-3
         type: atmos
@@ -52,12 +52,13 @@ workflows:
   test-1:
     description: Test workflow
     steps:
-      - command: echo "Command 1"
+      - command: echo Command 1
         type: shell
-      - command: echo "Command 2"
+      - command: echo Command 2
         type: shell
-      - command: echo "Command 3"
+      - command: echo Command 3
         type: shell
-      - command: echo "Command 4"
+      - command: echo Command 4
         type: shell
-      - command: echo "Command 5"
+      - command: echo Command 5
+        type: shell
