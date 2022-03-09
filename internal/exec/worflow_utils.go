@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/fatih/color"
@@ -18,10 +19,13 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 
 		if commandType == "shell" {
 			args := strings.Fields(command)
-			err := execCommand(args[0], args[1:], ".", []string{})
-			if err != nil {
+			if err := execCommand(args[0], args[1:], ".", []string{}); err != nil {
 				return err
 			}
+		} else if commandType == "atmos" {
+
+		} else {
+			return errors.New(fmt.Sprintf("invalid workflow step type '%s'", commandType))
 		}
 
 		fmt.Println()
