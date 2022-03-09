@@ -48,3 +48,16 @@ workflows:
         type: shell
       - command: terraform plan test/test-component-override-3
         type: atmos
+
+  test-1:
+    description: Test workflow
+    steps:
+      - command: echo "Command 1"
+        type: shell
+      - command: echo "Command 2"
+        type: shell
+      - command: echo "Command 3"
+        type: shell
+      - command: echo "Command 4"
+        type: shell
+      - command: echo "Command 5"

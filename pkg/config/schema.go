@@ -123,7 +123,11 @@ type WorkflowStep struct {
 	Type    string `yaml:"type" json:"type" mapstructure:"type"`
 }
 
-type Workflow struct {
+type WorkflowDefinition struct {
 	Description string         `yaml:"description" json:"description" mapstructure:"description"`
 	Steps       []WorkflowStep `yaml:"steps" json:"steps" mapstructure:"steps"`
 }
+
+type WorkflowConfig map[string]WorkflowDefinition
+
+type WorkflowFile map[string]WorkflowConfig
