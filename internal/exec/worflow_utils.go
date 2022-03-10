@@ -19,8 +19,6 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 			commandType = "atmos"
 		}
 
-		color.HiCyan(fmt.Sprintf("Executing workflow step: %s", command))
-
 		if commandType == "shell" {
 			args := strings.Fields(command)
 			if err := execCommand(args[0], args[1:], ".", []string{}); err != nil {
@@ -33,15 +31,19 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 			var stepStack = strings.TrimSpace(step.Stack)
 			var finalStack = ""
 
-			if stepStack != "" {
-				args = append(args, []string{"-s", stepStack}...)
-				finalStack = stepStack
-			} else if workflowStack != "" {
-				args = append(args, []string{"-s", workflowStack}...)
+			color.HiCyan(fmt.Sprintf("Executing workflow step: %s", command))
+
+			// The workflow `stack` attribute overrides any stack in the `command` (if specified)
+			// The step `stack` attribute overrides any stack in the `command` (if specified) and the workflow `stack` attribute
+			if workflowStack != "" {
 				finalStack = workflowStack
+			}
+			if stepStack != "" {
+				finalStack = stepStack
 			}
 
 			if finalStack != "" {
+				args = append(args, []string{"-s", finalStack}...)
 				color.HiCyan(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
