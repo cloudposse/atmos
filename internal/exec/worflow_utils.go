@@ -15,6 +15,8 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 		var command = strings.TrimSpace(step.Command)
 		var commandType = strings.TrimSpace(step.Type)
 
+		color.HiCyan(fmt.Sprintf("Executing workflow step: %s", command))
+
 		if commandType == "" {
 			commandType = "atmos"
 		}
@@ -30,8 +32,6 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 			var workflowStack = strings.TrimSpace(workflowDefinition.Stack)
 			var stepStack = strings.TrimSpace(step.Stack)
 			var finalStack = ""
-
-			color.HiCyan(fmt.Sprintf("Executing workflow step: %s", command))
 
 			// The workflow `stack` attribute overrides any stack in the `command` (if specified)
 			// The step `stack` attribute overrides any stack in the `command` (if specified) and the workflow `stack` attribute
