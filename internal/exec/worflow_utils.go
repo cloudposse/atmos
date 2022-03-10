@@ -15,6 +15,10 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 		var command = step.Command
 		var commandType = step.Type
 
+		if commandType == "" {
+			commandType = "atmos"
+		}
+
 		color.Cyan(fmt.Sprintf("Executing workflow step: %s", command))
 
 		if commandType == "shell" {
@@ -23,7 +27,10 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 				return err
 			}
 		} else if commandType == "atmos" {
-
+			args := strings.Fields(command)
+			if err := execCommand("atmos", args, ".", []string{}); err != nil {
+				return err
+			}
 		} else {
 			return errors.New(fmt.Sprintf("invalid workflow step type '%s'", commandType))
 		}
