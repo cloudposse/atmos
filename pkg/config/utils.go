@@ -232,6 +232,12 @@ func processEnvVars() error {
 		Config.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
 	}
 
+	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
+	if len(workflowsBasePath) > 0 {
+		color.Cyan("Found ENV var ATMOS_WORKFLOWS_BASE_PATH=%s", workflowsBasePath)
+		Config.Workflows.BasePath = workflowsBasePath
+	}
+
 	return nil
 }
 
@@ -283,6 +289,10 @@ func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
 		}
 		Config.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
 		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
+	}
+	if len(configAndStacksInfo.WorkflowsDir) > 0 {
+		Config.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
+		color.Cyan(fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
 	}
 	return nil
 }

@@ -62,3 +62,7 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 func TrimBasePathFromPath(basePath string, path string) string {
 	return strings.TrimPrefix(path, basePath)
 }
+
+func IsPathAbsolute(path string) bool {
+	return filepath.IsAbs(path)
+}

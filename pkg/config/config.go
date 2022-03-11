@@ -47,6 +47,9 @@ var (
 				"**/*globals*",
 			},
 		},
+		Workflows: Workflows{
+			BasePath: "workflows",
+		},
 		Logs: Logs{
 			Verbose: false,
 			Colors:  true,
