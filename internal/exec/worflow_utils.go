@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
+func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, commandLineStack string) error {
 	var steps = workflowDefinition.Steps
 
 	for _, step := range steps {
@@ -33,8 +33,12 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 			var stepStack = strings.TrimSpace(step.Stack)
 			var finalStack = ""
 
-			// The workflow `stack` attribute overrides any stack in the `command` (if specified)
-			// The step `stack` attribute overrides any stack in the `command` (if specified) and the workflow `stack` attribute
+			// The stack defined on the command line (`atmos workflow <name> -f <file> -s <stack>`) has the lowest priority
+			// The workflow `stack` attribute overrides the stack in the `command` (if specified) or on the command line
+			// The step `stack` attribute overrides the stack in the `command`, the workflow `stack` attribute, and on the command line
+			if commandLineStack != "" {
+				finalStack = commandLineStack
+			}
 			if workflowStack != "" {
 				finalStack = workflowStack
 			}
