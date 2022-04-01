@@ -244,8 +244,8 @@ func TransformStackConfigToSpaceliftStacks(
 	processImports bool) (map[string]interface{}, error) {
 
 	res := map[string]interface{}{}
-
 	var allStackNames []string
+
 	for stackName, stackConfig := range stacks {
 		config := stackConfig.(map[interface{}]interface{})
 
@@ -445,8 +445,14 @@ func TransformStackConfigToSpaceliftStacks(
 
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
+					// Spacelift stack name
+					spaceliftStackNameSuffix := component
+					if i, ok2 := spaceliftSettings["stack_name_suffix"].(string); ok2 {
+						spaceliftStackNameSuffix = i
+					}
+
 					// Add Spacelift stack config to the final map
-					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", contextPrefix, component), "/", "-", -1)
+					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", contextPrefix, spaceliftStackNameSuffix), "/", "-", -1)
 					res[spaceliftStackName] = spaceliftConfig
 				}
 			}
