@@ -445,14 +445,14 @@ func TransformStackConfigToSpaceliftStacks(
 
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
-					// Spacelift stack name
-					spaceliftStackNameSuffix := component
-					if i, ok2 := spaceliftSettings["stack_name_suffix"].(string); ok2 {
-						spaceliftStackNameSuffix = i
+					// Component name override
+					componentName := component
+					if i, ok2 := spaceliftSettings["component_name_override"].(string); ok2 {
+						componentName = i
 					}
 
 					// Add Spacelift stack config to the final map
-					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", contextPrefix, spaceliftStackNameSuffix), "/", "-", -1)
+					spaceliftStackName := strings.Replace(fmt.Sprintf("%s-%s", contextPrefix, componentName), "/", "-", -1)
 					res[spaceliftStackName] = spaceliftConfig
 				}
 			}

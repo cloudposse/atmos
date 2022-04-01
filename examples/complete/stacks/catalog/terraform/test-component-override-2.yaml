@@ -12,11 +12,11 @@ components:
       settings:
         spacelift:
           workspace_enabled: true
-          # `stack_name_suffix` overrides the Spacelift stack name suffix (which is usually the name of the YAML component with all `/` replaced by `-`)
-          # The final Spacelift stack name will be in the following format: <tenant>-<environment>-<stage>-<stack_name_suffix>
-          # By specifying `stack_name_suffix: new-test-component-override-2`, the final Spacelift stack name will be
+          # `component_name_override` overrides the Spacelift stack name suffix (which is usually the name of the YAML component with all `/` replaced by `-`)
+          # The final Spacelift stack name will be in the following format: <tenant>-<environment>-<stage>-<component_name_override>
+          # By specifying `component_name_override: new-test-component-override-2`, the final Spacelift stack name will be
           # `tenant1-ue2-dev-new-test-component-override-2` instead of `tenant1-ue2-dev-test-test-component-override-2`
-          stack_name_suffix: new-test-component-override-2
+          component_name_override: new-test-component-override-2
       # Specify terraform binary to run
       command: "/usr/local/bin/terraform"
       # The `component` attribute specifies that `test-component-override-2` inherits from the `test-component-override` base component,
