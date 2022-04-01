@@ -23,6 +23,7 @@ func findAllStackConfigsInPathsForStack(
 
 	var absolutePaths []string
 	var relativePaths []string
+	var stackIsDir = strings.IndexAny(stack, "/") > 0
 
 	for _, p := range includeStackPaths {
 		pathWithExt := p
@@ -46,6 +47,7 @@ func findAllStackConfigsInPathsForStack(
 
 				// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
 				stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+g.DefaultStackConfigFileExtension)
+
 				if stackMatch == true {
 					allExcluded := true
 					for _, excludePath := range excludeStackPaths {
@@ -58,7 +60,8 @@ func findAllStackConfigsInPathsForStack(
 							break
 						}
 					}
-					if allExcluded == true {
+
+					if allExcluded == true && stackIsDir {
 						return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
 					}
 				}
