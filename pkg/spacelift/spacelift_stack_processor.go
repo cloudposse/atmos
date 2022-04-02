@@ -353,8 +353,6 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					context := c.GetContextFromVars(componentVars)
-					context.Component = component
-
 					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
 					if err != nil {
 						return nil, err
@@ -448,10 +446,13 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Stack name and stack name pattern
-					spaceliftStackName := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
+					context.Component = component
+					var spaceliftStackName string
 					// if `stack_name_pattern` is specified, replace tokens and use it as the Spacelift stack name
 					if spaceliftStackNamePattern, ok2 := spaceliftSettings["stack_name_pattern"].(string); ok2 {
 						spaceliftStackName = c.ReplaceContextTokens(context, spaceliftStackNamePattern)
+					} else {
+						spaceliftStackName = fmt.Sprintf("%s-%s", contextPrefix, context.Component)
 					}
 
 					// Add Spacelift stack config to the final map
