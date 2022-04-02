@@ -341,7 +341,7 @@ func GetContextFromVars(vars map[interface{}]interface{}) Context {
 	return context
 }
 
-// GetContextPrefix calculates context prefix
+// GetContextPrefix calculates context prefix from the context
 func GetContextPrefix(stack string, context Context, stackNamePattern string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
@@ -382,7 +382,7 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 			if len(context.Stage) == 0 {
 				return "",
 					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
-						Config.Stacks.NamePattern,
+						stackNamePattern,
 						stack,
 					))
 			}
@@ -402,7 +402,9 @@ func ReplaceContextTokens(context Context, pattern string) string {
 	return strings.Replace(
 		strings.Replace(
 			strings.Replace(
-				strings.Replace(pattern,
+				strings.Replace(
+					strings.Replace(pattern,
+						"{component}", context.Component, 1),
 					"{namespace}", context.Namespace, 1),
 				"{environment}", context.Environment, 1),
 			"{tenant}", context.Tenant, 1),
