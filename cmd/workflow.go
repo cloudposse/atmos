@@ -23,7 +23,6 @@ var workflowCmd = &cobra.Command{
 func init() {
 	workflowCmd.DisableFlagParsing = false
 	workflowCmd.PersistentFlags().StringP("file", "f", "", "atmos workflow <name> -f <file>")
-	workflowCmd.PersistentFlags().StringP("stack", "s", "", "atmos workflow <name> -f <file> -s <stack>")
 
 	err := workflowCmd.MarkPersistentFlagRequired("file")
 	if err != nil {
