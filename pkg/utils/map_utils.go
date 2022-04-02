@@ -1,6 +1,8 @@
 package utils
 
-import "sort"
+import (
+	"sort"
+)
 
 // StringKeysFromMap returns a slice of sorted string keys from the provided map
 func StringKeysFromMap(m map[string]interface{}) []string {
@@ -10,4 +12,10 @@ func StringKeysFromMap(m map[string]interface{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// MapKeyExists checks if a key already defined in a map
+func MapKeyExists(m map[string]interface{}, key string) bool {
+	_, ok := m[key]
+	return ok
 }
