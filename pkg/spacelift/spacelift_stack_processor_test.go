@@ -61,6 +61,10 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	assert.Equal(t, "folder:tenant1/ue2/dev", tenant1Ue2DevTestTestComponentOverrideComponentLabels[35])
 	assert.Equal(t, "test-component-override-workspace-override", tenant1Ue2DevTestTestComponentOverrideTerraformWorkspace)
 
+	newTenant1Ue2DevTestTestComponentOverrideComponent2 := spaceliftStacks["tenant1-ue2-dev-new-component"].(map[string]interface{})
+	newTenant1Ue2DevTestTestComponentOverrideComponent2InfrastructureStackName := newTenant1Ue2DevTestTestComponentOverrideComponent2["stack"].(string)
+	assert.Equal(t, "tenant1-ue2-dev", newTenant1Ue2DevTestTestComponentOverrideComponent2InfrastructureStackName)
+
 	yamlSpaceliftStacks, err := yaml.Marshal(spaceliftStacks)
 	assert.Nil(t, err)
 	t.Log(string(yamlSpaceliftStacks))

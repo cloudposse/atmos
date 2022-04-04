@@ -3,12 +3,12 @@ workflows:
   terraform-plan-test-component-override-2-all-stacks:
     description: Run 'terraform plan' on 'test/test-component-override-2' component in all stacks
     steps:
-      - command: terraform plan test/test-component-override-3 -s tenant1-ue2-dev
-      - command: terraform plan test/test-component-override-3 -s tenant1-ue2-staging
-      - command: terraform plan test/test-component-override-3 -s tenant1-ue2-prod
-      - command: terraform plan test/test-component-override-3 -s tenant2-ue2-dev
-      - command: terraform plan test/test-component-override-3 -s tenant2-ue2-staging
-      - command: terraform plan test/test-component-override-3 -s tenant2-ue2-prod
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-dev
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-staging
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-prod
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-dev
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-staging
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-prod
 
   terraform-plan-test-component-override-3-all-stacks:
     description: Run 'terraform plan' on 'test/test-component-override-3' component in all stacks

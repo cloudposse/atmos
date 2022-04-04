@@ -76,7 +76,7 @@ func FindComponentConfig(
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component type must be provided and must not be empty")
 	}
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Could not find the stack '%s'", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))

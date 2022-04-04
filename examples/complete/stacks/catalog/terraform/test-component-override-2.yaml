@@ -9,6 +9,15 @@ import:
 components:
   terraform:
     "test/test-component-override-2":
+      settings:
+        spacelift:
+          workspace_enabled: true
+          # `stack_name_pattern` overrides Spacelift stack names
+          # By specifying the following `stack_name_pattern`, the final Spacelift stack name will be
+          # `tenant1-ue2-dev-new-component` instead of `tenant1-ue2-dev-test-test-component-override-2`
+          # By default (if `stack_name_pattern` is not specified), the stack name is generated using the pattern {tenant}-{environment}-{stage}-{component}
+          # Supported tokens: {namespace}, {tenant}, {environment}, {stage}, {component}
+          stack_name_pattern: "{tenant}-{environment}-{stage}-new-component"
       # Specify terraform binary to run
       command: "/usr/local/bin/terraform"
       # The `component` attribute specifies that `test-component-override-2` inherits from the `test-component-override` base component,

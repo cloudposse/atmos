@@ -60,6 +60,7 @@ type Context struct {
 	Environment string
 	Stage       string
 	Region      string
+	Component   string
 }
 
 type ArgsAndFlagsInfo struct {

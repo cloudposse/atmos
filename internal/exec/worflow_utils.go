@@ -33,8 +33,8 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 			var stepStack = strings.TrimSpace(step.Stack)
 			var finalStack = ""
 
-			// The workflow `stack` attribute overrides any stack in the `command` (if specified)
-			// The step `stack` attribute overrides any stack in the `command` (if specified) and the workflow `stack` attribute
+			// The workflow `stack` attribute overrides the stack in the `command` (if specified)
+			// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute
 			if workflowStack != "" {
 				finalStack = workflowStack
 			}
