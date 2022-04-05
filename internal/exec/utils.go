@@ -25,6 +25,7 @@ var (
 		g.BasePathFlag,
 		g.GlobalOptionsFlag,
 		g.DeployRunInitFlag,
+		g.InitRunReconfigure,
 		g.AutoGenerateBackendFileFlag,
 		g.FromPlanFlag,
 		g.HelpFlag1,
@@ -169,6 +170,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 	configAndStacksInfo.WorkflowsDir = argsAndFlagsInfo.WorkflowsDir
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
+	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
@@ -547,6 +549,19 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
 			}
 			info.WorkflowsDir = workflowDirFlagParts[1]
+		}
+
+		if arg == g.InitRunReconfigure {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.InitRunReconfigure = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.InitRunReconfigure) {
+			var initRunReconfigureParts = strings.Split(arg, "=")
+			if len(initRunReconfigureParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.InitRunReconfigure = initRunReconfigureParts[1]
 		}
 
 		if arg == g.FromPlanFlag {

@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const defaultSpaceliftStackNamePattern = "{tenant}-{environment}-{stage}-{component}"
-
 // CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
 // and returns a map of Spacelift stack configs
 func CreateSpaceliftStacks(
@@ -248,7 +246,7 @@ func TransformStackConfigToSpaceliftStacks(
 	res := map[string]interface{}{}
 	var allStackNames []string
 
-	for _, stackConfig := range stacks {
+	for stackName, stackConfig := range stacks {
 		config := stackConfig.(map[interface{}]interface{})
 
 		if i, ok := config["components"]; ok {
@@ -277,8 +275,13 @@ func TransformStackConfigToSpaceliftStacks(
 
 					// Spacelift stack name
 					context := c.GetContextFromVars(componentVars)
+					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
+					if err != nil {
+						return nil, err
+					}
+
 					context.Component = component
-					spaceliftStackName, _ := buildSpaceliftStackName(spaceliftSettings, context)
+					spaceliftStackName, _ := buildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 					allStackNames = append(allStackNames, strings.Replace(spaceliftStackName, "/", "-", -1))
 				}
 			}
@@ -458,7 +461,7 @@ func TransformStackConfigToSpaceliftStacks(
 
 					// Spacelift stack name
 					context.Component = component
-					spaceliftStackName, spaceliftStackNamePattern := buildSpaceliftStackName(spaceliftSettings, context)
+					spaceliftStackName, spaceliftStackNamePattern := buildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 
 					// Add Spacelift stack config to the final map
 					spaceliftStackNameKey := strings.Replace(spaceliftStackName, "/", "-", -1)
@@ -511,14 +514,11 @@ func buildSpaceliftDependsOnStackName(
 }
 
 // buildSpaceliftStackName build a Spacelift stack name from the provided context and state name pattern
-func buildSpaceliftStackName(spaceliftSettings map[interface{}]interface{}, context c.Context) (string, string) {
-	var finalSpaceliftStackNamePattern string
-
+func buildSpaceliftStackName(spaceliftSettings map[interface{}]interface{}, context c.Context, contextPrefix string) (string, string) {
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
-		finalSpaceliftStackNamePattern = spaceliftStackNamePattern
+		return c.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
 	} else {
-		finalSpaceliftStackNamePattern = defaultSpaceliftStackNamePattern
+		defaultSpaceliftStackNamePattern := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
+		return strings.Replace(defaultSpaceliftStackNamePattern, "/", "-", -1), contextPrefix
 	}
-
-	return c.ReplaceContextTokens(context, finalSpaceliftStackNamePattern), finalSpaceliftStackNamePattern
 }

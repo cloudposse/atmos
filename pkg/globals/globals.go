@@ -19,6 +19,7 @@ const (
 
 	DeployRunInitFlag           = "--deploy-run-init"
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
+	InitRunReconfigure          = "--init-run-reconfigure"
 
 	FromPlanFlag = "--from-plan"
 

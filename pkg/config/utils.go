@@ -201,6 +201,16 @@ func processEnvVars() error {
 		Config.Components.Terraform.DeployRunInit = deployRunInitBool
 	}
 
+	componentsInitRunReconfigure := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE")
+	if len(componentsInitRunReconfigure) > 0 {
+		color.Cyan("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure)
+		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+	}
+
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
 		color.Cyan("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile)
@@ -297,6 +307,14 @@ func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
 		Config.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
 		color.Cyan(fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
 	}
+	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
+		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
+	}
 	return nil
 }
 
@@ -352,7 +370,20 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 	stackNamePatternParts := strings.Split(stackNamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
-		if part == "{tenant}" {
+		if part == "{namespace}" {
+			if len(context.Namespace) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'namespace`, but the stack %s does not have a namespace defined",
+						stackNamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Namespace
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Namespace
+			}
+		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
 				return "",
 					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
