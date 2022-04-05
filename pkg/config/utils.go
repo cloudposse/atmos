@@ -370,7 +370,20 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 	stackNamePatternParts := strings.Split(stackNamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
-		if part == "{tenant}" {
+		if part == "{namespace}" {
+			if len(context.Namespace) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'namespace`, but the stack %s does not have a namespace defined",
+						stackNamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Namespace
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Namespace
+			}
+		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
 				return "",
 					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
