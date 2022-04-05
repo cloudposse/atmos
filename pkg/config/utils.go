@@ -201,6 +201,16 @@ func processEnvVars() error {
 		Config.Components.Terraform.DeployRunInit = deployRunInitBool
 	}
 
+	componentsInitRunReconfigure := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE")
+	if len(componentsInitRunReconfigure) > 0 {
+		color.Cyan("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure)
+		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+	}
+
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
 		color.Cyan("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile)
@@ -296,6 +306,14 @@ func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.WorkflowsDir) > 0 {
 		Config.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
 		color.Cyan(fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
+	}
+	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
+		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
 	}
 	return nil
 }
