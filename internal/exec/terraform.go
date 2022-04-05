@@ -47,7 +47,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
-	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
+	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
 		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}
@@ -298,15 +298,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if info.SubCommand != "plan" {
 		planFilePath := constructTerraformComponentPlanfilePath(info)
 		_ = os.Remove(planFilePath)
-	}
-
-	return nil
-}
-
-func checkTerraformConfig() error {
-	if len(c.Config.Components.Terraform.BasePath) < 1 {
-		return errors.New("Base path to terraform components must be provided in 'components.terraform.base_path' config or " +
-			"'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV variable")
 	}
 
 	return nil
