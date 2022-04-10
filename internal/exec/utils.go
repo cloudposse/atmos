@@ -622,9 +622,6 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.ComponentFromArg = additionalArgsAndFlags[1]
 			info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
 		}
-	} else {
-		message := "invalid number of arguments. Usage: atmos <command> <component> <arguments_and_flags>"
-		return info, errors.New(message)
 	}
 
 	return info, nil
