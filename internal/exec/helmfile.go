@@ -62,9 +62,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFilePath)
-	err = utils.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
-	if err != nil {
-		return err
+
+	if !info.DryRun {
+		err = utils.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Handle `helmfile deploy` custom command

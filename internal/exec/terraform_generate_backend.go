@@ -69,9 +69,12 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	color.Cyan("Writing the backend config to file:")
 	fmt.Println(backendFilePath)
-	err = utils.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)
-	if err != nil {
-		return err
+
+	if !info.DryRun {
+		err = utils.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)
+		if err != nil {
+			return err
+		}
 	}
 
 	fmt.Println()

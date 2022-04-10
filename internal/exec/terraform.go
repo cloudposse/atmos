@@ -116,9 +116,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFilePath)
-	err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
-	if err != nil {
-		return err
+
+	if !info.DryRun {
+		err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Handle `terraform varfile` and `terraform write varfile` custom commands
@@ -137,10 +140,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 		color.Cyan("Writing the backend config to file:")
 		fmt.Println(backendFileName)
-		var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
-		err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
-		if err != nil {
-			return err
+
+		if !info.DryRun {
+			var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
+			err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
