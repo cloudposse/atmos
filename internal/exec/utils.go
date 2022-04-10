@@ -16,8 +16,8 @@ var (
 	commonFlags = []string{
 		"--stack",
 		"-s",
-		"--dry-run",
-		"--kubeconfig-path",
+		g.DryRunFlag,
+		g.KubeConfigConfigFlag,
 		g.TerraformDirFlag,
 		g.HelmfileDirFlag,
 		g.ConfigDirFlag,
