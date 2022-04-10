@@ -10,7 +10,7 @@ import (
 )
 
 // execCommand prints and executes the provided command with args and flags
-func execCommand(command string, args []string, dir string, env []string) error {
+func execCommand(command string, args []string, dir string, env []string, dryRun bool) error {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
@@ -21,6 +21,11 @@ func execCommand(command string, args []string, dir string, env []string) error 
 	fmt.Println()
 	color.Cyan("Executing command:\n")
 	fmt.Println(cmd.String())
+
+	if dryRun {
+		return nil
+	}
+
 	return cmd.Run()
 }
 

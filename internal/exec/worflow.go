@@ -85,7 +85,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = executeWorkflowSteps(workflowDefinition)
+	err = executeWorkflowSteps(workflowDefinition, false)
 	if err != nil {
 		return err
 	}

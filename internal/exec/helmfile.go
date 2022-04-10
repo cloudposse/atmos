@@ -95,6 +95,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		},
 		componentPath,
 		nil,
+		info.DryRun,
 	)
 	if err != nil {
 		return err
@@ -153,7 +154,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Println(v)
 	}
 
-	err = execCommand(info.Command, allArgsAndFlags, componentPath, envVars)
+	err = execCommand(info.Command, allArgsAndFlags, componentPath, envVars, info.DryRun)
 	if err != nil {
 		return err
 	}

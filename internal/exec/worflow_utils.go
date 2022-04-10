@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
+func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, dryRun bool) error {
 	var steps = workflowDefinition.Steps
 
 	for _, step := range steps {
@@ -23,7 +23,7 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 
 		if commandType == "shell" {
 			args := strings.Fields(command)
-			if err := execCommand(args[0], args[1:], ".", []string{}); err != nil {
+			if err := execCommand(args[0], args[1:], ".", []string{}, dryRun); err != nil {
 				return err
 			}
 		} else if commandType == "atmos" {
@@ -47,7 +47,7 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition) error {
 				color.HiCyan(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
-			if err := execCommand("atmos", args, ".", []string{}); err != nil {
+			if err := execCommand("atmos", args, ".", []string{}, dryRun); err != nil {
 				return err
 			}
 		} else {

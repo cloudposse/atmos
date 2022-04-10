@@ -173,6 +173,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
+	configAndStacksInfo.DryRun = argsAndFlagsInfo.DryRun
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 
 	// Check if `-h` or `--help` flags are specified
@@ -566,6 +567,10 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 
 		if arg == g.FromPlanFlag {
 			info.UseTerraformPlan = true
+		}
+
+		if arg == g.DryRunFlag {
+			info.DryRun = true
 		}
 
 		if arg == g.HelpFlag1 || arg == g.HelpFlag2 {
