@@ -313,7 +313,7 @@ Short versions of the command-line arguments can be used:
     atmos terraform apply eks -s ue2-dev
   ```
 
-To execute `plan` and `apply` in one step, use `terrafrom deploy` command:
+To execute `plan` and `apply` in one step, use `terraform deploy` command:
 
   ```bash
     atmos terraform deploy eks -s ue2-dev

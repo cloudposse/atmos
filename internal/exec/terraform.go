@@ -116,9 +116,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFilePath)
-	err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
-	if err != nil {
-		return err
+
+	if !info.DryRun {
+		err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Handle `terraform varfile` and `terraform write varfile` custom commands
@@ -137,10 +140,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 		color.Cyan("Writing the backend config to file:")
 		fmt.Println(backendFileName)
-		var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
-		err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
-		if err != nil {
-			return err
+
+		if !info.DryRun {
+			var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
+			err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -156,7 +162,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if info.SubCommand == "workspace" || c.Config.Components.Terraform.InitRunReconfigure == true {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
-		err = execCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList)
+		err = execCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			return err
 		}
@@ -237,9 +243,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Run `terraform workspace`
 	if info.SubCommand != "init" {
-		err = execCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList)
+		err = execCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
-			err = execCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList)
+			err = execCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
 			if err != nil {
 				return err
 			}
@@ -288,7 +294,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute the provided command
 	if info.SubCommand != "workspace" {
-		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList)
+		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			return err
 		}

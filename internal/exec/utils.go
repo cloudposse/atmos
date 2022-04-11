@@ -16,8 +16,8 @@ var (
 	commonFlags = []string{
 		"--stack",
 		"-s",
-		"--dry-run",
-		"--kubeconfig-path",
+		g.DryRunFlag,
+		g.KubeConfigConfigFlag,
 		g.TerraformDirFlag,
 		g.HelmfileDirFlag,
 		g.ConfigDirFlag,
@@ -173,6 +173,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
+	configAndStacksInfo.DryRun = argsAndFlagsInfo.DryRun
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 
 	// Check if `-h` or `--help` flags are specified
@@ -568,6 +569,10 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.UseTerraformPlan = true
 		}
 
+		if arg == g.DryRunFlag {
+			info.DryRun = true
+		}
+
 		if arg == g.HelpFlag1 || arg == g.HelpFlag2 {
 			info.NeedHelp = true
 		}
@@ -617,9 +622,6 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.ComponentFromArg = additionalArgsAndFlags[1]
 			info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
 		}
-	} else {
-		message := "invalid number of arguments. Usage: atmos <command> <component> <arguments_and_flags>"
-		return info, errors.New(message)
 	}
 
 	return info, nil
