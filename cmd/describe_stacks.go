@@ -10,7 +10,7 @@ import (
 var describeStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "Execute 'describe stacks' command",
-	Long:               `This command shows configuration for stacks and components in the stacks: atmos describe stacks <component> -s <stack>`,
+	Long:               `This command shows configuration for stacks and components in the stacks: atmos describe stacks`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeStacks(cmd, args)
@@ -22,7 +22,8 @@ var describeStacksCmd = &cobra.Command{
 
 func init() {
 	describeStacksCmd.DisableFlagParsing = false
-	describeStacksCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe component <component> -s <stack>")
+	describeStacksCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe stacks")
+	describeStacksCmd.PersistentFlags().String("format", "", "atmos describe stacks --format=yaml/json")
 
 	describeCmd.AddCommand(describeStacksCmd)
 }

@@ -195,6 +195,33 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	return ProcessStacks(configAndStacksInfo)
 }
 
+// FindStacksMap processes stack config and returns a map of all stacks
+func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo) (map[string]interface{}, error) {
+	// Process and merge CLI configurations
+	err := c.InitConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.ProcessConfig(configAndStacksInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process stack config file(s)
+	_, stacksMap, err := s.ProcessYAMLConfigFiles(
+		c.ProcessedConfig.StacksBaseAbsolutePath,
+		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		false,
+		true)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return stacksMap, nil
+}
+
 // ProcessStacks processes stack config
 func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
@@ -211,24 +238,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacks
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	// Process and merge CLI configurations
-	err := c.InitConfig()
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	err = c.ProcessConfig(configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	// Process stack config file(s)
-	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.ProcessedConfig.StacksBaseAbsolutePath,
-		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
-		false,
-		true)
-
+	stacksMap, err := FindStacksMap(configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
