@@ -192,18 +192,18 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 		return configAndStacksInfo, err
 	}
 
-	return ProcessStacks(configAndStacksInfo)
+	return ProcessStacks(configAndStacksInfo, true)
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo) (map[string]interface{}, error) {
+func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]interface{}, error) {
 	// Process and merge CLI configurations
 	err := c.InitConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	err = c.ProcessConfig(configAndStacksInfo)
+	err = c.ProcessConfig(configAndStacksInfo, checkStack)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo) (map[string]interf
 }
 
 // ProcessStacks processes stack config
-func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacksInfo, error) {
+func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (c.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
 	if len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
@@ -238,7 +238,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacks
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	stacksMap, err := FindStacksMap(configAndStacksInfo)
+	stacksMap, err := FindStacksMap(configAndStacksInfo, checkStack)
 	if err != nil {
 		return configAndStacksInfo, err
 	}

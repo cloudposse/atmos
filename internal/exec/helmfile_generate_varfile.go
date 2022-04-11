@@ -29,7 +29,7 @@ func ExecuteHelmfileGenerateVarfile(cmd *cobra.Command, args []string) error {
 	info.Stack = stack
 	info.ComponentType = "helmfile"
 
-	info, err = ProcessStacks(info)
+	info, err = ProcessStacks(info, true)
 	if err != nil {
 		return err
 	}
