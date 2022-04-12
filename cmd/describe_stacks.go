@@ -22,8 +22,9 @@ var describeStacksCmd = &cobra.Command{
 
 func init() {
 	describeStacksCmd.DisableFlagParsing = false
-	describeStacksCmd.PersistentFlags().String("format", "yaml", "atmos describe stacks --format=yaml/json")
+	describeStacksCmd.PersistentFlags().String("format", "yaml", "atmos describe stacks --format=yaml/json ('yaml' is default)")
 	describeStacksCmd.PersistentFlags().StringP("file", "f", "", "atmos describe stacks --file=stacks.yaml")
+	describeStacksCmd.PersistentFlags().StringP("component", "c", "", "atmos describe stacks --component=<component>")
 
 	describeCmd.AddCommand(describeStacksCmd)
 }
