@@ -80,19 +80,14 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "terraform") {
 								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"] = make(map[string]interface{})
 							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{}), compName) {
+								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = make(map[string]interface{})
+							}
 
-							// If `sections` specified, output only the provided sections
-							if len(sections) > 0 {
-								for sectionName, section := range comp.(map[string]interface{}) {
-									if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{}), compName) {
-										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = make(map[string]interface{})
-									}
-									if u.SliceContainsString(sections, sectionName) {
-										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
-									}
+							for sectionName, section := range comp.(map[string]interface{}) {
+								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
+									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
 								}
-							} else {
-								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = comp
 							}
 						}
 					}
@@ -106,19 +101,14 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "helmfile") {
 								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"] = make(map[string]interface{})
 							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{}), compName) {
+								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = make(map[string]interface{})
+							}
 
-							// If `sections` specified, output only the provided sections
-							if len(sections) > 0 {
-								for sectionName, section := range comp.(map[string]interface{}) {
-									if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{}), compName) {
-										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = make(map[string]interface{})
-									}
-									if u.SliceContainsString(sections, sectionName) {
-										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
-									}
+							for sectionName, section := range comp.(map[string]interface{}) {
+								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
+									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
 								}
-							} else {
-								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = comp
 							}
 						}
 					}
