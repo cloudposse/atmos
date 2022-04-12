@@ -13,6 +13,11 @@ import (
 func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
 
+	filterByStack, err := flags.GetString("stack")
+	if err != nil {
+		return err
+	}
+
 	format, err := flags.GetString("format")
 	if err != nil {
 		return err
@@ -55,74 +60,76 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 
 	finalStacksMap := make(map[string]interface{})
 
-	for stackName, stack := range stacksMap {
-		// Delete the stack-wide imports
-		delete(stack.(map[interface{}]interface{}), "imports")
+	for stackName, stackSection := range stacksMap {
+		if filterByStack == "" || filterByStack == stackName {
+			// Delete the stack-wide imports
+			delete(stackSection.(map[interface{}]interface{}), "imports")
 
-		// Filter the stacks by components
-		if len(components) > 0 {
-			if componentsSection, ok := stack.(map[interface{}]interface{})["components"].(map[string]interface{}); ok {
-				if terraformSection, ok2 := componentsSection["terraform"].(map[string]interface{}); ok2 {
-					for compName, comp := range terraformSection {
-						if u.SliceContainsString(components, compName) {
-							if !u.MapKeyExists(finalStacksMap, stackName) {
-								finalStacksMap[stackName] = make(map[string]interface{})
-							}
-							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
-								finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
-							}
-							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "terraform") {
-								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"] = make(map[string]interface{})
-							}
-
-							// If `sections` specified, output only the provided sections
-							if len(sections) > 0 {
-								for sectionName, section := range comp.(map[string]interface{}) {
-									if u.SliceContainsString(sections, sectionName) {
-										if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{}), compName) {
-											finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = make(map[string]interface{})
-										}
-										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
-									}
+			// Filter the stacks by components
+			if len(components) > 0 {
+				if componentsSection, ok := stackSection.(map[interface{}]interface{})["components"].(map[string]interface{}); ok {
+					if terraformSection, ok2 := componentsSection["terraform"].(map[string]interface{}); ok2 {
+						for compName, comp := range terraformSection {
+							if u.SliceContainsString(components, compName) {
+								if !u.MapKeyExists(finalStacksMap, stackName) {
+									finalStacksMap[stackName] = make(map[string]interface{})
 								}
-							} else {
-								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = comp
+								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
+									finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
+								}
+								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "terraform") {
+									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"] = make(map[string]interface{})
+								}
+
+								// If `sections` specified, output only the provided sections
+								if len(sections) > 0 {
+									for sectionName, section := range comp.(map[string]interface{}) {
+										if u.SliceContainsString(sections, sectionName) {
+											if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{}), compName) {
+												finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = make(map[string]interface{})
+											}
+											finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
+										}
+									}
+								} else {
+									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = comp
+								}
+							}
+						}
+					}
+					if helmfileSection, ok3 := componentsSection["helmfile"].(map[string]interface{}); ok3 {
+						for compName, comp := range helmfileSection {
+							if u.SliceContainsString(components, compName) {
+								if !u.MapKeyExists(finalStacksMap, stackName) {
+									finalStacksMap[stackName] = make(map[string]interface{})
+								}
+								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
+									finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
+								}
+								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "helmfile") {
+									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"] = make(map[string]interface{})
+								}
+
+								// If `sections` specified, output only the provided sections
+								if len(sections) > 0 {
+									for sectionName, section := range comp.(map[string]interface{}) {
+										if u.SliceContainsString(sections, sectionName) {
+											if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{}), compName) {
+												finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = make(map[string]interface{})
+											}
+											finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
+										}
+									}
+								} else {
+									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = comp
+								}
 							}
 						}
 					}
 				}
-				if helmfileSection, ok3 := componentsSection["helmfile"].(map[string]interface{}); ok3 {
-					for compName, comp := range helmfileSection {
-						if u.SliceContainsString(components, compName) {
-							if !u.MapKeyExists(finalStacksMap, stackName) {
-								finalStacksMap[stackName] = make(map[string]interface{})
-							}
-							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
-								finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
-							}
-							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "helmfile") {
-								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"] = make(map[string]interface{})
-							}
-
-							// If `sections` specified, output only the provided sections
-							if len(sections) > 0 {
-								for sectionName, section := range comp.(map[string]interface{}) {
-									if u.SliceContainsString(sections, sectionName) {
-										if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{}), compName) {
-											finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = make(map[string]interface{})
-										}
-										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
-									}
-								}
-							} else {
-								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = comp
-							}
-						}
-					}
-				}
+			} else {
+				finalStacksMap[stackName] = stackSection
 			}
-		} else {
-			finalStacksMap[stackName] = stack
 		}
 	}
 
