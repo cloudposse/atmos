@@ -225,7 +225,7 @@ func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 // ProcessStacks processes stack config
 func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (c.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
-	if len(configAndStacksInfo.Stack) < 1 {
+	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
 	}

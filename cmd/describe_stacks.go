@@ -26,7 +26,7 @@ func init() {
 	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify output format: atmos describe stacks --format=yaml/json ('yaml' is default)")
 	describeStacksCmd.PersistentFlags().StringP("stack", "s", "", "Filter by a specific stack: atmos describe stacks -s <stack>")
 	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific components: atmos describe stacks --components=<component1>,<component2>")
-	describeStacksCmd.PersistentFlags().String("sections", "", "Output only these sections: atmos describe stacks --sections=vars,settings. Available sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
+	describeStacksCmd.PersistentFlags().String("sections", "", "Output only these component sections: atmos describe stacks --sections=vars,settings. Available component sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
 
 	describeCmd.AddCommand(describeStacksCmd)
 }
