@@ -53,7 +53,8 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 	}
 
 	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(configAndStacksInfo, false)
+	configAndStacksInfo.Stack = filterByStack
+	stacksMap, err := FindStacksMap(configAndStacksInfo, filterByStack != "")
 	if err != nil {
 		return err
 	}
