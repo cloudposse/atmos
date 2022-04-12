@@ -30,10 +30,10 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = ProcessStacks(configAndStacksInfo)
+	configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(configAndStacksInfo)
+		configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
 		if err != nil {
 			return err
 		}

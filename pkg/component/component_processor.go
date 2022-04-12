@@ -15,10 +15,10 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err := e.ProcessStacks(configAndStacksInfo)
+	configAndStacksInfo, err := e.ProcessStacks(configAndStacksInfo, true)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = e.ProcessStacks(configAndStacksInfo)
+		configAndStacksInfo, err = e.ProcessStacks(configAndStacksInfo, true)
 		if err != nil {
 			return nil, err
 		}
