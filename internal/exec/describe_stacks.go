@@ -51,25 +51,35 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 		delete(stack.(map[interface{}]interface{}), "imports")
 
 		if len(components) > 0 {
-			finalStacksMap[stackName] = make(map[string]interface{})
-
 			if componentsSection, ok := stack.(map[interface{}]interface{})["components"].(map[string]interface{}); ok {
-				finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
-
 				if terraformSection, ok2 := componentsSection["terraform"].(map[string]interface{}); ok2 {
-					finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"] = make(map[string]interface{})
-
 					for compName, comp := range terraformSection {
 						if u.SliceContainsString(components, compName) {
+							if !u.MapKeyExists(finalStacksMap, stackName) {
+								finalStacksMap[stackName] = make(map[string]interface{})
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
+								finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "terraform") {
+								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"] = make(map[string]interface{})
+							}
 							finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = comp
 						}
 					}
 				}
 				if helmfileSection, ok3 := componentsSection["helmfile"].(map[string]interface{}); ok3 {
-					finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"] = make(map[string]interface{})
-
 					for compName, comp := range helmfileSection {
 						if u.SliceContainsString(components, compName) {
+							if !u.MapKeyExists(finalStacksMap, stackName) {
+								finalStacksMap[stackName] = make(map[string]interface{})
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
+								finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "helmfile") {
+								finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"] = make(map[string]interface{})
+							}
 							finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = comp
 						}
 					}
