@@ -85,10 +85,10 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 								// If `sections` specified, output only the provided sections
 								if len(sections) > 0 {
 									for sectionName, section := range comp.(map[string]interface{}) {
+										if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{}), compName) {
+											finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = make(map[string]interface{})
+										}
 										if u.SliceContainsString(sections, sectionName) {
-											if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{}), compName) {
-												finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = make(map[string]interface{})
-											}
 											finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
 										}
 									}
@@ -114,10 +114,10 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 								// If `sections` specified, output only the provided sections
 								if len(sections) > 0 {
 									for sectionName, section := range comp.(map[string]interface{}) {
+										if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{}), compName) {
+											finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = make(map[string]interface{})
+										}
 										if u.SliceContainsString(sections, sectionName) {
-											if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{}), compName) {
-												finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = make(map[string]interface{})
-											}
 											finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
 										}
 									}
