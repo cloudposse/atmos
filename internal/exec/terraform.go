@@ -68,6 +68,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println(fmt.Sprintf("Deleting terraform planfile: %s", planFile))
 		_ = os.Remove(path.Join(componentPath, planFile))
 
+		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
+		if c.Config.Components.Terraform.AutoGenerateBackendFile {
+			fmt.Println("Deleting 'backend.tf.json' file")
+			_ = os.Remove(path.Join(componentPath, "backend.tf.json"))
+		}
+
 		tfDataDir := os.Getenv("TF_DATA_DIR")
 		if len(tfDataDir) > 0 && tfDataDir != "." && tfDataDir != "/" && tfDataDir != "./" {
 			color.Cyan("Found ENV var TF_DATA_DIR=%s", tfDataDir)
