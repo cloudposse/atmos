@@ -1,0 +1,19 @@
+settings:
+  spacelift:
+    workspace_enabled: true
+    stack_destructor_enabled: false
+    protect_from_deletion: true
+
+terraform:
+  vars: {}
+
+  backend_type: s3 # s3, remote, vault, etc.
+  backend:
+    s3:
+      encrypt: true
+      key: terraform.tfstate
+      bucket:         eg-ue2-root-tfstate
+      dynamodb_table: eg-ue2-root-tfstate-lock
+      profile:        eg-gb2-root-tfstate
+      acl: bucket-owner-full-control
+      region: us-east-2

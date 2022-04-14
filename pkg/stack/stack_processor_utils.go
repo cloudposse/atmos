@@ -49,8 +49,10 @@ func FindComponentStacks(
 
 // FindComponentDependencies finds all imports where the component or the base component is defined
 // Component depends on the imported config file if any of the following conditions is true:
-// 1. The imported config file has the global `vars` section and it's not empty
-// 2. The imported config file has the component type section, which has a `vars` section which is not empty
+// 1. The imported file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
+//    `settings` or `vars` sections which are not empty
+// 2. The imported file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
+//    `remote_state_backend_type`, `settings` or `vars` sections which are not empty
 // 3. The imported config file has the "components" section, which has the component type section, which has the component section
 // 4. The imported config file has the "components" section, which has the component type section, which has the base component section
 func FindComponentDependencies(
@@ -63,25 +65,31 @@ func FindComponentDependencies(
 	var deps []string
 
 	for imp, importConfig := range importsConfig {
-		if i, ok := importConfig["vars"]; ok {
-			globalVarsSection := i.(map[interface{}]interface{})
-
-			if len(globalVarsSection) > 0 {
-				deps = append(deps, imp)
-				continue
-			}
+		if sectionContainsAnyNotEmptySections(importConfig, []string{
+			"backend",
+			"backend_type",
+			"env",
+			"remote_state_backend",
+			"remote_state_backend_type",
+			"settings",
+			"vars",
+		}) {
+			deps = append(deps, imp)
+			continue
 		}
 
-		if i, ok := importConfig[componentType]; ok {
-			componentTypeSection := i.(map[interface{}]interface{})
-
-			if i2, ok2 := componentTypeSection["vars"]; ok2 {
-				componentTypeVarsSection := i2.(map[interface{}]interface{})
-
-				if len(componentTypeVarsSection) > 0 {
-					deps = append(deps, imp)
-					continue
-				}
+		if sectionContainsAnyNotEmptySections(importConfig, []string{componentType}) {
+			if sectionContainsAnyNotEmptySections(importConfig[componentType].(map[interface{}]interface{}), []string{
+				"backend",
+				"backend_type",
+				"env",
+				"remote_state_backend",
+				"remote_state_backend_type",
+				"settings",
+				"vars",
+			}) {
+				deps = append(deps, imp)
+				continue
 			}
 		}
 
@@ -118,6 +126,23 @@ func FindComponentDependencies(
 	unique := utils.UniqueStrings(deps)
 	sort.Strings(unique)
 	return unique, nil
+}
+
+// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections and it's not empty
+func sectionContainsAnyNotEmptySections(section map[interface{}]interface{}, sectionsToCheck []string) bool {
+	for _, s := range sectionsToCheck {
+		if len(s) > 0 {
+			if v, ok := section[s]; ok {
+				if v2, ok2 := v.(map[interface{}]interface{}); ok2 && len(v2) > 0 {
+					return true
+				}
+				if v2, ok2 := v.(string); ok2 && len(v2) > 0 {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
