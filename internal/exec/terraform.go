@@ -47,7 +47,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
-	if (info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
+	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
 		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
 	}
@@ -67,6 +67,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 		fmt.Println(fmt.Sprintf("Deleting terraform planfile: %s", planFile))
 		_ = os.Remove(path.Join(componentPath, planFile))
+
+		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
+		if c.Config.Components.Terraform.AutoGenerateBackendFile {
+			fmt.Println("Deleting 'backend.tf.json' file")
+			_ = os.Remove(path.Join(componentPath, "backend.tf.json"))
+		}
 
 		tfDataDir := os.Getenv("TF_DATA_DIR")
 		if len(tfDataDir) > 0 && tfDataDir != "." && tfDataDir != "/" && tfDataDir != "./" {
@@ -116,9 +122,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFilePath)
-	err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
-	if err != nil {
-		return err
+
+	if !info.DryRun {
+		err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Handle `terraform varfile` and `terraform write varfile` custom commands
@@ -137,10 +146,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 		color.Cyan("Writing the backend config to file:")
 		fmt.Println(backendFileName)
-		var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
-		err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
-		if err != nil {
-			return err
+
+		if !info.DryRun {
+			var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
+			err = utils.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -153,10 +165,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 	if runTerraformInit == true {
 		initCommandWithArguments := []string{"init"}
-		if info.SubCommand == "workspace" {
+		if info.SubCommand == "workspace" || c.Config.Components.Terraform.InitRunReconfigure == true {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
-		err = execCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList)
+		err = execCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			return err
 		}
@@ -237,9 +249,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Run `terraform workspace`
 	if info.SubCommand != "init" {
-		err = execCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList)
+		err = execCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
-			err = execCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList)
+			err = execCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
 			if err != nil {
 				return err
 			}
@@ -288,7 +300,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute the provided command
 	if info.SubCommand != "workspace" {
-		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList)
+		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			return err
 		}
@@ -298,15 +310,6 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	if info.SubCommand != "plan" {
 		planFilePath := constructTerraformComponentPlanfilePath(info)
 		_ = os.Remove(planFilePath)
-	}
-
-	return nil
-}
-
-func checkTerraformConfig() error {
-	if len(c.Config.Components.Terraform.BasePath) < 1 {
-		return errors.New("Base path to terraform components must be provided in 'components.terraform.base_path' config or " +
-			"'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV variable")
 	}
 
 	return nil

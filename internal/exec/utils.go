@@ -16,8 +16,8 @@ var (
 	commonFlags = []string{
 		"--stack",
 		"-s",
-		"--dry-run",
-		"--kubeconfig-path",
+		g.DryRunFlag,
+		g.KubeConfigConfigFlag,
 		g.TerraformDirFlag,
 		g.HelmfileDirFlag,
 		g.ConfigDirFlag,
@@ -25,6 +25,7 @@ var (
 		g.BasePathFlag,
 		g.GlobalOptionsFlag,
 		g.DeployRunInitFlag,
+		g.InitRunReconfigure,
 		g.AutoGenerateBackendFileFlag,
 		g.FromPlanFlag,
 		g.HelpFlag1,
@@ -76,7 +77,7 @@ func FindComponentConfig(
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component type must be provided and must not be empty")
 	}
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Stack '%s' does not exist", stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Could not find the stack '%s'", stack))
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
@@ -169,8 +170,10 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 	configAndStacksInfo.WorkflowsDir = argsAndFlagsInfo.WorkflowsDir
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
+	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
+	configAndStacksInfo.DryRun = argsAndFlagsInfo.DryRun
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 
 	// Check if `-h` or `--help` flags are specified
@@ -189,13 +192,40 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 		return configAndStacksInfo, err
 	}
 
-	return ProcessStacks(configAndStacksInfo)
+	return ProcessStacks(configAndStacksInfo, true)
+}
+
+// FindStacksMap processes stack config and returns a map of all stacks
+func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]interface{}, error) {
+	// Process and merge CLI configurations
+	err := c.InitConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.ProcessConfig(configAndStacksInfo, checkStack)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process stack config file(s)
+	_, stacksMap, err := s.ProcessYAMLConfigFiles(
+		c.ProcessedConfig.StacksBaseAbsolutePath,
+		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		false,
+		true)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return stacksMap, nil
 }
 
 // ProcessStacks processes stack config
-func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacksInfo, error) {
+func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (c.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
-	if len(configAndStacksInfo.Stack) < 1 {
+	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
 	}
@@ -208,24 +238,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo) (c.ConfigAndStacks
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	// Process and merge CLI configurations
-	err := c.InitConfig()
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	err = c.ProcessConfig(configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	// Process stack config file(s)
-	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.ProcessedConfig.StacksBaseAbsolutePath,
-		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
-		false,
-		true)
-
+	stacksMap, err := FindStacksMap(configAndStacksInfo, checkStack)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -549,8 +562,25 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.WorkflowsDir = workflowDirFlagParts[1]
 		}
 
+		if arg == g.InitRunReconfigure {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.InitRunReconfigure = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.InitRunReconfigure) {
+			var initRunReconfigureParts = strings.Split(arg, "=")
+			if len(initRunReconfigureParts) != 2 {
+				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+			}
+			info.InitRunReconfigure = initRunReconfigureParts[1]
+		}
+
 		if arg == g.FromPlanFlag {
 			info.UseTerraformPlan = true
+		}
+
+		if arg == g.DryRunFlag {
+			info.DryRun = true
 		}
 
 		if arg == g.HelpFlag1 || arg == g.HelpFlag2 {
@@ -602,9 +632,6 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 			info.ComponentFromArg = additionalArgsAndFlags[1]
 			info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
 		}
-	} else {
-		message := "invalid number of arguments. Usage: atmos <command> <component> <arguments_and_flags>"
-		return info, errors.New(message)
 	}
 
 	return info, nil

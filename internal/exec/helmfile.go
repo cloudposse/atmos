@@ -62,9 +62,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFilePath)
-	err = utils.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
-	if err != nil {
-		return err
+
+	if !info.DryRun {
+		err = utils.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Handle `helmfile deploy` custom command
@@ -95,6 +98,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		},
 		componentPath,
 		nil,
+		info.DryRun,
 	)
 	if err != nil {
 		return err
@@ -153,7 +157,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Println(v)
 	}
 
-	err = execCommand(info.Command, allArgsAndFlags, componentPath, envVars)
+	err = execCommand(info.Command, allArgsAndFlags, componentPath, envVars, info.DryRun)
 	if err != nil {
 		return err
 	}

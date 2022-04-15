@@ -29,7 +29,7 @@ func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
 	info.Stack = stack
 	info.ComponentType = "terraform"
 
-	info, err = ProcessStacks(info)
+	info, err = ProcessStacks(info, true)
 	if err != nil {
 		return err
 	}
@@ -58,9 +58,12 @@ func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
 	// Write the variables to file
 	color.Cyan("Writing the variables to file:")
 	fmt.Println(varFilePath)
-	err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
-	if err != nil {
-		return err
+
+	if !info.DryRun {
+		err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+		if err != nil {
+			return err
+		}
 	}
 
 	fmt.Println()

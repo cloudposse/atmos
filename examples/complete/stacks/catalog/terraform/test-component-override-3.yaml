@@ -5,6 +5,7 @@
 # File extensions are optional (if not specified, `.yaml` is used by default)
 import:
   - catalog/terraform/mixins/test-*.*
+  - catalog/terraform/spacelift-and-backend-override-1
 
 components:
   terraform:

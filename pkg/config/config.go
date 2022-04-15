@@ -27,6 +27,7 @@ var (
 				BasePath:                "components/terraform",
 				ApplyAutoApprove:        false,
 				DeployRunInit:           true,
+				InitRunReconfigure:      true,
 				AutoGenerateBackendFile: false,
 			},
 			Helmfile: Helmfile{
@@ -157,7 +158,7 @@ func InitConfig() error {
 }
 
 // ProcessConfig processes and checks CLI configuration
-func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
+func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) error {
 	// Process ENV vars
 	err := processEnvVars()
 	if err != nil {
@@ -239,40 +240,42 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
 	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
-	if stackIsPhysicalPath == true {
-		if g.LogVerbose {
-			color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
-				configAndStacksInfo.Stack,
-				stackConfigFilesRelativePaths[0]),
-			)
-		}
-		ProcessedConfig.StackType = "Directory"
-	} else {
-		// The stack is a logical name
-		// Check if it matches the pattern specified in 'StackNamePattern'
-		if len(Config.Stacks.NamePattern) == 0 {
-			errorMessage := "\nStack name pattern must be provided and must not be empty. Check the CLI config in 'atmos.yaml'"
-			return errors.New(errorMessage)
-		}
-
-		stackParts := strings.Split(configAndStacksInfo.Stack, "-")
-		stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
-
-		if len(stackParts) == len(stackNamePatternParts) {
+	if checkStack {
+		if stackIsPhysicalPath == true {
 			if g.LogVerbose {
-				color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack name pattern '%s'",
+				color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
 					configAndStacksInfo.Stack,
-					Config.Stacks.NamePattern),
+					stackConfigFilesRelativePaths[0]),
 				)
 			}
-			ProcessedConfig.StackType = "Logical"
+			ProcessedConfig.StackType = "Directory"
 		} else {
-			errorMessage := fmt.Sprintf("\nThe stack '%s' does not exist in the config directories, "+
-				"and it does not match the stack name pattern '%s'",
-				configAndStacksInfo.Stack,
-				Config.Stacks.NamePattern,
-			)
-			return errors.New(errorMessage)
+			// The stack is a logical name
+			// Check if it matches the pattern specified in 'StackNamePattern'
+			if len(Config.Stacks.NamePattern) == 0 {
+				errorMessage := "\nStack name pattern must be provided and must not be empty. Check the CLI config in 'atmos.yaml'"
+				return errors.New(errorMessage)
+			}
+
+			stackParts := strings.Split(configAndStacksInfo.Stack, "-")
+			stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
+
+			if len(stackParts) == len(stackNamePatternParts) {
+				if g.LogVerbose {
+					color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack name pattern '%s'",
+						configAndStacksInfo.Stack,
+						Config.Stacks.NamePattern),
+					)
+				}
+				ProcessedConfig.StackType = "Logical"
+			} else {
+				errorMessage := fmt.Sprintf("\nThe stack '%s' does not exist in the config directories, "+
+					"and it does not match the stack name pattern '%s'",
+					configAndStacksInfo.Stack,
+					Config.Stacks.NamePattern,
+				)
+				return errors.New(errorMessage)
+			}
 		}
 	}
 

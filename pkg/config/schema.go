@@ -4,6 +4,7 @@ type Terraform struct {
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
 	DeployRunInit           bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
+	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
 	AutoGenerateBackendFile bool   `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
 }
 
@@ -60,6 +61,7 @@ type Context struct {
 	Environment string
 	Stage       string
 	Region      string
+	Component   string
 }
 
 type ArgsAndFlagsInfo struct {
@@ -74,8 +76,10 @@ type ArgsAndFlagsInfo struct {
 	WorkflowsDir            string
 	BasePath                string
 	DeployRunInit           string
+	InitRunReconfigure      string
 	AutoGenerateBackendFile string
 	UseTerraformPlan        bool
+	DryRun                  bool
 	NeedHelp                bool
 }
 
@@ -108,8 +112,10 @@ type ConfigAndStacksInfo struct {
 	Context                   Context
 	ContextPrefix             string
 	DeployRunInit             string
+	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
 	UseTerraformPlan          bool
+	DryRun                    bool
 	ComponentInheritanceChain []string
 	NeedHelp                  bool
 	ComponentIsAbstract       bool

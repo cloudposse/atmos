@@ -17,7 +17,7 @@ import (
 // ExecuteWorkflow executes a workflow
 func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `workflow name` and one flag `file name`")
+		return errors.New("invalid arguments. The command requires one argument `workflow name`")
 	}
 
 	err := c.InitConfig()
@@ -28,6 +28,11 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
 
 	workflowFile, err := flags.GetString("file")
+	if err != nil {
+		return err
+	}
+
+	dryRun, err := flags.GetBool("dry-run")
 	if err != nil {
 		return err
 	}
@@ -85,7 +90,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = executeWorkflowSteps(workflowDefinition)
+	err = executeWorkflowSteps(workflowDefinition, dryRun)
 	if err != nil {
 		return err
 	}

@@ -23,6 +23,7 @@ func findAllStackConfigsInPathsForStack(
 
 	var absolutePaths []string
 	var relativePaths []string
+	var stackIsDir = strings.IndexAny(stack, "/") > 0
 
 	for _, p := range includeStackPaths {
 		pathWithExt := p
@@ -46,6 +47,7 @@ func findAllStackConfigsInPathsForStack(
 
 				// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
 				stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+g.DefaultStackConfigFileExtension)
+
 				if stackMatch == true {
 					allExcluded := true
 					for _, excludePath := range excludeStackPaths {
@@ -58,7 +60,8 @@ func findAllStackConfigsInPathsForStack(
 							break
 						}
 					}
-					if allExcluded == true {
+
+					if allExcluded == true && stackIsDir {
 						return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
 					}
 				}
@@ -198,6 +201,16 @@ func processEnvVars() error {
 		Config.Components.Terraform.DeployRunInit = deployRunInitBool
 	}
 
+	componentsInitRunReconfigure := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE")
+	if len(componentsInitRunReconfigure) > 0 {
+		color.Cyan("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure)
+		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+	}
+
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
 		color.Cyan("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile)
@@ -294,6 +307,14 @@ func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
 		Config.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
 		color.Cyan(fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
 	}
+	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
+		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
+		if err != nil {
+			return err
+		}
+		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		color.Cyan(fmt.Sprintf("Using command line argument '%s=%s'", g.InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
+	}
 	return nil
 }
 
@@ -338,7 +359,7 @@ func GetContextFromVars(vars map[interface{}]interface{}) Context {
 	return context
 }
 
-// GetContextPrefix calculates context prefix
+// GetContextPrefix calculates context prefix from the context
 func GetContextPrefix(stack string, context Context, stackNamePattern string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
@@ -349,7 +370,20 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 	stackNamePatternParts := strings.Split(stackNamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
-		if part == "{tenant}" {
+		if part == "{namespace}" {
+			if len(context.Namespace) == 0 {
+				return "",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'namespace`, but the stack %s does not have a namespace defined",
+						stackNamePattern,
+						stack,
+					))
+			}
+			if len(contextPrefix) == 0 {
+				contextPrefix = context.Namespace
+			} else {
+				contextPrefix = contextPrefix + "-" + context.Namespace
+			}
+		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
 				return "",
 					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
@@ -379,7 +413,7 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 			if len(context.Stage) == 0 {
 				return "",
 					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
-						Config.Stacks.NamePattern,
+						stackNamePattern,
 						stack,
 					))
 			}
@@ -399,7 +433,9 @@ func ReplaceContextTokens(context Context, pattern string) string {
 	return strings.Replace(
 		strings.Replace(
 			strings.Replace(
-				strings.Replace(pattern,
+				strings.Replace(
+					strings.Replace(pattern,
+						"{component}", context.Component, 1),
 					"{namespace}", context.Namespace, 1),
 				"{environment}", context.Environment, 1),
 			"{tenant}", context.Tenant, 1),

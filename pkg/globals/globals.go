@@ -10,17 +10,20 @@ const (
 	// https://github.com/roboll/helmfile#cli-reference
 	GlobalOptionsFlag = "--global-options"
 
-	TerraformDirFlag = "--terraform-dir"
-	HelmfileDirFlag  = "--helmfile-dir"
-	ConfigDirFlag    = "--config-dir"
-	StackDirFlag     = "--stacks-dir"
-	BasePathFlag     = "--base-path"
-	WorkflowDirFlag  = "--workflows-dir"
+	TerraformDirFlag     = "--terraform-dir"
+	HelmfileDirFlag      = "--helmfile-dir"
+	ConfigDirFlag        = "--config-dir"
+	StackDirFlag         = "--stacks-dir"
+	BasePathFlag         = "--base-path"
+	WorkflowDirFlag      = "--workflows-dir"
+	KubeConfigConfigFlag = "--kubeconfig-path"
 
 	DeployRunInitFlag           = "--deploy-run-init"
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
+	InitRunReconfigure          = "--init-run-reconfigure"
 
 	FromPlanFlag = "--from-plan"
+	DryRunFlag   = "--dry-run"
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
