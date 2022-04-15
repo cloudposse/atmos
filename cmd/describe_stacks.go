@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// describeComponentCmd describes configuration for components
+// describeStacksCmd describes configuration for stacks and components in the stacks
 var describeStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "Execute 'describe stacks' command",
