@@ -29,3 +29,21 @@ func WriteToFileAsYAML(filePath string, data interface{}, fileMode os.FileMode) 
 	}
 	return nil
 }
+
+// ConvertToYAMLString coverts the provided value to YAML string
+func ConvertToYAMLString(data interface{}) (string, error) {
+	y, err := yaml.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return string(y), nil
+}
+
+// ConvertToYAMLBytes coverts the provided value to YAML-encoded slice of bytes
+func ConvertToYAMLBytes(data interface{}) ([]byte, error) {
+	y, err := yaml.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	return y, nil
+}

@@ -6,6 +6,7 @@ import (
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"github.com/spyzhov/ajson"
 	"strings"
 )
 
@@ -59,6 +60,11 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 	var sections []string
 	if sectionsCsv != "" {
 		sections = strings.Split(sectionsCsv, ",")
+	}
+
+	jsonpath, err := flags.GetString("jsonpath")
+	if err != nil {
+		return err
 	}
 
 	var configAndStacksInfo c.ConfigAndStacksInfo
@@ -128,6 +134,25 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 				}
 			}
 		}
+	}
+
+	// https://cburgmer.github.io/json-path-comparison/
+	// https://github.com/ohler55/ojg
+	// https://github.com/bhmj/jsonslice
+	// https://github.com/spyzhov/ajson
+	if len(jsonpath) > 0 {
+		json, err := u.ConvertToJSONBytes(finalStacksMap)
+		if err != nil {
+			return err
+		}
+
+		nodes, err := ajson.JSONPath(json, jsonpath)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(nodes)
+		return nil
 	}
 
 	if format == "yaml" {
