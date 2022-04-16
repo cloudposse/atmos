@@ -156,7 +156,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Run `terraform init`
+	// Run `terraform init` before running other commands
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
 		info.SubCommand == "clean" ||
@@ -241,6 +241,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
 		} else {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+		}
+		break
+	case "init":
+		if c.Config.Components.Terraform.InitRunReconfigure == true {
+			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
 		break
 	}
