@@ -40,3 +40,7 @@ components:
           val2: "5"
           val3: 7
           val4: null
+      metadata:
+        # Override Terraform workspace
+        # Note that by default, Terraform workspace is generated from the context, e.g. `<environment>-<stage>`
+        terraform_workspace_pattern: "{tenant}-{environment}-{stage}-{component}"
