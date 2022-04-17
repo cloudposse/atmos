@@ -372,6 +372,12 @@ func TransformStackConfigToSpaceliftStacks(
 						baseComponentName = baseComponent.(string)
 					}
 
+					if componentMetadata, componentMetadataExists := componentMap["metadata"].(map[interface{}]interface{}); componentMetadataExists {
+						if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
+							baseComponentName = componentMetadataComponent
+						}
+					}
+
 					context := c.GetContextFromVars(componentVars)
 					context.Component = component
 					context.BaseComponent = baseComponentName
