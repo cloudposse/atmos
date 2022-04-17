@@ -2,6 +2,7 @@ package spacelift
 
 import (
 	"fmt"
+	e "github.com/cloudposse/atmos/internal/exec"
 	c "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -409,16 +410,18 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["metadata"] = componentMetadata
 
 					// workspace
-					var workspace string
-					// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
-					if componentTerraformWorkspace, componentTerraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); componentTerraformWorkspaceExist {
-						workspace = componentTerraformWorkspace
-					} else if backendTypeName == "s3" && baseComponentName == "" {
-						workspace = contextPrefix
-					} else {
-						workspace = fmt.Sprintf("%s-%s", contextPrefix, component)
+					workspace, err := e.BuildTerraformWorkspace(
+						stackName,
+						stackNamePattern,
+						componentMetadata,
+						component,
+						baseComponentName,
+						context,
+					)
+					if err != nil {
+						return nil, err
 					}
-					spaceliftConfig["workspace"] = strings.Replace(workspace, "/", "-", -1)
+					spaceliftConfig["workspace"] = workspace
 
 					// labels
 					labels := []string{}
