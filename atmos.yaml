@@ -64,4 +64,3 @@ workflows:
 logs:
   verbose: false
   colors: true
-
