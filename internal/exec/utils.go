@@ -637,7 +637,7 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 	return info, nil
 }
 
-// generateComponentBackendConfig generates backend config components
+// generateComponentBackendConfig generates backend config for components
 func generateComponentBackendConfig(backendType string, backendConfig map[interface{}]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"terraform": map[string]interface{}{
