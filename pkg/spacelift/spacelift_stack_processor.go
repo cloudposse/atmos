@@ -367,14 +367,20 @@ func TransformStackConfigToSpaceliftStacks(
 						componentInheritance = i.([]string)
 					}
 
+					// Process base component
+					// Base component can be specified in two places:
+					// `component` attribute (legacy)
+					// `metadata.component` attribute
+					// `metadata.component` takes precedence over `component`
 					baseComponentName := ""
 					if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 						baseComponentName = baseComponent.(string)
 					}
-
+					// First check if component's `metadata` section exists
+					// Then check if `metadata.component` exists
 					if componentMetadata, componentMetadataExists := componentMap["metadata"].(map[interface{}]interface{}); componentMetadataExists {
-						if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
-							baseComponentName = componentMetadataComponent
+						if componentFromMetadata, componentFromMetadataExists := componentMetadata["component"].(string); componentFromMetadataExists {
+							baseComponentName = componentFromMetadata
 						}
 					}
 
