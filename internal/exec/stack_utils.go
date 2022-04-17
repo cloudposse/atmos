@@ -11,8 +11,6 @@ func BuildTerraformWorkspace(
 	stack string,
 	stackNamePattern string,
 	componentMetadata map[interface{}]interface{},
-	component string,
-	baseComponent string,
 	context c.Context,
 ) (string, error) {
 
@@ -23,13 +21,16 @@ func BuildTerraformWorkspace(
 
 	var workspace string
 
-	// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
-	if componentTerraformWorkspace, componentTerraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); componentTerraformWorkspaceExist {
-		workspace = componentTerraformWorkspace
-	} else if baseComponent == "" {
+	if terraformWorkspacePattern, terraformWorkspacePatternExist := componentMetadata["terraform_workspace_pattern"].(string); terraformWorkspacePatternExist {
+		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace_pattern`
+		workspace = c.ReplaceContextTokens(context, terraformWorkspacePattern)
+	} else if terraformWorkspace, terraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); terraformWorkspaceExist {
+		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
+		workspace = terraformWorkspace
+	} else if context.BaseComponent == "" {
 		workspace = contextPrefix
 	} else {
-		workspace = fmt.Sprintf("%s-%s", contextPrefix, component)
+		workspace = fmt.Sprintf("%s-%s", contextPrefix, context.Component)
 	}
 
 	return strings.Replace(workspace, "/", "-", -1), nil

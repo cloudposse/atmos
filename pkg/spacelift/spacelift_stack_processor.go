@@ -367,7 +367,15 @@ func TransformStackConfigToSpaceliftStacks(
 						componentInheritance = i.([]string)
 					}
 
+					baseComponentName := ""
+					if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
+						baseComponentName = baseComponent.(string)
+					}
+
 					context := c.GetContextFromVars(componentVars)
+					context.Component = component
+					context.BaseComponent = baseComponentName
+
 					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
 					if err != nil {
 						return nil, err
@@ -382,11 +390,6 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["deps"] = componentDeps
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
-
-					baseComponentName := ""
-					if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
-						baseComponentName = baseComponent.(string)
-					}
 					spaceliftConfig["base_component"] = baseComponentName
 
 					// backend
@@ -414,8 +417,6 @@ func TransformStackConfigToSpaceliftStacks(
 						stackName,
 						stackNamePattern,
 						componentMetadata,
-						component,
-						baseComponentName,
 						context,
 					)
 					if err != nil {
@@ -463,7 +464,6 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Spacelift stack name
-					context.Component = component
 					spaceliftStackName, spaceliftStackNamePattern := buildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 
 					// Add Spacelift stack config to the final map

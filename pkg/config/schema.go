@@ -56,12 +56,13 @@ type ProcessedConfiguration struct {
 }
 
 type Context struct {
-	Namespace   string
-	Tenant      string
-	Environment string
-	Stage       string
-	Region      string
-	Component   string
+	Namespace     string
+	Tenant        string
+	Environment   string
+	Stage         string
+	Region        string
+	Component     string
+	BaseComponent string
 }
 
 type ArgsAndFlagsInfo struct {

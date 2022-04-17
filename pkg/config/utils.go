@@ -434,7 +434,9 @@ func ReplaceContextTokens(context Context, pattern string) string {
 		strings.Replace(
 			strings.Replace(
 				strings.Replace(
-					strings.Replace(pattern,
+					strings.Replace(
+						strings.Replace(pattern,
+							"{base-component}", context.BaseComponent, 1),
 						"{component}", context.Component, 1),
 					"{namespace}", context.Namespace, 1),
 				"{environment}", context.Environment, 1),

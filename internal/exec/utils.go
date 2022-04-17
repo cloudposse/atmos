@@ -417,6 +417,8 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 
 	// Process context
 	configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponent
 	configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
 	if err != nil {
 		return configAndStacksInfo, err
@@ -427,9 +429,8 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		configAndStacksInfo.Stack,
 		c.Config.Stacks.NamePattern,
 		configAndStacksInfo.ComponentMetadataSection,
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.BaseComponent,
-		configAndStacksInfo.Context)
+		configAndStacksInfo.Context,
+	)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
