@@ -5,12 +5,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/fatih/color"
-	"github.com/spf13/cobra"
 )
-
-func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
-	return nil
-}
 
 // ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig' command
 func ExecuteAwsEksUpdateKubeconfig(info c.ConfigAndStacksInfo, path string) error {
