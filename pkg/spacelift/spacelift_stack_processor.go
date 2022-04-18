@@ -2,6 +2,7 @@ package spacelift
 
 import (
 	"fmt"
+	e "github.com/cloudposse/atmos/internal/exec"
 	c "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -366,7 +367,27 @@ func TransformStackConfigToSpaceliftStacks(
 						componentInheritance = i.([]string)
 					}
 
+					// Process base component
+					// Base component can be specified in two places:
+					// `component` attribute (legacy)
+					// `metadata.component` attribute
+					// `metadata.component` takes precedence over `component`
+					baseComponentName := ""
+					if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
+						baseComponentName = baseComponent.(string)
+					}
+					// First check if component's `metadata` section exists
+					// Then check if `metadata.component` exists
+					if componentMetadata, componentMetadataExists := componentMap["metadata"].(map[interface{}]interface{}); componentMetadataExists {
+						if componentFromMetadata, componentFromMetadataExists := componentMetadata["component"].(string); componentFromMetadataExists {
+							baseComponentName = componentFromMetadata
+						}
+					}
+
 					context := c.GetContextFromVars(componentVars)
+					context.Component = component
+					context.BaseComponent = baseComponentName
+
 					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
 					if err != nil {
 						return nil, err
@@ -381,11 +402,6 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["deps"] = componentDeps
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
-
-					baseComponentName := ""
-					if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
-						baseComponentName = baseComponent.(string)
-					}
 					spaceliftConfig["base_component"] = baseComponentName
 
 					// backend
@@ -409,16 +425,16 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["metadata"] = componentMetadata
 
 					// workspace
-					var workspace string
-					// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
-					if componentTerraformWorkspace, componentTerraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); componentTerraformWorkspaceExist {
-						workspace = componentTerraformWorkspace
-					} else if backendTypeName == "s3" && baseComponentName == "" {
-						workspace = contextPrefix
-					} else {
-						workspace = fmt.Sprintf("%s-%s", contextPrefix, component)
+					workspace, err := e.BuildTerraformWorkspace(
+						stackName,
+						stackNamePattern,
+						componentMetadata,
+						context,
+					)
+					if err != nil {
+						return nil, err
 					}
-					spaceliftConfig["workspace"] = strings.Replace(workspace, "/", "-", -1)
+					spaceliftConfig["workspace"] = workspace
 
 					// labels
 					labels := []string{}
@@ -460,7 +476,6 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Spacelift stack name
-					context.Component = component
 					spaceliftStackName, spaceliftStackNamePattern := buildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 
 					// Add Spacelift stack config to the final map

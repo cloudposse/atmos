@@ -428,16 +428,15 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 	return contextPrefix, nil
 }
 
-// ReplaceContextTokens replaces tokens in the context pattern
+// ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced
 func ReplaceContextTokens(context Context, pattern string) string {
-	return strings.Replace(
-		strings.Replace(
-			strings.Replace(
-				strings.Replace(
-					strings.Replace(pattern,
-						"{component}", context.Component, 1),
-					"{namespace}", context.Namespace, 1),
-				"{environment}", context.Environment, 1),
-			"{tenant}", context.Tenant, 1),
-		"{stage}", context.Stage, 1)
+	r := strings.NewReplacer(
+		"{base-component}", context.BaseComponent,
+		"{component}", context.Component,
+		"{namespace}", context.Namespace,
+		"{environment}", context.Environment,
+		"{tenant}", context.Tenant,
+		"{stage}", context.Stage,
+	)
+	return r.Replace(pattern)
 }
