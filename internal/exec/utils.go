@@ -417,23 +417,23 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 
 	// Process context
 	configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
 	configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
 	// workspace
-	var workspace string
-	// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
-	if componentTerraformWorkspace, componentTerraformWorkspaceExist := configAndStacksInfo.ComponentMetadataSection["terraform_workspace"].(string); componentTerraformWorkspaceExist {
-		workspace = componentTerraformWorkspace
-	} else if len(configAndStacksInfo.BaseComponent) == 0 {
-		workspace = configAndStacksInfo.ContextPrefix
-	} else {
-		workspace = fmt.Sprintf("%s-%s", configAndStacksInfo.ContextPrefix, configAndStacksInfo.ComponentFromArg)
+	workspace, err := BuildTerraformWorkspace(
+		configAndStacksInfo.Stack,
+		c.Config.Stacks.NamePattern,
+		configAndStacksInfo.ComponentMetadataSection,
+		configAndStacksInfo.Context,
+	)
+	if err != nil {
+		return configAndStacksInfo, err
 	}
-
-	workspace = strings.Replace(workspace, "/", "-", -1)
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
@@ -637,6 +637,7 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 	return info, nil
 }
 
+// generateComponentBackendConfig generates backend config for components
 func generateComponentBackendConfig(backendType string, backendConfig map[interface{}]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"terraform": map[string]interface{}{
