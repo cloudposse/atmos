@@ -23,7 +23,7 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, dryRun bool) 
 
 		if commandType == "shell" {
 			args := strings.Fields(command)
-			if err := execCommand(args[0], args[1:], ".", []string{}, dryRun); err != nil {
+			if err := ExecuteShellCommand(args[0], args[1:], ".", []string{}, dryRun); err != nil {
 				return err
 			}
 		} else if commandType == "atmos" {
@@ -47,7 +47,7 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, dryRun bool) 
 				color.HiCyan(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
-			if err := execCommand("atmos", args, ".", []string{}, dryRun); err != nil {
+			if err := ExecuteShellCommand("atmos", args, ".", []string{}, dryRun); err != nil {
 				return err
 			}
 		} else {

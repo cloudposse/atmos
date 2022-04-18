@@ -4,10 +4,15 @@ import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 )
 
-// processKubeconfig prepares AWS profile and downloads `kubeconfig` from an EKS cluster by running `aws eks update-kubeconfig`
-func processKubeconfig(info c.ConfigAndStacksInfo, path string) error {
+func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
+	return nil
+}
+
+// ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig' command
+func ExecuteAwsEksUpdateKubeconfig(info c.ConfigAndStacksInfo, path string) error {
 	// Prepare AWS profile
 	context := c.GetContextFromVars(info.ComponentVarsSection)
 	helmAwsProfile := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
@@ -18,12 +23,12 @@ func processKubeconfig(info c.ConfigAndStacksInfo, path string) error {
 	clusterName := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
 	color.Cyan(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to '%s'\n\n", clusterName, kubeconfigPath))
 
-	err := execCommand("aws",
+	err := ExecuteShellCommand("aws",
 		[]string{
-			"--profile",
-			helmAwsProfile,
 			"eks",
 			"update-kubeconfig",
+			"--profile",
+			helmAwsProfile,
 			fmt.Sprintf("--name=%s", clusterName),
 			fmt.Sprintf("--region=%s", context.Region),
 			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),

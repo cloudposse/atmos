@@ -168,7 +168,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if info.SubCommand == "workspace" || c.Config.Components.Terraform.InitRunReconfigure == true {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
-		err = execCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList, info.DryRun)
+		err = ExecuteShellCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			return err
 		}
@@ -249,9 +249,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Run `terraform workspace`
 	if info.SubCommand != "init" {
-		err = execCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
+		err = ExecuteShellCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
-			err = execCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
+			err = ExecuteShellCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
 			if err != nil {
 				return err
 			}
@@ -300,7 +300,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Execute the provided command
 	if info.SubCommand != "workspace" {
-		err = execCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList, info.DryRun)
+		err = ExecuteShellCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			return err
 		}

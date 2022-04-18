@@ -86,7 +86,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	clusterName := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
 	color.Cyan(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
-	err = execCommand("aws",
+	err = ExecuteShellCommand("aws",
 		[]string{
 			"--profile",
 			helmAwsProfile,
@@ -157,7 +157,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Println(v)
 	}
 
-	err = execCommand(info.Command, allArgsAndFlags, componentPath, envVars, info.DryRun)
+	err = ExecuteShellCommand(info.Command, allArgsAndFlags, componentPath, envVars, info.DryRun)
 	if err != nil {
 		return err
 	}
