@@ -30,6 +30,7 @@ func processKubeconfig(info c.ConfigAndStacksInfo, path string) error {
 		},
 		path,
 		nil,
+		false,
 	)
 	if err != nil {
 		return err
