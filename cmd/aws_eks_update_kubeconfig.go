@@ -24,7 +24,12 @@ var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 func init() {
 	awsEksCmdUpdateKubeconfigCmd.DisableFlagParsing = false
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().StringP("stack", "s", "", "atmos aws eks update-kubeconfig -s <stack>")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("stack", "", "atmos aws eks update-kubeconfig -s <stack>")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("name", "", "atmos aws eks update-kubeconfig --name <cluster name>")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "atmos aws eks update-kubeconfig --kubeconfig <path_to_kubeconfig>")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("role-arn", "", "atmos aws eks update-kubeconfig --role-arn <ARN>")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "atmos aws eks update-kubeconfig --dry-run=true")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("verbose", false, "atmos aws eks update-kubeconfig --verbose=true")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("alias", "", "atmos aws eks update-kubeconfig --alias <alias for the cluster context name>")
 
 	awsEksCmd.AddCommand(awsEksCmdUpdateKubeconfigCmd)
 }
