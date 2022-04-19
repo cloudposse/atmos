@@ -7,7 +7,6 @@ import (
 )
 
 // awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command
-// https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 	Use:                "update-kubeconfig",
 	Short:              "Execute 'aws eks update-kubeconfig' command",
@@ -21,6 +20,7 @@ var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 	},
 }
 
+// https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 func init() {
 	awsEksCmdUpdateKubeconfigCmd.DisableFlagParsing = false
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().StringP("stack", "s", "", "atmos aws eks update-kubeconfig -s <stack>")
