@@ -10,7 +10,7 @@ import (
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 	Use:                "update-kubeconfig",
-	Short:              "Executes 'aws eks update-kubeconfig' command",
+	Short:              "Execute 'aws eks update-kubeconfig' command",
 	Long:               `This command executes 'aws eks update-kubeconfig' command. Docs: https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
