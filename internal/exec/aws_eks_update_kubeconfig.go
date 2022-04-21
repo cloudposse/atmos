@@ -5,6 +5,7 @@ import (
 	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"path"
 )
 
 func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
@@ -110,6 +111,8 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 	// The rest of the parameters are optional
 	requiredParamsProvided := clusterName != "" && (profile != "" || roleArn != "")
 
+	shellCommandPath := ""
+
 	if !requiredParamsProvided {
 		// If stack is not provided, calculate the stack name from the context (tenent, environment, stage)
 		if kubeconfigContext.Stack == "" {
@@ -137,9 +140,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 
 		configAndStacksInfo.ComponentType = "terraform"
 		configAndStacksInfo, err := ProcessStacks(configAndStacksInfo, true)
+		shellCommandPath = path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
 			configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
+			shellCommandPath = path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err
 			}
@@ -196,7 +201,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err := ExecuteShellCommand("aws", args, "", nil, false)
+	err := ExecuteShellCommand("aws", args, shellCommandPath, nil, false)
 	if err != nil {
 		return err
 	}
