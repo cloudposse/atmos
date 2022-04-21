@@ -23,7 +23,7 @@ For example: atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster
   - 'components.helmfile.helm_aws_profile_pattern' in 'atmos.yaml' CLI config (and calculates the '--profile' parameter using the pattern)
   - 'components.helmfile.kubeconfig_path' in 'atmos.yaml' CLI config
   - the variables for the component in the provided stack
-  - 'region'' from the variables for the component in the stack
+  - 'region' from the variables for the component in the stack
 For example: atmos aws eks update-kubeconfig <component> -s <stack>
 
 3. Combination of the above. Provide a component and a stack, and override other parameters on the command line:
