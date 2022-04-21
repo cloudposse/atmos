@@ -165,17 +165,20 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 		}
 	}
 
-	args := []string{
+	var args []string
+
+	if profile != "" {
+		args = append(args, fmt.Sprintf("--profile=%s", profile))
+	}
+
+	args = append(args, []string{
 		"eks",
 		"update-kubeconfig",
 		fmt.Sprintf("--name=%s", clusterName),
 		fmt.Sprintf("--dry-run=%t", dryRun),
 		fmt.Sprintf("--verbose=%t", verbose),
-	}
+	}...)
 
-	if profile != "" {
-		args = append(args, fmt.Sprintf("--profile=%s", profile))
-	}
 	if roleArn != "" {
 		args = append(args, fmt.Sprintf("--role-arn=%s", roleArn))
 	}
