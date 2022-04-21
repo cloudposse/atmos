@@ -373,7 +373,7 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		if part == "{namespace}" {
 			if len(context.Namespace) == 0 {
 				return "",
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'namespace`, but the stack %s does not have a namespace defined",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'namespace`, but the stack '%s' does not have a namespace defined",
 						stackNamePattern,
 						stack,
 					))
@@ -386,7 +386,7 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
 				return "",
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack %s does not have a tenant defined",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack '%s' does not have a tenant defined",
 						stackNamePattern,
 						stack,
 					))
@@ -399,7 +399,7 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{environment}" {
 			if len(context.Environment) == 0 {
 				return "",
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack %s does not have an environment defined",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack '%s' does not have an environment defined",
 						stackNamePattern,
 						stack,
 					))
@@ -412,7 +412,7 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{stage}" {
 			if len(context.Stage) == 0 {
 				return "",
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack %s does not have a stage defined",
+					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack '%s' does not have a stage defined",
 						stackNamePattern,
 						stack,
 					))
@@ -439,4 +439,48 @@ func ReplaceContextTokens(context Context, pattern string) string {
 		"{stage}", context.Stage,
 	)
 	return r.Replace(pattern)
+}
+
+// GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern
+func GetStackNameFromContextAndStackNamePattern(tenant string, environment string, stage string, stackNamePattern string) (string, error) {
+	if len(stackNamePattern) == 0 {
+		return "",
+			errors.New(fmt.Sprintf("Stack name pattern must be provided"))
+	}
+
+	var stack string
+	stackNamePatternParts := strings.Split(stackNamePattern, "-")
+
+	for _, part := range stackNamePatternParts {
+		if part == "{tenant}" {
+			if len(tenant) == 0 {
+				return "", errors.New(fmt.Sprintf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", stackNamePattern))
+			}
+			if len(stack) == 0 {
+				stack = tenant
+			} else {
+				stack = fmt.Sprintf("%s-%s", stack, tenant)
+			}
+		} else if part == "{environment}" {
+			if len(environment) == 0 {
+				return "", errors.New(fmt.Sprintf("stack name pattern '%s' includes '{environment}', but environment is not provided", stackNamePattern))
+			}
+			if len(stack) == 0 {
+				stack = environment
+			} else {
+				stack = fmt.Sprintf("%s-%s", stack, environment)
+			}
+		} else if part == "{stage}" {
+			if len(stage) == 0 {
+				return "", errors.New(fmt.Sprintf("stack name pattern '%s' includes '{stage}', but stage is not provided", stackNamePattern))
+			}
+			if len(stack) == 0 {
+				stack = stage
+			} else {
+				stack = fmt.Sprintf("%s-%s", stack, stage)
+			}
+		}
+	}
+
+	return stack, nil
 }
