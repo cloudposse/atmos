@@ -149,7 +149,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 
 		// `kubeconfig` can be overridden on the command line
 		if kubeconfigPath == "" {
-			kubeconfigPath = fmt.Sprintf("%s/%s-kubecfg", kubeconfigContext.Kubeconfig, kubeconfigContext.Stack)
+			kubeconfigPath = fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, kubeconfigContext.Stack)
 		}
 		// `clusterName` can be overridden on the command line
 		if clusterName == "" {
@@ -175,10 +175,14 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 		"eks",
 		"update-kubeconfig",
 		fmt.Sprintf("--name=%s", clusterName),
-		fmt.Sprintf("--dry-run=%t", dryRun),
-		fmt.Sprintf("--verbose=%t", verbose),
 	}...)
 
+	if dryRun {
+		args = append(args, "--dry-run")
+	}
+	if verbose {
+		args = append(args, "--verbose")
+	}
 	if roleArn != "" {
 		args = append(args, fmt.Sprintf("--role-arn=%s", roleArn))
 	}
@@ -192,7 +196,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err := ExecuteShellCommand("aws", args, kubeconfigPath, nil, false)
+	err := ExecuteShellCommand("aws", args, "", nil, false)
 	if err != nil {
 		return err
 	}
