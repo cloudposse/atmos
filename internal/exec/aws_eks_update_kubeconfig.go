@@ -165,6 +165,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 			clusterName = c.ReplaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
 		}
 		// `profile` can be overridden on the command line
+		// `--role-arn` suppresses `profile` being automatically set
 		if profile == "" && roleArn == "" {
 			profile = c.ReplaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
 		}
