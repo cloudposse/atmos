@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// execCommand prints and executes the provided command with args and flags
-func execCommand(command string, args []string, dir string, env []string, dryRun bool) error {
+// ExecuteShellCommand prints and executes the provided command with args and flags
+func ExecuteShellCommand(command string, args []string, dir string, env []string, dryRun bool) error {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir

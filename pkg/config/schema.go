@@ -139,3 +139,19 @@ type WorkflowDefinition struct {
 type WorkflowConfig map[string]WorkflowDefinition
 
 type WorkflowFile map[string]WorkflowConfig
+
+type AwsEksUpdateKubeconfigContext struct {
+	Component   string
+	Stack       string
+	Profile     string
+	ClusterName string
+	Kubeconfig  string
+	RoleArn     string
+	DryRun      bool
+	Verbose     bool
+	Alias       string
+	Tenant      string
+	Environment string
+	Stage       string
+	Region      string
+}
