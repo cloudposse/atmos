@@ -53,16 +53,22 @@ func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) err
 		return err
 	}
 
+	component := ""
+	if len(args) > 0 {
+		component = args[0]
+	}
+
 	executeAwsEksUpdateKubeconfigContext := a.ExecuteAwsEksUpdateKubeconfigContext{
-		Stack:      stack,
-		Profile:    profile,
-		Name:       name,
-		Region:     region,
-		Kubeconfig: kubeconfig,
-		RoleArn:    roleArn,
-		DryRun:     dryRun,
-		Verbose:    verbose,
-		Alias:      alias,
+		Component:   component,
+		Stack:       stack,
+		Profile:     profile,
+		ClusterName: name,
+		Region:      region,
+		Kubeconfig:  kubeconfig,
+		RoleArn:     roleArn,
+		DryRun:      dryRun,
+		Verbose:     verbose,
+		Alias:       alias,
 	}
 
 	return a.ExecuteAwsEksUpdateKubeconfig(executeAwsEksUpdateKubeconfigContext)
