@@ -8,7 +8,7 @@ import (
 var awsEksCmd = &cobra.Command{
 	Use:                "eks",
 	Short:              "Execute 'aws eks' commands",
-	Long:               `This command executes 'aws eks'' CLI commands`,
+	Long:               `This command executes 'aws eks' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
