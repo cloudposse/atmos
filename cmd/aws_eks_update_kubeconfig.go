@@ -26,6 +26,7 @@ func init() {
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().StringP("stack", "s", "", "atmos aws eks update-kubeconfig -s <stack>")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("profile", "", "atmos aws eks update-kubeconfig --profile <profile>")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("name", "", "atmos aws eks update-kubeconfig --name <cluster name>")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("region", "", "atmos aws eks update-kubeconfig --region <region>")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "atmos aws eks update-kubeconfig --kubeconfig <path_to_kubeconfig>")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("role-arn", "", "atmos aws eks update-kubeconfig --role-arn <ARN>")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "atmos aws eks update-kubeconfig --dry-run=true")

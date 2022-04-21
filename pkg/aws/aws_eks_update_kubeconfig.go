@@ -7,8 +7,23 @@ import (
 	"github.com/fatih/color"
 )
 
-// ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig' command
-func ExecuteAwsEksUpdateKubeconfig(info c.ConfigAndStacksInfo, path string) error {
+type ExecuteAwsEksUpdateKubeconfigContext struct {
+	Stack       string
+	Profile     string
+	Name        string
+	Kubeconfig  string
+	RoleArn     string
+	DryRun      bool
+	Verbose     bool
+	Alias       string
+	Tenant      string
+	Environment string
+	Stage       string
+	Region      string
+}
+
+// ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig'
+func ExecuteAwsEksUpdateKubeconfig(executeAwsEksUpdateKubeconfigContext ExecuteAwsEksUpdateKubeconfigContext) error {
 	// Prepare AWS profile
 	context := c.GetContextFromVars(info.ComponentVarsSection)
 	helmAwsProfile := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
@@ -29,7 +44,7 @@ func ExecuteAwsEksUpdateKubeconfig(info c.ConfigAndStacksInfo, path string) erro
 			fmt.Sprintf("--region=%s", context.Region),
 			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
 		},
-		path,
+		executeAwsEksUpdateKubeconfigContext.Kubeconfig,
 		nil,
 		false,
 	)
