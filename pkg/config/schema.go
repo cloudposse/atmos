@@ -140,7 +140,7 @@ type WorkflowConfig map[string]WorkflowDefinition
 
 type WorkflowFile map[string]WorkflowConfig
 
-type ExecuteAwsEksUpdateKubeconfigContext struct {
+type AwsEksUpdateKubeconfigContext struct {
 	Component   string
 	Stack       string
 	Profile     string

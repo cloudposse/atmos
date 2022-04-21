@@ -61,7 +61,7 @@ func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) err
 		component = args[0]
 	}
 
-	executeAwsEksUpdateKubeconfigContext := c.ExecuteAwsEksUpdateKubeconfigContext{
+	executeAwsEksUpdateKubeconfigContext := c.AwsEksUpdateKubeconfigContext{
 		Component:   component,
 		Stack:       stack,
 		Profile:     profile,
@@ -79,7 +79,7 @@ func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) err
 
 // ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig'
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
-func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeconfigContext) error {
+func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigContext) error {
 	// AWS profile to authenticate to the cluster
 	profile := kubeconfigContext.Profile
 
@@ -111,7 +111,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 	// The rest of the parameters are optional
 	requiredParamsProvided := clusterName != "" && (profile != "" || roleArn != "")
 
-	shellCommandPath := ""
+	shellCommandWorkingDir := ""
 
 	if !requiredParamsProvided {
 		// If stack is not provided, calculate the stack name from the context (tenent, environment, stage)
@@ -140,11 +140,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 
 		configAndStacksInfo.ComponentType = "terraform"
 		configAndStacksInfo, err := ProcessStacks(configAndStacksInfo, true)
-		shellCommandPath = path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+		shellCommandWorkingDir = path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
 			configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
-			shellCommandPath = path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+			shellCommandWorkingDir = path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err
 			}
@@ -201,7 +201,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.ExecuteAwsEksUpdateKubeco
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err := ExecuteShellCommand("aws", args, shellCommandPath, nil, false)
+	err := ExecuteShellCommand("aws", args, shellCommandWorkingDir, nil, dryRun)
 	if err != nil {
 		return err
 	}
