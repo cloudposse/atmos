@@ -88,7 +88,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	roleArn := kubeconfigContext.RoleArn
 
 	if profile != "" && roleArn != "" {
-		return errors.New(fmt.Sprintf("Eigher 'profile' or 'role-arn' can be specified, but not both. Profile: '%s'. Role ARN: '%s'", profile, roleArn))
+		return errors.New(fmt.Sprintf("Either 'profile' or 'role-arn' can be specified, but not both. Profile: '%s'. Role ARN: '%s'", profile, roleArn))
 	}
 
 	// AWS region
