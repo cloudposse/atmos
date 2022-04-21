@@ -8,9 +8,29 @@ import (
 
 // awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command
 var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
-	Use:                "update-kubeconfig",
-	Short:              "Execute 'aws eks update-kubeconfig' command",
-	Long:               `This command executes 'aws eks update-kubeconfig' command. Docs: https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html`,
+	Use:   "update-kubeconfig",
+	Short: "Execute 'aws eks update-kubeconfig' command",
+
+	Long: `This command executes 'aws eks update-kubeconfig' in three different ways:
+
+1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line, 
+then 'atmos' executes the command without requiring atmos CLI config and context.
+For example: atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>
+
+2. If 'component' and 'stack' are provided on the command-line, 
+   then 'atmos' executes the command using atmos CLI config and stack's context by searching for the following settings:
+  - 'components.helmfile.cluster_name_pattern' in 'atmos.yaml' CLI config (and calculates the '--name' parameter using the pattern)
+  - 'components.helmfile.helm_aws_profile_pattern' in 'atmos.yaml' CLI config (and calculates the '--profile' parameter using the pattern)
+  - 'components.helmfile.kubeconfig_path' in 'atmos.yaml' CLI config
+  - the variables for the component in the provided stack
+  - 'region'' from the variables for the component in the stack
+For example: atmos aws eks update-kubeconfig <component> -s <stack>
+
+3. Combination of the above. Provide a component and a stack, and override other parameters on the command line:
+For example: atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>
+
+See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information.`,
+
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
@@ -23,7 +43,7 @@ var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 func init() {
 	awsEksCmdUpdateKubeconfigCmd.DisableFlagParsing = false
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().StringP("stack", "s", "", "atmos aws eks update-kubeconfig -s <stack>")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().StringP("stack", "s", "", "atmos aws eks update-kubeconfig <component> -s <stack>")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("profile", "", "atmos aws eks update-kubeconfig --profile <profile>")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("name", "", "atmos aws eks update-kubeconfig --name <cluster name>")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("region", "", "atmos aws eks update-kubeconfig --region <region>")
