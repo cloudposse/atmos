@@ -87,6 +87,10 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	// assuming an IAM role, then you must also assume that role to connect to the cluster the first time
 	roleArn := kubeconfigContext.RoleArn
 
+	if profile != "" && roleArn != "" {
+		return errors.New(fmt.Sprintf("Eigher 'profile' or 'role-arn' can be specified, but not both. Profile: '%s'. Role ARN: '%s'", profile, roleArn))
+	}
+
 	// AWS region
 	region := kubeconfigContext.Region
 
@@ -114,7 +118,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	shellCommandWorkingDir := ""
 
 	if !requiredParamsProvided {
-		// If stack is not provided, calculate the stack name from the context (tenent, environment, stage)
+		// If stack is not provided, calculate the stack name from the context (tenant, environment, stage)
 		if kubeconfigContext.Stack == "" {
 			err := c.InitConfig()
 			if err != nil {
@@ -172,7 +176,8 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 
 	var args []string
 
-	if profile != "" {
+	// `--role-arn` suppresses `profile` being automatically set
+	if profile != "" && roleArn == "" {
 		args = append(args, fmt.Sprintf("--profile=%s", profile))
 	}
 
