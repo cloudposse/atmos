@@ -23,6 +23,7 @@ func CreateSpaceliftStacks(
 	if filePaths != nil && len(filePaths) > 0 {
 		_, stacks, err := s.ProcessYAMLConfigFiles(basePath, filePaths, processStackDeps, processComponentDeps)
 		if err != nil {
+			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
@@ -30,11 +31,13 @@ func CreateSpaceliftStacks(
 	} else {
 		err := c.InitConfig()
 		if err != nil {
+			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
 		err = c.ProcessConfigForSpacelift()
 		if err != nil {
+			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
@@ -44,6 +47,7 @@ func CreateSpaceliftStacks(
 			processStackDeps,
 			processComponentDeps)
 		if err != nil {
+			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
@@ -210,6 +214,7 @@ func LegacyTransformStackConfigToSpaceliftStacks(
 							terraformComponentNamesInCurrentStack,
 							component)
 						if err != nil {
+							u.PrintErrorToStdError(err)
 							return nil, err
 						}
 						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackName))
@@ -278,6 +283,7 @@ func TransformStackConfigToSpaceliftStacks(
 					context := c.GetContextFromVars(componentVars)
 					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
 					if err != nil {
+						u.PrintErrorToStdError(err)
 						return nil, err
 					}
 
@@ -390,6 +396,7 @@ func TransformStackConfigToSpaceliftStacks(
 
 					contextPrefix, err := c.GetContextPrefix(stackName, context, stackNamePattern)
 					if err != nil {
+						u.PrintErrorToStdError(err)
 						return nil, err
 					}
 
@@ -432,6 +439,7 @@ func TransformStackConfigToSpaceliftStacks(
 						context,
 					)
 					if err != nil {
+						u.PrintErrorToStdError(err)
 						return nil, err
 					}
 					spaceliftConfig["workspace"] = workspace
@@ -465,6 +473,7 @@ func TransformStackConfigToSpaceliftStacks(
 							terraformComponentNamesInCurrentStack,
 							component)
 						if err != nil {
+							u.PrintErrorToStdError(err)
 							return nil, err
 						}
 						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -492,7 +501,9 @@ func TransformStackConfigToSpaceliftStacks(
 							stackName,
 							spaceliftStackNamePattern,
 						)
-						return nil, errors.New(errorMessage)
+						er := errors.New(errorMessage)
+						u.PrintErrorToStdError(er)
+						return nil, er
 					}
 				}
 			}
