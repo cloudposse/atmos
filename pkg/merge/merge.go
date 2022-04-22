@@ -1,6 +1,7 @@
 package merge
 
 import (
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/imdario/mergo"
 	"gopkg.in/yaml.v2"
 )
@@ -19,11 +20,13 @@ func MergeWithOptions(inputs []map[interface{}]interface{}, appendSlice, sliceDe
 		// so `mergo` does not have access to the original pointers
 		yamlCurrent, err := yaml.Marshal(current)
 		if err != nil {
+			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
 		var dataCurrent map[interface{}]interface{}
 		if err = yaml.Unmarshal(yamlCurrent, &dataCurrent); err != nil {
+			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
@@ -39,6 +42,7 @@ func MergeWithOptions(inputs []map[interface{}]interface{}, appendSlice, sliceDe
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
+			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 	}

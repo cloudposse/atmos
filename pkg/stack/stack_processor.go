@@ -11,7 +11,6 @@ import (
 	c "github.com/cloudposse/atmos/pkg/convert"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
-	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -57,7 +56,7 @@ func ProcessYAMLConfigFiles(
 				imports = append(imports, k)
 			}
 
-			uniqueImports := utils.UniqueStrings(imports)
+			uniqueImports := u.UniqueStrings(imports)
 			sort.Strings(uniqueImports)
 
 			componentStackMap := map[string]map[string][]string{}
@@ -94,7 +93,7 @@ func ProcessYAMLConfigFiles(
 
 			stackName := strings.TrimSuffix(
 				strings.TrimSuffix(
-					utils.TrimBasePathFromPath(stackBasePath+"/", p),
+					u.TrimBasePathFromPath(stackBasePath+"/", p),
 					g.DefaultStackConfigFileExtension),
 				".yml",
 			)
@@ -110,6 +109,7 @@ func ProcessYAMLConfigFiles(
 	wg.Wait()
 
 	if errorResult != nil {
+		u.PrintErrorToStdError(errorResult)
 		return nil, nil, errorResult
 	}
 	return listResult, mapResult, nil
@@ -224,7 +224,7 @@ func ProcessConfig(
 
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
-			utils.TrimBasePathFromPath(basePath+"/", stack),
+			u.TrimBasePathFromPath(basePath+"/", stack),
 			g.DefaultStackConfigFileExtension),
 		".yml",
 	)

@@ -9,6 +9,14 @@ import (
 // PrintErrorToStdErrorAndExit prints errors to std.Error and exits with an error code
 func PrintErrorToStdErrorAndExit(err error) {
 	if err != nil {
+		PrintErrorToStdError(err)
+		os.Exit(1)
+	}
+}
+
+// PrintErrorToStdError prints errors to std.Error
+func PrintErrorToStdError(err error) {
+	if err != nil {
 		c := color.New(color.FgRed)
 		_, err2 := c.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
@@ -17,7 +25,6 @@ func PrintErrorToStdErrorAndExit(err error) {
 			fmt.Println("Original error message:")
 			PrintError(err)
 		}
-		os.Exit(1)
 	}
 }
 
