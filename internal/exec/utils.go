@@ -259,13 +259,6 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		}
 	}
 
-	if len(c.Config.Stacks.NamePattern) < 1 {
-		return configAndStacksInfo,
-			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-	}
-
-	stackNamePatternParts := strings.Split(c.Config.Stacks.NamePattern, "-")
-
 	// Check and process stacks
 	if c.ProcessedConfig.StackType == "Directory" {
 		configAndStacksInfo.ComponentSection,
@@ -289,30 +282,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
 		}
 
-		stackParts := strings.Split(configAndStacksInfo.Stack, "-")
-		if len(stackParts) != len(stackNamePatternParts) {
-			return configAndStacksInfo,
-				errors.New(fmt.Sprintf("Stack '%s' does not match the stack name pattern '%s'",
-					configAndStacksInfo.Stack,
-					c.Config.Stacks.NamePattern))
-		}
-
-		var tenant string
-		var environment string
-		var stage string
-		var tenantFound bool
-		var environmentFound bool
-		var stageFound bool
-
-		for i, part := range stackNamePatternParts {
-			if part == "{tenant}" {
-				tenant = stackParts[i]
-			} else if part == "{environment}" {
-				environment = stackParts[i]
-			} else if part == "{stage}" {
-				stage = stackParts[i]
-			}
-		}
+		stackFound := false
 
 		for stackName := range stacksMap {
 			configAndStacksInfo.ComponentSection,
@@ -332,43 +302,30 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 
 			configAndStacksInfo.ComponentEnvList = convertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
-			tenantFound = true
-			environmentFound = true
-			stageFound = true
-
-			// Search for tenant in stack
-			if len(tenant) > 0 {
-				if tenantInStack, ok := configAndStacksInfo.ComponentVarsSection["tenant"].(string); !ok || tenantInStack != tenant {
-					tenantFound = false
-				}
+			// Process context
+			configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+			configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
+			if err != nil {
+				return configAndStacksInfo, err
 			}
 
-			// Search for environment in stack
-			if len(environment) > 0 {
-				if environmentInStack, ok := configAndStacksInfo.ComponentVarsSection["environment"].(string); !ok || environmentInStack != environment {
-					environmentFound = false
-				}
-			}
-
-			// Search for stage in stack
-			if len(stage) > 0 {
-				if stageInStack, ok := configAndStacksInfo.ComponentVarsSection["stage"].(string); !ok || stageInStack != stage {
-					stageFound = false
-				}
-			}
-
-			if tenantFound == true && environmentFound == true && stageFound == true {
-				if g.LogVerbose {
-					color.Green("Found stack config for the component '%s' in the stack '%s'\n\n", configAndStacksInfo.ComponentFromArg, stackName)
-				}
-				configAndStacksInfo.Stack = stackName
+			// Check if we've found the stack
+			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+				stackFound = true
+				color.Cyan("Found config for the component '%s' in the stack '%s' in the file '%s'\n",
+					configAndStacksInfo.ComponentFromArg,
+					configAndStacksInfo.Stack,
+					stackName,
+				)
 				break
 			}
 		}
 
-		if tenantFound == false || environmentFound == false || stageFound == false {
+		if !stackFound {
 			return configAndStacksInfo,
-				errors.New(fmt.Sprintf("\nCould not find config for the component '%s' in the stack '%s'.\n"+
+				errors.New(fmt.Sprintf("\nSearched all stack files, but could not find config for the component '%s' in the stack '%s'.\n"+
 					"Check that all attributes in the stack name pattern '%s' are defined in the stack config files.\n"+
 					"Are the component and stack names correct? Did you forget an import?",
 					configAndStacksInfo.ComponentFromArg,
@@ -413,15 +370,6 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		configAndStacksInfo.FinalComponent = configAndStacksInfo.BaseComponent
 	} else {
 		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
-	}
-
-	// Process context
-	configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-	configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
-	if err != nil {
-		return configAndStacksInfo, err
 	}
 
 	// workspace
