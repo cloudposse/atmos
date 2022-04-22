@@ -363,7 +363,7 @@ func GetContextFromVars(vars map[interface{}]interface{}) Context {
 func GetContextPrefix(stack string, context Context, stackNamePattern string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
-			errors.New(fmt.Sprintf("Stack name pattern must be provided"))
+			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	}
 
 	contextPrefix := ""

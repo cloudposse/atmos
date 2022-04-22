@@ -15,7 +15,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 var (
@@ -240,43 +239,17 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
 	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
-	if checkStack {
-		if stackIsPhysicalPath == true {
-			if g.LogVerbose {
-				color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
-					configAndStacksInfo.Stack,
-					stackConfigFilesRelativePaths[0]),
-				)
-			}
-			ProcessedConfig.StackType = "Directory"
-		} else {
-			// The stack is a logical name
-			// Check if it matches the pattern specified in 'StackNamePattern'
-			if len(Config.Stacks.NamePattern) == 0 {
-				errorMessage := "\nStack name pattern must be provided and must not be empty. Check the CLI config in 'atmos.yaml'"
-				return errors.New(errorMessage)
-			}
-
-			stackParts := strings.Split(configAndStacksInfo.Stack, "-")
-			stackNamePatternParts := strings.Split(Config.Stacks.NamePattern, "-")
-
-			if len(stackParts) == len(stackNamePatternParts) {
-				if g.LogVerbose {
-					color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack name pattern '%s'",
-						configAndStacksInfo.Stack,
-						Config.Stacks.NamePattern),
-					)
-				}
-				ProcessedConfig.StackType = "Logical"
-			} else {
-				errorMessage := fmt.Sprintf("\nThe stack '%s' does not exist in the config directories, "+
-					"and it does not match the stack name pattern '%s'",
-					configAndStacksInfo.Stack,
-					Config.Stacks.NamePattern,
-				)
-				return errors.New(errorMessage)
-			}
+	if stackIsPhysicalPath == true {
+		if g.LogVerbose {
+			color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
+				configAndStacksInfo.Stack,
+				stackConfigFilesRelativePaths[0]),
+			)
 		}
+		ProcessedConfig.StackType = "Directory"
+	} else {
+		// The stack is a logical name
+		ProcessedConfig.StackType = "Logical"
 	}
 
 	if g.LogVerbose {
