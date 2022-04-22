@@ -114,12 +114,27 @@ func TestComponentProcessor(t *testing.T) {
 	stage = "dev"
 	tenant1Ue2DevTestTestComponentOverrideComponent2, err = ProcessComponentFromContext(component, tenant, environment, stage)
 	assert.Nil(t, err)
+	tenant1Ue2DevTestTestComponentOverrideComponent2Backend := tenant1Ue2DevTestTestComponentOverrideComponent2["backend"].(map[interface{}]interface{})
 	tenant1Ue2DevTestTestComponentOverrideComponent2Workspace := tenant1Ue2DevTestTestComponentOverrideComponent2["workspace"].(string)
-	tenant1Ue2DevTestTestComponentOverrideComponent2WorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
+	tenant1Ue2DevTestTestComponentOverrideComponent2WorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentOverrideComponent2Backend["workspace_key_prefix"].(string)
 	assert.Equal(t, "tenant1-ue2-dev-test-test-component-override-2", tenant1Ue2DevTestTestComponentOverrideComponent2Workspace)
 	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentOverrideComponent2WorkspaceKeyPrefix)
 
 	yamlConfig, err = yaml.Marshal(tenant1Ue2DevTestTestComponentOverrideComponent2)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
+
+	// Test having a dash `-` in the stage name
+	var tenant1Ue2Test1TestTestComponentOverrideComponent2 map[string]interface{}
+	component = "test/test-component-override-2"
+	tenant = "tenant1"
+	environment = "ue2"
+	stage = "test-1"
+	tenant1Ue2Test1TestTestComponentOverrideComponent2, err = ProcessComponentFromContext(component, tenant, environment, stage)
+	assert.Nil(t, err)
+	tenant1Ue2Test1TestTestComponentOverrideComponent2Backend := tenant1Ue2DevTestTestComponentOverrideComponent2["backend"].(map[interface{}]interface{})
+	tenant1Ue2Test1TestTestComponentOverrideComponent2Workspace := tenant1Ue2Test1TestTestComponentOverrideComponent2["workspace"].(string)
+	tenant1Ue2Test1TestTestComponentOverrideComponent2WorkspaceKeyPrefix := tenant1Ue2Test1TestTestComponentOverrideComponent2Backend["workspace_key_prefix"].(string)
+	assert.Equal(t, "tenant1-ue2-test-1-test-test-component-override-2", tenant1Ue2Test1TestTestComponentOverrideComponent2Workspace)
+	assert.Equal(t, "test-test-component", tenant1Ue2Test1TestTestComponentOverrideComponent2WorkspaceKeyPrefix)
 }

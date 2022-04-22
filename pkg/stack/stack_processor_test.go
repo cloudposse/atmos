@@ -15,6 +15,7 @@ func TestStackProcessor(t *testing.T) {
 		"../../examples/complete/stacks/tenant1/ue2/dev.yaml",
 		"../../examples/complete/stacks/tenant1/ue2/prod.yaml",
 		"../../examples/complete/stacks/tenant1/ue2/staging.yaml",
+		"../../examples/complete/stacks/tenant1/ue2/test1.yaml",
 	}
 
 	processStackDeps := true
@@ -22,13 +23,14 @@ func TestStackProcessor(t *testing.T) {
 
 	var listResult, mapResult, err = ProcessYAMLConfigFiles(basePath, filePaths, processStackDeps, processComponentDeps)
 	assert.Nil(t, err)
-	assert.Equal(t, 3, len(listResult))
-	assert.Equal(t, 3, len(mapResult))
+	assert.Equal(t, 4, len(listResult))
+	assert.Equal(t, 4, len(mapResult))
 
 	mapResultKeys := u.StringKeysFromMap(mapResult)
 	assert.Equal(t, "tenant1/ue2/dev", mapResultKeys[0])
 	assert.Equal(t, "tenant1/ue2/prod", mapResultKeys[1])
 	assert.Equal(t, "tenant1/ue2/staging", mapResultKeys[2])
+	assert.Equal(t, "tenant1/ue2/test1", mapResultKeys[3])
 
 	mapConfig1, err := c.YAMLToMapOfInterfaces(listResult[0])
 	assert.Nil(t, err)

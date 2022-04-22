@@ -15,7 +15,7 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 
 	var spaceliftStacks, err = CreateSpaceliftStacks("", nil, processStackDeps, processComponentDeps, processImports, stackConfigPathTemplate)
 	assert.Nil(t, err)
-	assert.Equal(t, 30, len(spaceliftStacks))
+	assert.Equal(t, 35, len(spaceliftStacks))
 
 	tenant1Ue2DevInfraVpcStack := spaceliftStacks["tenant1-ue2-dev-infra-vpc"].(map[string]interface{})
 	tenant1Ue2DevInfraVpcStackInfrastructureStackName := tenant1Ue2DevInfraVpcStack["stack"].(string)
@@ -82,6 +82,7 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 		"../../examples/complete/stacks/tenant1/ue2/dev.yaml",
 		"../../examples/complete/stacks/tenant1/ue2/prod.yaml",
 		"../../examples/complete/stacks/tenant1/ue2/staging.yaml",
+		"../../examples/complete/stacks/tenant1/ue2/test1.yaml",
 		"../../examples/complete/stacks/tenant2/ue2/dev.yaml",
 		"../../examples/complete/stacks/tenant2/ue2/prod.yaml",
 		"../../examples/complete/stacks/tenant2/ue2/staging.yaml",
@@ -94,7 +95,7 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 
 	var spaceliftStacks, err = CreateSpaceliftStacks(basePath, filePaths, processStackDeps, processComponentDeps, processImports, stackConfigPathTemplate)
 	assert.Nil(t, err)
-	assert.Equal(t, 30, len(spaceliftStacks))
+	assert.Equal(t, 35, len(spaceliftStacks))
 
 	tenant1Ue2DevInfraVpcStack := spaceliftStacks["tenant1-ue2-dev-infra-vpc"].(map[string]interface{})
 	tenant1Ue2DevInfraVpcStackBackend := tenant1Ue2DevInfraVpcStack["backend"].(map[interface{}]interface{})
