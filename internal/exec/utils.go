@@ -277,6 +277,15 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		}
 
 		configAndStacksInfo.ComponentEnvList = convertEnvVars(configAndStacksInfo.ComponentEnvSection)
+
+		// Process context
+		configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+		configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
 	} else {
 		if g.LogVerbose {
 			color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
@@ -314,7 +323,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
 				stackFound = true
-				color.Cyan("Found config for the component '%s' in the stack '%s' in the file '%s'\n",
+				color.Cyan("Found config for the component '%s' for the stack '%s' in the file '%s'\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					stackName,
