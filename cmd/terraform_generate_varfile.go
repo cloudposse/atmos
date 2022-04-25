@@ -4,7 +4,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 // terraformGenerateVarfileCmd generates varfile for a terraform component
@@ -16,7 +15,7 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateVarfile(cmd, args)
 		if err != nil {
-			os.Exit(1)
+			u.PrintErrorToStdErrorAndExit(err)
 		}
 	},
 }

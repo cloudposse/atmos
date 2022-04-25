@@ -40,9 +40,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := utils.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
+		return errors.New(fmt.Sprintf("Component '%s' is defined as Terraform component in '%s', but it does not exist in '%s'",
 			info.FinalComponent,
-			path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix),
+			info.ComponentFromArg,
+			path.Join(c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix),
 		))
 	}
 

@@ -4,7 +4,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 // terraformGenerateBackendCmd generates backend config for a terraform component
@@ -16,7 +15,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateBackend(cmd, args)
 		if err != nil {
-			os.Exit(1)
+			u.PrintErrorToStdErrorAndExit(err)
 		}
 	},
 }
