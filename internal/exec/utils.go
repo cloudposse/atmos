@@ -323,11 +323,14 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
 				stackFound = true
-				color.Cyan("Found config for the component '%s' for the stack '%s' in the file '%s'\n",
-					configAndStacksInfo.ComponentFromArg,
-					configAndStacksInfo.Stack,
-					stackName,
-				)
+				if g.LogVerbose {
+					fmt.Println()
+					color.Cyan("Found config for the component '%s' for the stack '%s' in the file '%s'\n",
+						configAndStacksInfo.ComponentFromArg,
+						configAndStacksInfo.Stack,
+						stackName,
+					)
+				}
 				break
 			}
 		}
