@@ -94,39 +94,41 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Print component variables
-	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
-	err = utils.PrintAsYAML(info.ComponentVarsSection)
-	if err != nil {
-		return err
-	}
-
-	// Write variables to a file
-	var varFilePath, varFileNameFromArg string
-
-	// Handle `terraform varfile` and `terraform write varfile` custom commands
-	if info.SubCommand == "varfile" || info.SubCommand == "write varfile" {
-		if len(info.AdditionalArgsAndFlags) == 2 {
-			fileFlag := info.AdditionalArgsAndFlags[0]
-			if fileFlag == "-f" || fileFlag == "--file" {
-				varFileNameFromArg = info.AdditionalArgsAndFlags[1]
-			}
-		}
-	}
-
-	if len(varFileNameFromArg) > 0 {
-		varFilePath = varFileNameFromArg
-	} else {
-		varFilePath = constructTerraformComponentVarfilePath(info)
-	}
-
-	color.Cyan("Writing the variables to file:")
-	fmt.Println(varFilePath)
-
-	if !info.DryRun {
-		err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+	// Print component variables and write to file
+	if info.SubCommand != "workspace" {
+		color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
+		err = utils.PrintAsYAML(info.ComponentVarsSection)
 		if err != nil {
 			return err
+		}
+
+		// Write variables to a file
+		var varFilePath, varFileNameFromArg string
+
+		// Handle `terraform varfile` and `terraform write varfile` custom commands
+		if info.SubCommand == "varfile" || info.SubCommand == "write varfile" {
+			if len(info.AdditionalArgsAndFlags) == 2 {
+				fileFlag := info.AdditionalArgsAndFlags[0]
+				if fileFlag == "-f" || fileFlag == "--file" {
+					varFileNameFromArg = info.AdditionalArgsAndFlags[1]
+				}
+			}
+		}
+
+		if len(varFileNameFromArg) > 0 {
+			varFilePath = varFileNameFromArg
+		} else {
+			varFilePath = constructTerraformComponentVarfilePath(info)
+		}
+
+		color.Cyan("Writing the variables to file:")
+		fmt.Println(varFilePath)
+
+		if !info.DryRun {
+			err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
