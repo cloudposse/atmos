@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	g "github.com/cloudposse/atmos/pkg/globals"
 	"github.com/fatih/color"
 	"os"
 )
@@ -32,5 +33,12 @@ func PrintErrorToStdError(err error) {
 func PrintError(err error) {
 	if err != nil {
 		color.Red("%s\n\n", err)
+	}
+}
+
+// PrintInfo checks the log level and prints the provided message
+func PrintInfo(message string) {
+	if g.LogVerbose {
+		color.Cyan("%s", message)
 	}
 }
