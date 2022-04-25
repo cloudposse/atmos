@@ -240,12 +240,10 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	if stackIsPhysicalPath == true {
-		if g.LogVerbose {
-			color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
-				configAndStacksInfo.Stack,
-				stackConfigFilesRelativePaths[0]),
-			)
-		}
+		u.PrintInfo(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
+			configAndStacksInfo.Stack,
+			stackConfigFilesRelativePaths[0]),
+		)
 		ProcessedConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name

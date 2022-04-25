@@ -45,8 +45,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 
-	fmt.Println()
-	color.Cyan("Component backend config:\n\n")
+	u.PrintInfo("Component backend config:\n\n")
 	err = u.PrintAsJSON(componentBackendConfig)
 	if err != nil {
 		return err

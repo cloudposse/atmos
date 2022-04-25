@@ -95,6 +95,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print component variables and write to file
+	// Don't process variables when executing `terraform workspace` command
 	if info.SubCommand != "workspace" {
 		color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
 		err = utils.PrintAsYAML(info.ComponentVarsSection)
