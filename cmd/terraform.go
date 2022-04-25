@@ -2,8 +2,8 @@ package cmd
 
 import (
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -15,7 +15,7 @@ var terraformCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraform(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			os.Exit(1)
 		}
 	},
 }

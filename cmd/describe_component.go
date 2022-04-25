@@ -4,6 +4,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 // describeComponentCmd describes configuration for components
@@ -15,7 +16,7 @@ var describeComponentCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeComponent(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			os.Exit(1)
 		}
 	},
 }

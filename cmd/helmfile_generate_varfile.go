@@ -4,6 +4,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 // helmfileGenerateVarfileCmd generates varfile for a helmfile component
@@ -15,7 +16,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteHelmfileGenerateVarfile(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			os.Exit(1)
 		}
 	},
 }

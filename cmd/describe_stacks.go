@@ -2,8 +2,8 @@ package cmd
 
 import (
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 // describeStacksCmd describes configuration for stacks and components in the stacks
@@ -15,7 +15,7 @@ var describeStacksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeStacks(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			os.Exit(1)
 		}
 	},
 }

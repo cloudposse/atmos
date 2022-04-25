@@ -2,8 +2,8 @@ package cmd
 
 import (
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 // awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command
@@ -35,7 +35,7 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			os.Exit(1)
 		}
 	},
 }
