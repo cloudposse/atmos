@@ -1,11 +1,11 @@
 source:
   type: git
-  uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket
+  uri: https://github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket
   version: v0.193.1
 
 mixins:
   context.tf:
     type: git
-    uri: github.com/cloudposse/terraform-null-label.git//exports/context.tf
+    uri: https://github.com/cloudposse/terraform-null-label.git//exports/context.tf
     version: v0.25.0
     filename: context.tf

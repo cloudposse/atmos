@@ -82,6 +82,9 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 	return executeVendorCommandInternal(componentConfig, component, componentPath, dryRun, vendorCommand)
 }
 
+// https://brett.is/writing/about/managing-go-dependencies-with-git-subtree/
+// https://blog.developer.atlassian.com/the-power-of-git-subtree/
+// https://stackoverflow.com/questions/21976922/how-to-get-a-git-subtree-diff
 func executeVendorCommandInternal(
 	componentConfig c.VendorComponentConfig,
 	component string,
@@ -89,5 +92,20 @@ func executeVendorCommandInternal(
 	dryRun bool,
 	vendorCommand string,
 ) error {
+	if vendorCommand == "pull" {
+		args := []string{
+			"subtree",
+			"pull",
+			"--prefix",
+			componentPath,
+			componentConfig.Source.Uri,
+			componentConfig.Source.Version,
+			"--squash",
+		}
+
+		if err := ExecuteShellCommand("git", args, ".", []string{}, dryRun); err != nil {
+			return err
+		}
+	}
 	return nil
 }
