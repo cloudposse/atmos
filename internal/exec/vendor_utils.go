@@ -79,9 +79,15 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 		return err
 	}
 
-	return executeVendorCommandInternal(componentConfig, component, dryRun)
+	return executeVendorCommandInternal(componentConfig, component, componentPath, dryRun, vendorCommand)
 }
 
-func executeVendorCommandInternal(componentConfig c.VendorComponentConfig, component string, dryRun bool) error {
+func executeVendorCommandInternal(
+	componentConfig c.VendorComponentConfig,
+	component string,
+	componentPath string,
+	dryRun bool,
+	vendorCommand string,
+) error {
 	return nil
 }
