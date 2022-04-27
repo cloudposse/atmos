@@ -11,7 +11,7 @@ var workflowCmd = &cobra.Command{
 	Use:                "workflow",
 	Short:              "Execute a workflow",
 	Long:               `This command executes a workflow: atmos workflow <name> -f <file>`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteWorkflow(cmd, args)
 		if err != nil {
