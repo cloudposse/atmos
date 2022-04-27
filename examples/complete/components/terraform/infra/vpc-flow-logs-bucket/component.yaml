@@ -1,6 +1,7 @@
 source:
   type: git
-  uri: https://github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket
+  # uri: https://github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket
+  uri: https://github.com/cloudposse/terraform-null-label.git
   version: v0.193.1
 
 mixins:
