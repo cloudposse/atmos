@@ -95,9 +95,9 @@ func executeVendorCommandInternal(
 	if vendorCommand == "pull" {
 		args := []string{
 			"subtree",
-			"pull",
+			"add",
 			"--prefix",
-			componentPath,
+			componentPath + "2",
 			componentConfig.Source.Uri,
 			componentConfig.Source.Version,
 			"--squash",
