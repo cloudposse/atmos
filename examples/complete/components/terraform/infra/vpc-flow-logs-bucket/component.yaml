@@ -7,5 +7,5 @@ mixins:
   context.tf:
     type: git
     uri: github.com/cloudposse/terraform-null-label.git//exports/context.tf
-    version: 0.25.0
+    version: v0.25.0
     filename: context.tf
