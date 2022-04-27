@@ -155,3 +155,23 @@ type AwsEksUpdateKubeconfigContext struct {
 	Stage       string
 	Region      string
 }
+
+// Component vendoring (`component.yaml` file)
+
+type VendorComponentSource struct {
+	Type    string `yaml:"type" json:"type" mapstructure:"type"`
+	Uri     string `yaml:"uri" json:"uri" mapstructure:"uri"`
+	Version string `yaml:"version" json:"version" mapstructure:"version"`
+}
+
+type VendorComponentMixins struct {
+	Type     string `yaml:"type" json:"type" mapstructure:"type"`
+	Uri      string `yaml:"uri" json:"uri" mapstructure:"uri"`
+	Version  string `yaml:"version" json:"version" mapstructure:"version"`
+	Filename string `yaml:"filename" json:"filename" mapstructure:"filename"`
+}
+
+type VendorComponentConfig struct {
+	Source VendorComponentSource
+	Mixins map[string]VendorComponentMixins
+}
