@@ -100,18 +100,25 @@ func executeVendorCommandInternal(
 ) error {
 
 	if vendorCommand == "pull" {
-		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' and writing to '%s'", component, componentPath))
-
 		if componentConfig.Source.Uri == "" {
 			return errors.New("'uri' must be specified in 'source.uri' in the 'component.yaml' file")
 		}
+
+		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
+			component,
+			componentConfig.Source.Uri,
+			componentPath,
+		))
+
+		var tempDir string
+		var err error
 
 		if !dryRun {
 			// Create temp folder
 			// We are using a temp folder for the following reasons:
 			// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
 			// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-			tempDir, err := ioutil.TempDir("", "")
+			tempDir, err = ioutil.TempDir("", "")
 			if err != nil {
 				return err
 			}
@@ -162,6 +169,53 @@ func executeVendorCommandInternal(
 			for _, mixing := range componentConfig.Mixins {
 				if mixing.Uri == "" {
 					return errors.New("'uri' must be specified for each 'mixins' in the 'component.yaml' file")
+				}
+
+				u.PrintInfo(fmt.Sprintf("Pulling mixing for the component '%s' from '%s' and writing to '%s'\n",
+					component,
+					mixing.Uri,
+					componentPath,
+				))
+
+				if !dryRun {
+					err = os.RemoveAll(tempDir)
+					if err != nil {
+						return err
+					}
+
+					// Download the mixing into the temp folder
+					client := &getter.Client{
+						Ctx: context.Background(),
+						// Define the destination to where the files will be stored. This will create the directory if it doesn't exist
+						Dst: tempDir,
+						Dir: true,
+						// Source
+						Src:  componentConfig.Source.Uri,
+						Mode: getter.ClientModeDir,
+					}
+
+					if err = client.Get(); err != nil {
+						return err
+					}
+
+					// Copy from the temp folder to the destination folder
+					copyOptions := cp.Options{
+						// Skip specifies which files should be skipped
+						Skip: func(src string) (bool, error) {
+							return strings.HasSuffix(src, ".git"), nil
+						},
+
+						// Preserve the atime and the mtime of the entries
+						// On linux we can preserve only up to 1 millisecond accuracy
+						PreserveTimes: false,
+
+						// Preserve the uid and the gid of all entries.
+						PreserveOwner: false,
+					}
+
+					if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
+						return err
+					}
 				}
 			}
 		}
