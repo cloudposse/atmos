@@ -351,9 +351,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return nil
 	}
 
-	if g.LogVerbose {
-		color.Green("Found config in %s", path)
-	}
+	u.PrintInfoVerbose(fmt.Sprintf("Found config in %s", path))
 
 	reader, err := os.Open(path)
 	if err != nil {
