@@ -3,7 +3,11 @@ source:
   # URL and archive formats described in https://github.com/hashicorp/go-getter
   uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.193.1
 
-# https://github.com/hashicorp/go-getter/issues/98
+# mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
+# mixins are processed in the order they are declared in the list
 mixins:
+  # https://github.com/hashicorp/go-getter/issues/98
   - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
     filename: context.tf
+  - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/0.194.0/modules/datadog-agent/introspection.mixin.tf
+    filename: introspection.mixin.tf
