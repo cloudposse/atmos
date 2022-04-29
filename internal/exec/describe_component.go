@@ -5,7 +5,6 @@ import (
 	c "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +40,7 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 
 	if g.LogVerbose {
 		fmt.Println()
-		color.Cyan("Component config:\n\n")
+		u.PrintInfo("Component config:\n\n")
 	}
 
 	err = u.PrintAsYAML(configAndStacksInfo.ComponentSection)

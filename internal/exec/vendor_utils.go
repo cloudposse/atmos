@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"os"
 	"path"
 )
 
@@ -97,10 +98,22 @@ func executeVendorCommandInternal(
 
 	if vendorCommand == "pull" {
 
+		tempDir, err := ioutil.TempDir("", "")
+		if err != nil {
+			return err
+		}
+
+		defer func(path string) {
+			err := os.RemoveAll(path)
+			if err != nil {
+				u.PrintError(err)
+			}
+		}(tempDir)
+
 		client := &getter.Client{
 			Ctx: context.Background(),
 			// Define the destination to where the files will be stored. This will create the directory if it doesn't exist
-			Dst: componentPath,
+			Dst: tempDir,
 			Dir: true,
 			// Source
 			Src:  componentConfig.Source.Uri,
@@ -110,32 +123,6 @@ func executeVendorCommandInternal(
 		if err := client.Get(); err != nil {
 			return err
 		}
-
-		//_, err := git.PlainClone(componentPath, false,
-		//	&git.CloneOptions{
-		//		URL:           componentConfig.Source.Uri,
-		//		SingleBranch:  true,
-		//		Depth:         1,
-		//		ReferenceName: plumbing.NewTagReferenceName(componentConfig.Source.Version),
-		//	})
-		//
-		//if err != nil {
-		//	return err
-		//}
-
-		//args := []string{
-		//	"subtree",
-		//	"add",
-		//	"--prefix",
-		//	componentPath + "2",
-		//	componentConfig.Source.Uri,
-		//	componentConfig.Source.Version,
-		//	"--squash",
-		//}
-		//
-		//if err := ExecuteShellCommand("git", args, ".", []string{}, dryRun); err != nil {
-		//	return err
-		//}
 	}
 
 	return nil

@@ -6,7 +6,6 @@ import (
 	c "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -82,7 +81,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 		workflowDefinition = i
 	}
 
-	color.Cyan("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath)
+	u.PrintInfo(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 	fmt.Println()
 
 	err = u.PrintAsYAML(workflowDefinition)

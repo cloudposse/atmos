@@ -7,7 +7,6 @@ import (
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"strings"
 )
@@ -252,7 +251,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		} else {
 			msg = "Found config files:"
 		}
-		color.Cyan(msg)
+		u.PrintInfo(msg)
 		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -287,7 +286,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			return configAndStacksInfo, err
 		}
 	} else {
-		u.PrintInfo(fmt.Sprintf("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg))
+		u.PrintInfoVerbose(fmt.Sprintf("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg))
 
 		stackFound := false
 
@@ -321,7 +320,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
 				stackFound = true
-				u.PrintInfo(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the file '%s'\n",
+				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the file '%s'\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					stackName,

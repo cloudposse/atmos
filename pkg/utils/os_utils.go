@@ -36,9 +36,14 @@ func PrintError(err error) {
 	}
 }
 
-// PrintInfo checks the log level and prints the provided message
+// PrintInfo prints the provided message
 func PrintInfo(message string) {
+	color.Cyan("%s", message)
+}
+
+// PrintInfoVerbose checks the log level and prints the provided message
+func PrintInfoVerbose(message string) {
 	if g.LogVerbose {
-		color.Cyan("%s", message)
+		PrintInfo(message)
 	}
 }
