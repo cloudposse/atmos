@@ -173,5 +173,5 @@ type VendorComponentMixins struct {
 
 type VendorComponentConfig struct {
 	Source VendorComponentSource
-	Mixins map[string]VendorComponentMixins
+	Mixins []VendorComponentMixins
 }

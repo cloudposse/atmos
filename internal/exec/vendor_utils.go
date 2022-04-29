@@ -7,11 +7,13 @@ import (
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
+	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 )
 
 const (
@@ -87,7 +89,8 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 
 // Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
 // URL and archive formats described in https://github.com/hashicorp/go-getter
-// https://www.allee.xyz/en/posts/getting-started-with-go-getter/
+// https://www.allee.xyz/en/posts/getting-started-with-go-getter
+// https://github.com/otiai10/copy
 func executeVendorCommandInternal(
 	componentConfig c.VendorComponentConfig,
 	component string,
@@ -97,7 +100,7 @@ func executeVendorCommandInternal(
 ) error {
 
 	if vendorCommand == "pull" {
-
+		// Create temp folder
 		tempDir, err := ioutil.TempDir("", "")
 		if err != nil {
 			return err
@@ -110,6 +113,7 @@ func executeVendorCommandInternal(
 			}
 		}(tempDir)
 
+		// Download the source into the temp folder
 		client := &getter.Client{
 			Ctx: context.Background(),
 			// Define the destination to where the files will be stored. This will create the directory if it doesn't exist
@@ -120,7 +124,26 @@ func executeVendorCommandInternal(
 			Mode: getter.ClientModeDir,
 		}
 
-		if err := client.Get(); err != nil {
+		if err = client.Get(); err != nil {
+			return err
+		}
+
+		// Copy from the temp folder to the destination folder with skipping of some files
+		copyOptions := cp.Options{
+			// Skip specifies which files should be skipped
+			Skip: func(src string) (bool, error) {
+				return strings.HasSuffix(src, ".git"), nil
+			},
+
+			// Preserve the atime and the mtime of the entries
+			// On linux we can preserve only up to 1 millisecond accuracy
+			PreserveTimes: false,
+
+			// Preserve the uid and the gid of all entries.
+			PreserveOwner: false,
+		}
+
+		if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
 			return err
 		}
 	}
