@@ -105,14 +105,6 @@ func executeVendorCommandInternal(
 			// Source
 			Src:  componentConfig.Source.Uri,
 			Mode: getter.ClientModeDir,
-			// Define the type of detectors go getter should use, in this case only github is needed
-			Detectors: []getter.Detector{
-				&getter.GitHubDetector{},
-			},
-			// Provide the getter needed to download the files
-			Getters: map[string]getter.Getter{
-				"git": &getter.GitGetter{},
-			},
 		}
 
 		if err := client.Get(); err != nil {
