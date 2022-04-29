@@ -1,3 +1,16 @@
+# Component vendoring config
+
+# 'component.yaml' in the component folder is processed by the 'atmos' commands
+# 'atmos vendor pull -c infra/vpc-flow-logs-bucket' or 'atmos vendor pull --component infra/vpc-flow-logs-bucket'
+
+# > atmos vendor pull -c infra/vpc-flow-logs-bucket
+# Pulling sources for the component 'infra/vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.193.1'
+#  and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
+# Pulling the mixing 'https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf'
+#  for the component 'infra/vpc-flow-logs-bucket' and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
+# Pulling the mixing 'https://raw.githubusercontent.com/cloudposse/terraform-aws-components/0.194.0/modules/datadog-agent/introspection.mixin.tf'
+#  for the component 'infra/vpc-flow-logs-bucket' and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
+
 source:
   # 'uri' supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
   # URL and archive formats described in https://github.com/hashicorp/go-getter
