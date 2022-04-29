@@ -5,6 +5,8 @@ import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -92,20 +94,35 @@ func executeVendorCommandInternal(
 	dryRun bool,
 	vendorCommand string,
 ) error {
-	if vendorCommand == "pull" {
-		args := []string{
-			"subtree",
-			"add",
-			"--prefix",
-			componentPath + "2",
-			componentConfig.Source.Uri,
-			componentConfig.Source.Version,
-			"--squash",
-		}
 
-		if err := ExecuteShellCommand("git", args, ".", []string{}, dryRun); err != nil {
+	if vendorCommand == "pull" {
+		fmt.Println(componentPath)
+		_, err := git.PlainClone(componentPath, false,
+			&git.CloneOptions{
+				URL:           componentConfig.Source.Uri,
+				SingleBranch:  true,
+				Depth:         1,
+				ReferenceName: plumbing.NewTagReferenceName(componentConfig.Source.Version),
+			})
+
+		if err != nil {
 			return err
 		}
+
+		//args := []string{
+		//	"subtree",
+		//	"add",
+		//	"--prefix",
+		//	componentPath + "2",
+		//	componentConfig.Source.Uri,
+		//	componentConfig.Source.Version,
+		//	"--squash",
+		//}
+		//
+		//if err := ExecuteShellCommand("git", args, ".", []string{}, dryRun); err != nil {
+		//	return err
+		//}
 	}
+
 	return nil
 }
