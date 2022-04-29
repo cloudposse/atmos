@@ -100,6 +100,12 @@ func executeVendorCommandInternal(
 ) error {
 
 	if vendorCommand == "pull" {
+		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' and writing to '%s'", component, componentPath))
+
+		if dryRun {
+			return nil
+		}
+
 		// Create temp folder
 		tempDir, err := ioutil.TempDir("", "")
 		if err != nil {
