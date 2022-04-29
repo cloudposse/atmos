@@ -178,9 +178,9 @@ func executeVendorCommandInternal(
 					return errors.New("'filename' must be specified for each 'mixins' in the 'component.yaml' file")
 				}
 
-				u.PrintInfo(fmt.Sprintf("Pulling mixing for the component '%s' from '%s' and writing to '%s'\n",
-					component,
+				u.PrintInfo(fmt.Sprintf("Pulling the mixing '%s' for the component '%s' and writing to '%s'\n",
 					mixing.Uri,
+					component,
 					componentPath,
 				))
 
