@@ -13,7 +13,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -118,7 +120,7 @@ func executeVendorCommandInternal(
 			// We are using a temp folder for the following reasons:
 			// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
 			// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-			tempDir, err = ioutil.TempDir("", "")
+			tempDir, err = ioutil.TempDir("", strconv.FormatInt(time.Now().Unix(), 10))
 			if err != nil {
 				return err
 			}
@@ -156,7 +158,7 @@ func executeVendorCommandInternal(
 				// On linux we can preserve only up to 1 millisecond accuracy
 				PreserveTimes: false,
 
-				// Preserve the uid and the gid of all entries.
+				// Preserve the uid and the gid of all entries
 				PreserveOwner: false,
 			}
 
@@ -165,10 +167,15 @@ func executeVendorCommandInternal(
 			}
 		}
 
+		// Process mixins
 		if len(componentConfig.Mixins) > 0 {
 			for _, mixing := range componentConfig.Mixins {
 				if mixing.Uri == "" {
 					return errors.New("'uri' must be specified for each 'mixins' in the 'component.yaml' file")
+				}
+
+				if mixing.Filename == "" {
+					return errors.New("'filename' must be specified for each 'mixins' in the 'component.yaml' file")
 				}
 
 				u.PrintInfo(fmt.Sprintf("Pulling mixing for the component '%s' from '%s' and writing to '%s'\n",
@@ -183,15 +190,13 @@ func executeVendorCommandInternal(
 						return err
 					}
 
-					// Download the mixing into the temp folder
+					// Download the mixing into the temp file
 					client := &getter.Client{
-						Ctx: context.Background(),
-						// Define the destination to where the files will be stored. This will create the directory if it doesn't exist
-						Dst: tempDir,
-						Dir: true,
-						// Source
-						Src:  componentConfig.Source.Uri,
-						Mode: getter.ClientModeDir,
+						Ctx:  context.Background(),
+						Dst:  path.Join(tempDir, mixing.Filename),
+						Dir:  false,
+						Src:  mixing.Uri,
+						Mode: getter.ClientModeFile,
 					}
 
 					if err = client.Get(); err != nil {
@@ -200,16 +205,10 @@ func executeVendorCommandInternal(
 
 					// Copy from the temp folder to the destination folder
 					copyOptions := cp.Options{
-						// Skip specifies which files should be skipped
-						Skip: func(src string) (bool, error) {
-							return strings.HasSuffix(src, ".git"), nil
-						},
-
 						// Preserve the atime and the mtime of the entries
-						// On linux we can preserve only up to 1 millisecond accuracy
 						PreserveTimes: false,
 
-						// Preserve the uid and the gid of all entries.
+						// Preserve the uid and the gid of all entries
 						PreserveOwner: false,
 					}
 

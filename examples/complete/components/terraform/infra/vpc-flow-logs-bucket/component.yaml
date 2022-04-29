@@ -3,5 +3,7 @@ source:
   # URL and archive formats described in https://github.com/hashicorp/go-getter
   uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.193.1
 
+# https://github.com/hashicorp/go-getter/issues/98
 mixins:
-  - uri: github.com/cloudposse/terraform-null-label.git//exports/context.tf?ref=0.25.0
+  - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
+    filename: context.tf
