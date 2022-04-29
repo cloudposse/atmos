@@ -1,12 +1,12 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/hashicorp/go-getter"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -84,9 +84,9 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 	return executeVendorCommandInternal(componentConfig, component, componentPath, dryRun, vendorCommand)
 }
 
-// https://brett.is/writing/about/managing-go-dependencies-with-git-subtree/
-// https://blog.developer.atlassian.com/the-power-of-git-subtree/
-// https://stackoverflow.com/questions/21976922/how-to-get-a-git-subtree-diff
+// Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
+// URL and archive formats described in https://github.com/hashicorp/go-getter
+// https://www.allee.xyz/en/posts/getting-started-with-go-getter/
 func executeVendorCommandInternal(
 	componentConfig c.VendorComponentConfig,
 	component string,
@@ -96,18 +96,40 @@ func executeVendorCommandInternal(
 ) error {
 
 	if vendorCommand == "pull" {
-		fmt.Println(componentPath)
-		_, err := git.PlainClone(componentPath, false,
-			&git.CloneOptions{
-				URL:           componentConfig.Source.Uri,
-				SingleBranch:  true,
-				Depth:         1,
-				ReferenceName: plumbing.NewTagReferenceName(componentConfig.Source.Version),
-			})
 
-		if err != nil {
+		client := &getter.Client{
+			Ctx: context.Background(),
+			// Define the destination to where the files will be stored. This will create the directory if it doesn't exist
+			Dst: componentPath,
+			Dir: true,
+			// Source
+			Src:  componentConfig.Source.Uri,
+			Mode: getter.ClientModeDir,
+			// Define the type of detectors go getter should use, in this case only github is needed
+			Detectors: []getter.Detector{
+				&getter.GitHubDetector{},
+			},
+			// Provide the getter needed to download the files
+			Getters: map[string]getter.Getter{
+				"git": &getter.GitGetter{},
+			},
+		}
+
+		if err := client.Get(); err != nil {
 			return err
 		}
+
+		//_, err := git.PlainClone(componentPath, false,
+		//	&git.CloneOptions{
+		//		URL:           componentConfig.Source.Uri,
+		//		SingleBranch:  true,
+		//		Depth:         1,
+		//		ReferenceName: plumbing.NewTagReferenceName(componentConfig.Source.Version),
+		//	})
+		//
+		//if err != nil {
+		//	return err
+		//}
 
 		//args := []string{
 		//	"subtree",
