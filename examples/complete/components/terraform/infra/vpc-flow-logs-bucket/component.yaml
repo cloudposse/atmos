@@ -13,7 +13,7 @@
 
 source:
   # 'uri' supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
-  # URL and archive formats described in https://github.com/hashicorp/go-getter
+  # and all URL and archive formats as described in https://github.com/hashicorp/go-getter
   uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.193.1
 
 # mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
