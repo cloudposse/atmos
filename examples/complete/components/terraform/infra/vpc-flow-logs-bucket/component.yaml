@@ -4,7 +4,7 @@
 # 'atmos vendor pull -c infra/vpc-flow-logs-bucket' or 'atmos vendor pull --component infra/vpc-flow-logs-bucket'
 
 # > atmos vendor pull -c infra/vpc-flow-logs-bucket
-# Pulling sources for the component 'infra/vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.193.1'
+# Pulling sources for the component 'infra/vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.194.0'
 #  and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
 # Pulling the mixing 'https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf'
 #  for the component 'infra/vpc-flow-logs-bucket' and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
@@ -14,7 +14,10 @@
 source:
   # 'uri' supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
   # and all URL and archive formats as described in https://github.com/hashicorp/go-getter
-  uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.193.1
+  # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
+  # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
+  uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
+  version: 0.194.0
 
 # mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
 # mixins are processed in the order they are declared in the list
@@ -22,5 +25,6 @@ mixins:
   # https://github.com/hashicorp/go-getter/issues/98
   - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
     filename: context.tf
-  - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/0.194.0/modules/datadog-agent/introspection.mixin.tf
+  - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
+    version: 0.194.0
     filename: introspection.mixin.tf

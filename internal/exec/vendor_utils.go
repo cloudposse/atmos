@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -102,18 +104,34 @@ func executeVendorCommandInternal(
 ) error {
 
 	if vendorCommand == "pull" {
+		var tempDir string
+		var err error
+		var t *template.Template
+		var uri string
+
 		if componentConfig.Source.Uri == "" {
 			return errors.New("'uri' must be specified in 'source.uri' in the 'component.yaml' file")
 		}
 
+		// Parse 'uri' template
+		t, err = template.New("source-uri").Parse(componentConfig.Source.Uri)
+		if err != nil {
+			return err
+		}
+
+		var tpl bytes.Buffer
+		err = t.Execute(&tpl, componentConfig.Source)
+		if err != nil {
+			return err
+		}
+
+		uri = tpl.String()
+
 		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
 			component,
-			componentConfig.Source.Uri,
+			uri,
 			componentPath,
 		))
-
-		var tempDir string
-		var err error
 
 		if !dryRun {
 			// Create temp folder
@@ -139,7 +157,7 @@ func executeVendorCommandInternal(
 				Dst: tempDir,
 				Dir: true,
 				// Source
-				Src:  componentConfig.Source.Uri,
+				Src:  uri,
 				Mode: getter.ClientModeDir,
 			}
 
