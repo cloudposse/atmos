@@ -103,29 +103,33 @@ func executeVendorCommandInternal(
 	vendorCommand string,
 ) error {
 
-	if vendorCommand == "pull" {
-		var tempDir string
-		var err error
-		var t *template.Template
-		var uri string
+	var tempDir string
+	var err error
+	var t *template.Template
+	var uri string
 
+	if vendorCommand == "pull" {
 		if componentConfig.Source.Uri == "" {
 			return errors.New("'uri' must be specified in 'source.uri' in the 'component.yaml' file")
 		}
 
 		// Parse 'uri' template
-		t, err = template.New("source-uri").Parse(componentConfig.Source.Uri)
-		if err != nil {
-			return err
-		}
+		if componentConfig.Source.Version != "" {
+			t, err = template.New(fmt.Sprintf("source-uri-%s", componentConfig.Source.Version)).Parse(componentConfig.Source.Uri)
+			if err != nil {
+				return err
+			}
 
-		var tpl bytes.Buffer
-		err = t.Execute(&tpl, componentConfig.Source)
-		if err != nil {
-			return err
-		}
+			var tpl bytes.Buffer
+			err = t.Execute(&tpl, componentConfig.Source)
+			if err != nil {
+				return err
+			}
 
-		uri = tpl.String()
+			uri = tpl.String()
+		} else {
+			uri = componentConfig.Source.Uri
+		}
 
 		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
 			component,
@@ -189,15 +193,33 @@ func executeVendorCommandInternal(
 		if len(componentConfig.Mixins) > 0 {
 			for _, mixing := range componentConfig.Mixins {
 				if mixing.Uri == "" {
-					return errors.New("'uri' must be specified for each 'mixins' in the 'component.yaml' file")
+					return errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
 				}
 
 				if mixing.Filename == "" {
-					return errors.New("'filename' must be specified for each 'mixins' in the 'component.yaml' file")
+					return errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
+				}
+
+				// Parse 'uri' template
+				if mixing.Version != "" {
+					t, err = template.New(fmt.Sprintf("mixing-uri-%s", mixing.Version)).Parse(mixing.Uri)
+					if err != nil {
+						return err
+					}
+
+					var tpl bytes.Buffer
+					err = t.Execute(&tpl, mixing)
+					if err != nil {
+						return err
+					}
+
+					uri = tpl.String()
+				} else {
+					uri = mixing.Uri
 				}
 
 				u.PrintInfo(fmt.Sprintf("Pulling the mixing '%s' for the component '%s' and writing to '%s'\n",
-					mixing.Uri,
+					uri,
 					component,
 					componentPath,
 				))
@@ -213,7 +235,7 @@ func executeVendorCommandInternal(
 						Ctx:  context.Background(),
 						Dst:  path.Join(tempDir, mixing.Filename),
 						Dir:  false,
-						Src:  mixing.Uri,
+						Src:  uri,
 						Mode: getter.ClientModeFile,
 					}
 
