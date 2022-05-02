@@ -90,7 +90,10 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 	}
 
 	if componentConfig.Kind != "VendorConfig" {
-		return errors.New(fmt.Sprintf("Invalid 'kind' in the vendor config file '%s'. Supported kind is 'VendorConfig'", componentConfigFileName))
+		return errors.New(fmt.Sprintf("Invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'VendorConfig'",
+			componentConfig.Kind,
+			componentConfigFileName,
+		))
 	}
 
 	return executeVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
