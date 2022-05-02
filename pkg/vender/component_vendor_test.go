@@ -1,4 +1,4 @@
-package vendoring
+package vender
 
 import (
 	e "github.com/cloudposse/atmos/internal/exec"
