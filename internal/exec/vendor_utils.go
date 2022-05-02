@@ -64,47 +64,9 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 			componentType = "terraform"
 		}
 
-		var componentBasePath string
-
-		if componentType == "terraform" {
-			componentBasePath = c.Config.Components.Terraform.BasePath
-		} else if componentType == "helmfile" {
-			componentBasePath = c.Config.Components.Helmfile.BasePath
-		} else {
-			return errors.New(fmt.Sprintf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType))
-		}
-
-		componentPath := path.Join(c.Config.BasePath, componentBasePath, component)
-
-		dirExists, err := u.IsDirectory(componentPath)
+		componentConfig, componentPath, err := readAndProcessComponentConfigFile(component, componentType)
 		if err != nil {
 			return err
-		}
-
-		if !dirExists {
-			return errors.New(fmt.Sprintf("Folder '%s' does not exist", componentPath))
-		}
-
-		componentConfigFile := path.Join(componentPath, componentConfigFileName)
-		if !u.FileExists(componentConfigFile) {
-			return errors.New(fmt.Sprintf("Vendor config file '%s' does not exist in the '%s' folder", componentConfigFileName, componentPath))
-		}
-
-		componentConfigFileContent, err := ioutil.ReadFile(componentConfigFile)
-		if err != nil {
-			return err
-		}
-
-		var componentConfig c.VendorComponentConfig
-		if err = yaml.Unmarshal(componentConfigFileContent, &componentConfig); err != nil {
-			return err
-		}
-
-		if componentConfig.Kind != "ComponentVendorConfig" {
-			return errors.New(fmt.Sprintf("Invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'ComponentVendorConfig'",
-				componentConfig.Kind,
-				componentConfigFileName,
-			))
 		}
 
 		return executeComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
@@ -112,6 +74,53 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 		// Process stack vendoring
 		return executeStackVendorCommandInternal(stack, dryRun, vendorCommand)
 	}
+}
+
+func readAndProcessComponentConfigFile(component string, componentType string) (c.VendorComponentConfig, string, error) {
+	var componentBasePath string
+	var componentConfig c.VendorComponentConfig
+
+	if componentType == "terraform" {
+		componentBasePath = c.Config.Components.Terraform.BasePath
+	} else if componentType == "helmfile" {
+		componentBasePath = c.Config.Components.Helmfile.BasePath
+	} else {
+		return componentConfig, "", errors.New(fmt.Sprintf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType))
+	}
+
+	componentPath := path.Join(c.Config.BasePath, componentBasePath, component)
+
+	dirExists, err := u.IsDirectory(componentPath)
+	if err != nil {
+		return componentConfig, "", err
+	}
+
+	if !dirExists {
+		return componentConfig, "", errors.New(fmt.Sprintf("Folder '%s' does not exist", componentPath))
+	}
+
+	componentConfigFile := path.Join(componentPath, componentConfigFileName)
+	if !u.FileExists(componentConfigFile) {
+		return componentConfig, "", errors.New(fmt.Sprintf("Vendor config file '%s' does not exist in the '%s' folder", componentConfigFileName, componentPath))
+	}
+
+	componentConfigFileContent, err := ioutil.ReadFile(componentConfigFile)
+	if err != nil {
+		return componentConfig, "", err
+	}
+
+	if err = yaml.Unmarshal(componentConfigFileContent, &componentConfig); err != nil {
+		return componentConfig, "", err
+	}
+
+	if componentConfig.Kind != "ComponentVendorConfig" {
+		return componentConfig, "", errors.New(fmt.Sprintf("Invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'ComponentVendorConfig'",
+			componentConfig.Kind,
+			componentConfigFileName,
+		))
+	}
+
+	return componentConfig, componentPath, nil
 }
 
 // Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
