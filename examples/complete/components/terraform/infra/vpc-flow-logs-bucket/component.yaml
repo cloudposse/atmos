@@ -18,6 +18,19 @@ source:
   # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
   uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
   version: 0.194.0
+  # Only include the files that match the patterns
+  # If 'included_paths' is not specified, all files will be matched except those from that match patterns from 'excluded_paths'
+  # It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+  # https://en.wikipedia.org/wiki/Glob_(programming)
+  # https://github.com/bmatcuk/doublestar#patterns
+  included_paths:
+    - "**/*.tf"
+    - "**/*.tfvars"
+    - "**/*.md"
+  # Exclude (don't pull) these files (noe that we are excluding 'context.tf' since a newer version of it will be downloaded using 'mixins'
+  # It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+  excluded_paths:
+    - "**/context.tf"
 
 # mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
 # mixins are processed in the order they are declared in the list

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bmatcuk/doublestar/v4"
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
@@ -173,7 +174,61 @@ func executeVendorCommandInternal(
 			copyOptions := cp.Options{
 				// Skip specifies which files should be skipped
 				Skip: func(src string) (bool, error) {
-					return strings.HasSuffix(src, ".git"), nil
+					if strings.HasSuffix(src, ".git") {
+						return true, nil
+					}
+
+					// Exclude the files that match the 'excluded_paths' patterns
+					// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+					// https://en.wikipedia.org/wiki/Glob_(programming)
+					// https://github.com/bmatcuk/doublestar#patterns
+					for _, excludePath := range componentConfig.Source.ExcludedPaths {
+						excludeMatch, err := doublestar.PathMatch(excludePath, src)
+						if err != nil {
+							return true, err
+						} else if excludeMatch {
+							// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+							fmt.Println(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'",
+								u.TrimBasePathFromPath(tempDir+"/", src),
+								excludePath,
+							))
+							return true, nil
+						}
+					}
+
+					// Only include the files that match the 'included_paths' patterns
+					if len(componentConfig.Source.IncludedPaths) > 0 {
+						anyMatches := false
+						for _, includePath := range componentConfig.Source.IncludedPaths {
+							includeMatch, err := doublestar.PathMatch(includePath, src)
+							if err != nil {
+								return true, err
+							} else if includeMatch {
+								// If the file matches ANY of the 'included_paths' patterns, include the file
+								fmt.Println(fmt.Sprintf("Including the file '%s' since it matches the '%s' pattern from 'included_paths'",
+									u.TrimBasePathFromPath(tempDir+"/", src),
+									includePath,
+								))
+								anyMatches = true
+								continue
+							}
+						}
+
+						if anyMatches {
+							return false, nil
+						} else {
+							fmt.Println(fmt.Sprintf("Excluding the file '%s' since it does not match any pattern from 'included_paths'",
+								u.TrimBasePathFromPath(tempDir+"/", src),
+							))
+							return true, nil
+						}
+					}
+
+					// If 'included_paths' is not provided, include all files that were not excluded
+					fmt.Println(fmt.Sprintf("Including the file '%s'",
+						u.TrimBasePathFromPath(tempDir+"/", src),
+					))
+					return false, nil
 				},
 
 				// Preserve the atime and the mtime of the entries
@@ -191,6 +246,8 @@ func executeVendorCommandInternal(
 
 		// Process mixins
 		if len(componentConfig.Mixins) > 0 {
+			fmt.Println()
+
 			for _, mixing := range componentConfig.Mixins {
 				if mixing.Uri == "" {
 					return errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
