@@ -64,19 +64,20 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 			componentType = "terraform"
 		}
 
-		componentConfig, componentPath, err := readAndProcessComponentConfigFile(component, componentType)
+		componentConfig, componentPath, err := ReadAndProcessComponentConfigFile(component, componentType)
 		if err != nil {
 			return err
 		}
 
-		return executeComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
+		return ExecuteComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
 	} else {
 		// Process stack vendoring
-		return executeStackVendorCommandInternal(stack, dryRun, vendorCommand)
+		return ExecuteStackVendorCommandInternal(stack, dryRun, vendorCommand)
 	}
 }
 
-func readAndProcessComponentConfigFile(component string, componentType string) (c.VendorComponentConfig, string, error) {
+// ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
+func ReadAndProcessComponentConfigFile(component string, componentType string) (c.VendorComponentConfig, string, error) {
 	var componentBasePath string
 	var componentConfig c.VendorComponentConfig
 
@@ -123,11 +124,12 @@ func readAndProcessComponentConfigFile(component string, componentType string) (
 	return componentConfig, componentPath, nil
 }
 
+// ExecuteComponentVendorCommandInternal executes a component vendor command
 // Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
 // URL and archive formats described in https://github.com/hashicorp/go-getter
 // https://www.allee.xyz/en/posts/getting-started-with-go-getter
 // https://github.com/otiai10/copy
-func executeComponentVendorCommandInternal(
+func ExecuteComponentVendorCommandInternal(
 	vendorComponentSpec c.VendorComponentSpec,
 	component string,
 	componentPath string,
@@ -351,8 +353,9 @@ func executeComponentVendorCommandInternal(
 	return nil
 }
 
+// ExecuteStackVendorCommandInternal executes a stack vendor command
 // TODO: implement this
-func executeStackVendorCommandInternal(
+func ExecuteStackVendorCommandInternal(
 	stack string,
 	dryRun bool,
 	vendorCommand string,
