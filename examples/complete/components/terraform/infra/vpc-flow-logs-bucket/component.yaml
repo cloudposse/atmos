@@ -22,7 +22,7 @@
 #  for the component 'infra/vpc-flow-logs-bucket' and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
 
 apiVersion: atmos/v1
-kind: VendorConfig
+kind: ComponentVendorConfig
 metadata:
   name: vpc-flow-logs-bucket-vendor-config
   description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component

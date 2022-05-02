@@ -44,66 +44,81 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 		return err
 	}
 
-	componentType, err := flags.GetString("type")
+	stack, err := flags.GetString("stack")
 	if err != nil {
 		return err
 	}
 
-	if componentType == "" {
-		componentType = "terraform"
+	if component != "" && stack != "" {
+		return errors.New(fmt.Sprintf("Either '--component' or '--stack' parameter needs to be provided, but not both"))
 	}
 
-	var componentBasePath string
+	if component != "" {
+		// Process component vendoring
+		componentType, err := flags.GetString("type")
+		if err != nil {
+			return err
+		}
 
-	if componentType == "terraform" {
-		componentBasePath = c.Config.Components.Terraform.BasePath
-	} else if componentType == "helmfile" {
-		componentBasePath = c.Config.Components.Helmfile.BasePath
+		if componentType == "" {
+			componentType = "terraform"
+		}
+
+		var componentBasePath string
+
+		if componentType == "terraform" {
+			componentBasePath = c.Config.Components.Terraform.BasePath
+		} else if componentType == "helmfile" {
+			componentBasePath = c.Config.Components.Helmfile.BasePath
+		} else {
+			return errors.New(fmt.Sprintf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType))
+		}
+
+		componentPath := path.Join(c.Config.BasePath, componentBasePath, component)
+
+		dirExists, err := u.IsDirectory(componentPath)
+		if err != nil {
+			return err
+		}
+
+		if !dirExists {
+			return errors.New(fmt.Sprintf("Folder '%s' does not exist", componentPath))
+		}
+
+		componentConfigFile := path.Join(componentPath, componentConfigFileName)
+		if !u.FileExists(componentConfigFile) {
+			return errors.New(fmt.Sprintf("Vendor config file '%s' does not exist in the '%s' folder", componentConfigFileName, componentPath))
+		}
+
+		componentConfigFileContent, err := ioutil.ReadFile(componentConfigFile)
+		if err != nil {
+			return err
+		}
+
+		var componentConfig c.VendorComponentConfig
+		if err = yaml.Unmarshal(componentConfigFileContent, &componentConfig); err != nil {
+			return err
+		}
+
+		if componentConfig.Kind != "ComponentVendorConfig" {
+			return errors.New(fmt.Sprintf("Invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'ComponentVendorConfig'",
+				componentConfig.Kind,
+				componentConfigFileName,
+			))
+		}
+
+		return executeComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
 	} else {
-		return errors.New(fmt.Sprintf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType))
+		// Process stack vendoring
+		return executeStackVendorCommandInternal(stack, dryRun, vendorCommand)
 	}
-
-	componentPath := path.Join(c.Config.BasePath, componentBasePath, component)
-
-	dirExists, err := u.IsDirectory(componentPath)
-	if err != nil {
-		return err
-	}
-
-	if !dirExists {
-		return errors.New(fmt.Sprintf("Folder '%s' does not exist", componentPath))
-	}
-
-	componentConfigFile := path.Join(componentPath, componentConfigFileName)
-	if !u.FileExists(componentConfigFile) {
-		return errors.New(fmt.Sprintf("Vendor config file '%s' does not exist in the '%s' folder", componentConfigFileName, componentPath))
-	}
-
-	componentConfigFileContent, err := ioutil.ReadFile(componentConfigFile)
-	if err != nil {
-		return err
-	}
-
-	var componentConfig c.VendorComponentConfig
-	if err = yaml.Unmarshal(componentConfigFileContent, &componentConfig); err != nil {
-		return err
-	}
-
-	if componentConfig.Kind != "VendorConfig" {
-		return errors.New(fmt.Sprintf("Invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'VendorConfig'",
-			componentConfig.Kind,
-			componentConfigFileName,
-		))
-	}
-
-	return executeVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
 }
 
 // Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
 // URL and archive formats described in https://github.com/hashicorp/go-getter
 // https://www.allee.xyz/en/posts/getting-started-with-go-getter
 // https://github.com/otiai10/copy
-func executeVendorCommandInternal(
+func executeComponentVendorCommandInternal(
 	vendorComponentSpec c.VendorComponentSpec,
 	component string,
 	componentPath string,
@@ -325,4 +340,13 @@ func executeVendorCommandInternal(
 	}
 
 	return nil
+}
+
+// TODO: implement this
+func executeStackVendorCommandInternal(
+	stack string,
+	dryRun bool,
+	vendorCommand string,
+) error {
+	return errors.New(fmt.Sprintf("Command 'atmos vendor %s --stack <stack>' is not implemented yet", vendorCommand))
 }
