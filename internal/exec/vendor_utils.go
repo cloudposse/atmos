@@ -270,34 +270,34 @@ func executeComponentVendorCommandInternal(
 		if len(vendorComponentSpec.Mixins) > 0 {
 			fmt.Println()
 
-			for _, mixing := range vendorComponentSpec.Mixins {
-				if mixing.Uri == "" {
+			for _, mixin := range vendorComponentSpec.Mixins {
+				if mixin.Uri == "" {
 					return errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
 				}
 
-				if mixing.Filename == "" {
+				if mixin.Filename == "" {
 					return errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
 				}
 
 				// Parse 'uri' template
-				if mixing.Version != "" {
-					t, err = template.New(fmt.Sprintf("mixing-uri-%s", mixing.Version)).Parse(mixing.Uri)
+				if mixin.Version != "" {
+					t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Parse(mixin.Uri)
 					if err != nil {
 						return err
 					}
 
 					var tpl bytes.Buffer
-					err = t.Execute(&tpl, mixing)
+					err = t.Execute(&tpl, mixin)
 					if err != nil {
 						return err
 					}
 
 					uri = tpl.String()
 				} else {
-					uri = mixing.Uri
+					uri = mixin.Uri
 				}
 
-				u.PrintInfo(fmt.Sprintf("Pulling the mixing '%s' for the component '%s' and writing to '%s'\n",
+				u.PrintInfo(fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
 					uri,
 					component,
 					componentPath,
@@ -309,10 +309,10 @@ func executeComponentVendorCommandInternal(
 						return err
 					}
 
-					// Download the mixing into the temp file
+					// Download the mixin into the temp file
 					client := &getter.Client{
 						Ctx:  context.Background(),
-						Dst:  path.Join(tempDir, mixing.Filename),
+						Dst:  path.Join(tempDir, mixin.Filename),
 						Dir:  false,
 						Src:  uri,
 						Mode: getter.ClientModeFile,
