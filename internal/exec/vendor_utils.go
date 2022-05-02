@@ -89,7 +89,11 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 		return err
 	}
 
-	return executeVendorCommandInternal(componentConfig, component, componentPath, dryRun, vendorCommand)
+	if componentConfig.Kind != "VendorConfig" {
+		return errors.New(fmt.Sprintf("Invalid 'kind' in the vendor config file '%s'. Supported kind is 'VendorConfig'", componentConfigFileName))
+	}
+
+	return executeVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
 }
 
 // Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
@@ -97,7 +101,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 // https://www.allee.xyz/en/posts/getting-started-with-go-getter
 // https://github.com/otiai10/copy
 func executeVendorCommandInternal(
-	componentConfig c.VendorComponentConfig,
+	vendorComponentSpec c.VendorComponentSpec,
 	component string,
 	componentPath string,
 	dryRun bool,
@@ -110,26 +114,26 @@ func executeVendorCommandInternal(
 	var uri string
 
 	if vendorCommand == "pull" {
-		if componentConfig.Source.Uri == "" {
+		if vendorComponentSpec.Source.Uri == "" {
 			return errors.New("'uri' must be specified in 'source.uri' in the 'component.yaml' file")
 		}
 
 		// Parse 'uri' template
-		if componentConfig.Source.Version != "" {
-			t, err = template.New(fmt.Sprintf("source-uri-%s", componentConfig.Source.Version)).Parse(componentConfig.Source.Uri)
+		if vendorComponentSpec.Source.Version != "" {
+			t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Parse(vendorComponentSpec.Source.Uri)
 			if err != nil {
 				return err
 			}
 
 			var tpl bytes.Buffer
-			err = t.Execute(&tpl, componentConfig.Source)
+			err = t.Execute(&tpl, vendorComponentSpec.Source)
 			if err != nil {
 				return err
 			}
 
 			uri = tpl.String()
 		} else {
-			uri = componentConfig.Source.Uri
+			uri = vendorComponentSpec.Source.Uri
 		}
 
 		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
@@ -182,7 +186,7 @@ func executeVendorCommandInternal(
 					// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
 					// https://en.wikipedia.org/wiki/Glob_(programming)
 					// https://github.com/bmatcuk/doublestar#patterns
-					for _, excludePath := range componentConfig.Source.ExcludedPaths {
+					for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
 						excludeMatch, err := doublestar.PathMatch(excludePath, src)
 						if err != nil {
 							return true, err
@@ -197,9 +201,9 @@ func executeVendorCommandInternal(
 					}
 
 					// Only include the files that match the 'included_paths' patterns
-					if len(componentConfig.Source.IncludedPaths) > 0 {
+					if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
 						anyMatches := false
-						for _, includePath := range componentConfig.Source.IncludedPaths {
+						for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
 							includeMatch, err := doublestar.PathMatch(includePath, src)
 							if err != nil {
 								return true, err
@@ -245,10 +249,10 @@ func executeVendorCommandInternal(
 		}
 
 		// Process mixins
-		if len(componentConfig.Mixins) > 0 {
+		if len(vendorComponentSpec.Mixins) > 0 {
 			fmt.Println()
 
-			for _, mixing := range componentConfig.Mixins {
+			for _, mixing := range vendorComponentSpec.Mixins {
 				if mixing.Uri == "" {
 					return errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
 				}
