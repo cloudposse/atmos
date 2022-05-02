@@ -6,6 +6,16 @@
 # > atmos vendor pull -c infra/vpc-flow-logs-bucket
 # Pulling sources for the component 'infra/vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.194.0'
 #  and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
+#
+#  Including the file 'README.md' since it matches the '**/*.md' pattern from 'included_paths'
+#  Excluding the file 'context.tf' since it matches the '**/context.tf' pattern from 'excluded_paths'
+#  Including the file 'default.auto.tfvars' since it matches the '**/*.tfvars' pattern from 'included_paths'
+#  Including the file 'main.tf' since it matches the '**/*.tf' pattern from 'included_paths'
+#  Including the file 'outputs.tf' since it matches the '**/*.tf' pattern from 'included_paths'
+#  Including the file 'providers.tf' since it matches the '**/*.tf' pattern from 'included_paths'
+#  Including the file 'variables.tf' since it matches the '**/*.tf' pattern from 'included_paths'
+#  Including the file 'versions.tf' since it matches the '**/*.tf' pattern from 'included_paths'
+#
 # Pulling the mixing 'https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf'
 #  for the component 'infra/vpc-flow-logs-bucket' and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
 # Pulling the mixing 'https://raw.githubusercontent.com/cloudposse/terraform-aws-components/0.194.0/modules/datadog-agent/introspection.mixin.tf'
@@ -18,17 +28,18 @@ source:
   # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
   uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
   version: 0.194.0
-  # Only include the files that match the patterns
-  # If 'included_paths' is not specified, all files will be matched except those from that match patterns from 'excluded_paths'
-  # It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+  # Only include the files that match the 'included_paths' patterns
+  # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
+  # 'included_paths' supports POSIX-style Globs for file names/paths (double-star `**` is supported)
   # https://en.wikipedia.org/wiki/Glob_(programming)
   # https://github.com/bmatcuk/doublestar#patterns
   included_paths:
     - "**/*.tf"
     - "**/*.tfvars"
     - "**/*.md"
-  # Exclude (don't pull) these files (noe that we are excluding 'context.tf' since a newer version of it will be downloaded using 'mixins'
-  # It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+  # Exclude the files that match any of the 'excluded_paths' patterns
+  # Note that we are excluding 'context.tf' since a newer version of it will be downloaded using 'mixins'
+  # 'excluded_paths' supports POSIX-style Globs for file names/paths (double-star `**` is supported)
   excluded_paths:
     - "**/context.tf"
 
