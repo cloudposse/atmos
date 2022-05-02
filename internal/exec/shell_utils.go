@@ -2,7 +2,7 @@ package exec
 
 import (
 	"fmt"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"os"
 	"os/exec"
 	"runtime"
@@ -19,7 +19,7 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 	cmd.Stderr = os.Stderr
 
 	fmt.Println()
-	color.Cyan("Executing command:\n")
+	u.PrintInfo("Executing command:\n")
 	fmt.Println(cmd.String())
 
 	if dryRun {
@@ -46,13 +46,13 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 
 	fmt.Println()
-	color.Cyan("Starting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
+	u.PrintInfo("Starting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
 	fmt.Println(fmt.Sprintf("Component: %s", component))
 	fmt.Println(fmt.Sprintf("Stack: %s", stack))
 	fmt.Println(fmt.Sprintf("Working directory: %s", workingDir))
 	fmt.Println(fmt.Sprintf("Terraform workspace: %s", workspaceName))
 	fmt.Println()
-	color.Cyan("Setting the ENV vars in the shell:\n")
+	u.PrintInfo("Setting the ENV vars in the shell:\n")
 	for _, v := range componentEnvList {
 		fmt.Println(v)
 	}
@@ -83,7 +83,7 @@ func execTerraformShellCommand(
 		shellCommand = shellCommand + " -l"
 	}
 
-	color.Cyan(fmt.Sprintf("Starting process: %s", shellCommand))
+	u.PrintInfo(fmt.Sprintf("Starting process: %s", shellCommand))
 	fmt.Println()
 
 	args := strings.Fields(shellCommand)

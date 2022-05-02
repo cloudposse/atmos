@@ -4,8 +4,7 @@ import (
 	"errors"
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -49,18 +48,18 @@ func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print the component variables
-	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
-	err = utils.PrintAsYAML(info.ComponentVarsSection)
+	u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack))
+	err = u.PrintAsYAML(info.ComponentVarsSection)
 	if err != nil {
 		return err
 	}
 
 	// Write the variables to file
-	color.Cyan("Writing the variables to file:")
+	u.PrintInfo("Writing the variables to file:")
 	fmt.Println(varFilePath)
 
 	if !info.DryRun {
-		err = utils.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
 		if err != nil {
 			return err
 		}

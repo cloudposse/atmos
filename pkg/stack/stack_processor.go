@@ -954,7 +954,10 @@ func processBaseComponentConfig(
 		}
 		baseComponentConfig.BaseComponentEnv = merged
 
+		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
+
+		// Base component `backend_type`
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
 		// Base component `backend`
@@ -964,9 +967,10 @@ func processBaseComponentConfig(
 		}
 		baseComponentConfig.BaseComponentBackendSection = merged
 
-		// Base component `backend_type`
+		// Base component `remote_state_backend_type`
 		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 
+		// Base component `remote_state_backend`
 		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
 		if err != nil {
 			return err

@@ -80,7 +80,7 @@ func InitConfig() error {
 	}
 
 	if g.LogVerbose {
-		color.Cyan("\nProcessing and merging configurations in the following order:\n")
+		u.PrintInfo("\nProcessing and merging configurations in the following order:\n")
 		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments")
 		fmt.Println()
 	}
@@ -240,12 +240,10 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	if stackIsPhysicalPath == true {
-		if g.LogVerbose {
-			color.Cyan(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
-				configAndStacksInfo.Stack,
-				stackConfigFilesRelativePaths[0]),
-			)
-		}
+		u.PrintInfoVerbose(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
+			configAndStacksInfo.Stack,
+			stackConfigFilesRelativePaths[0]),
+		)
 		ProcessedConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name
@@ -253,7 +251,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	}
 
 	if g.LogVerbose {
-		color.Cyan("\nFinal CLI configuration:")
+		u.PrintInfo("\nFinal CLI configuration:")
 		err = u.PrintAsYAML(Config)
 		if err != nil {
 			return err
@@ -353,9 +351,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return nil
 	}
 
-	if g.LogVerbose {
-		color.Green("Found config in %s", path)
-	}
+	u.PrintInfoVerbose(fmt.Sprintf("Found config in %s", path))
 
 	reader, err := os.Open(path)
 	if err != nil {

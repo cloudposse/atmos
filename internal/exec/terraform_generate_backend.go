@@ -3,8 +3,7 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
@@ -45,9 +44,8 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 
-	fmt.Println()
-	color.Cyan("Component backend config:\n\n")
-	err = utils.PrintAsJSON(componentBackendConfig)
+	u.PrintInfoVerbose("Component backend config:\n\n")
+	err = u.PrintAsJSON(componentBackendConfig)
 	if err != nil {
 		return err
 	}
@@ -67,11 +65,11 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	)
 
 	fmt.Println()
-	color.Cyan("Writing the backend config to file:")
+	u.PrintInfo("Writing the backend config to file:")
 	fmt.Println(backendFilePath)
 
 	if !info.DryRun {
-		err = utils.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)
+		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)
 		if err != nil {
 			return err
 		}

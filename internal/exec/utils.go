@@ -6,8 +6,7 @@ import (
 	c "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
-	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"strings"
 )
@@ -252,8 +251,8 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		} else {
 			msg = "Found config files:"
 		}
-		color.Cyan(msg)
-		err = utils.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		u.PrintInfo(msg)
+		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -287,9 +286,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			return configAndStacksInfo, err
 		}
 	} else {
-		if g.LogVerbose {
-			color.Cyan("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg)
-		}
+		u.PrintInfoVerbose(fmt.Sprintf("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg))
 
 		stackFound := false
 
@@ -323,11 +320,11 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
 				stackFound = true
-				color.Cyan("Found config for the component '%s' for the stack '%s' in the file '%s'\n",
+				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the file '%s'\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					stackName,
-				)
+				))
 				break
 			}
 		}
@@ -555,7 +552,7 @@ func processArgsAndFlags(inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error)
 	}
 
 	for i, arg := range inputArgsAndFlags {
-		if !utils.SliceContainsInt(indexesToRemove, i) {
+		if !u.SliceContainsInt(indexesToRemove, i) {
 			additionalArgsAndFlags = append(additionalArgsAndFlags, arg)
 		}
 

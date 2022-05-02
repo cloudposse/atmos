@@ -5,7 +5,7 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/utils"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -35,11 +35,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Check if the component exists as a helmfile component
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
-	componentPathExists, err := utils.IsDirectory(componentPath)
+	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' does not exist in '%s'",
+		return errors.New(fmt.Sprintf("Component '%s' is defined as Helmfile component in '%s', but it does not exist in '%s'",
 			info.FinalComponent,
-			path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix),
+			info.ComponentFromArg,
+			path.Join(c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
 		))
 	}
 
@@ -50,8 +51,8 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print component variables
-	color.Cyan("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack)
-	err = utils.PrintAsYAML(info.ComponentVarsSection)
+	u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack))
+	err = u.PrintAsYAML(info.ComponentVarsSection)
 	if err != nil {
 		return err
 	}
@@ -60,11 +61,11 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	varFile := constructHelmfileComponentVarfileName(info)
 	varFilePath := constructHelmfileComponentVarfilePath(info)
 
-	color.Cyan("Writing the variables to file:")
+	u.PrintInfo("Writing the variables to file:")
 	fmt.Println(varFilePath)
 
 	if !info.DryRun {
-		err = utils.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
+		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
 		if err != nil {
 			return err
 		}
@@ -79,12 +80,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Prepare AWS profile
 	helmAwsProfile := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
-	color.Cyan(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
+	u.PrintInfo(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
 	// Download kubeconfig by running `aws eks update-kubeconfig`
 	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
 	clusterName := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
-	color.Cyan(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
+	u.PrintInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
 	err = ExecuteShellCommand("aws",
 		[]string{
@@ -105,7 +106,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print command info
-	color.Cyan("\nCommand info:")
+	u.PrintInfo("\nCommand info:")
 	fmt.Println("Helmfile binary: " + info.Command)
 	fmt.Println("Helmfile command: " + info.SubCommand)
 
@@ -152,7 +153,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Sprintf("STACK=%s", info.Stack),
 	}...)
 
-	color.Cyan("Using ENV vars:\n")
+	u.PrintInfo("Using ENV vars:\n")
 	for _, v := range envVars {
 		fmt.Println(v)
 	}
