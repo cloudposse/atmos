@@ -132,8 +132,8 @@ func ProcessYAMLConfigFile(
 
 	stackMapConfig, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
-		er := errors.New(fmt.Sprintf("Invalid YAML file '%s'\n%v", u.TrimBasePathFromPath(basePath+"/", filePath), err))
-		return nil, nil, er
+		e := errors.New(fmt.Sprintf("Invalid YAML file '%s'\n%v", u.TrimBasePathFromPath(basePath+"/", filePath), err))
+		return nil, nil, e
 	}
 
 	// Find and process all imports
@@ -283,7 +283,7 @@ func ProcessConfig(
 		terraformVars, ok = i.(map[interface{}]interface{})
 
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.vars` section in the stack '%s'", stack))
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.vars' section in the stack '%s'", stack))
 		}
 	}
 
@@ -335,7 +335,7 @@ func ProcessConfig(
 		helmfileVars, ok = i.(map[interface{}]interface{})
 
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.vars` section in the stack '%s'", stack))
+			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.vars' section in the stack '%s'", stack))
 		}
 	}
 
@@ -368,7 +368,7 @@ func ProcessConfig(
 
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[interface{}]interface{})
 			if !ok {
-				return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform` section in the stack '%s'", stack))
+				return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform' section in the stack '%s'", stack))
 			}
 
 			for cmp, v := range allTerraformComponentsMap {
@@ -686,7 +686,7 @@ func ProcessConfig(
 
 			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[interface{}]interface{})
 			if !ok {
-				return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile` section in the stack '%s'", stack))
+				return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile' section in the stack '%s'", stack))
 			}
 
 			for cmp, v := range allHelmfileComponentsMap {
