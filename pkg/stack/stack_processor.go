@@ -144,7 +144,7 @@ func ProcessYAMLConfigFile(
 			imp, ok := im.(string)
 
 			if !ok {
-				return nil, nil, errors.New(fmt.Sprintf("Invalid 'import` in the stack '%s'", filePath))
+				return nil, nil, errors.New(fmt.Sprintf("Invalid `import` in the stack '%s'", filePath))
 			}
 
 			// If the import file is specified without extension, use `.yaml` as default
