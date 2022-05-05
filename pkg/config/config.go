@@ -215,7 +215,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
-	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := findAllStackConfigsInPathsForStack(
+	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
 		configAndStacksInfo.Stack,
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
@@ -314,7 +314,7 @@ func ProcessConfigForSpacelift() error {
 	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
-	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, err := findAllStackConfigsInPaths(
+	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, err := FindAllStackConfigsInPaths(
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
 	)

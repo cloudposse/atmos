@@ -6,14 +6,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// describeStacksCmd describes configuration for stacks and components in the stacks
+// validateStacksCmd validates stacks
 var validateStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "Execute 'validate stacks' command",
-	Long:               `This command validates stack configurations: atmos validate stacks <options>`,
+	Long:               `This command validates stack configurations: atmos validate stacks`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteDescribeStacks(cmd, args)
+		err := e.ExecuteValidateStacks(cmd, args)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}

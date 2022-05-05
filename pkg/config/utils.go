@@ -14,8 +14,8 @@ import (
 	"strings"
 )
 
-// findAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
-func findAllStackConfigsInPathsForStack(
+// FindAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
+func FindAllStackConfigsInPathsForStack(
 	stack string,
 	includeStackPaths []string,
 	excludeStackPaths []string,
@@ -91,8 +91,8 @@ func findAllStackConfigsInPathsForStack(
 	return absolutePaths, relativePaths, false, nil
 }
 
-// findAllStackConfigsInPaths finds all stack config files in the paths specified by globs
-func findAllStackConfigsInPaths(
+// FindAllStackConfigsInPaths finds all stack config files in the paths specified by globs
+func FindAllStackConfigsInPaths(
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {

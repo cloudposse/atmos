@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,8 +13,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	g "github.com/cloudposse/atmos/pkg/globals"
-	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -42,7 +42,7 @@ func FindComponentStacks(
 		}
 	}
 
-	unique := utils.UniqueStrings(stacks)
+	unique := u.UniqueStrings(stacks)
 	sort.Strings(unique)
 	return unique, nil
 }
@@ -123,7 +123,7 @@ func FindComponentDependencies(
 	}
 
 	deps = append(deps, stack)
-	unique := utils.UniqueStrings(deps)
+	unique := u.UniqueStrings(deps)
 	sort.Strings(unique)
 	return unique, nil
 }
@@ -163,12 +163,12 @@ func CreateComponentStackMap(basePath string, filePath string) (map[string]map[s
 				return err
 			}
 
-			isDirectory, err := utils.IsDirectory(p)
+			isDirectory, err := u.IsDirectory(p)
 			if err != nil {
 				return err
 			}
 
-			isYaml := utils.IsYaml(p)
+			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
 				config, _, err := ProcessYAMLConfigFile(basePath, p, map[string]map[interface{}]interface{}{})
@@ -267,7 +267,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		color.Red(fmt.Sprintf("Import of %s (-> %s + %s) failed to find a match.", pattern, base, cleanPattern))
+		u.PrintError(errors.New(fmt.Sprintf("Import of %s (-> %s + %s) failed to find a match.", pattern, base, cleanPattern)))
 		return nil, nil
 	}
 
