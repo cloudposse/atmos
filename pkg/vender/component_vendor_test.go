@@ -4,6 +4,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/stretchr/testify/assert"
+	"os"
 	"path"
 	"testing"
 )
@@ -32,4 +33,24 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	assert.FileExists(t, path.Join(componentPath, "README.md"))
 	assert.FileExists(t, path.Join(componentPath, "variables.tf"))
 	assert.FileExists(t, path.Join(componentPath, "versions.tf"))
+
+	// Delete the files
+	err = os.Remove(path.Join(componentPath, "context.tf"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "default.auto.tfvars"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "introspection.mixin.tf"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "main.tf"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "outputs.tf"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "providers.tf"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "README.md"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "variables.tf"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "versions.tf"))
+	assert.Nil(t, err)
 }

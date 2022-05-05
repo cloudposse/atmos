@@ -109,9 +109,9 @@ func ProcessYAMLConfigFiles(
 	wg.Wait()
 
 	if errorResult != nil {
-		u.PrintErrorToStdError(errorResult)
 		return nil, nil, errorResult
 	}
+
 	return listResult, mapResult, nil
 }
 
@@ -132,7 +132,8 @@ func ProcessYAMLConfigFile(
 
 	stackMapConfig, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
-		return nil, nil, err
+		e := errors.New(fmt.Sprintf("Invalid YAML file '%s'\n%v", u.TrimBasePathFromPath(basePath+"/", filePath), err))
+		return nil, nil, e
 	}
 
 	// Find and process all imports
@@ -140,7 +141,11 @@ func ProcessYAMLConfigFile(
 		imports := importsSection.([]interface{})
 
 		for _, im := range imports {
-			imp := im.(string)
+			imp, ok := im.(string)
+
+			if !ok {
+				return nil, nil, errors.New(fmt.Sprintf("Invalid import in the stack '%s'", filePath))
+			}
 
 			// If the import file is specified without extension, use `.yaml` as default
 			impWithExt := imp
@@ -275,7 +280,11 @@ func ProcessConfig(
 
 	// Terraform section
 	if i, ok := globalTerraformSection["vars"]; ok {
-		terraformVars = i.(map[interface{}]interface{})
+		terraformVars, ok = i.(map[interface{}]interface{})
+
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.vars' section in the stack '%s'", stack))
+		}
 	}
 
 	globalAndTerraformVars, err := m.Merge([]map[interface{}]interface{}{globalVarsSection, terraformVars})
@@ -323,7 +332,11 @@ func ProcessConfig(
 
 	// Helmfile section
 	if i, ok := globalHelmfileSection["vars"]; ok {
-		helmfileVars = i.(map[interface{}]interface{})
+		helmfileVars, ok = i.(map[interface{}]interface{})
+
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.vars' section in the stack '%s'", stack))
+		}
 	}
 
 	globalAndHelmfileVars, err := m.Merge([]map[interface{}]interface{}{globalVarsSection, helmfileVars})
@@ -352,7 +365,11 @@ func ProcessConfig(
 	// Process all Terraform components
 	if componentTypeFilter == "" || componentTypeFilter == "terraform" {
 		if allTerraformComponents, ok := globalComponentsSection["terraform"]; ok {
-			allTerraformComponentsMap := allTerraformComponents.(map[interface{}]interface{})
+
+			allTerraformComponentsMap, ok := allTerraformComponents.(map[interface{}]interface{})
+			if !ok {
+				return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform' section in the stack '%s'", stack))
+			}
 
 			for cmp, v := range allTerraformComponentsMap {
 				component := cmp.(string)
@@ -666,7 +683,11 @@ func ProcessConfig(
 	// Process all helmfile components
 	if componentTypeFilter == "" || componentTypeFilter == "helmfile" {
 		if allHelmfileComponents, ok := globalComponentsSection["helmfile"]; ok {
-			allHelmfileComponentsMap := allHelmfileComponents.(map[interface{}]interface{})
+
+			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[interface{}]interface{})
+			if !ok {
+				return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile' section in the stack '%s'", stack))
+			}
 
 			for cmp, v := range allHelmfileComponentsMap {
 				component := cmp.(string)

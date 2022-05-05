@@ -1,0 +1,27 @@
+import:
+  - globals/tenant1-globals
+  - globals/ue2-globals
+  - catalog/terraform/top-level-component1
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+  - catalog/terraform/test-component-override-2
+  - catalog/terraform/test-component-override-3
+  - catalog/terraform/vpc
+  - catalog/terraform/tenant1-ue2-dev
+  - catalog/helmfile/echo-server
+  - catalog/helmfile/infra-server
+  - catalog/helmfile/infra-server-override
+
+%s
+
+vars:
+  stage: invalid
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform: {}
