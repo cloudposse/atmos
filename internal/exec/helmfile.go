@@ -153,7 +153,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Sprintf("STACK=%s", info.Stack),
 	}...)
 
-	u.PrintInfo("Using ENV vars:\n")
+	u.PrintInfo("Using ENV vars:")
 	for _, v := range envVars {
 		fmt.Println(v)
 	}

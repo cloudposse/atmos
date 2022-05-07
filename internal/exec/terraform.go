@@ -95,8 +95,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print component variables and write to file
-	// Don't process variables when executing `terraform workspace` command
-	if info.SubCommand != "workspace" {
+	// Don't process variables when executing `terraform workspace` or `terraform state` commands
+	if info.SubCommand != "workspace" && info.SubCommand != "state" {
 		u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
 		err = u.PrintAsYAML(info.ComponentVarsSection)
 		if err != nil {
@@ -195,7 +195,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Print command info
 	u.PrintInfo("\nCommand info:")
 	fmt.Println("Terraform binary: " + info.Command)
-	fmt.Println("Terraform command: " + info.SubCommand)
+	if info.SubCommand2 == "" {
+		fmt.Println(fmt.Sprintf("Terraform command: %s", info.SubCommand))
+	} else {
+		fmt.Println(fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
+	}
 	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
 	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponentPath) > 0 {
@@ -218,7 +222,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
 		fmt.Println()
-		u.PrintInfo("Using ENV vars:\n")
+		u.PrintInfo("Using ENV vars:")
 		for _, v := range info.ComponentEnvList {
 			fmt.Println(v)
 		}
@@ -250,13 +254,19 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if c.Config.Components.Terraform.InitRunReconfigure == true {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
+	case "workspace":
+		if info.SubCommand2 == "list" || info.SubCommand2 == "show" {
+			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2}...)
+		} else if info.SubCommand2 != "" {
+			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2, info.TerraformWorkspace}...)
+		}
 		break
 	}
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
-	// Run `terraform workspace`
-	if info.SubCommand != "init" {
+	// Run `terraform workspace` before executing other terraform commands
+	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") && info.SubCommand != "state" {
 		err = ExecuteShellCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			err = ExecuteShellCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
@@ -306,8 +316,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Execute the provided command
-	if info.SubCommand != "workspace" {
+	// Execute the provided command (except for `terraform workspace` which was executed above)
+	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
 		err = ExecuteShellCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			return err

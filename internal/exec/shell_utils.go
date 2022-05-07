@@ -19,7 +19,7 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 	cmd.Stderr = os.Stderr
 
 	fmt.Println()
-	u.PrintInfo("Executing command:\n")
+	u.PrintInfo("Executing command:")
 	fmt.Println(cmd.String())
 
 	if dryRun {
