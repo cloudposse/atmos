@@ -46,7 +46,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		))
 	}
 
-	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
+	// Check if the component is allowed to be provisioned (`metadata.type` attribute is not set to `abstract`)
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
 		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
@@ -97,7 +97,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` command
 	if info.SubCommand != "workspace" {
-		u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack))
+		u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
 		err = u.PrintAsYAML(info.ComponentVarsSection)
 		if err != nil {
 			return err

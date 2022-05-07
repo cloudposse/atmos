@@ -51,7 +51,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print component variables
-	u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n\n", info.ComponentFromArg, info.Stack))
+	u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
 	err = u.PrintAsYAML(info.ComponentVarsSection)
 	if err != nil {
 		return err
