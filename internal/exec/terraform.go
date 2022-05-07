@@ -254,12 +254,17 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if c.Config.Components.Terraform.InitRunReconfigure == true {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
+		break
 	case "workspace":
 		if info.SubCommand2 == "list" || info.SubCommand2 == "show" {
 			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2}...)
 		} else if info.SubCommand2 != "" {
 			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2, info.TerraformWorkspace}...)
 		}
+		break
+	case "state":
+		allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2}...)
+		allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 		break
 	}
 

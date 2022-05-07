@@ -589,6 +589,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 				twoWordsCommand = true
 			}
 			// `terraform workspace` commands
+			// https://www.terraform.io/cli/commands/workspace
 			if additionalArgsAndFlags[0] == "workspace" &&
 				u.SliceContainsString([]string{"list", "select", "new", "delete", "show"}, additionalArgsAndFlags[1]) {
 				info.SubCommand = "workspace"
@@ -596,11 +597,15 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 				twoWordsCommand = true
 			}
 			// `terraform state` commands
-			if additionalArgsAndFlags[0] == "state" &&
-				u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
-				info.SubCommand = "state"
-				info.SubCommand2 = additionalArgsAndFlags[1]
-				twoWordsCommand = true
+			// https://www.terraform.io/cli/commands/state
+			if additionalArgsAndFlags[0] == "state" {
+				if u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
+					info.SubCommand = "state"
+					info.SubCommand2 = additionalArgsAndFlags[1]
+					twoWordsCommand = true
+				} else {
+					return info, errors.New("'terraform state' command requires a subcommand: 'list', 'mv', 'pull', 'push', 'replace-provider', 'rm', 'show'")
+				}
 			}
 		}
 
