@@ -224,7 +224,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	allArgsAndFlags := []string{info.SubCommand}
+	allArgsAndFlags := strings.Fields(info.SubCommand)
 
 	switch info.SubCommand {
 	case "plan":
