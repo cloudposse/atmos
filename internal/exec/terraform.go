@@ -95,8 +95,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print component variables and write to file
-	// Don't process variables when executing `terraform workspace` or `terraform state` commands
-	if info.SubCommand != "workspace" && info.SubCommand != "state" {
+	// Don't process variables when executing `terraform workspace` commands
+	if info.SubCommand != "workspace" {
 		u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
 		err = u.PrintAsYAML(info.ComponentVarsSection)
 		if err != nil {
@@ -262,16 +262,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2, info.TerraformWorkspace}...)
 		}
 		break
-	case "state":
-		allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2}...)
-		allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
-		break
 	}
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace` before executing other terraform commands
-	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") && info.SubCommand != "state" {
+	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
 		err = ExecuteShellCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)
 		if err != nil {
 			err = ExecuteShellCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun)

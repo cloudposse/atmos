@@ -596,17 +596,6 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 				info.SubCommand2 = additionalArgsAndFlags[1]
 				twoWordsCommand = true
 			}
-			// `terraform state` commands
-			// https://www.terraform.io/cli/commands/state
-			if additionalArgsAndFlags[0] == "state" {
-				if u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
-					info.SubCommand = "state"
-					info.SubCommand2 = additionalArgsAndFlags[1]
-					twoWordsCommand = true
-				} else {
-					return info, errors.New("'terraform state' command requires a subcommand: 'list', 'mv', 'pull', 'push', 'replace-provider', 'rm', 'show'")
-				}
-			}
 		}
 
 		if twoWordsCommand {
