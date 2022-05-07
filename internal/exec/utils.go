@@ -579,6 +579,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 		twoWordsCommand := false
 
 		// Handle terraform two-words commands
+		// https://www.terraform.io/cli/commands
 		if componentType == "terraform" {
 			// Handle the custom legacy command `terraform write varfile` (NOTE: use `terraform generate varfile` instead)
 			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
