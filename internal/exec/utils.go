@@ -159,6 +159,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 
 	configAndStacksInfo.AdditionalArgsAndFlags = argsAndFlagsInfo.AdditionalArgsAndFlags
 	configAndStacksInfo.SubCommand = argsAndFlagsInfo.SubCommand
+	configAndStacksInfo.SubCommand2 = argsAndFlagsInfo.SubCommand2
 	configAndStacksInfo.ComponentType = componentType
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
@@ -583,11 +584,22 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 		if componentType == "terraform" {
 			// Handle the custom legacy command `terraform write varfile` (NOTE: use `terraform generate varfile` instead)
 			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
-				info.SubCommand = "write varfile"
+				info.SubCommand = "write"
+				info.SubCommand2 = "varfile"
 				twoWordsCommand = true
 			}
-			if additionalArgsAndFlags[0] == "workspace" && u.SliceContainsString([]string{"list", "select", "new", "delete", "show"}, additionalArgsAndFlags[1]) {
-				info.SubCommand = "workspace " + additionalArgsAndFlags[1]
+			// `terraform workspace` commands
+			if additionalArgsAndFlags[0] == "workspace" &&
+				u.SliceContainsString([]string{"list", "select", "new", "delete", "show"}, additionalArgsAndFlags[1]) {
+				info.SubCommand = "workspace"
+				info.SubCommand2 = additionalArgsAndFlags[1]
+				twoWordsCommand = true
+			}
+			// `terraform state` commands
+			if additionalArgsAndFlags[0] == "state" &&
+				u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
+				info.SubCommand = "state"
+				info.SubCommand2 = additionalArgsAndFlags[1]
 				twoWordsCommand = true
 			}
 		}

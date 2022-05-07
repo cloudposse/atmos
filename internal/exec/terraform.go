@@ -106,8 +106,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		// Write variables to a file
 		var varFilePath, varFileNameFromArg string
 
-		// Handle `terraform varfile` and `terraform write varfile` custom commands
-		if info.SubCommand == "varfile" || info.SubCommand == "write varfile" {
+		// Handle `terraform varfile` and `terraform write varfile` legacy commands
+		if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
 			if len(info.AdditionalArgsAndFlags) == 2 {
 				fileFlag := info.AdditionalArgsAndFlags[0]
 				if fileFlag == "-f" || fileFlag == "--file" {
@@ -133,8 +133,8 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Handle `terraform varfile` and `terraform write varfile` custom commands
-	if info.SubCommand == "varfile" || info.SubCommand == "write varfile" {
+	// Handle `terraform varfile` and `terraform write varfile` legacy commands
+	if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
 		fmt.Println()
 		return nil
 	}
