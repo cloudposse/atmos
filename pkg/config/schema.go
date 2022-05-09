@@ -68,6 +68,7 @@ type Context struct {
 type ArgsAndFlagsInfo struct {
 	AdditionalArgsAndFlags  []string
 	SubCommand              string
+	SubCommand2             string
 	ComponentFromArg        string
 	GlobalOptions           []string
 	TerraformDir            string
@@ -96,6 +97,7 @@ type ConfigAndStacksInfo struct {
 	FinalComponent            string
 	Command                   string
 	SubCommand                string
+	SubCommand2               string
 	ComponentSection          map[string]interface{}
 	ComponentVarsSection      map[interface{}]interface{}
 	ComponentEnvSection       map[interface{}]interface{}
