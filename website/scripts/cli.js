@@ -56,7 +56,7 @@ ${summary}
 $ ${name}
 \`\`\`
 
-${description}`;
+${(description + "").replace(/,\n/g, "\n")}`;
   } else {
     return `
 ${summary}
@@ -65,7 +65,7 @@ ${summary}
 $ ${name} [options]
 \`\`\`
 
-${description}`;
+${(description + "").replace(/,\n/g, "\n")}`;
   }
 }
 

@@ -6,7 +6,6 @@ function renderMarkdown(markdownString) {
   return unified().use(markdown).use(html).processSync(markdownString);
 }
 
-// a String equivalent to this component
 function renderReference(data, methodKeys) {
   return `
 <table className="reference-table">
@@ -43,7 +42,6 @@ function renderReference(data, methodKeys) {
 `;
 }
 
-// a String equivalent to this functional component
 function renderOptionSpec(option) {
   return `
 <a href="#option-${option.name}" id="option-${option.name}">

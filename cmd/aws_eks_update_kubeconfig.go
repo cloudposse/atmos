@@ -26,7 +26,7 @@ For example: atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster
   - 'region' from the variables for the component in the stack
 For example: atmos aws eks update-kubeconfig <component> -s <stack>
 
-3. Combination of the above. Provide a component and a stack, and override other parameters on the command line:
+3. Combination of the above. Provide a component and a stack, and override other parameters on the command line.
 For example: atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>
 
 See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information.`,

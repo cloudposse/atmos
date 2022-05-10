@@ -30,20 +30,38 @@
       "type": "project"
     },
     {
-      "name": "atmos config get",
+      "name": "atmos aws eks update-kubeconfig",
       "namespace": [
         "atmos",
-        "config"
+        "aws",
+        "eks"
       ],
-      "summary": "Print config values",
-      "description": "This command reads and prints configuration values from the project's **./atmos.config.json** file. It can also operate on the global CLI configuration (**~/.atmos/config.json**) using the `--global` option.\n\nFor nested properties, separate nest levels with dots. For example, the property name `integrations.atmos` will look in the **integrations** object for the **atmos** property.\n\nWithout a `property` argument, this command prints out the entire config.\n\nFor multi-app projects, this command is scoped to the current project by default. To operate at the root of the project configuration file instead, use the `--root` option.\n\nIf you are using this command programmatically, you can use the `--json` option.\n\nThis command will sanitize config output for known sensitive fields (disabled when using `--json`).",
+      "summary": "Execute `aws eks update-kubeconfig` command",
+      "description": [
+        "This command executes `aws eks update-kubeconfig` command to download `kubeconfig` from an EKS cluster and save it to a file.",
+        "\n\nThe command can execute `aws eks update-kubeconfig` in three different ways:",
+        "\n\n1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line",
+        "then `atmos` executes the command without requiring the `atmos` CLI config and context.",
+        "\n\n  For example: `atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>`",
+        "\n\n2. If `component` and `stack` are provided on the command-line,",
+        "then `atmos` executes the command using the `atmos` CLI config and stack's context by searching for the following settings:",
+        "\n    - `components.helmfile.cluster_name_pattern` in `atmos.yaml` CLI config (and calculates the `--name` parameter using the pattern)",
+        "\n    - `components.helmfile.helm_aws_profile_pattern` in `atmos.yaml` CLI config (and calculates the `--profile` parameter using the pattern)",
+        "\n    - `components.helmfile.kubeconfig_path` in `atmos.yaml` CLI config",
+        "\n    - the variables for the component in the provided stack",
+        "\n    - `region` from the variables for the component in the stack",
+        "\n\n  For example: `atmos aws eks update-kubeconfig <component> -s <stack>`",
+        "\n\n3. Combination of the above. Provide a component and a stack, and override other parameters on the command line.",
+        "\n\n  For example: `atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>`",
+        "\n\nSee https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information."
+      ],
       "footnotes": [],
       "groups": [],
       "exampleCommands": [
-        "atmos config get ",
-        "atmos config get id",
-        "atmos config get --global user.email",
-        "atmos config get -g npmClient"
+        "atmos aws eks update-kubeconfig",
+        "atmos aws eks update-kubeconfig",
+        "atmos aws eks update-kubeconfig",
+        "atmos aws eks update-kubeconfig"
       ],
       "aliases": [],
       "inputs": [
