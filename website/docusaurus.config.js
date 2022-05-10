@@ -4,7 +4,7 @@ const BASE_URL = '';
 
 module.exports = {
   title: 'Atmos Documentation',
-  tagline: '`atmos` is a universal tool for DevOps and Cloud Automation (works with terraform, helm, helmfile, etc.)',
+  tagline: '`atmos` is a universal tool for DevOps and Cloud Automation (works with terraform, helm, helmfile, aws, etc.)',
   url: 'https://atmos.tools',
   baseUrl: `${BASE_URL}/`,
   i18n: {
