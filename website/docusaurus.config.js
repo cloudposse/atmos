@@ -16,7 +16,7 @@ module.exports = {
   },
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
-  favicon: 'logos/atmos-logo-128.png',
+  favicon: 'logos/atmos-logo.png',
   organizationName: 'Cloud Posse LLC',
   projectName: 'atmos-docs',
   themeConfig: {
@@ -24,14 +24,14 @@ module.exports = {
       defaultMode: 'light',
     },
     navbar: {
-      hideOnScroll: true,
+      hideOnScroll: false,
       logo: {
-        alt: 'Site Logo',
-        src: '/logos/atmos-logo-128.svg',
-        srcDark: '/logos/atmos-logo-128.svg',
+        alt: 'atmos logo',
+        src: '/logos/atmos-docs-logo-dark.svg',
+        srcDark: '/logos/atmos-docs-logo-light.svg',
         href: '/',
         target: '_self',
-        height: 38,
+        height: 45
       },
       items: [
         {

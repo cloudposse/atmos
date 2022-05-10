@@ -5,7 +5,7 @@
   "display": "standalone",
   "icons": [
     {
-      "src": "/static/logos/atmos-logo-128.svg",
+      "src": "/static/logos/atmos-logo.svg",
       "sizes": "111x128",
       "type": "image/svg+xml"
     }
