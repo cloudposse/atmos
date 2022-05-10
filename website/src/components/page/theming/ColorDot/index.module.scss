@@ -1,0 +1,14 @@
+.colorDot {
+  border-radius: 1000px;
+
+  width: 2rem;
+  height: 2rem;
+
+  &Dark {
+    border: 1px solid var(--c-gray-60);
+  }
+
+  &Light {
+    border: 1px solid var(--c-gray-10);
+  }
+}

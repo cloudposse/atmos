@@ -1,0 +1,725 @@
+{
+  "type": "atmos",
+  "name": "atmos",
+  "summary": "",
+  "description": "",
+  "groups": [],
+  "commands": [
+    {
+      "name": "atmos build",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Build web assets and prepare your app for any platform targets",
+      "description": "`atmos build` will perform an atmos build, which compiles web assets and prepares them for deployment.\n\n`atmos build` uses the Angular CLI. Use `ng build --help` to list all Angular CLI options for building your app. See the `ng build` [docs](https://angular.io/cli/build) for explanations. Options not listed below are considered advanced and can be passed to the `ng` CLI using the `--` separator after the atmos CLI arguments. See the examples.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos build ",
+        "atmos build --prod",
+        "atmos build --watch"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [
+        {
+          "name": "prod",
+          "type": "boolean",
+          "summary": "Flag to use the `production` configuration",
+          "groups": [
+            "atmos"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "configuration",
+          "type": "string",
+          "summary": "Specify the configuration to use.",
+          "groups": [
+            "advanced",
+            "atmos"
+          ],
+          "aliases": [
+            "c"
+          ],
+          "spec": {
+            "value": "conf"
+          }
+        },
+        {
+          "name": "source-map",
+          "type": "boolean",
+          "summary": "Output source maps",
+          "groups": [
+            "advanced",
+            "atmos"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "watch",
+          "type": "boolean",
+          "summary": "Rebuild when files change",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "engine",
+          "type": "string",
+          "summary": "Target engine (e.g. `browser`, `atmos`)",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "engine"
+          }
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "summary": "Target platform on chosen engine (e.g. `ios`, `android`)",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "platform"
+          }
+        }
+      ],
+      "type": "project"
+    },
+    {
+      "name": "atmos config get",
+      "namespace": [
+        "atmos",
+        "config"
+      ],
+      "summary": "Print config values",
+      "description": "This command reads and prints configuration values from the project's **./atmos.config.json** file. It can also operate on the global CLI configuration (**~/.atmos/config.json**) using the `--global` option.\n\nFor nested properties, separate nest levels with dots. For example, the property name `integrations.atmos` will look in the **integrations** object for the **atmos** property.\n\nWithout a `property` argument, this command prints out the entire config.\n\nFor multi-app projects, this command is scoped to the current project by default. To operate at the root of the project configuration file instead, use the `--root` option.\n\nIf you are using this command programmatically, you can use the `--json` option.\n\nThis command will sanitize config output for known sensitive fields (disabled when using `--json`).",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos config get ",
+        "atmos config get id",
+        "atmos config get --global user.email",
+        "atmos config get -g npmClient"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "property",
+          "summary": "The property name you wish to get",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "name": "global",
+          "type": "boolean",
+          "summary": "Use global CLI config",
+          "groups": [],
+          "aliases": [
+            "g"
+          ],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "summary": "Output config values in JSON",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "root",
+          "type": "boolean",
+          "summary": "Operate on root of **./atmos.config.json**",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos config set",
+      "namespace": [
+        "atmos",
+        "config"
+      ],
+      "summary": "Set config values",
+      "description": "This command writes configuration values to the project's **./atmos.config.json** file. It can also operate on the global CLI configuration (**~/.atmos/config.json**) using the `--global` option.\n\nFor nested properties, separate nest levels with dots. For example, the property name `integrations.atmos` will look in the **integrations** object for the **atmos** property.\n\nFor multi-app projects, this command is scoped to the current project by default. To operate at the root of the project configuration file instead, use the `--root` option.\n\nThis command will attempt to coerce `value` into a suitable JSON type. If it is JSON-parsable, such as `123`, `true`, `[]`, etc., then it takes the parsed result. Otherwise, the value is interpreted as a string. For stricter input, use `--json`, which will error with non-JSON values.\n\nBy default, if `property` exists and is an object or an array, the value is not overwritten. To disable this check and always overwrite the property, use `--force`.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos config set name newAppName",
+        "atmos config set name \"\\\"newAppName\\\"\" --json",
+        "atmos config set -g interactive false"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "property",
+          "summary": "The property name you wish to set",
+          "required": true
+        },
+        {
+          "name": "value",
+          "summary": "The new value of the given property",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "global",
+          "type": "boolean",
+          "summary": "Use global CLI config",
+          "groups": [],
+          "aliases": [
+            "g"
+          ],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "summary": "Always interpret `value` as JSON",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "summary": "Always overwrite existing values",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "root",
+          "type": "boolean",
+          "summary": "Operate on root of **./atmos.config.json**",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos config unset",
+      "namespace": [
+        "atmos",
+        "config"
+      ],
+      "summary": "Delete config values",
+      "description": "This command deletes configuration values from the project's **./atmos.config.json** file. It can also operate on the global CLI configuration (**~/.atmos/config.json**) using the `--global` option.\n\nFor nested properties, separate nest levels with dots. For example, the property name `integrations.atmos` will look in the **integrations** object for the **atmos** property.\n\nFor multi-app projects, this command is scoped to the current project by default. To operate at the root of the project configuration file instead, use the `--root` option.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos config unset ",
+        "atmos config unset type",
+        "atmos config unset --global git.setup",
+        "atmos config unset -g interactive"
+      ],
+      "aliases": [
+        "atmos config delete",
+        "atmos config del"
+      ],
+      "inputs": [
+        {
+          "name": "property",
+          "summary": "The property name you wish to delete",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "global",
+          "type": "boolean",
+          "summary": "Use global CLI config",
+          "groups": [],
+          "aliases": [
+            "g"
+          ],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "root",
+          "type": "boolean",
+          "summary": "Operate on root of **./atmos.config.json**",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos deploy add",
+      "namespace": [
+        "atmos",
+        "deploy"
+      ],
+      "summary": "Adds Appflow Deploy to the project",
+      "description": "This command adds the Appflow Deploy plugin (`atmos-plugin-atmos`) for both Capacitor and atmos projects.\n\nFor Capacitor projects it runs all the steps necessary to install the plugin, sync with the native projects and add the configuration to the proper iOS and Android configuration files.\n\nFor atmos projects it just takes care of running the proper atmos CLI command with the submitted parameters.",
+      "footnotes": [],
+      "groups": [
+        "paid"
+      ],
+      "exampleCommands": [
+        "atmos deploy add ",
+        "atmos deploy add --app-id=abcd1234 --channel-name=\"Master\" --update-method=background",
+        "atmos deploy add --max-store=2 --min-background-duration=30",
+        "atmos deploy add --app-id=abcd1234 --channel-name=\"Master\" --update-method=background --max-store=2 --min-background-duration=30"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [
+        {
+          "name": "app-id",
+          "type": "string",
+          "summary": "Your Appflow app ID",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "id"
+          }
+        },
+        {
+          "name": "channel-name",
+          "type": "string",
+          "summary": "The channel to check for updates from",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "name"
+          }
+        },
+        {
+          "name": "update-method",
+          "type": "string",
+          "summary": "The update method that dictates the behavior of the plugin",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "name"
+          }
+        },
+        {
+          "name": "max-store",
+          "type": "string",
+          "summary": "The maximum number of downloaded versions to store on the device",
+          "default": "2",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "quantity"
+          }
+        },
+        {
+          "name": "min-background-duration",
+          "type": "string",
+          "summary": "The minimum duration after which the app checks for an update in the background",
+          "default": "30",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "seconds"
+          }
+        }
+      ],
+      "type": "project"
+    },
+    {
+      "name": "atmos deploy build",
+      "namespace": [
+        "atmos",
+        "deploy"
+      ],
+      "summary": "Create a deploy build on Appflow",
+      "description": "This command creates a deploy build on Appflow. While the build is running, it prints the remote build log to the terminal. If the build is successful, it downloads the created web build zip file in the current directory. Downloading build artifacts can be skipped by supplying the flag `skip-download`.\n\nApart from `--commit`, every option can be specified using the full name setup within the Appflow [Dashboard](https://dashboard.atmosframework.com).\n\nCustomizing the build:\n- The `--environment` and `--channel` options can be used to customize the groups of values exposed to the build.",
+      "footnotes": [],
+      "groups": [
+        "paid"
+      ],
+      "exampleCommands": [
+        "atmos deploy build ",
+        "atmos deploy build --environment=\"My Custom Environment Name\"",
+        "atmos deploy build --commit=2345cd3305a1cf94de34e93b73a932f25baac77c",
+        "atmos deploy build --channel=\"Master\"",
+        "atmos deploy build --channel=\"Master\" --skip-download",
+        "atmos deploy build --channel=\"Master\" --channel=\"My Custom Channel\""
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [
+        {
+          "name": "environment",
+          "type": "string",
+          "summary": "The group of environment variables exposed to your build",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "name"
+          }
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "summary": "The channel you want to auto deploy the build to. This can be repeated multiple times if multiple channels need to be specified.",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "name"
+          }
+        },
+        {
+          "name": "commit",
+          "type": "string",
+          "summary": "Commit (defaults to HEAD)",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "sha1"
+          }
+        },
+        {
+          "name": "skip-download",
+          "type": "boolean",
+          "summary": "Skip downloading build artifacts after command succeeds.",
+          "default": false,
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "name"
+          }
+        }
+      ],
+      "type": "project"
+    },
+    {
+      "name": "atmos deploy configure",
+      "namespace": [
+        "atmos",
+        "deploy"
+      ],
+      "summary": "Overrides Appflow Deploy configuration",
+      "description": "This command overrides configuration for the Appflow Deploy plugin (`atmos-plugin-atmos`) in Capacitor projects.\n\nFor Capacitor projects, if the plugin is already installed, it overrides the configuration variables in the native projects.\n\nFor atmos projects this is not implemented because it is better to reinstall the plugin with the different parameters and let atmos deal with the changes.",
+      "footnotes": [],
+      "groups": [
+        "paid"
+      ],
+      "exampleCommands": [
+        "atmos deploy configure ",
+        "atmos deploy configure --app-id=abcd1234 --channel-name=\"Master\" --update-method=background",
+        "atmos deploy configure --max-store=2 --min-background-duration=30",
+        "atmos deploy configure --app-id=abcd1234 --channel-name=\"Master\" --update-method=background --max-store=2 --min-background-duration=30",
+        "atmos deploy configure android",
+        "atmos deploy configure ios"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "platform",
+          "summary": "The native platform (e.g. `ios`, `android`)",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "name": "app-id",
+          "type": "string",
+          "summary": "Your Appflow app ID",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "id"
+          }
+        },
+        {
+          "name": "channel-name",
+          "type": "string",
+          "summary": "The channel to check for updates from",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "name"
+          }
+        },
+        {
+          "name": "update-method",
+          "type": "string",
+          "summary": "The update method that dictates the behavior of the plugin",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "name"
+          }
+        },
+        {
+          "name": "max-store",
+          "type": "string",
+          "summary": "The maximum number of downloaded versions to store on the device",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "quantity"
+          }
+        },
+        {
+          "name": "min-background-duration",
+          "type": "string",
+          "summary": "The minimum duration after which the app checks for an update in the background",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "seconds"
+          }
+        }
+      ],
+      "type": "project"
+    },
+    {
+      "name": "atmos deploy manifest",
+      "namespace": [
+        "atmos",
+        "deploy"
+      ],
+      "summary": "Generates a manifest file for the deploy service from a built app directory",
+      "description": "",
+      "footnotes": [],
+      "groups": [
+        "paid"
+      ],
+      "exampleCommands": [],
+      "aliases": [],
+      "inputs": [],
+      "options": [],
+      "type": "global"
+    },
+    {
+      "name": "atmos generate",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Create Pages, Components, & Angular Features",
+      "description": "Automatically create framework features with atmos Generate. This command uses the Angular CLI to generate features such as `pages`, `components`, `directives`, `services`, and more.\n\n - For a full list of available types, use `npx ng g --help`\n - For a list of options for a types, use `npx ng g <type> --help`\n\nYou can specify a path to nest your feature within any number of subdirectories. For example, specify a name of `\"pages/New Page\"` to generate page files at **src/app/pages/new-page/**.\n\nTo test a generator before file modifications are made, use the `--dry-run` option.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos generate ",
+        "atmos generate page",
+        "atmos generate page contact",
+        "atmos generate component contact/form",
+        "atmos generate component login-form --change-detection=OnPush",
+        "atmos generate directive ripple --skip-import",
+        "atmos generate service api/user"
+      ],
+      "aliases": [
+        "atmos g"
+      ],
+      "inputs": [
+        {
+          "name": "type",
+          "summary": "The type of feature (e.g. `page`, `component`, `directive`, `service`)",
+          "required": true
+        },
+        {
+          "name": "name",
+          "summary": "The name/path of the feature being generated",
+          "required": true
+        }
+      ],
+      "options": [],
+      "type": "project"
+    },
+    {
+      "name": "atmos git remote",
+      "namespace": [
+        "atmos",
+        "git"
+      ],
+      "summary": "Adds/updates the Appflow git remote to your local atmos app",
+      "description": "This command is used by `atmos link` when Appflow is used as the git host.\n\n`atmos git remote` will check the local repository for whether or not the git remote is properly set up. This command operates on the **atmos** remote. For advanced configuration, see **Settings** => **Git** in the app settings of the [Dashboard](https://dashboard.atmosframework.com).",
+      "footnotes": [],
+      "groups": [
+        "paid"
+      ],
+      "exampleCommands": [],
+      "aliases": [],
+      "inputs": [],
+      "options": [],
+      "type": "project"
+    },
+    {
+      "name": "atmos info",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Print project, system, and environment information",
+      "description": "This command is an easy way to share information about your setup. If applicable, be sure to run `atmos info` within your project directory to display even more information.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [],
+      "aliases": [],
+      "inputs": [],
+      "options": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "summary": "Print system/environment info in JSON format",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos init",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Initialize existing projects with atmos",
+      "description": "This command will initialize an atmos app within the current directory. Usually, this means an `atmos.config.json` file is created. If used within a multi-app project, the app is initialized in the root `atmos.config.json`.\n\n`atmos init` will prompt for a project name and then proceed to determine the type of your project. You can specify the `name` argument and `--type` option to provide these values via command-line.\n\nIf the `--multi-app` flag is specified, this command will initialize your project as a multi-app project, allowing for apps within monorepos and unconventional repository structures. See the multi-app [docs](https://atmosframework.com/docs/cli/configuration#multi-app-projects) for details. Once a multi-app project is initialized, you can run `atmos init` again within apps in your project to initialize them.",
+      "footnotes": [],
+      "groups": [
+        "beta"
+      ],
+      "exampleCommands": [
+        "atmos init ",
+        "atmos init \"My App\"",
+        "atmos init \"My App\" --type=angular",
+        "atmos init --multi-app"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "name",
+          "summary": "The name of your project (e.g. `myApp`, `\"My App\"`)",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "name": "type",
+          "type": "string",
+          "summary": "Type of project (e.g. `angular`, `react`, `vue`, `custom`)",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "type"
+          }
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "summary": "Initialize even if a project already exists",
+          "default": false,
+          "groups": [],
+          "aliases": [
+            "f"
+          ],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "multi-app",
+          "type": "boolean",
+          "summary": "Initialize a multi-app project",
+          "default": false,
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "project-id",
+          "type": "string",
+          "summary": "Specify a slug for your app",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "slug"
+          }
+        },
+        {
+          "name": "default",
+          "type": "boolean",
+          "summary": "Mark the initialized app as the default project",
+          "groups": [
+            "advanced"
+          ],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
+    }
+  ],
+  "aliases": []
+}
