@@ -1,4 +1,4 @@
-<svg height="128" viewBox="0 0 500 504" width="600" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg height="128" viewBox="0 0 1500 504" width="1500" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
   <radialGradient id="a" cx="0" cy="0" gradientTransform="matrix(174.9364 0 0 -174.9364 166.25447 175.30861)" gradientUnits="userSpaceOnUse" r="1"
                   spreadMethod="pad">
     <stop offset="0" stop-color="#60e862"/>
@@ -144,6 +144,5 @@
       d="m39.336 155.931c.173-.542-.074 4.22 2.547 8.984 2.728 4.955 8.561 9.912 21.203 8.892 11.905-.961 25.875-10.5 25.875-10.5 1.125 0-9.749 12.5-26.874 13.75-.899.066-1.778.098-2.633.098-15.461.001-23.553-10.444-20.118-21.224"
       fill="url(#w)"/>
   </g>
-  <text font-family="Arial" font-size="150" x="480" y="200" fill="black">atmos</text>
-  <text font-family="Arial" font-size="150" x="480" y="350" fill="darkgray">&#160;docs</text>
+  <text font-family="Arial" font-size="450" x="600" y="380" fill="black">atmos</text>
 </svg>
