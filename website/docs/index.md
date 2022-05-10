@@ -1,14 +1,12 @@
 ---
 title: atmos
 sidebar_label: Overview
+slug: /
 ---
 
 <head>
   <title>atmos</title>
-  <meta
-    name="description"
-    content="Universal tool for DevOps and Cloud Automation (works with terraform, helm, helmfile, etc.)."
-  />
+  <meta name="description" content="Universal tool for DevOps and Cloud Automation." />
   <link rel="canonical" href="https://atmos.tools" />
   <link rel="alternate" href="https://atmos.tools" hreflang="x-default" />
   <link rel="alternate" href="https://atmos.tools" hreflang="en" />
