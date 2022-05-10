@@ -36,7 +36,7 @@ const hexToRGB = (hex: string): RGB => {
   };
 };
 
-const hslToRGB = ({ h, s, l }: HSL): RGB => {
+const hslToRGB = ({h, s, l}: HSL): RGB => {
   h = h / 360;
   s = s / 100;
   l = l / 100;
@@ -93,11 +93,11 @@ const mixColors = (color: Color, mixColor: Color, weight = 0.5): RGB => {
   };
 };
 
-const rgbToHex = ({ r, g, b }: RGB) => {
+const rgbToHex = ({r, g, b}: RGB) => {
   return '#' + componentToHex(r) + componentToHex(g) + componentToHex(b);
 };
 
-const rgbToHSL = ({ r, g, b }: RGB): HSL => {
+const rgbToHSL = ({r, g, b}: RGB): HSL => {
   r = Math.max(Math.min(r / 255, 1), 0);
   g = Math.max(Math.min(g / 255, 1), 0);
   b = Math.max(Math.min(b / 255, 1), 0);
@@ -129,7 +129,7 @@ const rgbToHSL = ({ r, g, b }: RGB): HSL => {
   };
 };
 
-const rgbToYIQ = ({ r, g, b }: RGB): number => {
+const rgbToYIQ = ({r, g, b}: RGB): number => {
   return (r * 299 + g * 587 + b * 114) / 1000;
 };
 
@@ -142,10 +142,10 @@ export class Color {
   constructor(value: string | RGB | HSL) {
     if (typeof value === 'string' && /rgb\(/.test(value)) {
       const matches = /rgb\((\d{1,3}), ?(\d{1,3}), ?(\d{1,3})\)/.exec(value) ?? [];
-      value = { r: parseInt(matches[0], 10), g: parseInt(matches[1], 10), b: parseInt(matches[2], 10) };
+      value = {r: parseInt(matches[0], 10), g: parseInt(matches[1], 10), b: parseInt(matches[2], 10)};
     } else if (typeof value === 'string' && /hsl\(/.test(value)) {
       const matches = /hsl\((\d{1,3}), ?(\d{1,3}%), ?(\d{1,3}%)\)/.exec(value) ?? [];
-      value = { h: parseInt(matches[0], 10), s: parseInt(matches[1], 10), l: parseInt(matches[2], 10) };
+      value = {h: parseInt(matches[0], 10), s: parseInt(matches[1], 10), l: parseInt(matches[2], 10)};
     }
 
     if (typeof value === 'string') {
@@ -186,15 +186,15 @@ export class Color {
   }
 
   shade(weight = 0.12): Color {
-    return this.mix({ r: 0, g: 0, b: 0 }, weight);
+    return this.mix({r: 0, g: 0, b: 0}, weight);
   }
 
   tint(weight = 0.1): Color {
-    return this.mix({ r: 255, g: 255, b: 255 }, weight);
+    return this.mix({r: 255, g: 255, b: 255}, weight);
   }
 
   toList(): string {
-    const { r, g, b }: RGB = this.rgb;
+    const {r, g, b}: RGB = this.rgb;
     return `${r},${g},${b}`;
   }
 }

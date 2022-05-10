@@ -6,99 +6,27 @@
   "groups": [],
   "commands": [
     {
-      "name": "atmos build",
+      "name": "atmos help",
       "namespace": [
         "atmos"
       ],
-      "summary": "Build web assets and prepare your app for any platform targets",
-      "description": "`atmos build` will perform an atmos build, which compiles web assets and prepares them for deployment.\n\n`atmos build` uses the Angular CLI. Use `ng build --help` to list all Angular CLI options for building your app. See the `ng build` [docs](https://angular.io/cli/build) for explanations. Options not listed below are considered advanced and can be passed to the `ng` CLI using the `--` separator after the atmos CLI arguments. See the examples.",
+      "summary": "Show help for all atmos commands",
+      "description": "`atmos help` shows help for all atmos CLI commands.",
       "footnotes": [],
       "groups": [],
       "exampleCommands": [
-        "atmos build ",
-        "atmos build --prod",
-        "atmos build --watch"
+        "atmos help",
+        "atmos aws --help         # Execute 'aws' commands",
+        "atmos describe --help    # Execute 'describe' commands",
+        "atmos helmfile --help    # Execute 'helmfile' commands",
+        "atmos terraform --help   # Execute 'terraform' commands",
+        "atmos validate --help    # Execute 'validate' commands",
+        "atmos vendor --help      # Execute 'vendor' commands",
+        "atmos workflow --help    # Execute a workflow"
       ],
       "aliases": [],
       "inputs": [],
-      "options": [
-        {
-          "name": "prod",
-          "type": "boolean",
-          "summary": "Flag to use the `production` configuration",
-          "groups": [
-            "atmos"
-          ],
-          "aliases": [],
-          "spec": {
-            "value": "true/false"
-          }
-        },
-        {
-          "name": "configuration",
-          "type": "string",
-          "summary": "Specify the configuration to use.",
-          "groups": [
-            "advanced",
-            "atmos"
-          ],
-          "aliases": [
-            "c"
-          ],
-          "spec": {
-            "value": "conf"
-          }
-        },
-        {
-          "name": "source-map",
-          "type": "boolean",
-          "summary": "Output source maps",
-          "groups": [
-            "advanced",
-            "atmos"
-          ],
-          "aliases": [],
-          "spec": {
-            "value": "true/false"
-          }
-        },
-        {
-          "name": "watch",
-          "type": "boolean",
-          "summary": "Rebuild when files change",
-          "groups": [
-            "advanced"
-          ],
-          "aliases": [],
-          "spec": {
-            "value": "true/false"
-          }
-        },
-        {
-          "name": "engine",
-          "type": "string",
-          "summary": "Target engine (e.g. `browser`, `atmos`)",
-          "groups": [
-            "advanced"
-          ],
-          "aliases": [],
-          "spec": {
-            "value": "engine"
-          }
-        },
-        {
-          "name": "platform",
-          "type": "string",
-          "summary": "Target platform on chosen engine (e.g. `ios`, `android`)",
-          "groups": [
-            "advanced"
-          ],
-          "aliases": [],
-          "spec": {
-            "value": "platform"
-          }
-        }
-      ],
+      "options": [],
       "type": "project"
     },
     {

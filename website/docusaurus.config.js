@@ -31,7 +31,7 @@ module.exports = {
         srcDark: '/logos/atmos-logo-128.svg',
         href: '/',
         target: '_self',
-        height: 45,
+        height: 38,
       },
       items: [
         {

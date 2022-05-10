@@ -11,7 +11,6 @@ const commandToKebab = (str) =>
 
 (async function () {
   // console.log(cliJSON);
-
   cliJSON.commands.map(writePage);
 })();
 
@@ -46,8 +45,20 @@ ${Object.entries(frontmatter)
 `;
 }
 
-function renderIntro({description, summary, name}) {
-  return `
+function renderIntro({description, summary, name, options}) {
+  let ops = !!options ? options.filter((option) => !option.groups.includes('advanced')) : [];
+
+  if (ops.length === 0) {
+    return `
+${summary}
+
+\`\`\`shell
+$ ${name}
+\`\`\`
+
+${description}`;
+  } else {
+    return `
 ${summary}
 
 \`\`\`shell
@@ -55,6 +66,7 @@ $ ${name} [options]
 \`\`\`
 
 ${description}`;
+  }
 }
 
 function renderExamples({exampleCommands}) {
@@ -88,7 +100,7 @@ ${utils.renderReference(inputs, {
 }
 
 function renderOptions({options}) {
-  options = options.filter((option) => !option.groups.includes('advanced'));
+  options = !!options ? options.filter((option) => !option.groups.includes('advanced')) : [];
 
   if (options.length === 0) {
     return '';
@@ -127,113 +139,3 @@ ${utils.renderReference(options, {
 
 `;
 }
-
-// function renderProperties({ props: properties }) {
-//   if (properties.length === 0) {
-//     return "";
-//   }
-
-//   return `
-// ## Properties
-
-// ${properties
-//   .map(
-//     prop => `
-// ### ${prop.name}
-
-// | | |
-// | --- | --- |
-// | **Description** | ${prop.docs.split("\n").join("<br />")} |
-// | **Attribute** | \`${prop.attr}\` |
-// | **Type** | \`${prop.type.replace(/\|/g, "\\|")}\` |
-// | **Default** | \`${prop.default}\` |
-
-// `
-//   )
-//   .join("\n")}
-// `;
-// }
-
-// function renderEvents({ events }) {
-//   if (events.length === 0) {
-//     return "";
-//   }
-
-//   return `
-// ## Events
-
-// | Name | Description |
-// | --- | --- |
-// ${events.map(event => `| \`${event.event}\` | ${event.docs} |`).join("\n")}
-
-// `;
-// }
-
-// function renderMethods({ methods }) {
-//   if (methods.length === 0) {
-//     return "";
-//   }
-
-//   return `
-// ## Methods
-
-// ${methods
-//   .map(
-//     method => `
-// ### ${method.name}
-
-// | | |
-// | --- | --- |
-// | **Description** | ${method.docs.split("\n").join("<br />")} |
-// | **Signature** | \`${method.signature.replace(/\|/g, "\\|")}\` |
-// `
-//   )
-//   .join("\n")}
-
-// `;
-// }
-
-// function renderParts({ parts }) {
-//   if (parts.length === 0) {
-//     return "";
-//   }
-
-//   return `
-// ## CSS Shadow Parts
-
-// | Name | Description |
-// | --- | --- |
-// ${parts.map(prop => `| \`${prop.name}\` | ${prop.docs} |`).join("\n")}
-
-// `;
-// }
-
-// function renderCustomProps({ styles: customProps }) {
-//   if (customProps.length === 0) {
-//     return "";
-//   }
-
-//   return `
-// ## CSS Custom Properties
-
-// | Name | Description |
-// | --- | --- |
-// ${customProps.map(prop => `| \`${prop.name}\` | ${prop.docs} |`).join("\n")}
-
-// `;
-// }
-
-// function renderSlots({ slots }) {
-//   if (slots.length === 0) {
-//     return "";
-//   }
-
-//   return `
-// ## Slots
-
-// | Name | Description |
-// | --- | --- |
-// ${slots.map(slot => `| \`${slot.name}\` | ${slot.docs} |`).join("\n")}
-
-// `;
-// }

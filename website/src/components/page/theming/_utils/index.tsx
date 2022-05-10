@@ -1,5 +1,5 @@
-import { Color, RGB } from './color';
-import { COLOR_NAMES, ColorVariable } from './color-variables';
+import {Color, RGB} from './color';
+import {COLOR_NAMES, ColorVariable} from './color-variables';
 
 export const generateSteppedColors = (background = '#ffffff', text = '#000000') => {
   const color = new Color(background);
