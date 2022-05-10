@@ -151,11 +151,11 @@ Our recommended filesystem layout looks like this:
 
 ## Example
 
-The [example](examples/complete) folder contains a complete solution that shows how to:
+The `examples/complete` folder contains a complete solution that shows how to:
 
 - Structure the Terraform and helmfile components
 - Configure the CLI
-- Add [stack configurations](examples/complete/stacks) for the Terraform and helmfile components (to provision them to different environments and
+- Add for the Terraform and helmfile components (to provision them to different environments and
   stages)
 
 ## CLI Configuration
@@ -164,9 +164,9 @@ The [example](examples/complete) folder contains a complete solution that shows 
 
 `atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
-In our example, all the code (Terraform and helmfiles) is in the [components](examples/complete/components) folder.
+In our example, all the code (Terraform and helmfiles) is in the `examples/complete/components` folder.
 
-The centralized stack configurations (variables for the Terraform and helmfile components) are in the [stacks](examples/complete/stacks) folder.
+The centralized stack configurations (variables for the Terraform and helmfile components) are in the `examples/complete/stacks` folder.
 
 In the example, all stack configuration files are broken down by environments and stages and use the predefined format `$environment-$stage.yaml`.
 
@@ -177,12 +177,12 @@ The global values get merged with the `$environment-$stage.yaml` configuration f
 
 In the example, we defined a few config files:
 
-- [ue2-dev.yaml](example/stacks/ue2-dev.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `dev`
-- [ue2-staging.yaml](example/stacks/ue2-staging.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and
+- `example/stacks/ue2-dev.yaml` - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `dev`
+- `example/stacks/ue2-staging.yaml` - stack configuration (Terraform and helmfile variables) for the environment `ue2` and
   stage `staging`
-- [ue2-prod.yaml](example/stacks/ue2-prod.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
-- [ue2-globals.yaml](example/stacks/ue2-globals.yaml) - global settings for the environment `ue2` (e.g. `region`, `environment`)
-- [globals.yaml](example/stacks/globals.yaml) - global settings for the entire solution
+- `example/stacks/ue2-prod.yaml` - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
+- `example/stacks/ue2-globals.yaml` - global settings for the environment `ue2` (e.g. `region`, `environment`)
+- `example/stacks/globals.yaml` - global settings for the entire solution
 
 __NOTE:__ The stack configuration structure and the file names described above are just an example of how to name and structure the config files.
 You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire
@@ -236,10 +236,10 @@ It has the following main sections:
 The `components` section consists of the following:
 
 - `terraform` - defines variables, the binary to execute, and the backend for each Terraform component.
-  Terraform component names correspond to the Terraform components in the [components](example/components) folder
+  Terraform component names correspond to the Terraform components in the `example/components` folder
 
 - `helmfile` - defines variables and the binary to execute for each helmfile component.
-  Helmfile component names correspond to the helmfile components in the [helmfile](example/components/helmfile) folder
+  Helmfile component names correspond to the helmfile components in the `example/components/helmfile` folder
 
 ## Run the Example
 
@@ -308,11 +308,10 @@ Workflows are a way of combining multiple commands into one executable unit of w
 
 In the CLI, workflows can be defined using two different methods:
 
-- In the configuration file for a stack (see [workflows in ue2-dev.yaml](example/stacks/ue2-dev.yaml) for an example)
-- In a separate file (see [workflows.yaml](example/stacks/workflows.yaml)
+- In the configuration file for a stack
+- In a separate file
 
-In the first case, we define workflows in the configuration file for the stack (which we specify on the command line).
-To execute the workflows from [workflows in ue2-dev.yaml](example/stacks/ue2-dev.yaml), run the following commands:
+In the first case, we define workflows in the configuration file for the stack (which we specify on the command line):
 
 ```bash
   atmos workflow deploy-all -s ue2-dev
@@ -331,7 +330,7 @@ For example, to run `terraform plan` and `helmfile diff` on all terraform and he
 ```
 
 where the command-line option `-f` (`--file` for long version) instructs the `atmos` CLI to look for the `plan-all` workflow in the
-file [workflows](example/stacks/workflows.yaml).
+file `example/stacks/workflows.yaml`.
 
 As we can see, in multi-environment workflows, each workflow job specifies the stack it's operating on:
 
@@ -355,7 +354,7 @@ workflows:
 You can also define a workflow in a separate file without specifying the stack in the workflow's job config.
 In this case, the stack needs to be provided on the command line.
 
-For example, to run the `deploy-all` workflow from the [workflows](example/stacks/workflows.yaml) file for the `ue2-dev` stack,
+For example, to run the `deploy-all` workflow from the `example/stacks/workflows.yaml` file for the `ue2-dev` stack,
 execute the following command:
 
 ```bash
