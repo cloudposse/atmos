@@ -58,19 +58,14 @@
       "footnotes": [],
       "groups": [],
       "exampleCommands": [
-        "atmos aws eks update-kubeconfig",
-        "atmos aws eks update-kubeconfig",
-        "atmos aws eks update-kubeconfig",
-        "atmos aws eks update-kubeconfig"
+        "atmos aws eks update-kubeconfig <component> -s <stack>",
+        "atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>",
+        "atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>",
+        "atmos aws eks update-kubeconfig --dry-run=true",
+        "atmos aws eks update-kubeconfig --verbose=true"
       ],
       "aliases": [],
-      "inputs": [
-        {
-          "name": "property",
-          "summary": "The property name you wish to get",
-          "required": false
-        }
-      ],
+      "inputs": [],
       "options": [
         {
           "name": "global",
@@ -85,7 +80,7 @@
           }
         },
         {
-          "name": "json",
+          "name": "dry-run",
           "type": "boolean",
           "summary": "Output config values in JSON",
           "groups": [
