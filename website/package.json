@@ -9,12 +9,10 @@
     "build:production": "docusaurus build",
     "clear": "docusaurus clear",
     "deploy": "docusaurus deploy",
-    "docusaurus": "docusaurus",
     "generate-markdown": "concurrently \"node scripts/cli\"",
     "serve": "docusaurus serve",
     "prestart": "npm run generate-markdown",
-    "start": "docusaurus start",
-    "swizzle": "docusaurus swizzle --danger"
+    "start": "docusaurus start"
   },
   "browserslist": {
     "production": [
