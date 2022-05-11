@@ -7,7 +7,7 @@ The page structure loosely maps to the routing on the site since paths can be ch
 
 This folder can also contain components, assets, and whatever else is meant to be versioned when the docusaurus versioning script is run. For example,
 if there is a page component that is only relevant to the `layout` section in the current version, it could be added to a `_components/`
-folder in `docs/layout/`. When the versioning script is run, the component will be copied to `versioned_docs/verion-{X}/layout/_components/` and there
+folder in `docs/layout/`. When the versioning script is run, the component will be copied to `versioned_docs/version-{X}/layout/_components/` and there
 will now be a separate component in `docs/layout/_components/` that can be deleted or updated to the latest version. The same concept applies to
 images and other files.
 
