@@ -10,8 +10,8 @@
       "namespace": [
         "atmos"
       ],
-      "summary": "Show help for all atmos commands",
-      "description": "`atmos help` shows help for all atmos CLI commands.",
+      "summary": "Show help for all `atmos` commands",
+      "description": "`atmos help` shows help for all `atmos` CLI commands.",
       "footnotes": [],
       "groups": [],
       "exampleCommands": [
@@ -43,9 +43,9 @@
         "\n\n1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line, then `atmos` executes the command without requiring the `atmos` CLI config and context.",
         "\n\n  For example: `atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>`",
         "\n\n2. If `component` and `stack` are provided on the command-line, then `atmos` executes the command using the `atmos` CLI config and stack's context by searching for the following settings:",
-        "\n   - `components.helmfile.cluster_name_pattern` in `atmos.yaml` CLI config (and calculates the `--name` parameter using the pattern)",
-        "\n   - `components.helmfile.helm_aws_profile_pattern` in `atmos.yaml` CLI config (and calculates the `--profile` parameter using the pattern)",
-        "\n   - `components.helmfile.kubeconfig_path` in `atmos.yaml` CLI config",
+        "\n   - `components.helmfile.cluster_name_pattern` in the `atmos.yaml` CLI config (and calculates the `--name` parameter using the pattern)",
+        "\n   - `components.helmfile.helm_aws_profile_pattern` in the `atmos.yaml` CLI config (and calculates the `--profile` parameter using the pattern)",
+        "\n   - `components.helmfile.kubeconfig_path` in the `atmos.yaml` CLI config",
         "\n   - the variables for the component in the provided stack",
         "\n   - `region` from the variables for the component in the stack",
         "\n\n  For example: `atmos aws eks update-kubeconfig <component> -s <stack>`",
