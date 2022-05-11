@@ -14,7 +14,7 @@ var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 	Long: `This command executes 'aws eks update-kubeconfig' in three different ways:
 
 1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line, 
-then 'atmos' executes the command without requiring the 'atmos'' CLI config and context.
+then 'atmos' executes the command without requiring the 'atmos.yaml' CLI config and context.
 For example: atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>
 
 2. If 'component' and 'stack' are provided on the command-line, 
