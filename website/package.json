@@ -1,0 +1,69 @@
+{
+  "name": "atmos-docs",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "prebuild": "npm run generate-markdown",
+    "build": "npm run build:preview",
+    "build:preview": "docusaurus build --locale en",
+    "build:production": "docusaurus build",
+    "clear": "docusaurus clear",
+    "deploy": "docusaurus deploy",
+    "generate-markdown": "concurrently \"node scripts/cli\"",
+    "serve": "docusaurus serve",
+    "prestart": "npm run generate-markdown",
+    "start": "docusaurus start"
+  },
+  "browserslist": {
+    "production": [
+      ">0.5%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "dependencies": {
+    "@docusaurus/core": "0.0.0-4192",
+    "@docusaurus/mdx-loader": "0.0.0-4192",
+    "@docusaurus/plugin-client-redirects": "0.0.0-4192",
+    "@docusaurus/plugin-content-docs": "0.0.0-4192",
+    "@docusaurus/plugin-content-pages": "0.0.0-4192",
+    "@docusaurus/plugin-debug": "0.0.0-4192",
+    "@docusaurus/plugin-google-analytics": "0.0.0-4192",
+    "@docusaurus/plugin-google-gtag": "0.0.0-4192",
+    "@docusaurus/plugin-sitemap": "0.0.0-4192",
+    "@docusaurus/preset-classic": "0.0.0-4192",
+    "@docusaurus/theme-classic": "0.0.0-4192",
+    "@docusaurus/theme-search-algolia": "0.0.0-4192",
+    "@ionic-internal/docusaurus-plugin-tag-manager": "^2.0.0",
+    "@ionic-internal/ionic-ds": "^7.0.0",
+    "@mdx-js/react": "^1.6.22",
+    "@prismicio/client": "^6.4.2",
+    "@prismicio/react": "^2.2.0",
+    "clsx": "^1.1.1",
+    "concurrently": "^6.2.0",
+    "crowdin": "^3.5.0",
+    "docusaurus-plugin-module-alias": "^0.0.2",
+    "docusaurus-plugin-sass": "^0.2.1",
+    "fs-extra": "^9.1.0",
+    "modern-normalize": "^1.1.0",
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1",
+    "remark-html": "^13.0.1",
+    "remark-parse": "^8.0.3",
+    "sass": "^1.44.0",
+    "semver": "^7.3.5"
+  },
+  "devDependencies": {
+    "@docusaurus/module-type-aliases": "0.0.0-4192",
+    "@ionic/prettier-config": "^2.0.0",
+    "@tsconfig/docusaurus": "^1.0.4",
+    "@types/react": "^17.0.37",
+    "prettier": "^2.5.0",
+    "typescript": "^4.6.4"
+  }
+}

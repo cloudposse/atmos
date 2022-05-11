@@ -1,0 +1,206 @@
+{
+  "type": "global",
+  "name": "atmos",
+  "summary": "",
+  "description": "",
+  "groups": [],
+  "commands": [
+    {
+      "name": "atmos help",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Show help for all `atmos` commands",
+      "description": "`atmos help` shows help for all `atmos` CLI commands.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos help",
+        "atmos aws --help         # Execute 'aws' commands",
+        "atmos describe --help    # Execute 'describe' commands",
+        "atmos helmfile --help    # Execute 'helmfile' commands",
+        "atmos terraform --help   # Execute 'terraform' commands",
+        "atmos validate --help    # Execute 'validate' commands",
+        "atmos vendor --help      # Execute 'vendor' commands",
+        "atmos workflow --help    # Execute 'workflow' commands"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [],
+      "type": "global"
+    },
+    {
+      "name": "atmos aws eks update-kubeconfig",
+      "namespace": [
+        "atmos",
+        "aws",
+        "eks"
+      ],
+      "summary": "Execute `aws eks update-kubeconfig` command",
+      "description": [
+        "This command executes `aws eks update-kubeconfig` command to download `kubeconfig` from an EKS cluster and save it to a file.",
+        "\n\nThe command can execute `aws eks update-kubeconfig` in three different ways:",
+        "\n\n1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line, then `atmos` executes the command without requiring the `atmos` CLI config and context.",
+        "\n\n  For example: `atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>`",
+        "\n\n2. If `component` and `stack` are provided on the command-line, then `atmos` executes the command using the `atmos` CLI config and stack's context by searching for the following settings:",
+        "\n   - `components.helmfile.cluster_name_pattern` in the `atmos.yaml` CLI config (and calculates the `--name` parameter using the pattern)",
+        "\n   - `components.helmfile.helm_aws_profile_pattern` in the `atmos.yaml` CLI config (and calculates the `--profile` parameter using the pattern)",
+        "\n   - `components.helmfile.kubeconfig_path` in the `atmos.yaml` CLI config",
+        "\n   - the variables for the component in the provided stack",
+        "\n   - `region` from the variables for the component in the stack",
+        "\n\n  For example: `atmos aws eks update-kubeconfig <component> -s <stack>`",
+        "\n\n3. Combination of the above. Provide a component and a stack, and override other parameters on the command line.",
+        "\n\n  For example: `atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>`",
+        "\n\nSee https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information."
+      ],
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos aws eks update-kubeconfig <component> -s <stack>",
+        "atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>",
+        "atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>",
+        "atmos aws eks update-kubeconfig --role-arn <ARN>",
+        "atmos aws eks update-kubeconfig --alias <cluster context name alias>",
+        "atmos aws eks update-kubeconfig --dry-run=true",
+        "atmos aws eks update-kubeconfig --verbose=true"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "Component to get `kubeconfig` for",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack name",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "profile",
+          "type": "string",
+          "summary": "AWS profile to use to authenticate to the EKS cluster",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "profile"
+          }
+        },
+        {
+          "name": "role-arn",
+          "type": "string",
+          "summary": "AWS IAM role ARN to use to authenticate to the EKS cluster",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "ARN"
+          }
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "summary": "EKS cluster name",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "name"
+          }
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "summary": "AWS region",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "region"
+          }
+        },
+        {
+          "name": "kubeconfig",
+          "type": "string",
+          "summary": "A `kubeconfig` filename to append with the configuration",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "filename"
+          }
+        },
+        {
+          "name": "alias",
+          "type": "string",
+          "summary": "Alias for the cluster context name. Defaults to match cluster ARN",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "alias"
+          }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Print the merged kubeconfig to stdout instead of writing it to the specified file",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        },
+        {
+          "name": "verbose",
+          "type": "boolean",
+          "summary": "Print more detailed output when writing to the kubeconfig file, including the appended entries",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos describe config",
+      "namespace": [
+        "atmos",
+        "describe"
+      ],
+      "summary": "Execute `describe config` command",
+      "description": "This command shows the final (deep-merged) CLI configuration.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos describe config",
+        "atmos describe config -f json",
+        "atmos describe config -f yaml"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [
+        {
+          "name": "format",
+          "type": "string",
+          "summary": "Output format (`json` or `yaml`)",
+          "groups": [],
+          "aliases": [
+            "f"
+          ],
+          "spec": {
+            "value": "json/yaml"
+          }
+        }
+      ],
+      "type": "global"
+    }
+  ],
+  "aliases": []
+}

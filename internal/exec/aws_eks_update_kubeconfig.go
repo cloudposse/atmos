@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
+	"strings"
 )
 
 func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
@@ -155,6 +156,9 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 		}
 
 		context := c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+
+		// Add Component to allow the `cluster_name_pattern` in `atmos.yaml` to use `{component} token
+		context.Component = strings.Replace(kubeconfigContext.Component, "/", "-", -1)
 
 		// `kubeconfig` can be overridden on the command line
 		if kubeconfigPath == "" {

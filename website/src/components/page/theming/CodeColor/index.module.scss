@@ -1,0 +1,21 @@
+.codeColor {
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+.codeColorBlock {
+  display: inline-block;
+
+  width: 20px;
+  height: 20px;
+
+  margin-right: 2px;
+
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+.codeColorBlock,
+.codeColorValue {
+  vertical-align: middle;
+}
