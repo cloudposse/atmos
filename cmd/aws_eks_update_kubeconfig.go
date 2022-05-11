@@ -18,7 +18,7 @@ then 'atmos' executes the command without requiring the 'atmos'' CLI config and 
 For example: atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>
 
 2. If 'component' and 'stack' are provided on the command-line, 
-   then 'atmos' executes the command using the 'atmos'' CLI config and stack's context by searching for the following settings:
+   then 'atmos' executes the command using the 'atmos' CLI config and stack's context by searching for the following settings:
   - 'components.helmfile.cluster_name_pattern' in the 'atmos.yaml' CLI config (and calculates the '--name' parameter using the pattern)
   - 'components.helmfile.helm_aws_profile_pattern' in the 'atmos.yaml' CLI config (and calculates the '--profile' parameter using the pattern)
   - 'components.helmfile.kubeconfig_path' in the 'atmos.yaml' CLI config
