@@ -64,6 +64,8 @@
     "@tsconfig/docusaurus": "^1.0.4",
     "@types/react": "^17.0.37",
     "prettier": "^2.5.0",
-    "typescript": "^4.6.4"
+    "typescript": "^4.6.4",
+    "nth-check": "^2.0.1",
+    "trim": "^1.0.1"
   }
 }
