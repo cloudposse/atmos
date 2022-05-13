@@ -370,9 +370,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return err
 	}
 
-	if g.LogVerbose {
-		color.Green("Processed config %s", path)
-	}
+	u.PrintInfoVerbose(fmt.Sprintf("Processed config %s", path))
 
 	return nil
 }
