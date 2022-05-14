@@ -146,7 +146,13 @@ func sectionContainsAnyNotEmptySections(section map[interface{}]interface{}, sec
 }
 
 // CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
-func CreateComponentStackMap(basePath string, filePath string) (map[string]map[string][]string, error) {
+func CreateComponentStackMap(
+	stacksBasePath string,
+	terraformComponentsBasePath string,
+	helmfileComponentsBasePath string,
+	filePath string,
+) (map[string]map[string][]string, error) {
+
 	stackComponentMap := map[string]map[string][]string{}
 	stackComponentMap["terraform"] = map[string][]string{}
 	stackComponentMap["helmfile"] = map[string][]string{}
@@ -171,13 +177,15 @@ func CreateComponentStackMap(basePath string, filePath string) (map[string]map[s
 			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, err := ProcessYAMLConfigFile(basePath, p, map[string]map[interface{}]interface{}{})
+				config, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[interface{}]interface{}{})
 				if err != nil {
 					return err
 				}
 
 				finalConfig, err := ProcessStackConfig(
-					basePath,
+					stacksBasePath,
+					terraformComponentsBasePath,
+					helmfileComponentsBasePath,
 					p,
 					config,
 					false,
@@ -191,7 +199,7 @@ func CreateComponentStackMap(basePath string, filePath string) (map[string]map[s
 
 				if componentsConfig, componentsConfigExists := finalConfig["components"]; componentsConfigExists {
 					componentsSection := componentsConfig.(map[string]interface{})
-					stackName := strings.Replace(p, basePath+"/", "", 1)
+					stackName := strings.Replace(p, stacksBasePath+"/", "", 1)
 
 					if terraformConfig, terraformConfigExists := componentsSection["terraform"]; terraformConfigExists {
 						terraformSection := terraformConfig.(map[string]interface{})

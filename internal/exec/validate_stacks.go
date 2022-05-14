@@ -51,6 +51,8 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 		componentStackMap := map[string]map[string][]string{}
 		_, err = s.ProcessStackConfig(
 			c.ProcessedConfig.StacksBaseAbsolutePath,
+			c.ProcessedConfig.TerraformDirAbsolutePath,
+			c.ProcessedConfig.HelmfileDirAbsolutePath,
 			filePath,
 			stackConfig,
 			false,

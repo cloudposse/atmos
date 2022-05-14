@@ -24,7 +24,9 @@ var (
 // ProcessYAMLConfigFiles takes a list of paths to YAML config files, processes and deep-merges all imports,
 // and returns a list of stack configs
 func ProcessYAMLConfigFiles(
-	basePath string,
+	stacksBasePath string,
+	terraformComponentsBasePath string,
+	helmfileComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool) ([]string, map[string]interface{}, error) {
@@ -40,7 +42,7 @@ func ProcessYAMLConfigFiles(
 		go func(i int, p string) {
 			defer wg.Done()
 
-			stackBasePath := basePath
+			stackBasePath := stacksBasePath
 			if len(stackBasePath) < 1 {
 				stackBasePath = path.Dir(p)
 			}
@@ -70,7 +72,10 @@ func ProcessYAMLConfigFiles(
 			//	}
 			//}
 
-			finalConfig, err := ProcessStackConfig(stackBasePath,
+			finalConfig, err := ProcessStackConfig(
+				stackBasePath,
+				terraformComponentsBasePath,
+				helmfileComponentsBasePath,
 				p,
 				stackConfig,
 				processStackDeps,
@@ -220,7 +225,9 @@ func ProcessYAMLConfigFile(
 // ProcessStackConfig takes a raw stack config, deep-merges all variables, settings, environments and backends,
 // and returns the final stack configuration for all Terraform and helmfile components
 func ProcessStackConfig(
-	basePath string,
+	stacksBasePath string,
+	terraformComponentsBasePath string,
+	helmfileComponentsBasePath string,
 	stack string,
 	config map[interface{}]interface{},
 	processStackDeps bool,
@@ -232,7 +239,7 @@ func ProcessStackConfig(
 
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
-			u.TrimBasePathFromPath(basePath+"/", stack),
+			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
 			g.DefaultStackConfigFileExtension),
 		".yml",
 	)
@@ -443,7 +450,7 @@ func ProcessStackConfig(
 					baseComponentName = baseComponent
 
 					// Process the base components recursively to find `componentInheritanceChain`
-					err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName)
+					err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName, terraformComponentsBasePath)
 					if err != nil {
 						return nil, err
 					}
@@ -481,7 +488,7 @@ func ProcessStackConfig(
 
 						if _, ok2 := allTerraformComponentsMap[base]; !ok2 {
 							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
-								"(using 'metadata.inherits'), but '%[3]s' does not exist in the stack '%[2]s'",
+								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the YAML config files for the stack '%[2]s'",
 								component,
 								stackName,
 								base,
@@ -490,7 +497,7 @@ func ProcessStackConfig(
 						}
 
 						// Process the base components recursively to find `componentInheritanceChain`
-						err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, base)
+						err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, base, terraformComponentsBasePath)
 						if err != nil {
 							return nil, err
 						}
@@ -737,7 +744,7 @@ func ProcessStackConfig(
 					baseComponentName = baseComponent
 
 					// Process the base components recursively to find `componentInheritanceChain`
-					err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, baseComponentName)
+					err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, baseComponentName, helmfileComponentsBasePath)
 					if err != nil {
 						return nil, err
 					}
@@ -771,7 +778,7 @@ func ProcessStackConfig(
 
 						if _, ok2 := allHelmfileComponentsMap[base]; !ok2 {
 							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
-								"(using 'metadata.inherits'), but '%[3]s' does not exist in the stack '%[2]s'",
+								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the YAML config files for the stack '%[2]s'",
 								component,
 								stackName,
 								base,
@@ -780,7 +787,7 @@ func ProcessStackConfig(
 						}
 
 						// Process the base components recursively to find `componentInheritanceChain`
-						err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, base)
+						err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, base, helmfileComponentsBasePath)
 						if err != nil {
 							return nil, err
 						}
@@ -886,7 +893,8 @@ func processBaseComponentConfig(
 	allComponentsMap map[interface{}]interface{},
 	component string,
 	stack string,
-	baseComponent string) error {
+	baseComponent string,
+	componentBasePath string) error {
 
 	if component == baseComponent {
 		return nil
@@ -913,6 +921,7 @@ func processBaseComponentConfig(
 				baseComponent,
 				stack,
 				baseComponentOfBaseComponent.(string),
+				componentBasePath,
 			)
 
 			if err != nil {
@@ -1003,8 +1012,13 @@ func processBaseComponentConfig(
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {
-		return errors.New("Terraform component '" + component + "' inherits from the base component '" +
-			baseComponent + "', " + "but `" + baseComponent + "' is not defined in the stack '" + stack + "'")
+		// Check if the base component exists as Terraform/Helmfile component
+		componentPath := path.Join(componentBasePath, baseComponent)
+		componentPathExists, err := u.IsDirectory(componentPath)
+		if err != nil || !componentPathExists {
+			return errors.New("The component '" + component + "' inherits from the base component '" +
+				baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+		}
 	}
 
 	return nil

@@ -211,6 +211,8 @@ func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
 		c.ProcessedConfig.StacksBaseAbsolutePath,
+		c.ProcessedConfig.TerraformDirAbsolutePath,
+		c.ProcessedConfig.HelmfileDirAbsolutePath,
 		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true)
