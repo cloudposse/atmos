@@ -59,7 +59,8 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 			true,
 			"",
 			componentStackMap,
-			importsConfig)
+			importsConfig,
+			false)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}

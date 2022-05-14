@@ -82,7 +82,8 @@ func ProcessYAMLConfigFiles(
 				processComponentDeps,
 				"",
 				componentStackMap,
-				importsConfig)
+				importsConfig,
+				true)
 			if err != nil {
 				errorResult = err
 				return
@@ -235,6 +236,7 @@ func ProcessStackConfig(
 	componentTypeFilter string,
 	componentStackMap map[string]map[string][]string,
 	importsConfig map[string]map[interface{}]interface{},
+	checkBaseComponentExists bool,
 ) (map[interface{}]interface{}, error) {
 
 	stackName := strings.TrimSuffix(
@@ -450,7 +452,15 @@ func ProcessStackConfig(
 					baseComponentName = baseComponent
 
 					// Process the base components recursively to find `componentInheritanceChain`
-					err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, baseComponentName, terraformComponentsBasePath)
+					err = processBaseComponentConfig(
+						&baseComponentConfig,
+						allTerraformComponentsMap,
+						component,
+						stack,
+						baseComponentName,
+						terraformComponentsBasePath,
+						checkBaseComponentExists,
+					)
 					if err != nil {
 						return nil, err
 					}
@@ -487,17 +497,27 @@ func ProcessStackConfig(
 						base := v.(string)
 
 						if _, ok2 := allTerraformComponentsMap[base]; !ok2 {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
-								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the YAML config files for the stack '%[2]s'",
-								component,
-								stackName,
-								base,
-							)
-							return nil, errors.New(errorMessage)
+							if checkBaseComponentExists {
+								errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
+									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the YAML config files for the stack '%[2]s'",
+									component,
+									stackName,
+									base,
+								)
+								return nil, errors.New(errorMessage)
+							}
 						}
 
 						// Process the base components recursively to find `componentInheritanceChain`
-						err = processBaseComponentConfig(&baseComponentConfig, allTerraformComponentsMap, component, stack, base, terraformComponentsBasePath)
+						err = processBaseComponentConfig(
+							&baseComponentConfig,
+							allTerraformComponentsMap,
+							component,
+							stack,
+							base,
+							terraformComponentsBasePath,
+							checkBaseComponentExists,
+						)
 						if err != nil {
 							return nil, err
 						}
@@ -744,7 +764,15 @@ func ProcessStackConfig(
 					baseComponentName = baseComponent
 
 					// Process the base components recursively to find `componentInheritanceChain`
-					err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, baseComponentName, helmfileComponentsBasePath)
+					err = processBaseComponentConfig(
+						&baseComponentConfig,
+						allHelmfileComponentsMap,
+						component,
+						stack,
+						baseComponentName,
+						helmfileComponentsBasePath,
+						checkBaseComponentExists,
+					)
 					if err != nil {
 						return nil, err
 					}
@@ -777,17 +805,27 @@ func ProcessStackConfig(
 						base := v.(string)
 
 						if _, ok2 := allHelmfileComponentsMap[base]; !ok2 {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
-								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the YAML config files for the stack '%[2]s'",
-								component,
-								stackName,
-								base,
-							)
-							return nil, errors.New(errorMessage)
+							if checkBaseComponentExists {
+								errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
+									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the YAML config files for the stack '%[2]s'",
+									component,
+									stackName,
+									base,
+								)
+								return nil, errors.New(errorMessage)
+							}
 						}
 
 						// Process the base components recursively to find `componentInheritanceChain`
-						err = processBaseComponentConfig(&baseComponentConfig, allHelmfileComponentsMap, component, stack, base, helmfileComponentsBasePath)
+						err = processBaseComponentConfig(
+							&baseComponentConfig,
+							allHelmfileComponentsMap,
+							component,
+							stack,
+							base,
+							helmfileComponentsBasePath,
+							checkBaseComponentExists,
+						)
 						if err != nil {
 							return nil, err
 						}
@@ -894,7 +932,8 @@ func processBaseComponentConfig(
 	component string,
 	stack string,
 	baseComponent string,
-	componentBasePath string) error {
+	componentBasePath string,
+	checkBaseComponentExists bool) error {
 
 	if component == baseComponent {
 		return nil
@@ -922,6 +961,7 @@ func processBaseComponentConfig(
 				stack,
 				baseComponentOfBaseComponent.(string),
 				componentBasePath,
+				checkBaseComponentExists,
 			)
 
 			if err != nil {
@@ -1012,13 +1052,15 @@ func processBaseComponentConfig(
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {
-		// Check if the base component exists as Terraform/Helmfile component
-		// If it does exist, don't trow error if it is not defined in YAML config
-		componentPath := path.Join(componentBasePath, baseComponent)
-		componentPathExists, err := u.IsDirectory(componentPath)
-		if err != nil || !componentPathExists {
-			return errors.New("The component '" + component + "' inherits from the base component '" +
-				baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+		if checkBaseComponentExists {
+			// Check if the base component exists as Terraform/Helmfile component
+			// If it does exist, don't throw errors if it is not defined in YAML config
+			componentPath := path.Join(componentBasePath, baseComponent)
+			componentPathExists, err := u.IsDirectory(componentPath)
+			if err != nil || !componentPathExists {
+				return errors.New("The component '" + component + "' inherits from the base component '" +
+					baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+			}
 		}
 	}
 

@@ -192,7 +192,8 @@ func CreateComponentStackMap(
 					false,
 					"",
 					nil,
-					nil)
+					nil,
+					true)
 				if err != nil {
 					return err
 				}
