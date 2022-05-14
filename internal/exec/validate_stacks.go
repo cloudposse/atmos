@@ -6,8 +6,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"path"
-	"path/filepath"
 	"strings"
 )
 
@@ -18,14 +16,14 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	stacksBasePath := path.Join(c.Config.BasePath, c.Config.Stacks.BasePath)
-	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
+	var configAndStacksInfo c.ConfigAndStacksInfo
+	err = c.ProcessConfig(configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
 
 	includedPaths := []string{"**/*"}
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, includedPaths)
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(c.ProcessedConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
 	}
@@ -42,7 +40,7 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 	var errorMessages []string
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		_, _, err = s.ProcessYAMLConfigFile(stacksBaseAbsPath, filePath, map[string]map[interface{}]interface{}{})
+		_, _, err = s.ProcessYAMLConfigFile(c.ProcessedConfig.StacksBaseAbsolutePath, filePath, map[string]map[interface{}]interface{}{})
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}
