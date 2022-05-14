@@ -1,0 +1,13 @@
+import: {}
+
+vars:
+  stage: invalid
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform: {}
