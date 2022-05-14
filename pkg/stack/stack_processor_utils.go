@@ -176,7 +176,7 @@ func CreateComponentStackMap(basePath string, filePath string) (map[string]map[s
 					return err
 				}
 
-				finalConfig, err := ProcessConfig(
+				finalConfig, err := ProcessStackConfig(
 					basePath,
 					p,
 					config,

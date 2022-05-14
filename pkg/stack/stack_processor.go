@@ -70,7 +70,7 @@ func ProcessYAMLConfigFiles(
 			//	}
 			//}
 
-			finalConfig, err := ProcessConfig(stackBasePath,
+			finalConfig, err := ProcessStackConfig(stackBasePath,
 				p,
 				config,
 				processStackDeps,
@@ -217,9 +217,9 @@ func ProcessYAMLConfigFile(
 	return result, importsConfig, nil
 }
 
-// ProcessConfig takes a raw stack config, deep-merges all variables, settings, environments and backends,
+// ProcessStackConfig takes a raw stack config, deep-merges all variables, settings, environments and backends,
 // and returns the final stack configuration for all Terraform and helmfile components
-func ProcessConfig(
+func ProcessStackConfig(
 	basePath string,
 	stack string,
 	config map[interface{}]interface{},
