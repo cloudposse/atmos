@@ -267,8 +267,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		u.PrintError(errors.New(fmt.Sprintf("Import of %s (-> %s + %s) failed to find a match.", pattern, base, cleanPattern)))
-		return nil, nil
+		return nil, errors.New(fmt.Sprintf("Failed to find a match for the import '%s' ('%s' + '%s')", pattern, base, cleanPattern))
 	}
 
 	var fullMatches []string

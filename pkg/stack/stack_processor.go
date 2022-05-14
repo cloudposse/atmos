@@ -167,17 +167,10 @@ func ProcessYAMLConfigFile(
 
 			// Find all import matches in the glob
 			importMatches, err := GetGlobMatches(impWithExtPath)
-			if err != nil {
-				return nil, nil, err
-			}
 
-			if importMatches == nil {
+			if err != nil || importMatches == nil {
 				importMatches, err = GetGlobMatches(impWithExtPath)
-				if err != nil {
-					return nil, nil, err
-				}
-
-				if importMatches == nil {
+				if err != nil || importMatches == nil {
 					errorMessage := fmt.Sprintf("Invalid import in the file '%s'\nNo matches found for the import '%s'",
 						relativeFilePath,
 						imp)
