@@ -139,13 +139,19 @@ func ProcessYAMLConfigFile(
 
 	// Find and process all imports
 	if importsSection, ok := stackMapConfig["import"]; ok {
-		imports := importsSection.([]interface{})
+		imports, ok := importsSection.([]interface{})
+		if !ok {
+			return nil, nil, errors.New(fmt.Sprintf("Invalid 'import' section in the file '%s'\nThe 'import' section must be a list of strings",
+				relativeFilePath))
+		}
 
 		for _, im := range imports {
 			imp, ok := im.(string)
 
 			if !ok {
-				return nil, nil, errors.New(fmt.Sprintf("Invalid import '%v' in the file '%s'. The import is not a valid string", im, relativeFilePath))
+				return nil, nil, errors.New(fmt.Sprintf("Invalid import in the file '%s'\nThe import '%v' is not a valid string",
+					relativeFilePath,
+					im))
 			}
 
 			// If the import file is specified without extension, use `.yaml` as default
