@@ -1,0 +1,15 @@
+import:
+  - globals/tenant1-globals-does-not-exist
+  - catalog/terraform/test-component-does-not-exist
+
+vars:
+  stage: invalid
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform: {}

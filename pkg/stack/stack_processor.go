@@ -115,7 +115,7 @@ func ProcessYAMLConfigFiles(
 	return listResult, mapResult, nil
 }
 
-// ProcessYAMLConfigFile takes a path to a YAML config file,
+// ProcessYAMLConfigFile takes a path to a YAML stack config file,
 // recursively processes and deep-merges all imports,
 // and returns stack config as map[interface{}]interface{}
 func ProcessYAMLConfigFile(
@@ -124,6 +124,7 @@ func ProcessYAMLConfigFile(
 	importsConfig map[string]map[interface{}]interface{}) (map[interface{}]interface{}, map[string]map[interface{}]interface{}, error) {
 
 	var configs []map[interface{}]interface{}
+	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	stackYamlConfig, err := getFileContent(filePath)
 	if err != nil {
@@ -132,7 +133,7 @@ func ProcessYAMLConfigFile(
 
 	stackMapConfig, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
-		e := errors.New(fmt.Sprintf("Invalid YAML file '%s'\n%v", u.TrimBasePathFromPath(basePath+"/", filePath), err))
+		e := errors.New(fmt.Sprintf("Invalid YAML file '%s'\n%v", relativeFilePath, err))
 		return nil, nil, e
 	}
 
@@ -144,7 +145,7 @@ func ProcessYAMLConfigFile(
 			imp, ok := im.(string)
 
 			if !ok {
-				return nil, nil, errors.New(fmt.Sprintf("Invalid import in the stack '%s'", filePath))
+				return nil, nil, errors.New(fmt.Sprintf("Invalid import '%v' in the file '%s'. The import is not a valid string", im, relativeFilePath))
 			}
 
 			// If the import file is specified without extension, use `.yaml` as default
@@ -158,8 +159,8 @@ func ProcessYAMLConfigFile(
 			impWithExtPath := path.Join(basePath, impWithExt)
 
 			if impWithExtPath == filePath {
-				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nThe file imports itself in '%s'",
-					filePath,
+				errorMessage := fmt.Sprintf("Invalid import in the config file '%s'\nThe file imports itself in '%s'",
+					relativeFilePath,
 					strings.Replace(impWithExt, basePath+"/", "", 1))
 				return nil, nil, errors.New(errorMessage)
 			}
@@ -171,10 +172,9 @@ func ProcessYAMLConfigFile(
 			}
 
 			if importMatches == nil {
-				errorMessage := fmt.Sprintf("Invalid import in the config file %s.\nNo matches found for the import '%s' using the pattern '%s'",
-					filePath,
-					imp,
-					impWithExtPath)
+				errorMessage := fmt.Sprintf("Invalid import in the config file '%s'\nNo matches found for the import '%s'",
+					relativeFilePath,
+					imp)
 
 				importMatches, err = GetGlobMatches(impWithExtPath)
 				if err != nil {
@@ -205,7 +205,7 @@ func ProcessYAMLConfigFile(
 
 	configs = append(configs, stackMapConfig)
 
-	// Deep-merge the config file and the imports
+	// Deep-merge the stack config file and all the imports
 	result, err := m.Merge(configs)
 	if err != nil {
 		return nil, nil, err
