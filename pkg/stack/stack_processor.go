@@ -149,6 +149,10 @@ func ProcessYAMLConfigFile(
 			imp, ok := im.(string)
 
 			if !ok {
+				if im == nil {
+					return nil, nil, errors.New(fmt.Sprintf("Invalid import in the file '%s'\nThe import is an empty string",
+						relativeFilePath))
+				}
 				return nil, nil, errors.New(fmt.Sprintf("Invalid import in the file '%s'\nThe import '%v' is not a valid string",
 					relativeFilePath,
 					im))
