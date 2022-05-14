@@ -45,7 +45,7 @@ func ProcessYAMLConfigFiles(
 				stackBasePath = path.Dir(p)
 			}
 
-			config, importsConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[interface{}]interface{}{})
+			stackConfig, importsConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[interface{}]interface{}{})
 			if err != nil {
 				errorResult = err
 				return
@@ -61,7 +61,7 @@ func ProcessYAMLConfigFiles(
 
 			componentStackMap := map[string]map[string][]string{}
 			// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-			// TODO: review it to use the new `atmos.yaml CLI config
+			// TODO: review it to use the new `atmos.yaml CLI stackConfig
 			//if processStackDeps {
 			//	componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
 			//	if err != nil {
@@ -72,7 +72,7 @@ func ProcessYAMLConfigFiles(
 
 			finalConfig, err := ProcessStackConfig(stackBasePath,
 				p,
-				config,
+				stackConfig,
 				processStackDeps,
 				processComponentDeps,
 				"",
@@ -286,7 +286,7 @@ func ProcessStackConfig(
 		terraformVars, ok = i.(map[interface{}]interface{})
 
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.vars' section in the stack '%s'", stack))
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.vars' section in the file '%s'", stack))
 		}
 	}
 
@@ -338,7 +338,7 @@ func ProcessStackConfig(
 		helmfileVars, ok = i.(map[interface{}]interface{})
 
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.vars' section in the stack '%s'", stack))
+			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.vars' section in the file '%s'", stack))
 		}
 	}
 
@@ -371,7 +371,7 @@ func ProcessStackConfig(
 
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[interface{}]interface{})
 			if !ok {
-				return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform' section in the stack '%s'", stack))
+				return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform' section in the file '%s'", stack))
 			}
 
 			for cmp, v := range allTerraformComponentsMap {
@@ -689,7 +689,7 @@ func ProcessStackConfig(
 
 			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[interface{}]interface{})
 			if !ok {
-				return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile' section in the stack '%s'", stack))
+				return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile' section in the file '%s'", stack))
 			}
 
 			for cmp, v := range allHelmfileComponentsMap {
