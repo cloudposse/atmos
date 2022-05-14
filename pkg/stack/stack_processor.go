@@ -429,53 +429,95 @@ func ProcessStackConfig(
 
 			for cmp, v := range allTerraformComponentsMap {
 				component := cmp.(string)
-				componentMap := v.(map[interface{}]interface{})
+
+				componentMap, ok := v.(map[interface{}]interface{})
+				if !ok {
+					return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s' section in the file '%s'", component, stackName))
+				}
 
 				componentVars := map[interface{}]interface{}{}
 				if i, ok2 := componentMap["vars"]; ok2 {
-					componentVars = i.(map[interface{}]interface{})
+					componentVars, ok = i.(map[interface{}]interface{})
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.vars' section in the file '%s'", component, stackName))
+					}
 				}
 
 				componentSettings := map[interface{}]interface{}{}
 				if i, ok2 := componentMap["settings"]; ok2 {
-					componentSettings = i.(map[interface{}]interface{})
+					componentSettings, ok = i.(map[interface{}]interface{})
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.settings' section in the file '%s'", component, stackName))
+					}
+
+					if i, ok2 := componentSettings["spacelift"]; ok2 {
+						_, ok = i.(map[interface{}]interface{})
+						if !ok {
+							return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName))
+						}
+					}
 				}
 
 				componentEnv := map[interface{}]interface{}{}
 				if i, ok2 := componentMap["env"]; ok2 {
-					componentEnv = i.(map[interface{}]interface{})
+					componentEnv, ok = i.(map[interface{}]interface{})
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.env' section in the file '%s'", component, stackName))
+					}
 				}
 
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[interface{}]interface{}{}
 				if i, ok2 := componentMap["metadata"]; ok2 {
-					componentMetadata = i.(map[interface{}]interface{})
+					componentMetadata, ok = i.(map[interface{}]interface{})
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.metadata' section in the file '%s'", component, stackName))
+					}
 				}
 
 				// Component backend
 				componentBackendType := ""
 				componentBackendSection := map[interface{}]interface{}{}
+
 				if i, ok2 := componentMap["backend_type"]; ok2 {
-					componentBackendType = i.(string)
+					componentBackendType, ok = i.(string)
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.backend_type' section in the file '%s'", component, stackName))
+					}
 				}
+
 				if i, ok2 := componentMap["backend"]; ok2 {
-					componentBackendSection = i.(map[interface{}]interface{})
+					componentBackendSection, ok = i.(map[interface{}]interface{})
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.backend' section in the file '%s'", component, stackName))
+					}
 				}
 
 				// Component remote state backend
 				componentRemoteStateBackendType := ""
 				componentRemoteStateBackendSection := map[interface{}]interface{}{}
+
 				if i, ok2 := componentMap["remote_state_backend_type"]; ok2 {
-					componentRemoteStateBackendType = i.(string)
+					componentRemoteStateBackendType, ok = i.(string)
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.remote_state_backend_type' section in the file '%s'", component, stackName))
+					}
 				}
+
 				if i, ok2 := componentMap["remote_state_backend"]; ok2 {
-					componentRemoteStateBackendSection = i.(map[interface{}]interface{})
+					componentRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.remote_state_backend' section in the file '%s'", component, stackName))
+					}
 				}
 
 				componentTerraformCommand := ""
 				if i, ok2 := componentMap["command"]; ok2 {
-					componentTerraformCommand = i.(string)
+					componentTerraformCommand, ok = i.(string)
+					if !ok {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.command' section in the file '%s'", component, stackName))
+					}
 				}
 
 				// Process base component(s)
@@ -703,7 +745,10 @@ func ProcessStackConfig(
 				}
 				if componentIsAbstract == true {
 					if i, ok2 := finalComponentSettings["spacelift"]; ok2 {
-						spaceliftSettings := i.(map[interface{}]interface{})
+						spaceliftSettings, ok2 := i.(map[interface{}]interface{})
+						if !ok2 {
+							return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName))
+						}
 
 						if _, ok3 := spaceliftSettings["workspace_enabled"]; ok3 {
 							delete(spaceliftSettings, "workspace_enabled")
@@ -765,33 +810,52 @@ func ProcessStackConfig(
 
 			for cmp, v := range allHelmfileComponentsMap {
 				component := cmp.(string)
-				componentMap := v.(map[interface{}]interface{})
+
+				componentMap, ok := v.(map[interface{}]interface{})
+				if !ok {
+					return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s' section in the file '%s'", component, stackName))
+				}
 
 				componentVars := map[interface{}]interface{}{}
 				if i2, ok2 := componentMap["vars"]; ok2 {
-					componentVars = i2.(map[interface{}]interface{})
+					componentVars, ok2 = i2.(map[interface{}]interface{})
+					if !ok2 {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s.vars' section in the file '%s'", component, stackName))
+					}
 				}
 
 				componentSettings := map[interface{}]interface{}{}
 				if i, ok2 := componentMap["settings"]; ok2 {
-					componentSettings = i.(map[interface{}]interface{})
+					componentSettings, ok2 = i.(map[interface{}]interface{})
+					if !ok2 {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s.settings' section in the file '%s'", component, stackName))
+					}
 				}
 
 				componentEnv := map[interface{}]interface{}{}
 				if i, ok2 := componentMap["env"]; ok2 {
-					componentEnv = i.(map[interface{}]interface{})
+					componentEnv, ok2 = i.(map[interface{}]interface{})
+					if !ok2 {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s.env' section in the file '%s'", component, stackName))
+					}
 				}
 
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[interface{}]interface{}{}
 				if i, ok2 := componentMap["metadata"]; ok2 {
-					componentMetadata = i.(map[interface{}]interface{})
+					componentMetadata, ok2 = i.(map[interface{}]interface{})
+					if !ok2 {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s.metadata' section in the file '%s'", component, stackName))
+					}
 				}
 
 				componentHelmfileCommand := ""
 				if i, ok2 := componentMap["command"]; ok2 {
-					componentHelmfileCommand = i.(string)
+					componentHelmfileCommand, ok2 = i.(string)
+					if !ok2 {
+						return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s.command' section in the file '%s'", component, stackName))
+					}
 				}
 
 				// Process base component(s)

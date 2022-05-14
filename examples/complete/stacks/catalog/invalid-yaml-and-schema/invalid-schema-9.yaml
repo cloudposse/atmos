@@ -1,0 +1,16 @@
+vars:
+  stage: invalid
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+settings: {}
+
+env: {}
+
+components:
+  terraform:
+    bad-component:
