@@ -1013,6 +1013,7 @@ func processBaseComponentConfig(
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {
 		// Check if the base component exists as Terraform/Helmfile component
+		// If it does exist, don't trow error if it is not defined in YAML config
 		componentPath := path.Join(componentBasePath, baseComponent)
 		componentPathExists, err := u.IsDirectory(componentPath)
 		if err != nil || !componentPathExists {
