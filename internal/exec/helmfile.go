@@ -37,9 +37,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("Component '%s' is defined as Helmfile component in '%s', but it does not exist in '%s'",
-			info.FinalComponent,
+		return errors.New(fmt.Sprintf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
+			info.FinalComponent,
 			path.Join(c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
 		))
 	}

@@ -363,8 +363,8 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		baseComponentPathParts := strings.Split(configAndStacksInfo.BaseComponentPath, "/")
 		baseComponentPathPartsLength := len(baseComponentPathParts)
 		if baseComponentPathPartsLength > 1 {
-			baseComponentFromArgPartsWithoutLast := baseComponentPathParts[:componentPathPartsLength-1]
-			configAndStacksInfo.ComponentFolderPrefix = strings.Join(baseComponentFromArgPartsWithoutLast, "/")
+			baseComponentPartsWithoutLast := baseComponentPathParts[:baseComponentPathPartsLength-1]
+			configAndStacksInfo.ComponentFolderPrefix = strings.Join(baseComponentPartsWithoutLast, "/")
 			configAndStacksInfo.BaseComponent = baseComponentPathParts[baseComponentPathPartsLength-1]
 		} else {
 			configAndStacksInfo.ComponentFolderPrefix = ""
