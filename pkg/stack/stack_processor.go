@@ -267,35 +267,52 @@ func ProcessStackConfig(
 
 	// Global sections
 	if i, ok := config["vars"]; ok {
-		globalVarsSection = i.(map[interface{}]interface{})
+		globalVarsSection, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'vars' section in the file '%s'", stackName))
+		}
 	}
 
 	if i, ok := config["settings"]; ok {
-		globalSettingsSection = i.(map[interface{}]interface{})
+		globalSettingsSection, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'settings' section in the file '%s'", stackName))
+		}
 	}
 
 	if i, ok := config["env"]; ok {
-		globalEnvSection = i.(map[interface{}]interface{})
+		globalEnvSection, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'env' section in the file '%s'", stackName))
+		}
 	}
 
 	if i, ok := config["terraform"]; ok {
-		globalTerraformSection = i.(map[interface{}]interface{})
+		globalTerraformSection, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform' section in the file '%s'", stackName))
+		}
 	}
 
 	if i, ok := config["helmfile"]; ok {
-		globalHelmfileSection = i.(map[interface{}]interface{})
+		globalHelmfileSection, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile' section in the file '%s'", stackName))
+		}
 	}
 
 	if i, ok := config["components"]; ok {
-		globalComponentsSection = i.(map[interface{}]interface{})
+		globalComponentsSection, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'components' section in the file '%s'", stackName))
+		}
 	}
 
 	// Terraform section
 	if i, ok := globalTerraformSection["vars"]; ok {
 		terraformVars, ok = i.(map[interface{}]interface{})
-
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.vars' section in the file '%s'", stack))
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.vars' section in the file '%s'", stackName))
 		}
 	}
 
@@ -305,7 +322,10 @@ func ProcessStackConfig(
 	}
 
 	if i, ok := globalTerraformSection["settings"]; ok {
-		terraformSettings = i.(map[interface{}]interface{})
+		terraformSettings, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.settings' section in the file '%s'", stackName))
+		}
 	}
 
 	globalAndTerraformSettings, err := m.Merge([]map[interface{}]interface{}{globalSettingsSection, terraformSettings})
@@ -314,7 +334,10 @@ func ProcessStackConfig(
 	}
 
 	if i, ok := globalTerraformSection["env"]; ok {
-		terraformEnv = i.(map[interface{}]interface{})
+		terraformEnv, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.env' section in the file '%s'", stackName))
+		}
 	}
 
 	globalAndTerraformEnv, err := m.Merge([]map[interface{}]interface{}{globalEnvSection, terraformEnv})
@@ -325,29 +348,44 @@ func ProcessStackConfig(
 	// Global backend
 	globalBackendType := ""
 	globalBackendSection := map[interface{}]interface{}{}
+
 	if i, ok := globalTerraformSection["backend_type"]; ok {
-		globalBackendType = i.(string)
+		globalBackendType, ok = i.(string)
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.backend_type' section in the file '%s'", stackName))
+		}
 	}
+
 	if i, ok := globalTerraformSection["backend"]; ok {
-		globalBackendSection = i.(map[interface{}]interface{})
+		globalBackendSection, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.backend' section in the file '%s'", stackName))
+		}
 	}
 
 	// Global remote state backend
 	globalRemoteStateBackendType := ""
 	globalRemoteStateBackendSection := map[interface{}]interface{}{}
+
 	if i, ok := globalTerraformSection["remote_state_backend_type"]; ok {
-		globalRemoteStateBackendType = i.(string)
+		globalRemoteStateBackendType, ok = i.(string)
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.remote_state_backend_type' section in the file '%s'", stackName))
+		}
 	}
+
 	if i, ok := globalTerraformSection["remote_state_backend"]; ok {
-		globalRemoteStateBackendSection = i.(map[interface{}]interface{})
+		globalRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'terraform.remote_state_backend' section in the file '%s'", stackName))
+		}
 	}
 
 	// Helmfile section
 	if i, ok := globalHelmfileSection["vars"]; ok {
 		helmfileVars, ok = i.(map[interface{}]interface{})
-
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.vars' section in the file '%s'", stack))
+			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.vars' section in the file '%s'", stackName))
 		}
 	}
 
@@ -357,7 +395,10 @@ func ProcessStackConfig(
 	}
 
 	if i, ok := globalHelmfileSection["settings"]; ok {
-		helmfileSettings = i.(map[interface{}]interface{})
+		helmfileSettings, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.settings' section in the file '%s'", stackName))
+		}
 	}
 
 	globalAndHelmfileSettings, err := m.Merge([]map[interface{}]interface{}{globalSettingsSection, helmfileSettings})
@@ -366,7 +407,10 @@ func ProcessStackConfig(
 	}
 
 	if i, ok := globalHelmfileSection["env"]; ok {
-		helmfileEnv = i.(map[interface{}]interface{})
+		helmfileEnv, ok = i.(map[interface{}]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid 'helmfile.env' section in the file '%s'", stackName))
+		}
 	}
 
 	globalAndHelmfileEnv, err := m.Merge([]map[interface{}]interface{}{globalEnvSection, helmfileEnv})
@@ -380,7 +424,7 @@ func ProcessStackConfig(
 
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[interface{}]interface{})
 			if !ok {
-				return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform' section in the file '%s'", stack))
+				return nil, errors.New(fmt.Sprintf("Invalid 'components.terraform' section in the file '%s'", stackName))
 			}
 
 			for cmp, v := range allTerraformComponentsMap {
@@ -716,7 +760,7 @@ func ProcessStackConfig(
 
 			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[interface{}]interface{})
 			if !ok {
-				return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile' section in the file '%s'", stack))
+				return nil, errors.New(fmt.Sprintf("Invalid 'components.helmfile' section in the file '%s'", stackName))
 			}
 
 			for cmp, v := range allHelmfileComponentsMap {
