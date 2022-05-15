@@ -82,21 +82,21 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 			if componentsSection, ok := stackSection.(map[interface{}]interface{})["components"].(map[string]interface{}); ok {
 				if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "terraform") {
 					if terraformSection, ok2 := componentsSection["terraform"].(map[string]interface{}); ok2 {
-						for compName, comp := range terraformSection {
-							if len(components) == 0 || u.SliceContainsString(components, compName) {
+						for componentName, componentSection := range terraformSection {
+							if len(components) == 0 || u.SliceContainsString(components, componentName) {
 								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
 									finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
 								}
 								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "terraform") {
 									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"] = make(map[string]interface{})
 								}
-								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{}), compName) {
-									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName] = make(map[string]interface{})
+								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{}), componentName) {
+									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[componentName] = make(map[string]interface{})
 								}
 
-								for sectionName, section := range comp.(map[string]interface{}) {
+								for sectionName, section := range componentSection.(map[string]interface{}) {
 									if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
-										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
+										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[componentName].(map[string]interface{})[sectionName] = section
 									}
 								}
 							}
@@ -105,21 +105,21 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 				}
 				if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "helmfile") {
 					if helmfileSection, ok3 := componentsSection["helmfile"].(map[string]interface{}); ok3 {
-						for compName, comp := range helmfileSection {
-							if len(components) == 0 || u.SliceContainsString(components, compName) {
+						for componentName, componentSection := range helmfileSection {
+							if len(components) == 0 || u.SliceContainsString(components, componentName) {
 								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
 									finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
 								}
 								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{}), "helmfile") {
 									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"] = make(map[string]interface{})
 								}
-								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{}), compName) {
-									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName] = make(map[string]interface{})
+								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{}), componentName) {
+									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[componentName] = make(map[string]interface{})
 								}
 
-								for sectionName, section := range comp.(map[string]interface{}) {
+								for sectionName, section := range componentSection.(map[string]interface{}) {
 									if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
-										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[compName].(map[string]interface{})[sectionName] = section
+										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[componentName].(map[string]interface{})[sectionName] = section
 									}
 								}
 							}
