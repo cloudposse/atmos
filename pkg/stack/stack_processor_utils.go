@@ -325,9 +325,14 @@ func ProcessBaseComponentConfig(
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
 	var baseComponentMap map[interface{}]interface{}
+	var ok bool
 
 	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
-		baseComponentMap = baseComponentSection.(map[interface{}]interface{})
+		baseComponentMap, ok = baseComponentSection.(map[interface{}]interface{})
+		if !ok {
+			return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the file '%s'",
+				baseComponent, component, stack))
+		}
 
 		// First, process the base component of this base component
 		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
@@ -347,36 +352,62 @@ func ProcessBaseComponentConfig(
 		}
 
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
-			baseComponentVars = baseComponentVarsSection.(map[interface{}]interface{})
+			baseComponentVars, ok = baseComponentVarsSection.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.vars' section in the file '%s'", baseComponent, stack))
+			}
 		}
 
 		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
-			baseComponentSettings = baseComponentSettingsSection.(map[interface{}]interface{})
+			baseComponentSettings, ok = baseComponentSettingsSection.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.settings' section in the file '%s'", baseComponent, stack))
+			}
 		}
 
 		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
-			baseComponentEnv = baseComponentEnvSection.(map[interface{}]interface{})
+			baseComponentEnv, ok = baseComponentEnvSection.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.env' section in the file '%s'", baseComponent, stack))
+			}
 		}
 
 		// Base component backend
 		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
-			baseComponentBackendType = i.(string)
+			baseComponentBackendType, ok = i.(string)
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.backend_type' section in the file '%s'", baseComponent, stack))
+			}
 		}
+
 		if i, ok2 := baseComponentMap["backend"]; ok2 {
-			baseComponentBackendSection = i.(map[interface{}]interface{})
+			baseComponentBackendSection, ok = i.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.backend' section in the file '%s'", baseComponent, stack))
+			}
 		}
 
 		// Base component remote state backend
 		if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
-			baseComponentRemoteStateBackendType = i.(string)
+			baseComponentRemoteStateBackendType, ok = i.(string)
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend_type' section in the file '%s'", baseComponent, stack))
+			}
 		}
+
 		if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
-			baseComponentRemoteStateBackendSection = i.(map[interface{}]interface{})
+			baseComponentRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend' section in the file '%s'", baseComponent, stack))
+			}
 		}
 
 		// Base component `command`
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
-			baseComponentCommand = baseComponentCommandSection.(string)
+			baseComponentCommand, ok = baseComponentCommandSection.(string)
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.command' section in the file '%s'", baseComponent, stack))
+			}
 		}
 
 		if len(baseComponentConfig.FinalBaseComponentName) == 0 {
