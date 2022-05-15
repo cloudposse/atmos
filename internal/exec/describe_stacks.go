@@ -128,7 +128,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			// Filter out empty stacks
+			// Filter out empty stacks (stacks without any components)
 			if s, ok := finalStacksMap[stackName].(map[string]interface{}); ok {
 				if len(s) == 0 {
 					delete(finalStacksMap, stackName)

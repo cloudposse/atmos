@@ -3,6 +3,10 @@ package stack
 import (
 	"errors"
 	"fmt"
+	"github.com/bmatcuk/doublestar/v4"
+	g "github.com/cloudposse/atmos/pkg/globals"
+	m "github.com/cloudposse/atmos/pkg/merge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"io/ioutil"
 	"os"
 	"path"
@@ -10,10 +14,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/bmatcuk/doublestar/v4"
-	g "github.com/cloudposse/atmos/pkg/globals"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -128,7 +128,7 @@ func FindComponentDependencies(
 	return unique, nil
 }
 
-// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections and it's not empty
+// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
 func sectionContainsAnyNotEmptySections(section map[interface{}]interface{}, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
 		if len(s) > 0 {
@@ -287,4 +287,165 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
 
 	return fullMatches, nil
+}
+
+type BaseComponentConfig struct {
+	BaseComponentVars                      map[interface{}]interface{}
+	BaseComponentSettings                  map[interface{}]interface{}
+	BaseComponentEnv                       map[interface{}]interface{}
+	FinalBaseComponentName                 string
+	BaseComponentCommand                   string
+	BaseComponentBackendType               string
+	BaseComponentBackendSection            map[interface{}]interface{}
+	BaseComponentRemoteStateBackendType    string
+	BaseComponentRemoteStateBackendSection map[interface{}]interface{}
+	ComponentInheritanceChain              []string
+}
+
+// ProcessBaseComponentConfig processes base component(s) config
+func ProcessBaseComponentConfig(
+	baseComponentConfig *BaseComponentConfig,
+	allComponentsMap map[interface{}]interface{},
+	component string,
+	stack string,
+	baseComponent string,
+	componentBasePath string,
+	checkBaseComponentExists bool) error {
+
+	if component == baseComponent {
+		return nil
+	}
+
+	var baseComponentVars map[interface{}]interface{}
+	var baseComponentSettings map[interface{}]interface{}
+	var baseComponentEnv map[interface{}]interface{}
+	var baseComponentCommand string
+	var baseComponentBackendType string
+	var baseComponentBackendSection map[interface{}]interface{}
+	var baseComponentRemoteStateBackendType string
+	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
+	var baseComponentMap map[interface{}]interface{}
+
+	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
+		baseComponentMap = baseComponentSection.(map[interface{}]interface{})
+
+		// First, process the base component of this base component
+		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+			err := ProcessBaseComponentConfig(
+				baseComponentConfig,
+				allComponentsMap,
+				baseComponent,
+				stack,
+				baseComponentOfBaseComponent.(string),
+				componentBasePath,
+				checkBaseComponentExists,
+			)
+
+			if err != nil {
+				return err
+			}
+		}
+
+		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
+			baseComponentVars = baseComponentVarsSection.(map[interface{}]interface{})
+		}
+
+		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
+			baseComponentSettings = baseComponentSettingsSection.(map[interface{}]interface{})
+		}
+
+		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
+			baseComponentEnv = baseComponentEnvSection.(map[interface{}]interface{})
+		}
+
+		// Base component backend
+		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
+			baseComponentBackendType = i.(string)
+		}
+		if i, ok2 := baseComponentMap["backend"]; ok2 {
+			baseComponentBackendSection = i.(map[interface{}]interface{})
+		}
+
+		// Base component remote state backend
+		if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
+			baseComponentRemoteStateBackendType = i.(string)
+		}
+		if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
+			baseComponentRemoteStateBackendSection = i.(map[interface{}]interface{})
+		}
+
+		// Base component `command`
+		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
+			baseComponentCommand = baseComponentCommandSection.(string)
+		}
+
+		if len(baseComponentConfig.FinalBaseComponentName) == 0 {
+			baseComponentConfig.FinalBaseComponentName = baseComponent
+		}
+
+		// Base component `vars`
+		merged, err := m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentVars, baseComponentVars})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentVars = merged
+
+		// Base component `settings`
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentSettings = merged
+
+		// Base component `env`
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentEnv = merged
+
+		// Base component `command`
+		baseComponentConfig.BaseComponentCommand = baseComponentCommand
+
+		// Base component `backend_type`
+		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
+
+		// Base component `backend`
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentBackendSection = merged
+
+		// Base component `remote_state_backend_type`
+		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
+
+		// Base component `remote_state_backend`
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRemoteStateBackendSection = merged
+
+		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
+	} else {
+		if checkBaseComponentExists {
+			// Check if the base component exists as Terraform/Helmfile component
+			// If it does exist, don't throw errors if it is not defined in YAML config
+			componentPath := path.Join(componentBasePath, baseComponent)
+			componentPathExists, err := u.IsDirectory(componentPath)
+			if err != nil || !componentPathExists {
+				return errors.New("The component '" + component + "' inherits from the base component '" +
+					baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+			}
+		}
+	}
+
+	return nil
+}
+
+// FindStacksDerivedFromStack searches in the section and finds all stack names that are derived from the given stack
+func FindStacksDerivedFromStack(section map[string]interface{}, stack string) []string {
+	res := []string{}
+	return res
 }
