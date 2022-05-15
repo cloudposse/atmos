@@ -564,7 +564,7 @@ func ProcessStackConfig(
 
 				// Multiple inheritance (and multiple-inheritance chain) using `metadata.component` and `metadata.inherit`.
 				// `metadata.component` points to the component implementation (e.g. in `components/terraform` folder),
-				//  it does not specify inheritance (it overrides the deprecated top-level `component` attribute).
+				// it does not specify inheritance (it overrides the deprecated top-level `component` attribute).
 				// `metadata.inherit` is a list of component names from which the current component inherits.
 				// It uses a method similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance.
 				//
