@@ -127,6 +127,13 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 					}
 				}
 			}
+
+			// Filter out empty stacks
+			if s, ok := finalStacksMap[stackName].(map[string]interface{}); ok {
+				if len(s) == 0 {
+					delete(finalStacksMap, stackName)
+				}
+			}
 		}
 	}
 
