@@ -330,18 +330,24 @@ func ProcessBaseComponentConfig(
 	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
 		baseComponentMap, ok = baseComponentSection.(map[interface{}]interface{})
 		if !ok {
-			return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the file '%s'",
+			return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the stack '%s'",
 				baseComponent, component, stack))
 		}
 
 		// First, process the base component of this base component
 		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid 'component:' section of the component '%s' in the stack '%s'",
+					baseComponent, stack))
+			}
+
 			err := ProcessBaseComponentConfig(
 				baseComponentConfig,
 				allComponentsMap,
 				baseComponent,
 				stack,
-				baseComponentOfBaseComponent.(string),
+				baseComponentOfBaseComponentString,
 				componentBasePath,
 				checkBaseComponentExists,
 			)
@@ -354,21 +360,21 @@ func ProcessBaseComponentConfig(
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
 			baseComponentVars, ok = baseComponentVarsSection.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.vars' section in the file '%s'", baseComponent, stack))
+				return errors.New(fmt.Sprintf("Invalid '%s.vars' section in the stack '%s'", baseComponent, stack))
 			}
 		}
 
 		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
 			baseComponentSettings, ok = baseComponentSettingsSection.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.settings' section in the file '%s'", baseComponent, stack))
+				return errors.New(fmt.Sprintf("Invalid '%s.settings' section in the stack '%s'", baseComponent, stack))
 			}
 		}
 
 		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
 			baseComponentEnv, ok = baseComponentEnvSection.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.env' section in the file '%s'", baseComponent, stack))
+				return errors.New(fmt.Sprintf("Invalid '%s.env' section in the stack '%s'", baseComponent, stack))
 			}
 		}
 
@@ -376,14 +382,14 @@ func ProcessBaseComponentConfig(
 		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
 			baseComponentBackendType, ok = i.(string)
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.backend_type' section in the file '%s'", baseComponent, stack))
+				return errors.New(fmt.Sprintf("Invalid '%s.backend_type' section in the stack '%s'", baseComponent, stack))
 			}
 		}
 
 		if i, ok2 := baseComponentMap["backend"]; ok2 {
 			baseComponentBackendSection, ok = i.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.backend' section in the file '%s'", baseComponent, stack))
+				return errors.New(fmt.Sprintf("Invalid '%s.backend' section in the stack '%s'", baseComponent, stack))
 			}
 		}
 
@@ -391,14 +397,14 @@ func ProcessBaseComponentConfig(
 		if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
 			baseComponentRemoteStateBackendType, ok = i.(string)
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend_type' section in the file '%s'", baseComponent, stack))
+				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend_type' section in the stack '%s'", baseComponent, stack))
 			}
 		}
 
 		if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
 			baseComponentRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend' section in the file '%s'", baseComponent, stack))
+				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend' section in the stack '%s'", baseComponent, stack))
 			}
 		}
 
@@ -406,7 +412,7 @@ func ProcessBaseComponentConfig(
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
 			baseComponentCommand, ok = baseComponentCommandSection.(string)
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.command' section in the file '%s'", baseComponent, stack))
+				return errors.New(fmt.Sprintf("Invalid '%s.command' section in the stack '%s'", baseComponent, stack))
 			}
 		}
 
