@@ -13,7 +13,9 @@ import (
 // CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
 // and returns a map of Spacelift stack configs
 func CreateSpaceliftStacks(
-	basePath string,
+	stacksBasePath string,
+	terraformComponentsBasePath string,
+	helmfileComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -21,7 +23,7 @@ func CreateSpaceliftStacks(
 	stackConfigPathTemplate string) (map[string]interface{}, error) {
 
 	if filePaths != nil && len(filePaths) > 0 {
-		_, stacks, err := s.ProcessYAMLConfigFiles(basePath, filePaths, processStackDeps, processComponentDeps)
+		_, stacks, err := s.ProcessYAMLConfigFiles(stacksBasePath, terraformComponentsBasePath, helmfileComponentsBasePath, filePaths, processStackDeps, processComponentDeps)
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
@@ -43,6 +45,8 @@ func CreateSpaceliftStacks(
 
 		_, stacks, err := s.ProcessYAMLConfigFiles(
 			c.ProcessedConfig.StacksBaseAbsolutePath,
+			c.ProcessedConfig.TerraformDirAbsolutePath,
+			c.ProcessedConfig.HelmfileDirAbsolutePath,
 			c.ProcessedConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps)

@@ -1,0 +1,17 @@
+vars:
+  stage: invalid
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+settings: {}
+
+env: {}
+
+components:
+  helmfile:
+    echo-server:
+      vars: "I'm not correctly configured"

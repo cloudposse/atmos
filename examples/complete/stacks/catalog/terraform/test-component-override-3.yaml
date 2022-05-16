@@ -9,6 +9,13 @@ import:
 
 components:
   terraform:
+    # Note that you can name this YAML component anything that fits your needs.
+    # For example, it can be named `test/test-component-override-3` or `test-test-component-override-3`
+    # This affects only the `atmos` command you use to provision the component:
+    # For example:
+    # atmos terraform plan test/test-component-override-3 -s xxx (if you name the YAML component `test/test-component-override-3`)
+    # atmos terraform plan test-test-component-override-3 -s xxx (if you name the YAML component `test-test-component-override-3`)
+    # The terraform component (terraform code) it points to is defined by using the `metadata.component` attribute
     "test/test-component-override-3":
       settings:
         spacelift:

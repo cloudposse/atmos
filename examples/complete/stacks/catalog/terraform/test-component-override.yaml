@@ -11,8 +11,9 @@ components:
     "test/test-component-override":
       # Specify terraform binary to run
       command: "/usr/local/bin/terraform"
-      # The `component` attribute specifies that `test-component-override` inherits from the `test-component` base component.
-      # `test-component-override` can override all the variables and other settings of the base component (except the `metadata` section).
+      # The `component` attribute specifies that `test/test-component-override` inherits from the `test/test-component` base component,
+      # and points to the `test/test-component` Terraform component in the `components/terraform` folder
+      # `test/test-component-override` can override all the variables and other settings of the base component (except the `metadata` section).
       # In this example, variables for each service are overridden in `catalog/services/service-?-override.*`
       component: "test/test-component"
       # Other variables can be overridden here

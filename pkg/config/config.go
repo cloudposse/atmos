@@ -80,7 +80,7 @@ func InitConfig() error {
 	}
 
 	if g.LogVerbose {
-		u.PrintInfo("\nProcessing and merging configurations in the following order:\n")
+		u.PrintInfo("\nProcessing and merging configurations in the following order:")
 		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments")
 		fmt.Println()
 	}
@@ -346,12 +346,12 @@ func ProcessConfigForSpacelift() error {
 func processConfigFile(path string, v *viper.Viper) error {
 	if !u.FileExists(path) {
 		if g.LogVerbose {
-			fmt.Println(fmt.Sprintf("No config found in %s", path))
+			fmt.Println(fmt.Sprintf("No CLI config found in %s", path))
 		}
 		return nil
 	}
 
-	u.PrintInfoVerbose(fmt.Sprintf("Found config in %s", path))
+	u.PrintInfoVerbose(fmt.Sprintf("Found CLI config in %s", path))
 
 	reader, err := os.Open(path)
 	if err != nil {
@@ -370,9 +370,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return err
 	}
 
-	if g.LogVerbose {
-		color.Green("Processed config %s", path)
-	}
+	u.PrintInfoVerbose(fmt.Sprintf("Processed CLI config %s", path))
 
 	return nil
 }

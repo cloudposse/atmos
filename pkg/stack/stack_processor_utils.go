@@ -3,6 +3,11 @@ package stack
 import (
 	"errors"
 	"fmt"
+	"github.com/bmatcuk/doublestar/v4"
+	c "github.com/cloudposse/atmos/pkg/convert"
+	g "github.com/cloudposse/atmos/pkg/globals"
+	m "github.com/cloudposse/atmos/pkg/merge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"io/ioutil"
 	"os"
 	"path"
@@ -10,10 +15,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/bmatcuk/doublestar/v4"
-	g "github.com/cloudposse/atmos/pkg/globals"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -128,7 +129,7 @@ func FindComponentDependencies(
 	return unique, nil
 }
 
-// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections and it's not empty
+// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
 func sectionContainsAnyNotEmptySections(section map[interface{}]interface{}, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
 		if len(s) > 0 {
@@ -146,7 +147,13 @@ func sectionContainsAnyNotEmptySections(section map[interface{}]interface{}, sec
 }
 
 // CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
-func CreateComponentStackMap(basePath string, filePath string) (map[string]map[string][]string, error) {
+func CreateComponentStackMap(
+	stacksBasePath string,
+	terraformComponentsBasePath string,
+	helmfileComponentsBasePath string,
+	filePath string,
+) (map[string]map[string][]string, error) {
+
 	stackComponentMap := map[string]map[string][]string{}
 	stackComponentMap["terraform"] = map[string][]string{}
 	stackComponentMap["helmfile"] = map[string][]string{}
@@ -171,27 +178,30 @@ func CreateComponentStackMap(basePath string, filePath string) (map[string]map[s
 			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, err := ProcessYAMLConfigFile(basePath, p, map[string]map[interface{}]interface{}{})
+				config, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[interface{}]interface{}{})
 				if err != nil {
 					return err
 				}
 
-				finalConfig, err := ProcessConfig(
-					basePath,
+				finalConfig, err := ProcessStackConfig(
+					stacksBasePath,
+					terraformComponentsBasePath,
+					helmfileComponentsBasePath,
 					p,
 					config,
 					false,
 					false,
 					"",
 					nil,
-					nil)
+					nil,
+					true)
 				if err != nil {
 					return err
 				}
 
 				if componentsConfig, componentsConfigExists := finalConfig["components"]; componentsConfigExists {
 					componentsSection := componentsConfig.(map[string]interface{})
-					stackName := strings.Replace(p, basePath+"/", "", 1)
+					stackName := strings.Replace(p, stacksBasePath+"/", "", 1)
 
 					if terraformConfig, terraformConfigExists := componentsSection["terraform"]; terraformConfigExists {
 						terraformSection := terraformConfig.(map[string]interface{})
@@ -267,8 +277,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		u.PrintError(errors.New(fmt.Sprintf("Import of %s (-> %s + %s) failed to find a match.", pattern, base, cleanPattern)))
-		return nil, nil
+		return nil, errors.New(fmt.Sprintf("Failed to find a match for the import '%s' ('%s' + '%s')", pattern, base, cleanPattern))
 	}
 
 	var fullMatches []string
@@ -279,4 +288,232 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
 
 	return fullMatches, nil
+}
+
+type BaseComponentConfig struct {
+	BaseComponentVars                      map[interface{}]interface{}
+	BaseComponentSettings                  map[interface{}]interface{}
+	BaseComponentEnv                       map[interface{}]interface{}
+	FinalBaseComponentName                 string
+	BaseComponentCommand                   string
+	BaseComponentBackendType               string
+	BaseComponentBackendSection            map[interface{}]interface{}
+	BaseComponentRemoteStateBackendType    string
+	BaseComponentRemoteStateBackendSection map[interface{}]interface{}
+	ComponentInheritanceChain              []string
+}
+
+// ProcessBaseComponentConfig processes base component(s) config
+func ProcessBaseComponentConfig(
+	baseComponentConfig *BaseComponentConfig,
+	allComponentsMap map[interface{}]interface{},
+	component string,
+	stack string,
+	baseComponent string,
+	componentBasePath string,
+	checkBaseComponentExists bool) error {
+
+	if component == baseComponent {
+		return nil
+	}
+
+	var baseComponentVars map[interface{}]interface{}
+	var baseComponentSettings map[interface{}]interface{}
+	var baseComponentEnv map[interface{}]interface{}
+	var baseComponentCommand string
+	var baseComponentBackendType string
+	var baseComponentBackendSection map[interface{}]interface{}
+	var baseComponentRemoteStateBackendType string
+	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
+	var baseComponentMap map[interface{}]interface{}
+	var ok bool
+
+	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
+		baseComponentMap, ok = baseComponentSection.(map[interface{}]interface{})
+		if !ok {
+			// Depending on the code and libraries, the section can have different map types: map[interface{}]interface{} or map[string]interface{}
+			// We try to convert to both
+			baseComponentMapOfStrings, ok := baseComponentSection.(map[string]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the stack '%s'",
+					baseComponent, component, stack))
+			}
+			baseComponentMap = c.MapsOfStringsToMapsOfInterfaces(baseComponentMapOfStrings)
+		}
+
+		// First, process the base component of this base component
+		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid 'component:' section of the component '%s' in the stack '%s'",
+					baseComponent, stack))
+			}
+
+			err := ProcessBaseComponentConfig(
+				baseComponentConfig,
+				allComponentsMap,
+				baseComponent,
+				stack,
+				baseComponentOfBaseComponentString,
+				componentBasePath,
+				checkBaseComponentExists,
+			)
+
+			if err != nil {
+				return err
+			}
+		}
+
+		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
+			baseComponentVars, ok = baseComponentVarsSection.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.vars' section in the stack '%s'", baseComponent, stack))
+			}
+		}
+
+		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
+			baseComponentSettings, ok = baseComponentSettingsSection.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.settings' section in the stack '%s'", baseComponent, stack))
+			}
+		}
+
+		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
+			baseComponentEnv, ok = baseComponentEnvSection.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.env' section in the stack '%s'", baseComponent, stack))
+			}
+		}
+
+		// Base component backend
+		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
+			baseComponentBackendType, ok = i.(string)
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.backend_type' section in the stack '%s'", baseComponent, stack))
+			}
+		}
+
+		if i, ok2 := baseComponentMap["backend"]; ok2 {
+			baseComponentBackendSection, ok = i.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.backend' section in the stack '%s'", baseComponent, stack))
+			}
+		}
+
+		// Base component remote state backend
+		if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
+			baseComponentRemoteStateBackendType, ok = i.(string)
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend_type' section in the stack '%s'", baseComponent, stack))
+			}
+		}
+
+		if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
+			baseComponentRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend' section in the stack '%s'", baseComponent, stack))
+			}
+		}
+
+		// Base component `command`
+		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
+			baseComponentCommand, ok = baseComponentCommandSection.(string)
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid '%s.command' section in the stack '%s'", baseComponent, stack))
+			}
+		}
+
+		if len(baseComponentConfig.FinalBaseComponentName) == 0 {
+			baseComponentConfig.FinalBaseComponentName = baseComponent
+		}
+
+		// Base component `vars`
+		merged, err := m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentVars, baseComponentVars})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentVars = merged
+
+		// Base component `settings`
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentSettings = merged
+
+		// Base component `env`
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentEnv = merged
+
+		// Base component `command`
+		baseComponentConfig.BaseComponentCommand = baseComponentCommand
+
+		// Base component `backend_type`
+		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
+
+		// Base component `backend`
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentBackendSection = merged
+
+		// Base component `remote_state_backend_type`
+		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
+
+		// Base component `remote_state_backend`
+		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRemoteStateBackendSection = merged
+
+		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
+	} else {
+		if checkBaseComponentExists {
+			// Check if the base component exists as Terraform/Helmfile component
+			// If it does exist, don't throw errors if it is not defined in YAML config
+			componentPath := path.Join(componentBasePath, baseComponent)
+			componentPathExists, err := u.IsDirectory(componentPath)
+			if err != nil || !componentPathExists {
+				return errors.New("The component '" + component + "' inherits from the base component '" +
+					baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+			}
+		}
+	}
+
+	return nil
+}
+
+// FindComponentsDerivedFromBaseComponents finds all components that derive from the given base components
+func FindComponentsDerivedFromBaseComponents(
+	stack string,
+	allComponents map[string]interface{},
+	baseComponents []string,
+) ([]string, error) {
+
+	res := []string{}
+
+	for component, compSection := range allComponents {
+		componentSection, ok := compSection.(map[string]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid '%s' component section in the file '%s'", component, stack))
+		}
+
+		if base, baseComponentExist := componentSection["component"]; baseComponentExist {
+			baseComponent, ok := base.(string)
+			if !ok {
+				return nil, errors.New(fmt.Sprintf("Invalid 'component' attribute in the component '%s' in the file '%s'", component, stack))
+			}
+
+			if baseComponent != "" && u.SliceContainsString(baseComponents, baseComponent) {
+				res = append(res, component)
+			}
+		}
+	}
+
+	return res, nil
 }

@@ -1,13 +1,13 @@
 package exec
 
 import (
+	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
-	"path/filepath"
 	"strings"
 )
 
@@ -18,31 +18,49 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	stacksBasePath := path.Join(c.Config.BasePath, c.Config.Stacks.BasePath)
-	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
+	var configAndStacksInfo c.ConfigAndStacksInfo
+	err = c.ProcessConfig(configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
 
+	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
 	includedPaths := []string{"**/*"}
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, includedPaths)
+	// Don't exclude any YAML files for validation
+	excludedPaths := []string{}
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(c.ProcessedConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
 	}
 
-	stackConfigFilesAbsolutePaths, _, err := c.FindAllStackConfigsInPaths(
-		includeStackAbsPaths,
-		[]string{},
-	)
-
+	stackConfigFilesAbsolutePaths, _, err := c.FindAllStackConfigsInPaths(includeStackAbsPaths, excludedPaths)
 	if err != nil {
 		return err
 	}
+
+	u.PrintInfo(fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders\n",
+		path.Join(c.Config.BasePath, c.Config.Stacks.BasePath)))
 
 	var errorMessages []string
-
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		_, _, err = s.ProcessYAMLConfigFile(stacksBaseAbsPath, filePath, map[string]map[interface{}]interface{}{})
+		stackConfig, importsConfig, err := s.ProcessYAMLConfigFile(c.ProcessedConfig.StacksBaseAbsolutePath, filePath, map[string]map[interface{}]interface{}{})
+		if err != nil {
+			errorMessages = append(errorMessages, err.Error())
+		}
+
+		componentStackMap := map[string]map[string][]string{}
+		_, err = s.ProcessStackConfig(
+			c.ProcessedConfig.StacksBaseAbsolutePath,
+			c.ProcessedConfig.TerraformDirAbsolutePath,
+			c.ProcessedConfig.HelmfileDirAbsolutePath,
+			filePath,
+			stackConfig,
+			false,
+			true,
+			"",
+			componentStackMap,
+			importsConfig,
+			false)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}
