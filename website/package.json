@@ -56,7 +56,8 @@
     "remark-html": "^13.0.1",
     "remark-parse": "^8.0.3",
     "sass": "^1.44.0",
-    "semver": "^7.3.5"
+    "semver": "^7.3.5",
+    "nth-check": "^2.0.1"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "0.0.0-4192",
