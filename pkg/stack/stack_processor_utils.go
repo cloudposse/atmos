@@ -333,12 +333,12 @@ func ProcessBaseComponentConfig(
 		if !ok {
 			// Depending on the code and libraries, the section can have different map types: map[interface{}]interface{} or map[string]interface{}
 			// We try to convert to both
-			mp, ok := baseComponentSection.(map[string]interface{})
+			baseComponentMapOfStrings, ok := baseComponentSection.(map[string]interface{})
 			if !ok {
 				return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the stack '%s'",
 					baseComponent, component, stack))
 			}
-			baseComponentMap = c.MapsOfStringsToMapsOfInterfaces(mp)
+			baseComponentMap = c.MapsOfStringsToMapsOfInterfaces(baseComponentMapOfStrings)
 		}
 
 		// First, process the base component of this base component
