@@ -1,5 +1,5 @@
 # Geodesic: https://github.com/cloudposse/geodesic/
-ARG GEODESIC_VERSION=1.0.3
+ARG GEODESIC_VERSION=1.1.0
 ARG GEODESIC_OS=debian
 # atmos: https://github.com/cloudposse/atmos
 ARG ATMOS_VERSION=1.4.15

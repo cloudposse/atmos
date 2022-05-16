@@ -532,7 +532,7 @@ func ProcessStackConfig(
 				var baseComponentConfig BaseComponentConfig
 				var componentInheritanceChain []string
 
-				// Specify inheritance with the top-level `component` attribute
+				// Inheritance using the top-level `component` attribute
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName, ok = baseComponent.(string)
 					if !ok {
@@ -881,7 +881,7 @@ func ProcessStackConfig(
 				var baseComponentConfig BaseComponentConfig
 				var componentInheritanceChain []string
 
-				// Specify inheritance with the top-level `component` attribute
+				// Inheritance using the top-level `component` attribute
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
 					baseComponentName, ok = baseComponent.(string)
 					if !ok {

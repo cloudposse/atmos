@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bmatcuk/doublestar/v4"
+	c "github.com/cloudposse/atmos/pkg/convert"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -325,13 +326,18 @@ func ProcessBaseComponentConfig(
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
 	var baseComponentMap map[interface{}]interface{}
+	var baseComponentMap2 map[string]interface{}
 	var ok bool
 
 	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
 		baseComponentMap, ok = baseComponentSection.(map[interface{}]interface{})
 		if !ok {
-			return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the stack '%s'",
-				baseComponent, component, stack))
+			baseComponentMap2, ok = baseComponentSection.(map[string]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the stack '%s'",
+					baseComponent, component, stack))
+			}
+			baseComponentMap = c.MapsOfStringsToMapsOfInterfaces(baseComponentMap2)
 		}
 
 		// First, process the base component of this base component
@@ -481,8 +487,48 @@ func ProcessBaseComponentConfig(
 	return nil
 }
 
-// FindStacksDerivedFromStack searches in the section and finds all stack names that are derived from the given stack
-func FindStacksDerivedFromStack(section map[string]interface{}, stack string) []string {
+// FindComponentsDerivedFromBaseComponents finds all components that derive from the given base components
+func FindComponentsDerivedFromBaseComponents(
+	stack string,
+	allComponents map[string]interface{},
+	baseComponents []string,
+) ([]string, error) {
+
 	res := []string{}
-	return res
+
+	for component, compSection := range allComponents {
+		componentSection, ok := compSection.(map[string]interface{})
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("Invalid '%s' component section in the file '%s'", component, stack))
+		}
+
+		if base, baseComponentExist := componentSection["component"]; baseComponentExist {
+			baseComponent, ok := base.(string)
+			if !ok {
+				return nil, errors.New(fmt.Sprintf("Invalid 'component' attribute in the component '%s' in the file '%s'", component, stack))
+			}
+
+			// Process the base components recursively
+			var baseComponentConfig BaseComponentConfig
+
+			err := ProcessBaseComponentConfig(
+				&baseComponentConfig,
+				c.MapsOfStringsToMapsOfInterfaces(allComponents),
+				component,
+				stack,
+				baseComponent,
+				"",
+				false,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			if baseComponentConfig.FinalBaseComponentName != "" && u.SliceContainsString(baseComponents, baseComponentConfig.FinalBaseComponentName) {
+				res = append(res, baseComponentConfig.FinalBaseComponentName)
+			}
+		}
+	}
+
+	return res, nil
 }

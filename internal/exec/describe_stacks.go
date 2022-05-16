@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
+	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"strings"
@@ -81,9 +82,19 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 
 			if componentsSection, ok := stackSection.(map[interface{}]interface{})["components"].(map[string]interface{}); ok {
 				if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "terraform") {
-					if terraformSection, ok2 := componentsSection["terraform"].(map[string]interface{}); ok2 {
-						for componentName, componentSection := range terraformSection {
-							if len(components) == 0 || u.SliceContainsString(components, componentName) {
+					if terraformSection, ok := componentsSection["terraform"].(map[string]interface{}); ok {
+						for componentName, compSection := range terraformSection {
+							componentSection, ok := compSection.(map[string]interface{})
+							if !ok {
+								return errors.New(fmt.Sprintf("Invalid 'components.terraform.%s' section in the file '%s'", componentName, stackName))
+							}
+
+							derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackName, terraformSection, components)
+							if err != nil {
+								return err
+							}
+
+							if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
 									finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
 								}
@@ -94,7 +105,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[componentName] = make(map[string]interface{})
 								}
 
-								for sectionName, section := range componentSection.(map[string]interface{}) {
+								for sectionName, section := range componentSection {
 									if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["terraform"].(map[string]interface{})[componentName].(map[string]interface{})[sectionName] = section
 									}
@@ -103,10 +114,21 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 						}
 					}
 				}
+
 				if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "helmfile") {
-					if helmfileSection, ok3 := componentsSection["helmfile"].(map[string]interface{}); ok3 {
-						for componentName, componentSection := range helmfileSection {
-							if len(components) == 0 || u.SliceContainsString(components, componentName) {
+					if helmfileSection, ok := componentsSection["helmfile"].(map[string]interface{}); ok {
+						for componentName, compSection := range helmfileSection {
+							componentSection, ok := compSection.(map[string]interface{})
+							if !ok {
+								return errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackName))
+							}
+
+							derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackName, helmfileSection, components)
+							if err != nil {
+								return err
+							}
+
+							if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]interface{}), "components") {
 									finalStacksMap[stackName].(map[string]interface{})["components"] = make(map[string]interface{})
 								}
@@ -117,7 +139,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 									finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[componentName] = make(map[string]interface{})
 								}
 
-								for sectionName, section := range componentSection.(map[string]interface{}) {
+								for sectionName, section := range componentSection {
 									if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 										finalStacksMap[stackName].(map[string]interface{})["components"].(map[string]interface{})["helmfile"].(map[string]interface{})[componentName].(map[string]interface{})[sectionName] = section
 									}
@@ -129,8 +151,8 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 			}
 
 			// Filter out empty stacks (stacks without any components)
-			if s, ok := finalStacksMap[stackName].(map[string]interface{}); ok {
-				if len(s) == 0 {
+			if st, ok := finalStacksMap[stackName].(map[string]interface{}); ok {
+				if len(st) == 0 {
 					delete(finalStacksMap, stackName)
 				}
 			}
