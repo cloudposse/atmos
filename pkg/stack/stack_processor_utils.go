@@ -508,24 +508,8 @@ func FindComponentsDerivedFromBaseComponents(
 				return nil, errors.New(fmt.Sprintf("Invalid 'component' attribute in the component '%s' in the file '%s'", component, stack))
 			}
 
-			// Process the base components recursively
-			var baseComponentConfig BaseComponentConfig
-
-			err := ProcessBaseComponentConfig(
-				&baseComponentConfig,
-				c.MapsOfStringsToMapsOfInterfaces(allComponents),
-				component,
-				stack,
-				baseComponent,
-				"",
-				false,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			if baseComponentConfig.FinalBaseComponentName != "" && u.SliceContainsString(baseComponents, baseComponentConfig.FinalBaseComponentName) {
-				res = append(res, baseComponentConfig.FinalBaseComponentName)
+			if baseComponent != "" && u.SliceContainsString(baseComponents, baseComponent) {
+				res = append(res, component)
 			}
 		}
 	}

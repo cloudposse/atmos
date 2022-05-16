@@ -89,6 +89,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 								return errors.New(fmt.Sprintf("Invalid 'components.terraform.%s' section in the file '%s'", componentName, stackName))
 							}
 
+							// Find all derived components of the provided components and include them in the output
 							derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackName, terraformSection, components)
 							if err != nil {
 								return err
@@ -123,6 +124,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 								return errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackName))
 							}
 
+							// Find all derived components of the provided components and include them in the output
 							derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackName, helmfileSection, components)
 							if err != nil {
 								return err
