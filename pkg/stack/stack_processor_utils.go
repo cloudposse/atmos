@@ -326,13 +326,14 @@ func ProcessBaseComponentConfig(
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
 	var baseComponentMap map[interface{}]interface{}
-	var baseComponentMap2 map[string]interface{}
 	var ok bool
 
 	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
 		baseComponentMap, ok = baseComponentSection.(map[interface{}]interface{})
 		if !ok {
-			baseComponentMap2, ok = baseComponentSection.(map[string]interface{})
+			// Depending on the code and libraries, the section can have diferent map types: map[interface{}]interface{} or map[string]interface{}
+			// We try to convert to both
+			baseComponentMap2, ok := baseComponentSection.(map[string]interface{})
 			if !ok {
 				return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the stack '%s'",
 					baseComponent, component, stack))
