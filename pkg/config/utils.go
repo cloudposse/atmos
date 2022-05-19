@@ -356,6 +356,10 @@ func GetContextFromVars(vars map[interface{}]interface{}) Context {
 		context.Region = region
 	}
 
+	if attributes, ok := vars["attributes"].([]string); ok {
+		context.Attributes = attributes
+	}
+
 	return context
 }
 
@@ -437,6 +441,7 @@ func ReplaceContextTokens(context Context, pattern string) string {
 		"{environment}", context.Environment,
 		"{tenant}", context.Tenant,
 		"{stage}", context.Stage,
+		"{attributes}", strings.Join(context.Attributes, "-"),
 	)
 	return r.Replace(pattern)
 }

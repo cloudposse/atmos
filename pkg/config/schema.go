@@ -63,6 +63,7 @@ type Context struct {
 	Region        string
 	Component     string
 	BaseComponent string
+	Attributes    []string
 }
 
 type ArgsAndFlagsInfo struct {
