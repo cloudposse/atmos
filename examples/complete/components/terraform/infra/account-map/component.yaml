@@ -1,0 +1,43 @@
+# 'account-map' component vendoring config
+
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: account-map-vendor-config
+  description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
+spec:
+  source:
+    # 'uri' supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
+    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter
+    # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
+    # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/account-map?ref={{.Version}}
+    version: 0.196.1
+    # Only include the files that match the 'included_paths' patterns
+    # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
+    # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
+    # https://en.wikipedia.org/wiki/Glob_(programming)
+    # https://github.com/bmatcuk/doublestar#patterns
+    included_paths:
+      # include '.tf', '.tfvars' and '.md' files from the root folder
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+      # include the 'modules' folder and all sub-folders
+      # note that if you don't include the folders, the files in the folders will not be included
+      - "**/modules/**"
+      # include '.tf', '.tfvars' and '.md' files from the 'modules' folder and all sub-folders
+      - "**/modules/**/*.tf"
+      - "**/modules/**/*.tfvars"
+      - "**/modules/**/*.md"
+    # Exclude the files that match any of the 'excluded_paths' patterns
+    # Note that we are excluding 'context.tf' since a newer version of it will be downloaded using 'mixins'
+    # 'excluded_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
+    excluded_paths: []
+
+  # mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
+  # mixins are processed in the order they are declared in the list
+  mixins:
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
+      version: 0.196.1
+      filename: introspection.mixin.tf
