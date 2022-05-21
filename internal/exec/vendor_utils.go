@@ -211,6 +211,8 @@ func ExecuteComponentVendorCommandInternal(
 						return true, nil
 					}
 
+					trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
+
 					// Exclude the files that match the 'excluded_paths' patterns
 					// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
 					// https://en.wikipedia.org/wiki/Glob_(programming)
@@ -222,14 +224,14 @@ func ExecuteComponentVendorCommandInternal(
 						} else if excludeMatch {
 							// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
 							fmt.Println(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'",
-								u.TrimBasePathFromPath(tempDir+"/", src),
+								trimmedSrc,
 								excludePath,
 							))
 							return true, nil
 						}
 					}
 
-					// Only include the files that match the 'included_paths' patterns
+					// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
 					if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
 						anyMatches := false
 						for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
@@ -238,29 +240,25 @@ func ExecuteComponentVendorCommandInternal(
 								return true, err
 							} else if includeMatch {
 								// If the file matches ANY of the 'included_paths' patterns, include the file
-								fmt.Println(fmt.Sprintf("Including the file '%s' since it matches the '%s' pattern from 'included_paths'",
-									u.TrimBasePathFromPath(tempDir+"/", src),
+								fmt.Println(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'",
+									trimmedSrc,
 									includePath,
 								))
 								anyMatches = true
-								continue
+								break
 							}
 						}
 
 						if anyMatches {
 							return false, nil
 						} else {
-							fmt.Println(fmt.Sprintf("Excluding the file '%s' since it does not match any pattern from 'included_paths'",
-								u.TrimBasePathFromPath(tempDir+"/", src),
-							))
+							fmt.Println(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'", trimmedSrc))
 							return true, nil
 						}
 					}
 
 					// If 'included_paths' is not provided, include all files that were not excluded
-					fmt.Println(fmt.Sprintf("Including the file '%s'",
-						u.TrimBasePathFromPath(tempDir+"/", src),
-					))
+					fmt.Println(fmt.Sprintf("Including '%s'", u.TrimBasePathFromPath(tempDir+"/", src)))
 					return false, nil
 				},
 
@@ -311,7 +309,7 @@ func ExecuteComponentVendorCommandInternal(
 				u.PrintInfo(fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
 					uri,
 					component,
-					componentPath,
+					path.Join(componentPath, mixin.Filename),
 				))
 
 				if !dryRun {

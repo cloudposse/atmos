@@ -33,7 +33,7 @@ spec:
     # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
     uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
-    version: 0.194.0
+    version: 0.196.1
     # Only include the files that match the 'included_paths' patterns
     # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
     # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
@@ -56,5 +56,5 @@ spec:
     - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
       filename: context.tf
     - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
-      version: 0.194.0
+      version: 0.196.1
       filename: introspection.mixin.tf
