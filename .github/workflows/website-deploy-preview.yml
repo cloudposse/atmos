@@ -1,0 +1,62 @@
+name: "website-deploy-preview"
+
+on:
+  workflow_dispatch:
+
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - "website/**"
+
+env:
+  AWS_REGION: us-east-2
+  IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-github-action
+  IAM_ROLE_SESSION_NAME: cloudposse/atmos/ci
+  S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+
+jobs:
+  website-deploy-preview:
+    runs-on: ["self-hosted"]
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
+
+      - name: Setup Node.js 16.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install Dependencies and Build Website
+        run: |
+          node --version
+          cd website
+          npm install --only=production
+          npm run build:production
+
+      - name: Copy Website to S3 Bucket PR Folder
+        run: |
+          cd build
+          /usr/local/bin/aws sts get-caller-identity
+          /usr/local/bin/aws s3 sync . s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/
+          /usr/local/bin/aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/ --recursive --human-readable --summarize
+
+      - name: Comment on PR with Website URL
+        uses: thollander/actions-comment-pull-request@v1
+        with:
+          message: |
+            The atmos docs website preview has been deployed:
+            https://pr-${{ env.PR_NUMBER }}.atmos-docs.ue2.dev.plat.cloudposse.org
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_ACCESS_TOKEN }}
