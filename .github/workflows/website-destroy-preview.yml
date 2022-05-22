@@ -14,7 +14,7 @@ env:
   S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
   PR_NUMBER: ${{ github.event.pull_request.number }}
 
-# These permissions are needed to interact with GitHub's OIDC Token endpoint
+# These permissions are needed to interact with the GitHub's OIDC Token endpoint
 permissions:
   id-token: write
   contents: read
