@@ -35,4 +35,3 @@ jobs:
         run: |
           aws sts get-caller-identity
           aws s3 rm s3://${{ env.S3_BUCKET_NAME }}/ --recursive --exclude "*" --include "pr-${{ env.PR_NUMBER }}/*"
-          aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/ --recursive
