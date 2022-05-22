@@ -25,6 +25,9 @@ permissions:
 
 jobs:
   website-deploy-preview:
+    # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
+    if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
+
     runs-on: ubuntu-latest
     steps:
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
