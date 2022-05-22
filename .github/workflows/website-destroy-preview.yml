@@ -1,4 +1,4 @@
-name: "website-destroy-preview"
+name: "Website Destroy Preview"
 
 on:
   workflow_dispatch:
@@ -31,7 +31,7 @@ jobs:
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
-      - name: Destroy S3 Bucket PR Folder
+      - name: Delete S3 Bucket PR Folder
         run: |
           aws sts get-caller-identity
           aws s3 rm s3://${{ env.S3_BUCKET_NAME }}/ --recursive --exclude "*" --include "pr-${{ env.PR_NUMBER }}/*"

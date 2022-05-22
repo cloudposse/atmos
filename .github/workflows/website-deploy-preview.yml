@@ -1,4 +1,4 @@
-name: "website-deploy-preview"
+name: "Website Deploy Preview"
 
 on:
   workflow_dispatch:
