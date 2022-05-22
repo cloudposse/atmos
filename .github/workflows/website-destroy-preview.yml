@@ -14,10 +14,16 @@ env:
   S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
   PR_NUMBER: ${{ github.event.pull_request.number }}
 
+# These permissions are needed to interact with GitHub's OIDC Token endpoint
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   website-destroy-preview:
-    runs-on: ["self-hosted"]
+    runs-on: ubuntu-latest
     steps:
+      # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -27,6 +33,6 @@ jobs:
 
       - name: Destroy S3 Bucket PR Folder
         run: |
-          /usr/local/bin/aws sts get-caller-identity
-          /usr/local/bin/aws s3 rm s3://${{ env.S3_BUCKET_NAME }}/ --recursive --exclude "*" --include "pr-${{ env.PR_NUMBER }}/*"
-          /usr/local/bin/aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/ --recursive
+          aws sts get-caller-identity
+          aws s3 rm s3://${{ env.S3_BUCKET_NAME }}/ --recursive --exclude "*" --include "pr-${{ env.PR_NUMBER }}/*"
+          aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/ --recursive
