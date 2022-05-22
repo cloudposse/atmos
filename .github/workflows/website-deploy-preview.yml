@@ -35,15 +35,15 @@ jobs:
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
-      - name: Setup Node.js 16.x
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: "website/.nvmrc"
 
       - name: Install Dependencies and Build Website
         run: |
