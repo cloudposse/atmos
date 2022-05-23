@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "build:site": "npm run generate-markdown && npm run build:production",
     "prebuild": "npm run generate-markdown",
     "build": "npm run build:preview",
     "build:preview": "docusaurus build --locale en",

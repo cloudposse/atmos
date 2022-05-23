@@ -45,8 +45,7 @@ jobs:
           node --version
           cd website
           npm install --only=production
-          npm run generate-markdown
-          npm run build:production
+          npm run build:site
 
       - name: Copy Website to S3 Bucket
         run: |
