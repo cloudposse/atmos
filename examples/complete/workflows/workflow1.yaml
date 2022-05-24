@@ -1,5 +1,15 @@
 workflows:
 
+  terraform-plan-all-test-components:
+    description: |
+      Run 'terraform plan' on 'test/test-component' and all its derived components.
+      The stack must be provided on the command line: atmos workflow terraform-plan-all-test-components -f workflow1 -s <stack>
+    steps:
+      - command: terraform plan test/test-component
+      - command: terraform plan test/test-component-override
+      - command: terraform plan test/test-component-override-2
+      - command: terraform plan test/test-component-override-3
+
   terraform-plan-test-component-override-2-all-stacks:
     description: Run 'terraform plan' on 'test/test-component-override-2' component in all stacks
     steps:
