@@ -23,7 +23,14 @@ func CreateSpaceliftStacks(
 	stackConfigPathTemplate string) (map[string]interface{}, error) {
 
 	if filePaths != nil && len(filePaths) > 0 {
-		_, stacks, err := s.ProcessYAMLConfigFiles(stacksBasePath, terraformComponentsBasePath, helmfileComponentsBasePath, filePaths, processStackDeps, processComponentDeps)
+		_, stacks, err := s.ProcessYAMLConfigFiles(
+			stacksBasePath,
+			terraformComponentsBasePath,
+			helmfileComponentsBasePath,
+			filePaths,
+			processStackDeps,
+			processComponentDeps,
+		)
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
@@ -49,7 +56,8 @@ func CreateSpaceliftStacks(
 			c.ProcessedConfig.HelmfileDirAbsolutePath,
 			c.ProcessedConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
-			processComponentDeps)
+			processComponentDeps,
+		)
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
