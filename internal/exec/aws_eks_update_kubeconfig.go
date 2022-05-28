@@ -204,7 +204,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	}
 	if kubeconfigPath != "" {
 		args = append(args, fmt.Sprintf("--kubeconfig=%s", kubeconfigPath))
-		// Set `KUBECONFIG` ENV var, it can be used in other scripts after executing `eks update-kubeconfig` command
+		// Set `KUBECONFIG` ENV var - it can be used in other scripts after executing `eks update-kubeconfig` command
 		envVars = append(envVars, fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 	}
 	if alias != "" {
