@@ -23,6 +23,12 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	
+	var configAndStacksInfo c.ConfigAndStacksInfo
+	err = c.ProcessConfig(configAndStacksInfo, false)
+	if err != nil {
+		return err
+	}
 
 	flags := cmd.Flags()
 
@@ -40,7 +46,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
+	
 	var workflowPath string
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
