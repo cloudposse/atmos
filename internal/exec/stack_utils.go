@@ -14,9 +14,16 @@ func BuildTerraformWorkspace(
 	context c.Context,
 ) (string, error) {
 
-	contextPrefix, err := c.GetContextPrefix(stack, context, stackNamePattern)
-	if err != nil {
-		return "", err
+	var contextPrefix string
+	var err error
+
+	if stackNamePattern != "" {
+		contextPrefix, err = c.GetContextPrefix(stack, context, stackNamePattern)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		contextPrefix = strings.Replace(stack, "/", "-", -1)
 	}
 
 	var workspace string

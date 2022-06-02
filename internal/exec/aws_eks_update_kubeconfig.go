@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
@@ -214,6 +215,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	err := ExecuteShellCommand("aws", args, shellCommandWorkingDir, nil, dryRun)
 	if err != nil {
 		return err
+	}
+
+	if kubeconfigPath != "" {
+		message := fmt.Sprintf("\n'kubeconfig' has been downloaded to '%s'\nYou can set 'KUBECONFIG' ENV var to use in other scripts\n", kubeconfigPath)
+		u.PrintInfo(message)
 	}
 
 	return nil
