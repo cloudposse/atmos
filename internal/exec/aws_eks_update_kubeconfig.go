@@ -181,7 +181,6 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	}
 
 	var args []string
-	var envVars []string
 
 	// `--role-arn` suppresses `profile` being automatically set
 	if profile != "" && roleArn == "" {
@@ -213,7 +212,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err := ExecuteShellCommand("aws", args, shellCommandWorkingDir, envVars, dryRun)
+	err := ExecuteShellCommand("aws", args, shellCommandWorkingDir, nil, dryRun)
 	if err != nil {
 		return err
 	}
