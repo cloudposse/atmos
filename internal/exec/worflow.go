@@ -19,11 +19,16 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 		return errors.New("invalid arguments. The command requires one argument `workflow name`")
 	}
 
+	// InitConfig finds and merges CLI configurations in the following order:
+	// system dir, home dir, current dir, ENV vars, command-line arguments
 	err := c.InitConfig()
 	if err != nil {
 		return err
 	}
-	
+
+	// ProcessConfig processes all the ENV vars and command line arguments
+	// Even if all workflow steps of type `atmos` process the ENV vars by calling InitConfig/ProcessConfig,
+	// we need call it from `atmos workflow` command to take into account the `ATMOS_WORKFLOWS_BASE_PATH` ENV var
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	err = c.ProcessConfig(configAndStacksInfo, false)
 	if err != nil {
@@ -46,7 +51,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	var workflowPath string
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
