@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
@@ -204,8 +205,6 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	}
 	if kubeconfigPath != "" {
 		args = append(args, fmt.Sprintf("--kubeconfig=%s", kubeconfigPath))
-		// Set `KUBECONFIG` ENV var. It can be used in other scripts after executing `eks update-kubeconfig` command
-		envVars = append(envVars, fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 	}
 	if alias != "" {
 		args = append(args, fmt.Sprintf("--alias=%s", alias))
@@ -217,6 +216,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	err := ExecuteShellCommand("aws", args, shellCommandWorkingDir, envVars, dryRun)
 	if err != nil {
 		return err
+	}
+
+	if kubeconfigPath != "" {
+		message := fmt.Sprintf("\n'kubeconfig' has been downloaded to '%s'\nYou can set 'KUBECONFIG' ENV var to use in other scripts\n", kubeconfigPath)
+		u.PrintInfo(message)
 	}
 
 	return nil
