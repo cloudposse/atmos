@@ -11,12 +11,17 @@ FROM cloudposse/geodesic:${GEODESIC_VERSION}-${GEODESIC_OS}
 # Geodesic message of the Day
 ENV MOTD_URL="https://geodesic.sh/motd"
 
+# Geodesic banner message
+ENV BANNER="atmos"
+ENV BANNER_COMMAND="atmos"
+
 # Some configuration options for Geodesic
 ENV AWS_SAML2AWS_ENABLED=false
 ENV AWS_VAULT_ENABLED=false
 ENV AWS_VAULT_SERVER_ENABLED=false
 ENV GEODESIC_TF_PROMPT_ACTIVE=false
 ENV DIRENV_ENABLED=false
+ENV NAMESPACE="eg"
 
 # Enable advanced AWS assume role chaining for tools using AWS SDK
 # https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
@@ -34,8 +39,5 @@ ARG ATMOS_VERSION
 RUN apt-get update && apt-get install -y --allow-downgrades atmos="${ATMOS_VERSION}-*"
 
 COPY rootfs/ /
-
-# Geodesic banner message
-ENV BANNER="atmos"
 
 WORKDIR /
