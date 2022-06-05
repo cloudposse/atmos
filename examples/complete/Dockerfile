@@ -29,9 +29,9 @@ RUN apt-get update && apt-get install -y -u --allow-downgrades \
   terraform-1="${TF_VERSION}-*" && \
   update-alternatives --set terraform /usr/share/terraform/1/bin/terraform
 
+# Install atmos
 ARG ATMOS_VERSION
-RUN apt-get update && apt-get install -y --allow-downgrades \
-  atmos="${ATMOS_VERSION}-*"
+RUN apt-get update && apt-get install -y --allow-downgrades atmos="${ATMOS_VERSION}-*"
 
 COPY rootfs/ /
 
