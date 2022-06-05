@@ -2,7 +2,7 @@
 ARG GEODESIC_VERSION=1.2.0
 ARG GEODESIC_OS=debian
 # atmos: https://github.com/cloudposse/atmos
-ARG ATMOS_VERSION=1.4.20
+ARG ATMOS_VERSION=1.4.21
 # Terraform: https://github.com/hashicorp/terraform/releases
 ARG TF_VERSION=1.2.2
 
@@ -13,7 +13,9 @@ ENV MOTD_URL="https://geodesic.sh/motd"
 
 # Geodesic banner message
 ENV BANNER="atmos"
-ENV BANNER_COMMAND="atmos"
+
+ENV DOCKER_IMAGE="cloudposse/atmos"
+ENV DOCKER_TAG="latest"
 
 # Some configuration options for Geodesic
 ENV AWS_SAML2AWS_ENABLED=false
