@@ -21,6 +21,11 @@ permissions:
 jobs:
   website-deploy-release:
     runs-on: ubuntu-latest
+
+    environment:
+      name: production
+      url: https://atmos.tools
+
     steps:
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
