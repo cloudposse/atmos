@@ -2,12 +2,13 @@ package spacelift
 
 import (
 	"fmt"
+	"strings"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	c "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 // CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
@@ -365,11 +366,11 @@ func buildSpaceliftDependsOnStackName(
 	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
 		spaceliftStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
 	} else {
-		errorMessage := errors.New(fmt.Sprintf("Component '%[1]s' in stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
+		errorMessage := fmt.Errorf("component '%[1]s' in stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
 			"but '%[3]s' is not a stack and not a terraform component in '%[2]s' stack",
 			currentComponentName,
 			currentStackName,
-			dependsOn))
+			dependsOn)
 
 		return "", errorMessage
 	}

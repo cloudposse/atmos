@@ -5,13 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/bmatcuk/doublestar/v4"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/hashicorp/go-getter"
-	cp "github.com/otiai10/copy"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"path"
@@ -19,6 +12,14 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/bmatcuk/doublestar/v4"
+	c "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/hashicorp/go-getter"
+	cp "github.com/otiai10/copy"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -52,7 +53,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 	}
 
 	if component != "" && stack != "" {
-		return errors.New(fmt.Sprintf("Either '--component' or '--stack' parameter needs to be provided, but not both"))
+		return fmt.Errorf("either '--component' or '--stack' parameter needs to be provided, but not both")
 	}
 
 	if component != "" {
@@ -88,7 +89,7 @@ func ReadAndProcessComponentConfigFile(component string, componentType string) (
 	} else if componentType == "helmfile" {
 		componentBasePath = c.Config.Components.Helmfile.BasePath
 	} else {
-		return componentConfig, "", errors.New(fmt.Sprintf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType))
+		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
 	componentPath := path.Join(c.Config.BasePath, componentBasePath, component)
@@ -99,12 +100,12 @@ func ReadAndProcessComponentConfigFile(component string, componentType string) (
 	}
 
 	if !dirExists {
-		return componentConfig, "", errors.New(fmt.Sprintf("Folder '%s' does not exist", componentPath))
+		return componentConfig, "", fmt.Errorf("folder '%s' does not exist", componentPath)
 	}
 
 	componentConfigFile := path.Join(componentPath, componentConfigFileName)
 	if !u.FileExists(componentConfigFile) {
-		return componentConfig, "", errors.New(fmt.Sprintf("Vendor config file '%s' does not exist in the '%s' folder", componentConfigFileName, componentPath))
+		return componentConfig, "", fmt.Errorf("vendor config file '%s' does not exist in the '%s' folder", componentConfigFileName, componentPath)
 	}
 
 	componentConfigFileContent, err := ioutil.ReadFile(componentConfigFile)
@@ -117,10 +118,9 @@ func ReadAndProcessComponentConfigFile(component string, componentType string) (
 	}
 
 	if componentConfig.Kind != "ComponentVendorConfig" {
-		return componentConfig, "", errors.New(fmt.Sprintf("Invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'ComponentVendorConfig'",
+		return componentConfig, "", fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'ComponentVendorConfig'",
 			componentConfig.Kind,
-			componentConfigFileName,
-		))
+			componentConfigFileName)
 	}
 
 	return componentConfig, componentPath, nil
@@ -360,5 +360,5 @@ func ExecuteStackVendorCommandInternal(
 	dryRun bool,
 	vendorCommand string,
 ) error {
-	return errors.New(fmt.Sprintf("Command 'atmos vendor %s --stack <stack>' is not implemented yet", vendorCommand))
+	return fmt.Errorf("command 'atmos vendor %s --stack <stack>' is not implemented yet", vendorCommand)
 }

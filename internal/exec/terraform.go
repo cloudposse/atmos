@@ -2,13 +2,14 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path"
+	"strings"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"os"
-	"path"
-	"strings"
 )
 
 const (
@@ -39,17 +40,17 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	componentPath := path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
+		return fmt.Errorf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
 			path.Join(c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix),
-		))
+		)
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute is not set to `abstract`)
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
-		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
+		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
+			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
 	varFile := constructTerraformComponentVarfileName(info)
@@ -62,10 +63,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println("Deleting '.terraform.lock.hcl' file")
 		_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
 
-		fmt.Println(fmt.Sprintf("Deleting terraform varfile: %s", varFile))
+		fmt.Printf("Deleting terraform varfile: %s\n", varFile)
 		_ = os.Remove(path.Join(componentPath, varFile))
 
-		fmt.Println(fmt.Sprintf("Deleting terraform planfile: %s", planFile))
+		fmt.Printf("Deleting terraform planfile: %s\n", planFile)
 		_ = os.Remove(path.Join(componentPath, planFile))
 
 		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
@@ -78,14 +79,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if len(tfDataDir) > 0 && tfDataDir != "." && tfDataDir != "/" && tfDataDir != "./" {
 			u.PrintInfo(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
 			var userAnswer string
-			fmt.Println(fmt.Sprintf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)", tfDataDir))
+			fmt.Printf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)\n", tfDataDir)
 			fmt.Print("Enter a value: ")
 			count, err := fmt.Scanln(&userAnswer)
 			if count > 0 && err != nil {
 				return err
 			}
 			if userAnswer == "yes" {
-				fmt.Println(fmt.Sprintf("Deleting folder '%s'", tfDataDir))
+				fmt.Printf("Deleting folder '%s'\n", tfDataDir)
 				_ = os.RemoveAll(tfDataDir)
 			}
 		}

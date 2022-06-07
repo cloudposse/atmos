@@ -2,12 +2,13 @@ package exec
 
 import (
 	"fmt"
+	"path"
+	"strings"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"path"
-	"strings"
 )
 
 func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
@@ -90,7 +91,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	roleArn := kubeconfigContext.RoleArn
 
 	if profile != "" && roleArn != "" {
-		return errors.New(fmt.Sprintf("Either 'profile' or 'role-arn' can be specified, but not both. Profile: '%s'. Role ARN: '%s'", profile, roleArn))
+		return fmt.Errorf("either 'profile' or 'role-arn' can be specified, but not both. Profile: '%s'. Role ARN: '%s'", profile, roleArn)
 	}
 
 	// AWS region

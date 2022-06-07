@@ -4,13 +4,14 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"os"
-	"path"
 )
 
 // ExecuteHelmfile executes helmfile commands
@@ -37,17 +38,17 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	componentPath := path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return errors.New(fmt.Sprintf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
+		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
 			path.Join(c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
-		))
+		)
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
 	if (info.SubCommand == "sync" || info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
-		return errors.New(fmt.Sprintf("Abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component)))
+		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
+			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
 	// Print component variables
