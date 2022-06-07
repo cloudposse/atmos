@@ -360,5 +360,9 @@ func ExecuteStackVendorCommandInternal(
 	dryRun bool,
 	vendorCommand string,
 ) error {
+<<<<<<< HEAD
 	return fmt.Errorf("eommand 'atmos vendor %s --stack <stack>' is not implemented yet", vendorCommand)
+=======
+	return fmt.Errorf("command 'atmos vendor %s --stack <stack>' is not implemented yet", vendorCommand)
+>>>>>>> def0ff6 (update error strings (#158))
 }
