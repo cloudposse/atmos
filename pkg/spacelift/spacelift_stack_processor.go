@@ -132,7 +132,7 @@ func TransformStackConfigToSpaceliftStacks(
 		config := stackConfig.(map[interface{}]interface{})
 		var imports []string
 
-		if processImports == true {
+		if processImports {
 			if i, ok := config["imports"]; ok {
 				imports = i.([]string)
 			}
@@ -164,7 +164,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					// If Spacelift workspace is disabled, don't include it, continue to the next component
-					if spaceliftWorkspaceEnabled == false {
+					if !spaceliftWorkspaceEnabled {
 						continue
 					}
 

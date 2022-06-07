@@ -23,7 +23,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if info.NeedHelp == true {
+	if info.NeedHelp {
 		return nil
 	}
 
@@ -141,7 +141,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto generate backend file
-	if c.Config.Components.Terraform.AutoGenerateBackendFile == true {
+	if c.Config.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := path.Join(
 			constructTerraformComponentWorkingDir(info),
 			"backend.tf.json",
@@ -164,12 +164,12 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
 		info.SubCommand == "clean" ||
-		(info.SubCommand == "deploy" && c.Config.Components.Terraform.DeployRunInit == false) {
+		(info.SubCommand == "deploy" && !c.Config.Components.Terraform.DeployRunInit) {
 		runTerraformInit = false
 	}
-	if runTerraformInit == true {
+	if runTerraformInit {
 		initCommandWithArguments := []string{"init"}
-		if info.SubCommand == "workspace" || c.Config.Components.Terraform.InitRunReconfigure == true {
+		if info.SubCommand == "workspace" || c.Config.Components.Terraform.InitRunReconfigure {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
 		err = ExecuteShellCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList, info.DryRun)
@@ -181,13 +181,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Handle `terraform deploy` custom command
 	if info.SubCommand == "deploy" {
 		info.SubCommand = "apply"
-		if info.UseTerraformPlan == false && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if !info.UseTerraformPlan && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
 
 	// Handle Config.Components.Terraform.ApplyAutoApprove flag
-	if info.SubCommand == "apply" && c.Config.Components.Terraform.ApplyAutoApprove == true && info.UseTerraformPlan == false {
+	if info.SubCommand == "apply" && c.Config.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
@@ -245,14 +245,14 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		break
 	case "apply":
-		if info.UseTerraformPlan == true {
+		if info.UseTerraformPlan {
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
 		} else {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		}
 		break
 	case "init":
-		if c.Config.Components.Terraform.InitRunReconfigure == true {
+		if c.Config.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
 		break

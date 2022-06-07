@@ -21,7 +21,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if info.NeedHelp == true {
+	if info.NeedHelp {
 		return nil
 	}
 
