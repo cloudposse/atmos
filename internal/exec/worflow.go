@@ -3,14 +3,15 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"path"
+	"path/filepath"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"path"
-	"path/filepath"
 )
 
 // ExecuteWorkflow executes a workflow
@@ -67,7 +68,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		return errors.New(fmt.Sprintf("File '%s' does not exist", workflowPath))
+		return fmt.Errorf("file '%s' does not exist", workflowPath)
 	}
 
 	fileContent, err := ioutil.ReadFile(workflowPath)
@@ -92,7 +93,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	workflow := args[0]
 
 	if i, ok := workflowConfig[workflow]; !ok {
-		return errors.New(fmt.Sprintf("the file '%s' does not have the '%s' workflow defined", workflowPath, workflow))
+		return fmt.Errorf("the file '%s' does not have the '%s' workflow defined", workflowPath, workflow)
 	} else {
 		workflowDefinition = i
 	}

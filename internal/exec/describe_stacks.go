@@ -1,13 +1,13 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
+	"strings"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 // ExecuteDescribeStacks executes `describe stacks` command
@@ -24,7 +24,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if format != "" && format != "yaml" && format != "json" {
-		return errors.New(fmt.Sprintf("Invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format))
+		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
 	}
 	if format == "" {
 		format = "yaml"
@@ -86,7 +86,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 						for componentName, compSection := range terraformSection {
 							componentSection, ok := compSection.(map[string]interface{})
 							if !ok {
-								return errors.New(fmt.Sprintf("Invalid 'components.terraform.%s' section in the file '%s'", componentName, stackName))
+								return fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackName)
 							}
 
 							// Find all derived components of the provided components and include them in the output
@@ -121,7 +121,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 						for componentName, compSection := range helmfileSection {
 							componentSection, ok := compSection.(map[string]interface{})
 							if !ok {
-								return errors.New(fmt.Sprintf("Invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackName))
+								return fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackName)
 							}
 
 							// Find all derived components of the provided components and include them in the output

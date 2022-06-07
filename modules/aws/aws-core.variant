@@ -1,0 +1,41 @@
+#!/usr/bin/env variant
+# vim: filetype=hcl
+
+job "aws subcommand" {
+  concurrency = 1
+  description = "Run an aws subcommand"
+  private     = true
+
+  option "subcommand" {
+    description = "The aws subcommand to run"
+    type        = string
+  }
+
+  option "args" {
+    default     = ""
+    description = "A string of arguments to supply to the aws subcommand"
+    type        = string
+  }
+
+  option "env" {
+    default     = {}
+    description = "Environment variables for the aws subcommand"
+    type        = map(string)
+  }
+
+  variable "args" {
+    type  = list(string)
+    value = compact(concat(
+        split(" ", opt.subcommand),
+        split(" ", opt.args)
+      )
+    )
+  }
+
+  step "aws exec" {
+    run "shell" {
+      command = "aws"
+      args    = var.args
+    }
+  }
+}
