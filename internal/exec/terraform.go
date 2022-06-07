@@ -181,7 +181,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	// Handle `terraform deploy` custom command
 	if info.SubCommand == "deploy" {
 		info.SubCommand = "apply"
-		if !info.UseTerraformPlan && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if !(info.UseTerraformPlan && u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag)) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
