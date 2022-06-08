@@ -23,7 +23,7 @@ func CreateSpaceliftStacks(
 	processImports bool,
 	stackConfigPathTemplate string) (map[string]interface{}, error) {
 
-	if filePaths != nil && len(filePaths) > 0 {
+	if len(filePaths) > 0 {
 		_, stacks, err := s.ProcessYAMLConfigFiles(
 			stacksBasePath,
 			terraformComponentsBasePath,

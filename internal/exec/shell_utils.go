@@ -2,11 +2,12 @@ package exec
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteShellCommand prints and executes the provided command with args and flags
@@ -47,10 +48,10 @@ func execTerraformShellCommand(
 
 	fmt.Println()
 	u.PrintInfo("Starting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
-	fmt.Println(fmt.Sprintf("Component: %s", component))
-	fmt.Println(fmt.Sprintf("Stack: %s", stack))
-	fmt.Println(fmt.Sprintf("Working directory: %s", workingDir))
-	fmt.Println(fmt.Sprintf("Terraform workspace: %s", workspaceName))
+	fmt.Printf("Component: %s\n", component)
+	fmt.Printf("Stack: %s\n", stack)
+	fmt.Printf("Working directory: %s\n", workingDir)
+	fmt.Printf("Terraform workspace: %s\n", workspaceName)
 	fmt.Println()
 	u.PrintInfo("Setting the ENV vars in the shell:\n")
 	for _, v := range componentEnvList {
