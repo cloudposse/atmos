@@ -3,11 +3,6 @@ package stack
 import (
 	"errors"
 	"fmt"
-	"github.com/bmatcuk/doublestar/v4"
-	c "github.com/cloudposse/atmos/pkg/convert"
-	g "github.com/cloudposse/atmos/pkg/globals"
-	m "github.com/cloudposse/atmos/pkg/merge"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"io/ioutil"
 	"os"
 	"path"
@@ -15,6 +10,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/bmatcuk/doublestar/v4"
+	c "github.com/cloudposse/atmos/pkg/convert"
+	g "github.com/cloudposse/atmos/pkg/globals"
+	m "github.com/cloudposse/atmos/pkg/merge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -247,7 +248,7 @@ func CreateComponentStackMap(
 // otherwise it reads the file, stores its content in the map and returns the content
 func getFileContent(filePath string) (string, error) {
 	existingContent, found := getFileContentSyncMap.Load(filePath)
-	if found == true && existingContent != nil {
+	if found && existingContent != nil {
 		return fmt.Sprintf("%s", existingContent), nil
 	}
 
@@ -264,7 +265,7 @@ func getFileContent(filePath string) (string, error) {
 // otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files
 func GetGlobMatches(pattern string) ([]string, error) {
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
-	if found == true && existingMatches != nil {
+	if found && existingMatches != nil {
 		return strings.Split(fmt.Sprintf("%s", existingMatches), ","), nil
 	}
 
@@ -277,7 +278,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		return nil, errors.New(fmt.Sprintf("Failed to find a match for the import '%s' ('%s' + '%s')", pattern, base, cleanPattern))
+		return nil, fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", pattern, base, cleanPattern)
 	}
 
 	var fullMatches []string
@@ -335,8 +336,8 @@ func ProcessBaseComponentConfig(
 			// We try to convert to both
 			baseComponentMapOfStrings, ok := baseComponentSection.(map[string]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid config for the base component '%s' of the component '%s' in the stack '%s'",
-					baseComponent, component, stack))
+				return fmt.Errorf("invalid config for the base component '%s' of the component '%s' in the stack '%s'",
+					baseComponent, component, stack)
 			}
 			baseComponentMap = c.MapsOfStringsToMapsOfInterfaces(baseComponentMapOfStrings)
 		}
@@ -345,8 +346,8 @@ func ProcessBaseComponentConfig(
 		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
 			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid 'component:' section of the component '%s' in the stack '%s'",
-					baseComponent, stack))
+				return fmt.Errorf("invalid 'component:' section of the component '%s' in the stack '%s'",
+					baseComponent, stack)
 			}
 
 			err := ProcessBaseComponentConfig(
@@ -367,21 +368,21 @@ func ProcessBaseComponentConfig(
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
 			baseComponentVars, ok = baseComponentVarsSection.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.vars' section in the stack '%s'", baseComponent, stack))
+				return fmt.Errorf("invalid '%s.vars' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
 		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
 			baseComponentSettings, ok = baseComponentSettingsSection.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.settings' section in the stack '%s'", baseComponent, stack))
+				return fmt.Errorf("invalid '%s.settings' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
 		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
 			baseComponentEnv, ok = baseComponentEnvSection.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.env' section in the stack '%s'", baseComponent, stack))
+				return fmt.Errorf("invalid '%s.env' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
@@ -389,14 +390,14 @@ func ProcessBaseComponentConfig(
 		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
 			baseComponentBackendType, ok = i.(string)
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.backend_type' section in the stack '%s'", baseComponent, stack))
+				return fmt.Errorf("invalid '%s.backend_type' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
 		if i, ok2 := baseComponentMap["backend"]; ok2 {
 			baseComponentBackendSection, ok = i.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.backend' section in the stack '%s'", baseComponent, stack))
+				return fmt.Errorf("invalid '%s.backend' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
@@ -404,14 +405,14 @@ func ProcessBaseComponentConfig(
 		if i, ok2 := baseComponentMap["remote_state_backend_type"]; ok2 {
 			baseComponentRemoteStateBackendType, ok = i.(string)
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend_type' section in the stack '%s'", baseComponent, stack))
+				return fmt.Errorf("invalid '%s.remote_state_backend_type' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
 		if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
 			baseComponentRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.remote_state_backend' section in the stack '%s'", baseComponent, stack))
+				return fmt.Errorf("invalid '%s.remote_state_backend' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
@@ -419,7 +420,7 @@ func ProcessBaseComponentConfig(
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
 			baseComponentCommand, ok = baseComponentCommandSection.(string)
 			if !ok {
-				return errors.New(fmt.Sprintf("Invalid '%s.command' section in the stack '%s'", baseComponent, stack))
+				return fmt.Errorf("invalid '%s.command' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
@@ -500,13 +501,13 @@ func FindComponentsDerivedFromBaseComponents(
 	for component, compSection := range allComponents {
 		componentSection, ok := compSection.(map[string]interface{})
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("Invalid '%s' component section in the file '%s'", component, stack))
+			return nil, fmt.Errorf("invalid '%s' component section in the file '%s'", component, stack)
 		}
 
 		if base, baseComponentExist := componentSection["component"]; baseComponentExist {
 			baseComponent, ok := base.(string)
 			if !ok {
-				return nil, errors.New(fmt.Sprintf("Invalid 'component' attribute in the component '%s' in the file '%s'", component, stack))
+				return nil, fmt.Errorf("invalid 'component' attribute in the component '%s' in the file '%s'", component, stack)
 			}
 
 			if baseComponent != "" && u.SliceContainsString(baseComponents, baseComponent) {

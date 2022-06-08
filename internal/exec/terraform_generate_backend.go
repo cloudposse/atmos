@@ -2,11 +2,12 @@ package exec
 
 import (
 	"fmt"
+	"path"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"path"
 )
 
 // ExecuteTerraformGenerateBackend executes `terraform generate backend` command
@@ -35,11 +36,11 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	}
 
 	if info.ComponentBackendType == "" {
-		return errors.New(fmt.Sprintf("\n'backend_type' is missing for the '%s' component.\n", component))
+		return fmt.Errorf("\n'backend_type' is missing for the '%s' component.\n", component)
 	}
 
 	if info.ComponentBackendSection == nil {
-		return errors.New(fmt.Sprintf("\nCould not find 'backend' config for the '%s' component.\n", component))
+		return fmt.Errorf("\nCould not find 'backend' config for the '%s' component.\n", component)
 	}
 
 	var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
@@ -52,7 +53,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	// Check if the `backend` section has `workspace_key_prefix`
 	if _, ok := info.ComponentBackendSection["workspace_key_prefix"].(string); !ok {
-		return errors.New(fmt.Sprintf("\nBackend config for the '%s' component is missing 'workspace_key_prefix'\n", component))
+		return fmt.Errorf("\nBackend config for the '%s' component is missing 'workspace_key_prefix'\n", component)
 	}
 
 	// Write backend config to file

@@ -1,11 +1,11 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
+	"strings"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/fatih/color"
-	"strings"
 )
 
 func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, dryRun bool, commandLineStack string) error {
@@ -56,7 +56,7 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, dryRun bool, 
 				return err
 			}
 		} else {
-			return errors.New(fmt.Sprintf("invalid workflow step type '%s'. Supported types are 'atmos' and 'shell'", commandType))
+			return fmt.Errorf("invalid workflow step type '%s'. Supported types are 'atmos' and 'shell'", commandType)
 		}
 
 		fmt.Println()

@@ -3,15 +3,16 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
 	"github.com/bmatcuk/doublestar/v4"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
@@ -41,27 +42,27 @@ func FindAllStackConfigsInPathsForStack(
 		}
 
 		// Exclude files that match any of the excludePaths
-		if matches != nil && len(matches) > 0 {
+		if len(matches) > 0 {
 			for _, matchedFileAbsolutePath := range matches {
 				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 				// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
 				stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+g.DefaultStackConfigFileExtension)
 
-				if stackMatch == true {
+				if stackMatch {
 					allExcluded := true
 					for _, excludePath := range excludeStackPaths {
 						excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
 						if err != nil {
 							color.Red("%s", err)
 							continue
-						} else if excludeMatch == true {
+						} else if excludeMatch {
 							allExcluded = false
 							break
 						}
 					}
 
-					if allExcluded == true && stackIsDir {
+					if allExcluded && stackIsDir {
 						return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
 					}
 				}
@@ -80,7 +81,7 @@ func FindAllStackConfigsInPathsForStack(
 					}
 				}
 
-				if include == true {
+				if include {
 					absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
 					relativePaths = append(relativePaths, matchedFileRelativePath)
 				}
@@ -116,7 +117,7 @@ func FindAllStackConfigsInPaths(
 		}
 
 		// Exclude files that match any of the excludePaths
-		if matches != nil && len(matches) > 0 {
+		if len(matches) > 0 {
 			for _, matchedFileAbsolutePath := range matches {
 				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 				include := true
@@ -133,7 +134,7 @@ func FindAllStackConfigsInPaths(
 					}
 				}
 
-				if include == true {
+				if include {
 					absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
 					relativePaths = append(relativePaths, matchedFileRelativePath)
 				}
@@ -377,10 +378,9 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		if part == "{namespace}" {
 			if len(context.Namespace) == 0 {
 				return "",
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'namespace`, but the stack '%s' does not have a namespace defined",
+					fmt.Errorf("the stack name pattern '%s' specifies 'namespace`, but the stack '%s' does not have a namespace defined",
 						stackNamePattern,
-						stack,
-					))
+						stack)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Namespace
@@ -390,10 +390,9 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
 				return "",
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'tenant`, but the stack '%s' does not have a tenant defined",
+					fmt.Errorf("the stack name pattern '%s' specifies 'tenant`, but the stack '%s' does not have a tenant defined",
 						stackNamePattern,
-						stack,
-					))
+						stack)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Tenant
@@ -403,10 +402,9 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{environment}" {
 			if len(context.Environment) == 0 {
 				return "",
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'environment`, but the stack '%s' does not have an environment defined",
+					fmt.Errorf("the stack name pattern '%s' specifies 'environment`, but the stack '%s' does not have an environment defined",
 						stackNamePattern,
-						stack,
-					))
+						stack)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Environment
@@ -416,10 +414,9 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{stage}" {
 			if len(context.Stage) == 0 {
 				return "",
-					errors.New(fmt.Sprintf("The stack name pattern '%s' specifies 'stage`, but the stack '%s' does not have a stage defined",
+					fmt.Errorf("the stack name pattern '%s' specifies 'stage`, but the stack '%s' does not have a stage defined",
 						stackNamePattern,
-						stack,
-					))
+						stack)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Stage
@@ -450,7 +447,7 @@ func ReplaceContextTokens(context Context, pattern string) string {
 func GetStackNameFromContextAndStackNamePattern(tenant string, environment string, stage string, stackNamePattern string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
-			errors.New(fmt.Sprintf("Stack name pattern must be provided"))
+			fmt.Errorf("stack name pattern must be provided")
 	}
 
 	var stack string
@@ -459,7 +456,7 @@ func GetStackNameFromContextAndStackNamePattern(tenant string, environment strin
 	for _, part := range stackNamePatternParts {
 		if part == "{tenant}" {
 			if len(tenant) == 0 {
-				return "", errors.New(fmt.Sprintf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", stackNamePattern))
+				return "", fmt.Errorf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", stackNamePattern)
 			}
 			if len(stack) == 0 {
 				stack = tenant
@@ -468,7 +465,7 @@ func GetStackNameFromContextAndStackNamePattern(tenant string, environment strin
 			}
 		} else if part == "{environment}" {
 			if len(environment) == 0 {
-				return "", errors.New(fmt.Sprintf("stack name pattern '%s' includes '{environment}', but environment is not provided", stackNamePattern))
+				return "", fmt.Errorf("stack name pattern '%s' includes '{environment}', but environment is not provided", stackNamePattern)
 			}
 			if len(stack) == 0 {
 				stack = environment
@@ -477,7 +474,7 @@ func GetStackNameFromContextAndStackNamePattern(tenant string, environment strin
 			}
 		} else if part == "{stage}" {
 			if len(stage) == 0 {
-				return "", errors.New(fmt.Sprintf("stack name pattern '%s' includes '{stage}', but stage is not provided", stackNamePattern))
+				return "", fmt.Errorf("stack name pattern '%s' includes '{stage}', but stage is not provided", stackNamePattern)
 			}
 			if len(stack) == 0 {
 				stack = stage

@@ -3,12 +3,13 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"strings"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 var (
@@ -76,19 +77,19 @@ func FindComponentConfig(
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component type must be provided and must not be empty")
 	}
 	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Could not find the stack '%s'", stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("could not find the stack '%s'", stack)
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("'components' section is missing in the stack '%s'", stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components' section is missing in the stack '%s'", stack)
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("'components/%s' section is missing in the stack '%s'", componentType, stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack '%s'", componentType, stack)
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Invalid or missing configuration for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("invalid or missing configuration for the component '%s' in the stack '%s'", component, stack)
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New(fmt.Sprintf("Missing 'vars' section for the component '%s' in the stack '%s'", component, stack))
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack '%s'", component, stack)
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
 		componentBackendSection = nil
@@ -177,7 +178,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 
 	// Check if `-h` or `--help` flags are specified
-	if argsAndFlagsInfo.NeedHelp == true {
+	if argsAndFlagsInfo.NeedHelp {
 		err = processHelp(componentType, argsAndFlagsInfo.SubCommand)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -334,13 +335,12 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 
 		if !stackFound {
 			return configAndStacksInfo,
-				errors.New(fmt.Sprintf("\nSearched all stack files, but could not find config for the component '%s' in the stack '%s'.\n"+
+				fmt.Errorf("\nSearched all stack files, but could not find config for the component '%s' in the stack '%s'.\n"+
 					"Check that all attributes in the stack name pattern '%s' are defined in the stack config files.\n"+
 					"Are the component and stack names correct? Did you forget an import?",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
-					c.Config.Stacks.NamePattern,
-				))
+					c.Config.Stacks.NamePattern)
 		}
 	}
 
@@ -417,117 +417,117 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 
 		if arg == g.TerraformDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.TerraformDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.TerraformDirFlag) {
 			var terraformDirFlagParts = strings.Split(arg, "=")
 			if len(terraformDirFlagParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.TerraformDir = terraformDirFlagParts[1]
 		}
 
 		if arg == g.HelmfileDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.HelmfileDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.HelmfileDirFlag) {
 			var helmfileDirFlagParts = strings.Split(arg, "=")
 			if len(helmfileDirFlagParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.HelmfileDir = helmfileDirFlagParts[1]
 		}
 
 		if arg == g.ConfigDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.StacksDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.ConfigDirFlag) {
 			var configDirFlagParts = strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.StacksDir = configDirFlagParts[1]
 		}
 
 		if arg == g.StackDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.ConfigDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.StackDirFlag) {
 			var stacksDirFlagParts = strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.ConfigDir = stacksDirFlagParts[1]
 		}
 
 		if arg == g.BasePathFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.BasePath = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.BasePathFlag) {
 			var stacksDirFlagParts = strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.BasePath = stacksDirFlagParts[1]
 		}
 
 		if arg == g.DeployRunInitFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.DeployRunInit = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.DeployRunInitFlag) {
 			var deployRunInitFlagParts = strings.Split(arg, "=")
 			if len(deployRunInitFlagParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.DeployRunInit = deployRunInitFlagParts[1]
 		}
 
 		if arg == g.AutoGenerateBackendFileFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.AutoGenerateBackendFile = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.AutoGenerateBackendFileFlag) {
 			var autoGenerateBackendFileFlagParts = strings.Split(arg, "=")
 			if len(autoGenerateBackendFileFlagParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
 		}
 
 		if arg == g.WorkflowDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.WorkflowsDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.WorkflowDirFlag) {
 			var workflowDirFlagParts = strings.Split(arg, "=")
 			if len(workflowDirFlagParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.WorkflowsDir = workflowDirFlagParts[1]
 		}
 
 		if arg == g.InitRunReconfigure {
 			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.InitRunReconfigure = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.InitRunReconfigure) {
 			var initRunReconfigureParts = strings.Split(arg, "=")
 			if len(initRunReconfigureParts) != 2 {
-				return info, errors.New(fmt.Sprintf("invalid flag: %s", arg))
+				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.InitRunReconfigure = initRunReconfigureParts[1]
 		}
@@ -571,7 +571,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 
 	info.GlobalOptions = globalOptions
 
-	if info.NeedHelp == true {
+	if info.NeedHelp {
 		if len(additionalArgsAndFlags) > 0 {
 			info.SubCommand = additionalArgsAndFlags[0]
 		}
