@@ -2,14 +2,15 @@ package exec
 
 import (
 	"fmt"
+
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // processHelp processes help commands
 func processHelp(componentType string, command string) error {
 	if len(command) == 0 {
-		fmt.Println(fmt.Sprintf("'atmos' supports all native '%s' commands.", componentType))
-		fmt.Println(fmt.Sprintf("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack."))
+		fmt.Printf("'atmos' supports all native '%s' commands.\n", componentType)
+		fmt.Printf("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
 		u.PrintInfo(fmt.Sprintf("atmos %s <command> <component> -s <stack> [options]", componentType))
 		u.PrintInfo(fmt.Sprintf("atmos %s <command> <component> --stack <stack> [options]", componentType))
 
@@ -49,8 +50,8 @@ func processHelp(componentType string, command string) error {
 			return err
 		}
 	} else {
-		fmt.Println(fmt.Sprintf("'atmos' supports native '%s %s' command with all the options, arguments and flags.", componentType, command))
-		fmt.Println(fmt.Sprintf("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack."))
+		fmt.Printf("'atmos' supports native '%s %s' command with all the options, arguments and flags.\n", componentType, command)
+		fmt.Printf("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.")
 		u.PrintInfo(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
 		u.PrintInfo(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
 
