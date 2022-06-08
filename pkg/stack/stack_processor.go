@@ -763,10 +763,7 @@ func ProcessStackConfig(
 						if !ok {
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName)
 						}
-
-						if _, ok := spaceliftSettings["workspace_enabled"]; ok {
-							delete(spaceliftSettings, "workspace_enabled")
-						}
+						delete(spaceliftSettings, "workspace_enabled")
 					}
 				}
 
