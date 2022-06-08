@@ -178,7 +178,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 
 	// Check if `-h` or `--help` flags are specified
-	if argsAndFlagsInfo.NeedHelp == true {
+	if argsAndFlagsInfo.NeedHelp {
 		err = processHelp(componentType, argsAndFlagsInfo.SubCommand)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -571,7 +571,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 
 	info.GlobalOptions = globalOptions
 
-	if info.NeedHelp == true {
+	if info.NeedHelp {
 		if len(additionalArgsAndFlags) > 0 {
 			info.SubCommand = additionalArgsAndFlags[0]
 		}

@@ -42,27 +42,27 @@ func FindAllStackConfigsInPathsForStack(
 		}
 
 		// Exclude files that match any of the excludePaths
-		if matches != nil && len(matches) > 0 {
+		if len(matches) > 0 {
 			for _, matchedFileAbsolutePath := range matches {
 				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 				// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
 				stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+g.DefaultStackConfigFileExtension)
 
-				if stackMatch == true {
+				if stackMatch {
 					allExcluded := true
 					for _, excludePath := range excludeStackPaths {
 						excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
 						if err != nil {
 							color.Red("%s", err)
 							continue
-						} else if excludeMatch == true {
+						} else if excludeMatch {
 							allExcluded = false
 							break
 						}
 					}
 
-					if allExcluded == true && stackIsDir {
+					if allExcluded && stackIsDir {
 						return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
 					}
 				}
@@ -81,7 +81,7 @@ func FindAllStackConfigsInPathsForStack(
 					}
 				}
 
-				if include == true {
+				if include {
 					absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
 					relativePaths = append(relativePaths, matchedFileRelativePath)
 				}
@@ -117,7 +117,7 @@ func FindAllStackConfigsInPaths(
 		}
 
 		// Exclude files that match any of the excludePaths
-		if matches != nil && len(matches) > 0 {
+		if len(matches) > 0 {
 			for _, matchedFileAbsolutePath := range matches {
 				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 				include := true
@@ -134,7 +134,7 @@ func FindAllStackConfigsInPaths(
 					}
 				}
 
-				if include == true {
+				if include {
 					absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
 					relativePaths = append(relativePaths, matchedFileRelativePath)
 				}

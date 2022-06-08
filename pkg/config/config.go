@@ -239,7 +239,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
 	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
-	if stackIsPhysicalPath == true {
+	if stackIsPhysicalPath {
 		u.PrintInfoVerbose(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
 			configAndStacksInfo.Stack,
 			stackConfigFilesRelativePaths[0]),

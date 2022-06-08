@@ -248,7 +248,7 @@ func CreateComponentStackMap(
 // otherwise it reads the file, stores its content in the map and returns the content
 func getFileContent(filePath string) (string, error) {
 	existingContent, found := getFileContentSyncMap.Load(filePath)
-	if found == true && existingContent != nil {
+	if found && existingContent != nil {
 		return fmt.Sprintf("%s", existingContent), nil
 	}
 
@@ -265,7 +265,7 @@ func getFileContent(filePath string) (string, error) {
 // otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files
 func GetGlobMatches(pattern string) ([]string, error) {
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
-	if found == true && existingMatches != nil {
+	if found && existingMatches != nil {
 		return strings.Split(fmt.Sprintf("%s", existingMatches), ","), nil
 	}
 

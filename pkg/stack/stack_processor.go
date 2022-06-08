@@ -757,7 +757,7 @@ func ProcessStackConfig(
 						componentIsAbstract = true
 					}
 				}
-				if componentIsAbstract == true {
+				if componentIsAbstract {
 					if i, ok := finalComponentSettings["spacelift"]; ok {
 						spaceliftSettings, ok := i.(map[interface{}]interface{})
 						if !ok {
@@ -798,7 +798,7 @@ func ProcessStackConfig(
 				//	comp["stacks"] = []string{}
 				//}
 
-				if processComponentDeps == true {
+				if processComponentDeps {
 					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponentName, importsConfig)
 					if err != nil {
 						return nil, err
@@ -1018,7 +1018,7 @@ func ProcessStackConfig(
 				//	comp["stacks"] = []string{}
 				//}
 
-				if processComponentDeps == true {
+				if processComponentDeps {
 					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponentName, importsConfig)
 					if err != nil {
 						return nil, err
