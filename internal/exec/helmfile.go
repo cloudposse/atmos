@@ -116,9 +116,9 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
-	fmt.Println(fmt.Sprintf("Global options: %v", info.GlobalOptions))
+	fmt.Printf("Global options: %v\n", info.GlobalOptions)
 
-	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	fmt.Printf("Arguments and flags: %v\n", info.AdditionalArgsAndFlags)
 	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponent) > 0 {
 		fmt.Println("Helmfile component: " + info.BaseComponent)
@@ -132,7 +132,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	workingDir := constructHelmfileComponentWorkingDir(info)
-	fmt.Println(fmt.Sprintf("Working dir: %s\n\n", workingDir))
+	fmt.Printf("Working dir: %s\n\n", workingDir)
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}

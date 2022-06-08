@@ -4,6 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+
 	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
@@ -11,10 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
 )
 
 var (
@@ -346,7 +347,7 @@ func ProcessConfigForSpacelift() error {
 func processConfigFile(path string, v *viper.Viper) error {
 	if !u.FileExists(path) {
 		if g.LogVerbose {
-			fmt.Println(fmt.Sprintf("No CLI config found in %s", path))
+			fmt.Printf("No CLI config found in %s\n", path)
 		}
 		return nil
 	}

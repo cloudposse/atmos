@@ -197,11 +197,11 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	u.PrintInfo("\nCommand info:")
 	fmt.Println("Terraform binary: " + info.Command)
 	if info.SubCommand2 == "" {
-		fmt.Println(fmt.Sprintf("Terraform command: %s", info.SubCommand))
+		fmt.Printf("Terraform command: %s\n", info.SubCommand)
 	} else {
-		fmt.Println(fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
+		fmt.Printf("Terraform command: %s %s\n", info.SubCommand, info.SubCommand2)
 	}
-	fmt.Println(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	fmt.Printf("Arguments and flags: %v\n", info.AdditionalArgsAndFlags)
 	fmt.Println("Component: " + info.ComponentFromArg)
 	if len(info.BaseComponentPath) > 0 {
 		fmt.Println("Terraform component: " + info.BaseComponentPath)
@@ -218,7 +218,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	workingDir := constructTerraformComponentWorkingDir(info)
-	fmt.Println(fmt.Sprintf(fmt.Sprintf("Working dir: %s", workingDir)))
+	fmt.Printf("Working dir: %s\n", workingDir)
 
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
