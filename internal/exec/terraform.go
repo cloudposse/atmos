@@ -234,35 +234,28 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	switch info.SubCommand {
 	case "plan":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile, "-out", planFile}...)
-		break
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		break
 	case "import":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		break
 	case "refresh":
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
-		break
 	case "apply":
 		if info.UseTerraformPlan {
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
 		} else {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		}
-		break
 	case "init":
 		if c.Config.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
-		break
 	case "workspace":
 		if info.SubCommand2 == "list" || info.SubCommand2 == "show" {
 			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2}...)
 		} else if info.SubCommand2 != "" {
 			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2, info.TerraformWorkspace}...)
 		}
-		break
 	}
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
