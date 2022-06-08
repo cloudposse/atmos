@@ -260,7 +260,7 @@ func ExecuteComponentVendorCommandInternal(
 					}
 
 					// If 'included_paths' is not provided, include all files that were not excluded
-					fmt.Printf("Including '%s'", u.TrimBasePathFromPath(tempDir+"/", src))
+					fmt.Printf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src))
 					return false, nil
 				},
 
