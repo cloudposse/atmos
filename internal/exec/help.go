@@ -51,7 +51,7 @@ func processHelp(componentType string, command string) error {
 		}
 	} else {
 		fmt.Printf("'atmos' supports native '%s %s' command with all the options, arguments and flags.\n", componentType, command)
-		fmt.Printf("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.")
+		fmt.Printf("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
 		u.PrintInfo(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
 		u.PrintInfo(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
 
