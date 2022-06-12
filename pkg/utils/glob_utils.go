@@ -18,7 +18,7 @@ var (
 func GetGlobMatches(pattern string) ([]string, error) {
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
 	if found && existingMatches != nil {
-		return strings.Split(fmt.Sprintf("%s", existingMatches), ","), nil
+		return strings.Split(existingMatches.(string), ","), nil
 	}
 
 	base, cleanPattern := doublestar.SplitPattern(pattern)
