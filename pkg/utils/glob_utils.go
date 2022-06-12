@@ -43,8 +43,8 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	return fullMatches, nil
 }
 
-// PathMatch returns true if `name` matches the file name `pattern`. The
-// difference between Match and PathMatch is that PathMatch will automatically
+// PathMatch returns true if `name` matches the file name `pattern`.
+// PathMatch will automatically
 // use your system's path separator to split `name` and `pattern`. On systems
 // where the path separator is `'\'`, escaping will be disabled.
 //
