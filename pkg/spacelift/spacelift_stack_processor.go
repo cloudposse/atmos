@@ -21,7 +21,7 @@ func CreateSpaceliftStacks(
 	processStackDeps bool,
 	processComponentDeps bool,
 	processImports bool,
-	stackConfigPathTemplate string) (map[string]interface{}, error) {
+	stackConfigPathTemplate string) (map[string]any, error) {
 
 	if len(filePaths) > 0 {
 		_, stacks, err := s.ProcessYAMLConfigFiles(
@@ -70,40 +70,40 @@ func CreateSpaceliftStacks(
 
 // TransformStackConfigToSpaceliftStacks takes a map of stack configs and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
-	stacks map[string]interface{},
+	stacks map[string]any,
 	stackConfigPathTemplate string,
 	stackNamePattern string,
-	processImports bool) (map[string]interface{}, error) {
+	processImports bool) (map[string]any, error) {
 
 	var err error
-	res := map[string]interface{}{}
+	res := map[string]any{}
 	var allStackNames []string
 
 	for stackName, stackConfig := range stacks {
-		config := stackConfig.(map[interface{}]interface{})
+		config := stackConfig.(map[any]any)
 
 		if i, ok := config["components"]; ok {
-			componentsSection := i.(map[string]interface{})
+			componentsSection := i.(map[string]any)
 
 			if terraformComponents, ok := componentsSection["terraform"]; ok {
-				terraformComponentsMap := terraformComponents.(map[string]interface{})
+				terraformComponentsMap := terraformComponents.(map[string]any)
 
 				for component, v := range terraformComponentsMap {
-					componentMap := v.(map[string]interface{})
-					componentVars := map[interface{}]interface{}{}
-					spaceliftSettings := map[interface{}]interface{}{}
+					componentMap := v.(map[string]any)
+					componentVars := map[any]any{}
+					spaceliftSettings := map[any]any{}
 
 					if i, ok2 := componentMap["vars"]; ok2 {
-						componentVars = i.(map[interface{}]interface{})
+						componentVars = i.(map[any]any)
 					}
 
-					componentSettings := map[interface{}]interface{}{}
+					componentSettings := map[any]any{}
 					if i, ok2 := componentMap["settings"]; ok2 {
-						componentSettings = i.(map[interface{}]interface{})
+						componentSettings = i.(map[any]any)
 					}
 
 					if i, ok2 := componentSettings["spacelift"]; ok2 {
-						spaceliftSettings = i.(map[interface{}]interface{})
+						spaceliftSettings = i.(map[any]any)
 					}
 
 					context := c.GetContextFromVars(componentVars)
@@ -129,7 +129,7 @@ func TransformStackConfigToSpaceliftStacks(
 	}
 
 	for stackName, stackConfig := range stacks {
-		config := stackConfig.(map[interface{}]interface{})
+		config := stackConfig.(map[any]any)
 		var imports []string
 
 		if processImports {
@@ -139,24 +139,24 @@ func TransformStackConfigToSpaceliftStacks(
 		}
 
 		if i, ok := config["components"]; ok {
-			componentsSection := i.(map[string]interface{})
+			componentsSection := i.(map[string]any)
 
 			if terraformComponents, ok := componentsSection["terraform"]; ok {
-				terraformComponentsMap := terraformComponents.(map[string]interface{})
+				terraformComponentsMap := terraformComponents.(map[string]any)
 
 				for component, v := range terraformComponentsMap {
-					componentMap := v.(map[string]interface{})
+					componentMap := v.(map[string]any)
 
-					componentSettings := map[interface{}]interface{}{}
+					componentSettings := map[any]any{}
 					if i, ok2 := componentMap["settings"]; ok2 {
-						componentSettings = i.(map[interface{}]interface{})
+						componentSettings = i.(map[any]any)
 					}
 
-					spaceliftSettings := map[interface{}]interface{}{}
+					spaceliftSettings := map[any]any{}
 					spaceliftWorkspaceEnabled := false
 
 					if i, ok2 := componentSettings["spacelift"]; ok2 {
-						spaceliftSettings = i.(map[interface{}]interface{})
+						spaceliftSettings = i.(map[any]any)
 
 						if i3, ok3 := spaceliftSettings["workspace_enabled"]; ok3 {
 							spaceliftWorkspaceEnabled = i3.(bool)
@@ -168,27 +168,27 @@ func TransformStackConfigToSpaceliftStacks(
 						continue
 					}
 
-					spaceliftExplicitLabels := []interface{}{}
+					spaceliftExplicitLabels := []any{}
 					if i, ok2 := spaceliftSettings["labels"]; ok2 {
-						spaceliftExplicitLabels = i.([]interface{})
+						spaceliftExplicitLabels = i.([]any)
 					}
 
-					spaceliftDependsOn := []interface{}{}
+					spaceliftDependsOn := []any{}
 					if i, ok2 := spaceliftSettings["depends_on"]; ok2 {
-						spaceliftDependsOn = i.([]interface{})
+						spaceliftDependsOn = i.([]any)
 					}
 
-					spaceliftConfig := map[string]interface{}{}
+					spaceliftConfig := map[string]any{}
 					spaceliftConfig["enabled"] = spaceliftWorkspaceEnabled
 
-					componentVars := map[interface{}]interface{}{}
+					componentVars := map[any]any{}
 					if i, ok2 := componentMap["vars"]; ok2 {
-						componentVars = i.(map[interface{}]interface{})
+						componentVars = i.(map[any]any)
 					}
 
-					componentEnv := map[interface{}]interface{}{}
+					componentEnv := map[any]any{}
 					if i, ok2 := componentMap["env"]; ok2 {
-						componentEnv = i.(map[interface{}]interface{})
+						componentEnv = i.(map[any]any)
 					}
 
 					componentDeps := []string{}
@@ -217,7 +217,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 					// First check if component's `metadata` section exists
 					// Then check if `metadata.component` exists
-					if componentMetadata, componentMetadataExists := componentMap["metadata"].(map[interface{}]interface{}); componentMetadataExists {
+					if componentMetadata, componentMetadataExists := componentMap["metadata"].(map[any]any); componentMetadataExists {
 						if componentFromMetadata, componentFromMetadataExists := componentMetadata["component"].(string); componentFromMetadataExists {
 							baseComponentName = componentFromMetadata
 						}
@@ -257,16 +257,16 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 					spaceliftConfig["backend_type"] = backendTypeName
 
-					componentBackend := map[interface{}]interface{}{}
+					componentBackend := map[any]any{}
 					if i, ok2 := componentMap["backend"]; ok2 {
-						componentBackend = i.(map[interface{}]interface{})
+						componentBackend = i.(map[any]any)
 					}
 					spaceliftConfig["backend"] = componentBackend
 
 					// metadata
-					componentMetadata := map[interface{}]interface{}{}
+					componentMetadata := map[any]any{}
 					if i, ok2 := componentMap["metadata"]; ok2 {
-						componentMetadata = i.(map[interface{}]interface{})
+						componentMetadata = i.(map[any]any)
 					}
 					spaceliftConfig["metadata"] = componentMetadata
 
@@ -379,7 +379,7 @@ func buildSpaceliftDependsOnStackName(
 }
 
 // buildSpaceliftStackName build a Spacelift stack name from the provided context and state name pattern
-func buildSpaceliftStackName(spaceliftSettings map[interface{}]interface{}, context c.Context, contextPrefix string) (string, string) {
+func buildSpaceliftStackName(spaceliftSettings map[any]any, context c.Context, contextPrefix string) (string, string) {
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
 		return c.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
 	} else {

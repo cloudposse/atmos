@@ -8,7 +8,7 @@ import (
 )
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
-func ProcessComponentInStack(component string, stack string) (map[string]interface{}, error) {
+func ProcessComponentInStack(component string, stack string) (map[string]any, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -28,7 +28,7 @@ func ProcessComponentInStack(component string, stack string) (map[string]interfa
 }
 
 // ProcessComponentFromContext accepts context (tenant, environment, stage) and returns the component configuration in the stack
-func ProcessComponentFromContext(component string, tenant string, environment string, stage string) (map[string]interface{}, error) {
+func ProcessComponentFromContext(component string, tenant string, environment string, stage string) (map[string]any, error) {
 	err := c.InitConfig()
 	if err != nil {
 		u.PrintErrorToStdError(err)

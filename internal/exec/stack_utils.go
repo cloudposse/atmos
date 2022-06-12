@@ -10,7 +10,7 @@ import (
 func BuildTerraformWorkspace(
 	stack string,
 	stackNamePattern string,
-	componentMetadata map[interface{}]interface{},
+	componentMetadata map[any]any,
 	context c.Context,
 ) (string, error) {
 

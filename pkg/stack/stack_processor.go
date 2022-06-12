@@ -29,11 +29,11 @@ func ProcessYAMLConfigFiles(
 	helmfileComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
-	processComponentDeps bool) ([]string, map[string]interface{}, error) {
+	processComponentDeps bool) ([]string, map[string]any, error) {
 
 	count := len(filePaths)
 	listResult := make([]string, count)
-	mapResult := map[string]interface{}{}
+	mapResult := map[string]any{}
 	var errorResult error
 	var wg sync.WaitGroup
 	wg.Add(count)
@@ -47,7 +47,7 @@ func ProcessYAMLConfigFiles(
 				stackBasePath = path.Dir(p)
 			}
 
-			stackConfig, importsConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[interface{}]interface{}{})
+			stackConfig, importsConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
 			if err != nil {
 				errorResult = err
 				return
@@ -123,13 +123,13 @@ func ProcessYAMLConfigFiles(
 
 // ProcessYAMLConfigFile takes a path to a YAML stack config file,
 // recursively processes and deep-merges all imports,
-// and returns stack config as map[interface{}]interface{}
+// and returns stack config as map[any]any
 func ProcessYAMLConfigFile(
 	basePath string,
 	filePath string,
-	importsConfig map[string]map[interface{}]interface{}) (map[interface{}]interface{}, map[string]map[interface{}]interface{}, error) {
+	importsConfig map[string]map[any]any) (map[any]any, map[string]map[any]any, error) {
 
-	var configs []map[interface{}]interface{}
+	var configs []map[any]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	stackYamlConfig, err := getFileContent(filePath)
@@ -145,7 +145,7 @@ func ProcessYAMLConfigFile(
 
 	// Find and process all imports
 	if importsSection, ok := stackMapConfig["import"]; ok {
-		imports, ok := importsSection.([]interface{})
+		imports, ok := importsSection.([]any)
 		if !ok {
 			return nil, nil, fmt.Errorf("invalid 'import' section in the file '%s'\nThe 'import' section must be a list of strings", relativeFilePath)
 		}
@@ -235,14 +235,14 @@ func ProcessStackConfig(
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
 	stack string,
-	config map[interface{}]interface{},
+	config map[any]any,
 	processStackDeps bool,
 	processComponentDeps bool,
 	componentTypeFilter string,
 	componentStackMap map[string]map[string][]string,
-	importsConfig map[string]map[interface{}]interface{},
+	importsConfig map[string]map[any]any,
 	checkBaseComponentExists bool,
-) (map[interface{}]interface{}, error) {
+) (map[any]any, error) {
 
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
@@ -251,63 +251,63 @@ func ProcessStackConfig(
 		".yml",
 	)
 
-	globalVarsSection := map[interface{}]interface{}{}
-	globalSettingsSection := map[interface{}]interface{}{}
-	globalEnvSection := map[interface{}]interface{}{}
-	globalTerraformSection := map[interface{}]interface{}{}
-	globalHelmfileSection := map[interface{}]interface{}{}
-	globalComponentsSection := map[interface{}]interface{}{}
+	globalVarsSection := map[any]any{}
+	globalSettingsSection := map[any]any{}
+	globalEnvSection := map[any]any{}
+	globalTerraformSection := map[any]any{}
+	globalHelmfileSection := map[any]any{}
+	globalComponentsSection := map[any]any{}
 
-	terraformVars := map[interface{}]interface{}{}
-	terraformSettings := map[interface{}]interface{}{}
-	terraformEnv := map[interface{}]interface{}{}
+	terraformVars := map[any]any{}
+	terraformSettings := map[any]any{}
+	terraformEnv := map[any]any{}
 
-	helmfileVars := map[interface{}]interface{}{}
-	helmfileSettings := map[interface{}]interface{}{}
-	helmfileEnv := map[interface{}]interface{}{}
+	helmfileVars := map[any]any{}
+	helmfileSettings := map[any]any{}
+	helmfileEnv := map[any]any{}
 
-	terraformComponents := map[string]interface{}{}
-	helmfileComponents := map[string]interface{}{}
-	allComponents := map[string]interface{}{}
+	terraformComponents := map[string]any{}
+	helmfileComponents := map[string]any{}
+	allComponents := map[string]any{}
 
 	// Global sections
 	if i, ok := config["vars"]; ok {
-		globalVarsSection, ok = i.(map[interface{}]interface{})
+		globalVarsSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'vars' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := config["settings"]; ok {
-		globalSettingsSection, ok = i.(map[interface{}]interface{})
+		globalSettingsSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'settings' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := config["env"]; ok {
-		globalEnvSection, ok = i.(map[interface{}]interface{})
+		globalEnvSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'env' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := config["terraform"]; ok {
-		globalTerraformSection, ok = i.(map[interface{}]interface{})
+		globalTerraformSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := config["helmfile"]; ok {
-		globalHelmfileSection, ok = i.(map[interface{}]interface{})
+		globalHelmfileSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'helmfile' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := config["components"]; ok {
-		globalComponentsSection, ok = i.(map[interface{}]interface{})
+		globalComponentsSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'components' section in the file '%s'", stackName)
 		}
@@ -315,44 +315,44 @@ func ProcessStackConfig(
 
 	// Terraform section
 	if i, ok := globalTerraformSection["vars"]; ok {
-		terraformVars, ok = i.(map[interface{}]interface{})
+		terraformVars, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.vars' section in the file '%s'", stackName)
 		}
 	}
 
-	globalAndTerraformVars, err := m.Merge([]map[interface{}]interface{}{globalVarsSection, terraformVars})
+	globalAndTerraformVars, err := m.Merge([]map[any]any{globalVarsSection, terraformVars})
 	if err != nil {
 		return nil, err
 	}
 
 	if i, ok := globalTerraformSection["settings"]; ok {
-		terraformSettings, ok = i.(map[interface{}]interface{})
+		terraformSettings, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.settings' section in the file '%s'", stackName)
 		}
 	}
 
-	globalAndTerraformSettings, err := m.Merge([]map[interface{}]interface{}{globalSettingsSection, terraformSettings})
+	globalAndTerraformSettings, err := m.Merge([]map[any]any{globalSettingsSection, terraformSettings})
 	if err != nil {
 		return nil, err
 	}
 
 	if i, ok := globalTerraformSection["env"]; ok {
-		terraformEnv, ok = i.(map[interface{}]interface{})
+		terraformEnv, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.env' section in the file '%s'", stackName)
 		}
 	}
 
-	globalAndTerraformEnv, err := m.Merge([]map[interface{}]interface{}{globalEnvSection, terraformEnv})
+	globalAndTerraformEnv, err := m.Merge([]map[any]any{globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
 	}
 
 	// Global backend
 	globalBackendType := ""
-	globalBackendSection := map[interface{}]interface{}{}
+	globalBackendSection := map[any]any{}
 
 	if i, ok := globalTerraformSection["backend_type"]; ok {
 		globalBackendType, ok = i.(string)
@@ -362,7 +362,7 @@ func ProcessStackConfig(
 	}
 
 	if i, ok := globalTerraformSection["backend"]; ok {
-		globalBackendSection, ok = i.(map[interface{}]interface{})
+		globalBackendSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.backend' section in the file '%s'", stackName)
 		}
@@ -370,7 +370,7 @@ func ProcessStackConfig(
 
 	// Global remote state backend
 	globalRemoteStateBackendType := ""
-	globalRemoteStateBackendSection := map[interface{}]interface{}{}
+	globalRemoteStateBackendSection := map[any]any{}
 
 	if i, ok := globalTerraformSection["remote_state_backend_type"]; ok {
 		globalRemoteStateBackendType, ok = i.(string)
@@ -380,7 +380,7 @@ func ProcessStackConfig(
 	}
 
 	if i, ok := globalTerraformSection["remote_state_backend"]; ok {
-		globalRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
+		globalRemoteStateBackendSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.remote_state_backend' section in the file '%s'", stackName)
 		}
@@ -388,37 +388,37 @@ func ProcessStackConfig(
 
 	// Helmfile section
 	if i, ok := globalHelmfileSection["vars"]; ok {
-		helmfileVars, ok = i.(map[interface{}]interface{})
+		helmfileVars, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'helmfile.vars' section in the file '%s'", stackName)
 		}
 	}
 
-	globalAndHelmfileVars, err := m.Merge([]map[interface{}]interface{}{globalVarsSection, helmfileVars})
+	globalAndHelmfileVars, err := m.Merge([]map[any]any{globalVarsSection, helmfileVars})
 	if err != nil {
 		return nil, err
 	}
 
 	if i, ok := globalHelmfileSection["settings"]; ok {
-		helmfileSettings, ok = i.(map[interface{}]interface{})
+		helmfileSettings, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'helmfile.settings' section in the file '%s'", stackName)
 		}
 	}
 
-	globalAndHelmfileSettings, err := m.Merge([]map[interface{}]interface{}{globalSettingsSection, helmfileSettings})
+	globalAndHelmfileSettings, err := m.Merge([]map[any]any{globalSettingsSection, helmfileSettings})
 	if err != nil {
 		return nil, err
 	}
 
 	if i, ok := globalHelmfileSection["env"]; ok {
-		helmfileEnv, ok = i.(map[interface{}]interface{})
+		helmfileEnv, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'helmfile.env' section in the file '%s'", stackName)
 		}
 	}
 
-	globalAndHelmfileEnv, err := m.Merge([]map[interface{}]interface{}{globalEnvSection, helmfileEnv})
+	globalAndHelmfileEnv, err := m.Merge([]map[any]any{globalEnvSection, helmfileEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +427,7 @@ func ProcessStackConfig(
 	if componentTypeFilter == "" || componentTypeFilter == "terraform" {
 		if allTerraformComponents, ok := globalComponentsSection["terraform"]; ok {
 
-			allTerraformComponentsMap, ok := allTerraformComponents.(map[interface{}]interface{})
+			allTerraformComponentsMap, ok := allTerraformComponents.(map[any]any)
 			if !ok {
 				return nil, fmt.Errorf("invalid 'components.terraform' section in the file '%s'", stackName)
 			}
@@ -435,37 +435,37 @@ func ProcessStackConfig(
 			for cmp, v := range allTerraformComponentsMap {
 				component := cmp.(string)
 
-				componentMap, ok := v.(map[interface{}]interface{})
+				componentMap, ok := v.(map[any]any)
 				if !ok {
 					return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", component, stackName)
 				}
 
-				componentVars := map[interface{}]interface{}{}
+				componentVars := map[any]any{}
 				if i, ok := componentMap["vars"]; ok {
-					componentVars, ok = i.(map[interface{}]interface{})
+					componentVars, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.vars' section in the file '%s'", component, stackName)
 					}
 				}
 
-				componentSettings := map[interface{}]interface{}{}
+				componentSettings := map[any]any{}
 				if i, ok := componentMap["settings"]; ok {
-					componentSettings, ok = i.(map[interface{}]interface{})
+					componentSettings, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.settings' section in the file '%s'", component, stackName)
 					}
 
 					if i, ok := componentSettings["spacelift"]; ok {
-						_, ok = i.(map[interface{}]interface{})
+						_, ok = i.(map[any]any)
 						if !ok {
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName)
 						}
 					}
 				}
 
-				componentEnv := map[interface{}]interface{}{}
+				componentEnv := map[any]any{}
 				if i, ok := componentMap["env"]; ok {
-					componentEnv, ok = i.(map[interface{}]interface{})
+					componentEnv, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.env' section in the file '%s'", component, stackName)
 					}
@@ -473,9 +473,9 @@ func ProcessStackConfig(
 
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
-				componentMetadata := map[interface{}]interface{}{}
+				componentMetadata := map[any]any{}
 				if i, ok := componentMap["metadata"]; ok {
-					componentMetadata, ok = i.(map[interface{}]interface{})
+					componentMetadata, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.metadata' section in the file '%s'", component, stackName)
 					}
@@ -483,7 +483,7 @@ func ProcessStackConfig(
 
 				// Component backend
 				componentBackendType := ""
-				componentBackendSection := map[interface{}]interface{}{}
+				componentBackendSection := map[any]any{}
 
 				if i, ok := componentMap["backend_type"]; ok {
 					componentBackendType, ok = i.(string)
@@ -493,7 +493,7 @@ func ProcessStackConfig(
 				}
 
 				if i, ok := componentMap["backend"]; ok {
-					componentBackendSection, ok = i.(map[interface{}]interface{})
+					componentBackendSection, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.backend' section in the file '%s'", component, stackName)
 					}
@@ -501,7 +501,7 @@ func ProcessStackConfig(
 
 				// Component remote state backend
 				componentRemoteStateBackendType := ""
-				componentRemoteStateBackendSection := map[interface{}]interface{}{}
+				componentRemoteStateBackendSection := map[any]any{}
 
 				if i, ok := componentMap["remote_state_backend_type"]; ok {
 					componentRemoteStateBackendType, ok = i.(string)
@@ -511,7 +511,7 @@ func ProcessStackConfig(
 				}
 
 				if i, ok := componentMap["remote_state_backend"]; ok {
-					componentRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
+					componentRemoteStateBackendSection, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.remote_state_backend' section in the file '%s'", component, stackName)
 					}
@@ -527,14 +527,14 @@ func ProcessStackConfig(
 
 				// Process base component(s)
 				baseComponentName := ""
-				baseComponentVars := map[interface{}]interface{}{}
-				baseComponentSettings := map[interface{}]interface{}{}
-				baseComponentEnv := map[interface{}]interface{}{}
+				baseComponentVars := map[any]any{}
+				baseComponentSettings := map[any]any{}
+				baseComponentEnv := map[any]any{}
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
-				baseComponentBackendSection := map[interface{}]interface{}{}
+				baseComponentBackendSection := map[any]any{}
 				baseComponentRemoteStateBackendType := ""
-				baseComponentRemoteStateBackendSection := map[interface{}]interface{}{}
+				baseComponentRemoteStateBackendSection := map[any]any{}
 				var baseComponentConfig BaseComponentConfig
 				var componentInheritanceChain []string
 
@@ -589,7 +589,7 @@ func ProcessStackConfig(
 					}
 				}
 
-				if inheritList, inheritListExist := componentMetadata["inherits"].([]interface{}); inheritListExist {
+				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
 					for _, v := range inheritList {
 						baseComponentFromInheritList, ok := v.(string)
 						if !ok {
@@ -634,17 +634,17 @@ func ProcessStackConfig(
 					}
 				}
 
-				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformVars, baseComponentVars, componentVars})
+				finalComponentVars, err := m.Merge([]map[any]any{globalAndTerraformVars, baseComponentVars, componentVars})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformSettings, baseComponentSettings, componentSettings})
+				finalComponentSettings, err := m.Merge([]map[any]any{globalAndTerraformSettings, baseComponentSettings, componentSettings})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndTerraformEnv, baseComponentEnv, componentEnv})
+				finalComponentEnv, err := m.Merge([]map[any]any{globalAndTerraformEnv, baseComponentEnv, componentEnv})
 				if err != nil {
 					return nil, err
 				}
@@ -658,16 +658,16 @@ func ProcessStackConfig(
 					finalComponentBackendType = componentBackendType
 				}
 
-				finalComponentBackendSection, err := m.Merge([]map[interface{}]interface{}{globalBackendSection,
+				finalComponentBackendSection, err := m.Merge([]map[any]any{globalBackendSection,
 					baseComponentBackendSection,
 					componentBackendSection})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentBackend := map[interface{}]interface{}{}
+				finalComponentBackend := map[any]any{}
 				if i, ok := finalComponentBackendSection[finalComponentBackendType]; ok {
-					finalComponentBackend, ok = i.(map[interface{}]interface{})
+					finalComponentBackend, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'terraform.backend' section for the component '%s'", component)
 					}
@@ -690,14 +690,14 @@ func ProcessStackConfig(
 				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique tf state key
 				// The backend state file will be formatted like so: {global key name}/{component name}.terraform.tfstate
 				if finalComponentBackendType == "azurerm" {
-					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[interface{}]interface{}); !componentAzurermExists {
+					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[any]any); !componentAzurermExists {
 						if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
 							azureKeyPrefixComponent := component
 							baseKeyName := ""
 							if baseComponentName != "" {
 								azureKeyPrefixComponent = baseComponentName
 							}
-							if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[interface{}]interface{}); globalAzurermExists {
+							if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[any]any); globalAzurermExists {
 								baseKeyName = globalAzurerm["key"].(string)
 							}
 							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
@@ -719,7 +719,7 @@ func ProcessStackConfig(
 					finalComponentRemoteStateBackendType = componentRemoteStateBackendType
 				}
 
-				finalComponentRemoteStateBackendSection, err := m.Merge([]map[interface{}]interface{}{globalRemoteStateBackendSection,
+				finalComponentRemoteStateBackendSection, err := m.Merge([]map[any]any{globalRemoteStateBackendSection,
 					baseComponentRemoteStateBackendSection,
 					componentRemoteStateBackendSection})
 				if err != nil {
@@ -728,15 +728,15 @@ func ProcessStackConfig(
 
 				// Merge `backend` and `remote_state_backend` sections
 				// This will allow keeping `remote_state_backend` section DRY
-				finalComponentRemoteStateBackendSectionMerged, err := m.Merge([]map[interface{}]interface{}{finalComponentBackendSection,
+				finalComponentRemoteStateBackendSectionMerged, err := m.Merge([]map[any]any{finalComponentBackendSection,
 					finalComponentRemoteStateBackendSection})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentRemoteStateBackend := map[interface{}]interface{}{}
+				finalComponentRemoteStateBackend := map[any]any{}
 				if i, ok := finalComponentRemoteStateBackendSectionMerged[finalComponentRemoteStateBackendType]; ok {
-					finalComponentRemoteStateBackend, ok = i.(map[interface{}]interface{})
+					finalComponentRemoteStateBackend, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'terraform.remote_state_backend' section for the component '%s'", component)
 					}
@@ -765,7 +765,7 @@ func ProcessStackConfig(
 				}
 				if componentIsAbstract {
 					if i, ok := finalComponentSettings["spacelift"]; ok {
-						spaceliftSettings, ok := i.(map[interface{}]interface{})
+						spaceliftSettings, ok := i.(map[any]any)
 						if !ok {
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName)
 						}
@@ -773,7 +773,7 @@ func ProcessStackConfig(
 					}
 				}
 
-				comp := map[string]interface{}{}
+				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
 				comp["env"] = finalComponentEnv
@@ -820,7 +820,7 @@ func ProcessStackConfig(
 	if componentTypeFilter == "" || componentTypeFilter == "helmfile" {
 		if allHelmfileComponents, ok := globalComponentsSection["helmfile"]; ok {
 
-			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[interface{}]interface{})
+			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[any]any)
 			if !ok {
 				return nil, fmt.Errorf("invalid 'components.helmfile' section in the file '%s'", stackName)
 			}
@@ -828,30 +828,30 @@ func ProcessStackConfig(
 			for cmp, v := range allHelmfileComponentsMap {
 				component := cmp.(string)
 
-				componentMap, ok := v.(map[interface{}]interface{})
+				componentMap, ok := v.(map[any]any)
 				if !ok {
 					return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", component, stackName)
 				}
 
-				componentVars := map[interface{}]interface{}{}
+				componentVars := map[any]any{}
 				if i2, ok := componentMap["vars"]; ok {
-					componentVars, ok = i2.(map[interface{}]interface{})
+					componentVars, ok = i2.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.vars' section in the file '%s'", component, stackName)
 					}
 				}
 
-				componentSettings := map[interface{}]interface{}{}
+				componentSettings := map[any]any{}
 				if i, ok := componentMap["settings"]; ok {
-					componentSettings, ok = i.(map[interface{}]interface{})
+					componentSettings, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.settings' section in the file '%s'", component, stackName)
 					}
 				}
 
-				componentEnv := map[interface{}]interface{}{}
+				componentEnv := map[any]any{}
 				if i, ok := componentMap["env"]; ok {
-					componentEnv, ok = i.(map[interface{}]interface{})
+					componentEnv, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.env' section in the file '%s'", component, stackName)
 					}
@@ -859,9 +859,9 @@ func ProcessStackConfig(
 
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
-				componentMetadata := map[interface{}]interface{}{}
+				componentMetadata := map[any]any{}
 				if i, ok := componentMap["metadata"]; ok {
-					componentMetadata, ok = i.(map[interface{}]interface{})
+					componentMetadata, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.metadata' section in the file '%s'", component, stackName)
 					}
@@ -876,9 +876,9 @@ func ProcessStackConfig(
 				}
 
 				// Process base component(s)
-				baseComponentVars := map[interface{}]interface{}{}
-				baseComponentSettings := map[interface{}]interface{}{}
-				baseComponentEnv := map[interface{}]interface{}{}
+				baseComponentVars := map[any]any{}
+				baseComponentSettings := map[any]any{}
+				baseComponentEnv := map[any]any{}
 				baseComponentName := ""
 				baseComponentHelmfileCommand := ""
 				var baseComponentConfig BaseComponentConfig
@@ -931,7 +931,7 @@ func ProcessStackConfig(
 					}
 				}
 
-				if inheritList, inheritListExist := componentMetadata["inherits"].([]interface{}); inheritListExist {
+				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
 					for _, v := range inheritList {
 						baseComponentFromInheritList, ok := v.(string)
 						if !ok {
@@ -973,17 +973,17 @@ func ProcessStackConfig(
 					}
 				}
 
-				finalComponentVars, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileVars, baseComponentVars, componentVars})
+				finalComponentVars, err := m.Merge([]map[any]any{globalAndHelmfileVars, baseComponentVars, componentVars})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileSettings, baseComponentSettings, componentSettings})
+				finalComponentSettings, err := m.Merge([]map[any]any{globalAndHelmfileSettings, baseComponentSettings, componentSettings})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := m.Merge([]map[interface{}]interface{}{globalAndHelmfileEnv, baseComponentEnv, componentEnv})
+				finalComponentEnv, err := m.Merge([]map[any]any{globalAndHelmfileEnv, baseComponentEnv, componentEnv})
 				if err != nil {
 					return nil, err
 				}
@@ -997,7 +997,7 @@ func ProcessStackConfig(
 					finalComponentHelmfileCommand = componentHelmfileCommand
 				}
 
-				comp := map[string]interface{}{}
+				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
 				comp["env"] = finalComponentEnv
@@ -1039,7 +1039,7 @@ func ProcessStackConfig(
 	allComponents["terraform"] = terraformComponents
 	allComponents["helmfile"] = helmfileComponents
 
-	result := map[interface{}]interface{}{
+	result := map[any]any{
 		"components": allComponents,
 	}
 

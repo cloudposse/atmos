@@ -7,8 +7,8 @@ import (
 )
 
 // MergeWithOptions takes a list of maps of interface and options as input and returns a single map with the merged contents
-func MergeWithOptions(inputs []map[interface{}]interface{}, appendSlice, sliceDeepCopy bool) (map[interface{}]interface{}, error) {
-	merged := map[interface{}]interface{}{}
+func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (map[any]any, error) {
+	merged := map[any]any{}
 
 	for index := range inputs {
 		current := inputs[index]
@@ -24,7 +24,7 @@ func MergeWithOptions(inputs []map[interface{}]interface{}, appendSlice, sliceDe
 			return nil, err
 		}
 
-		var dataCurrent map[interface{}]interface{}
+		var dataCurrent map[any]any
 		if err = yaml.Unmarshal(yamlCurrent, &dataCurrent); err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
@@ -51,6 +51,6 @@ func MergeWithOptions(inputs []map[interface{}]interface{}, appendSlice, sliceDe
 }
 
 // Merge takes a list of maps of interface as input and returns a single map with the merged contents
-func Merge(inputs []map[interface{}]interface{}) (map[interface{}]interface{}, error) {
+func Merge(inputs []map[any]any) (map[any]any, error) {
 	return MergeWithOptions(inputs, false, false)
 }

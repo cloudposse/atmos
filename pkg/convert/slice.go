@@ -3,7 +3,7 @@ package convert
 import "github.com/pkg/errors"
 
 // SliceOfInterfacesToSliceOfStrings takes a slice of interfaces and converts it to a slice of strings
-func SliceOfInterfacesToSliceOfStrings(input []interface{}) ([]string, error) {
+func SliceOfInterfacesToSliceOfStrings(input []any) ([]string, error) {
 	if input == nil {
 		return nil, errors.New("input must not be nil")
 	}
@@ -16,11 +16,11 @@ func SliceOfInterfacesToSliceOfStrings(input []interface{}) ([]string, error) {
 	return output, nil
 }
 
-// SliceOfMapsOfStringsToSliceOfMapsOfInterfaces takes a slice of map[string]interface{} and returns a slice of map[interface{}]interface{}
-func SliceOfMapsOfStringsToSliceOfMapsOfInterfaces(input []map[string]interface{}) []map[interface{}]interface{} {
-	output := make([]map[interface{}]interface{}, 0)
+// SliceOfMapsOfStringsToSliceOfMapsOfInterfaces takes a slice of map[string]any and returns a slice of map[any]any
+func SliceOfMapsOfStringsToSliceOfMapsOfInterfaces(input []map[string]any) []map[any]any {
+	output := make([]map[any]any, 0)
 	for k, v := range input {
-		output = append(output, map[interface{}]interface{}{k: v})
+		output = append(output, map[any]any{k: v})
 	}
 	return output
 }

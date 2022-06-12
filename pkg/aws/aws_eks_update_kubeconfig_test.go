@@ -14,7 +14,7 @@ func TestClusterNamePattern(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Define variables for a component in a stack
-	componentVars := map[interface{}]interface{}{
+	componentVars := map[any]any{
 		"namespace":   "eg",
 		"tenant":      "plat",
 		"environment": "ue2",

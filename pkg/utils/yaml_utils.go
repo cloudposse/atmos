@@ -8,7 +8,7 @@ import (
 )
 
 // PrintAsYAML prints the provided value as YAML document to the console
-func PrintAsYAML(data interface{}) error {
+func PrintAsYAML(data any) error {
 	y, err := yaml.Marshal(data)
 	if err != nil {
 		return err
@@ -18,7 +18,7 @@ func PrintAsYAML(data interface{}) error {
 }
 
 // WriteToFileAsYAML converts the provided value to YAML and writes it to the provided file
-func WriteToFileAsYAML(filePath string, data interface{}, fileMode os.FileMode) error {
+func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	y, err := yaml.Marshal(data)
 	if err != nil {
 		return err

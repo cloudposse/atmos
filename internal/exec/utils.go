@@ -36,35 +36,35 @@ var (
 // FindComponentConfig finds component config sections
 func FindComponentConfig(
 	stack string,
-	stacksMap map[string]interface{},
+	stacksMap map[string]any,
 	componentType string,
 	component string,
-) (map[string]interface{},
-	map[interface{}]interface{},
-	map[interface{}]interface{},
-	map[interface{}]interface{},
+) (map[string]any,
+	map[any]any,
+	map[any]any,
+	map[any]any,
 	string,
 	string,
 	string,
 	[]string,
 	bool,
-	map[interface{}]interface{},
+	map[any]any,
 	error,
 ) {
 
-	var stackSection map[interface{}]interface{}
-	var componentsSection map[string]interface{}
-	var componentTypeSection map[string]interface{}
-	var componentSection map[string]interface{}
-	var componentVarsSection map[interface{}]interface{}
-	var componentEnvSection map[interface{}]interface{}
-	var componentBackendSection map[interface{}]interface{}
+	var stackSection map[any]any
+	var componentsSection map[string]any
+	var componentTypeSection map[string]any
+	var componentSection map[string]any
+	var componentVarsSection map[any]any
+	var componentEnvSection map[any]any
+	var componentBackendSection map[any]any
 	var componentBackendType string
 	var baseComponentName string
 	var command string
 	var componentInheritanceChain []string
 	var componentIsAbstract bool
-	var componentMetadata map[interface{}]interface{}
+	var componentMetadata map[any]any
 	var ok bool
 
 	if len(stack) == 0 {
@@ -76,22 +76,22 @@ func FindComponentConfig(
 	if len(componentType) == 0 {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component type must be provided and must not be empty")
 	}
-	if stackSection, ok = stacksMap[stack].(map[interface{}]interface{}); !ok {
+	if stackSection, ok = stacksMap[stack].(map[any]any); !ok {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("could not find the stack '%s'", stack)
 	}
-	if componentsSection, ok = stackSection["components"].(map[string]interface{}); !ok {
+	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components' section is missing in the stack '%s'", stack)
 	}
-	if componentTypeSection, ok = componentsSection[componentType].(map[string]interface{}); !ok {
+	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack '%s'", componentType, stack)
 	}
-	if componentSection, ok = componentTypeSection[component].(map[string]interface{}); !ok {
+	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("invalid or missing configuration for the component '%s' in the stack '%s'", component, stack)
 	}
-	if componentVarsSection, ok = componentSection["vars"].(map[interface{}]interface{}); !ok {
+	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack '%s'", component, stack)
 	}
-	if componentBackendSection, ok = componentSection["backend"].(map[interface{}]interface{}); !ok {
+	if componentBackendSection, ok = componentSection["backend"].(map[any]any); !ok {
 		componentBackendSection = nil
 	}
 	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
@@ -100,8 +100,8 @@ func FindComponentConfig(
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
 	}
-	if componentEnvSection, ok = componentSection["env"].(map[interface{}]interface{}); !ok {
-		componentEnvSection = map[interface{}]interface{}{}
+	if componentEnvSection, ok = componentSection["env"].(map[any]any); !ok {
+		componentEnvSection = map[any]any{}
 	}
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
@@ -110,7 +110,7 @@ func FindComponentConfig(
 		baseComponentName = ""
 	}
 	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
-		componentMetadata = componentMetadataSection.(map[interface{}]interface{})
+		componentMetadata = componentMetadataSection.(map[any]any)
 		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
 			if componentMetadataType == "abstract" {
 				componentIsAbstract = true
@@ -197,7 +197,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]interface{}, error) {
+func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]any, error) {
 	// Process and merge CLI configurations
 	err := c.InitConfig()
 	if err != nil {
@@ -614,10 +614,10 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 }
 
 // generateComponentBackendConfig generates backend config for components
-func generateComponentBackendConfig(backendType string, backendConfig map[interface{}]interface{}) map[string]interface{} {
-	return map[string]interface{}{
-		"terraform": map[string]interface{}{
-			"backend": map[string]interface{}{
+func generateComponentBackendConfig(backendType string, backendConfig map[any]any) map[string]any {
+	return map[string]any{
+		"terraform": map[string]any{
+			"backend": map[string]any{
 				backendType: backendConfig,
 			},
 		},
@@ -625,7 +625,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[interf
 }
 
 // convertEnvVars convert ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...]
-func convertEnvVars(envVarsMap map[interface{}]interface{}) []string {
+func convertEnvVars(envVarsMap map[any]any) []string {
 	res := []string{}
 
 	for k, v := range envVarsMap {

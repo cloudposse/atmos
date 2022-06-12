@@ -334,7 +334,7 @@ func processLogsConfig() error {
 }
 
 // GetContextFromVars creates a context object from the provided variables
-func GetContextFromVars(vars map[interface{}]interface{}) Context {
+func GetContextFromVars(vars map[any]any) Context {
 	var context Context
 
 	if namespace, ok := vars["namespace"].(string); ok {
