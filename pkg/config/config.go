@@ -11,7 +11,6 @@ import (
 
 	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -360,7 +359,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			color.Red("Error closing file " + path + ". " + err.Error())
+			u.PrintError(fmt.Errorf("error closing file '" + path + "'. " + err.Error()))
 		}
 	}(reader)
 

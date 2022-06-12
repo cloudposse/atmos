@@ -10,7 +10,6 @@ import (
 
 	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
@@ -52,7 +51,7 @@ func FindAllStackConfigsInPathsForStack(
 					for _, excludePath := range excludeStackPaths {
 						excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 						if err != nil {
-							color.Red("%s", err)
+							u.PrintError(err)
 							continue
 						} else if excludeMatch {
 							allExcluded = false
@@ -70,7 +69,7 @@ func FindAllStackConfigsInPathsForStack(
 				for _, excludePath := range excludeStackPaths {
 					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
-						color.Red("%s", err)
+						u.PrintError(err)
 						include = false
 						continue
 					} else if excludeMatch {
@@ -123,7 +122,7 @@ func FindAllStackConfigsInPaths(
 				for _, excludePath := range excludeStackPaths {
 					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
-						color.Red("%s", err)
+						u.PrintError(err)
 						include = false
 						continue
 					} else if excludeMatch {
