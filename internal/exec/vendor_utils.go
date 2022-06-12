@@ -13,7 +13,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/bmatcuk/doublestar/v4"
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
@@ -220,7 +219,7 @@ func ExecuteComponentVendorCommandInternal(
 					// https://en.wikipedia.org/wiki/Glob_(programming)
 					// https://github.com/bmatcuk/doublestar#patterns
 					for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
-						excludeMatch, err := doublestar.PathMatch(excludePath, src)
+						excludeMatch, err := u.PathMatch(excludePath, src)
 						if err != nil {
 							return true, err
 						} else if excludeMatch {
@@ -237,7 +236,7 @@ func ExecuteComponentVendorCommandInternal(
 					if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
 						anyMatches := false
 						for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
-							includeMatch, err := doublestar.PathMatch(includePath, src)
+							includeMatch, err := u.PathMatch(includePath, src)
 							if err != nil {
 								return true, err
 							} else if includeMatch {

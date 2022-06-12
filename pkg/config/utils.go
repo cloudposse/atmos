@@ -8,9 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bmatcuk/doublestar/v4"
 	g "github.com/cloudposse/atmos/pkg/globals"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 )
@@ -36,7 +34,7 @@ func FindAllStackConfigsInPathsForStack(
 		}
 
 		// Find all matches in the glob
-		matches, err := s.GetGlobMatches(pathWithExt)
+		matches, err := u.GetGlobMatches(pathWithExt)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -52,7 +50,7 @@ func FindAllStackConfigsInPathsForStack(
 				if stackMatch {
 					allExcluded := true
 					for _, excludePath := range excludeStackPaths {
-						excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
+						excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 						if err != nil {
 							color.Red("%s", err)
 							continue
@@ -70,7 +68,7 @@ func FindAllStackConfigsInPathsForStack(
 				include := true
 
 				for _, excludePath := range excludeStackPaths {
-					excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
+					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
 						color.Red("%s", err)
 						include = false
@@ -111,7 +109,7 @@ func FindAllStackConfigsInPaths(
 		}
 
 		// Find all matches in the glob
-		matches, err := s.GetGlobMatches(pathWithExt)
+		matches, err := u.GetGlobMatches(pathWithExt)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -123,7 +121,7 @@ func FindAllStackConfigsInPaths(
 				include := true
 
 				for _, excludePath := range excludeStackPaths {
-					excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
+					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
 						color.Red("%s", err)
 						include = false

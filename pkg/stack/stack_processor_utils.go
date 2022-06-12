@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bmatcuk/doublestar/v4"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -20,7 +19,6 @@ import (
 
 var (
 	getFileContentSyncMap = sync.Map{}
-	getGlobMatchesSyncMap = sync.Map{}
 )
 
 // FindComponentStacks finds all infrastructure stack config files where the component or the base component is defined
@@ -259,36 +257,6 @@ func getFileContent(filePath string) (string, error) {
 	getFileContentSyncMap.Store(filePath, content)
 
 	return string(content), nil
-}
-
-// GetGlobMatches tries to read and return the Glob matches content from the sync map if it exists in the map,
-// otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files
-func GetGlobMatches(pattern string) ([]string, error) {
-	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
-	if found && existingMatches != nil {
-		return strings.Split(fmt.Sprintf("%s", existingMatches), ","), nil
-	}
-
-	base, cleanPattern := doublestar.SplitPattern(pattern)
-	f := os.DirFS(base)
-
-	matches, err := doublestar.Glob(f, cleanPattern)
-	if err != nil {
-		return nil, err
-	}
-
-	if matches == nil {
-		return nil, fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", pattern, base, cleanPattern)
-	}
-
-	var fullMatches []string
-	for _, match := range matches {
-		fullMatches = append(fullMatches, path.Join(base, match))
-	}
-
-	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
-
-	return fullMatches, nil
 }
 
 type BaseComponentConfig struct {
