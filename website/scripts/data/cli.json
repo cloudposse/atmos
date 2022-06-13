@@ -181,7 +181,7 @@
       "exampleCommands": [
         "atmos describe config",
         "atmos describe config -f json",
-        "atmos describe config -f yaml"
+        "atmos describe config --format yaml"
       ],
       "aliases": [],
       "inputs": [],
@@ -196,6 +196,98 @@
           ],
           "spec": {
             "value": "json/yaml"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos describe stacks",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `describe stacks` command",
+      "description": "`atmos help` shows help for all `atmos` CLI commands.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos describe stacks",
+        "atmos describe stacks -s tenant1-ue2-dev",
+        "atmos describe stacks --file=stacks.yaml",
+        "atmos describe stacks --file=stacks.json --format=json",
+        "atmos describe stacks --components=infra/vpc",
+        "atmos describe stacks --components=echo-server,infra/vpc",
+        "atmos describe stacks --components=echo-server,infra/vpc --sections=none",
+        "atmos describe stacks --components=echo-server,infra/vpc --sections=none",
+        "atmos describe stacks --components=none --sections=metadata",
+        "atmos describe stacks --components=echo-server,infra/vpc --sections=vars,settings,metadata",
+        "atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings,component,deps,inheritance --file=stacks.yaml",
+        "atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings --format=json --file=stacks.json",
+        "atmos describe stacks --components=test/test-component-override-3 --sections=deps,vars -s=tenant2-ue2-staging"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [
+        {
+          "name": "format",
+          "type": "string",
+          "summary": "Output format (`yaml` or `json`)",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "format"
+          }
+        },
+        {
+          "name": "file",
+          "type": "string",
+          "summary": "Write the result to a file",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "file"
+          }
+        },
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Filter by a specific stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "components",
+          "type": "string",
+          "summary": "Filter by specific components",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "components"
+          }
+        },
+        {
+          "name": "component-types",
+          "type": "string",
+          "summary": "Filter by specific component types (terraform or helmfile)",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "component-types"
+          }
+        },
+        {
+          "name": "sections",
+          "type": "string",
+          "summary": "Output only the specified component sections. Available sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "sections"
           }
         }
       ],
