@@ -30,6 +30,23 @@
       "type": "global"
     },
     {
+      "name": "atmos version",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Show `atmos` version",
+      "description": "`atmos version` shows CLI version.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos version"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [],
+      "type": "global"
+    },
+    {
       "name": "atmos aws eks update-kubeconfig",
       "namespace": [
         "atmos",
@@ -207,7 +224,7 @@
         "atmos"
       ],
       "summary": "Execute `describe stacks` command",
-      "description": "`atmos help` shows help for all `atmos` CLI commands.",
+      "description": "This command shows configuration for stacks and components in the stacks.",
       "footnotes": [],
       "groups": [],
       "exampleCommands": [
