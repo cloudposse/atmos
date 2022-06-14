@@ -309,6 +309,96 @@
         }
       ],
       "type": "global"
+    },
+    {
+      "name": "atmos helmfile",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `helmfile` commands",
+      "description": "This command executes `helmfile` commands. Supports all commands and options described in https://github.com/helmfile/helmfile#cli-reference",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos helmfile diff echo-server -s tenant1-ue2-dev",
+        "atmos helmfile apply echo-server -s tenant1-ue2-dev",
+        "atmos helmfile sync echo-server --stack tenant1-ue2-dev",
+        "atmos helmfile destroy echo-server --stack=tenant1-ue2-dev"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "`helmfile` component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos helmfile generate varfile",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `helmfile generate varfile` command",
+      "description": "This command generates a varfile for a `helmfile` component.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos helmfile generate varfile echo-server -s tenant1-ue2-dev",
+        "atmos helmfile generate varfile echo-server -s tenant1-ue2-dev",
+        "atmos helmfile generate varfile echo-server -s tenant1-ue2-dev -f vars.yaml",
+        "atmos helmfile generate varfile echo-server --stack tenant1-ue2-dev --file=vars.yaml"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "`helmfile` component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "file",
+          "type": "string",
+          "summary": "File to write the varfile to",
+          "groups": [],
+          "aliases": [
+            "f"
+          ],
+          "spec": {
+            "value": "file"
+          }
+        }
+      ],
+      "type": "global"
     }
   ],
   "aliases": []
