@@ -608,6 +608,88 @@
         }
       ],
       "type": "global"
+    },
+    {
+      "name": "atmos validate stacks",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `validate stacks` command",
+      "description": [
+        "This command validates stacks configuration. The command checks and validates the following:",
+        "\n\n- All YAML config files for any YAML errors and inconsistencies",
+        "\n\n- All imports - if they are configured correctly, have valid data types, and point to existing files",
+        "\n\n- Schema - if all sections in all YAML files are correctly configured and have valid data types"
+      ],
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos validate stacks"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [],
+      "type": "global"
+    },
+    {
+      "name": "atmos vendor pull",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `vendor pull` command",
+      "description": [
+        "This command pulls sources and mixins from remote repositories for a `terraform` or `helmfile` component.",
+        "\n\n- Supports Kubernetes-style YAML config (file `component.yaml`) to describe component vendoring configuration. The file is placed into the component folder",
+        "\n\n- The URIs (`uri`) in `component.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and archive formats as described in https://github.com/hashicorp/go-getter",
+        "\n\n- `included_paths` and `excluded_paths` in `component.yaml` support POSIX-style Globs for file names/paths (double-star ** is supported as well)"
+      ],
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos vendor pull -c infra/account-map",
+        "atmos vendor pull -c infra/vpc-flow-logs-bucket",
+        "atmos vendor pull -c echo-server -t helmfile",
+        "atmos vendor pull -c infra/account-map --dry-run"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [
+        {
+          "name": "component",
+          "type": "string",
+          "summary": "Component",
+          "groups": [],
+          "aliases": [
+            "c"
+          ],
+          "spec": {
+            "value": "component"
+          }
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "summary": "Component type (`terraform` or `helmfile`)",
+          "groups": [],
+          "aliases": [
+            "t"
+          ],
+          "spec": {
+            "value": "terraform/helmfile"
+          }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
     }
   ],
   "aliases": []
