@@ -690,6 +690,63 @@
         }
       ],
       "type": "global"
+    },
+    {
+      "name": "atmos workflow",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `workflow` command",
+      "description": [
+        "Allows sequential execution of `atmos` and `shell` commands defined as workflow steps."
+      ],
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos workflow test-1 -f workflow1",
+        "atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev",
+        "atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1 --dry-run",
+        "atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1"
+      ],
+      "aliases": [],
+      "inputs": [],
+      "options": [
+        {
+          "name": "file",
+          "type": "string",
+          "summary": "File name where the workflow is defined",
+          "groups": [],
+          "aliases": [
+            "f"
+          ],
+          "spec": {
+            "value": "file"
+          }
+        },
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Allows specifying the stack for the workflow on the command line. The stack defined on the command line (atmos workflow <name> -f <file> -s <stack>) has the highest priority, it overrides all other stack attributes",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
     }
   ],
   "aliases": []
