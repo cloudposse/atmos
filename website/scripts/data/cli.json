@@ -726,7 +726,7 @@
         {
           "name": "stack",
           "type": "string",
-          "summary": "Allows specifying the stack for the workflow on the command line. The stack defined on the command line (atmos workflow <name> -f <file> -s <stack>) has the highest priority, it overrides all other stack attributes",
+          "summary": "Allows specifying the stack for the workflow on the command line. The stack defined on the command line (atmos workflow <name> -f <file> -s <stack>) has the highest priority, it overrides all other stack attributes in the workflow definition",
           "groups": [],
           "aliases": [
             "s"
