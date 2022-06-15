@@ -491,8 +491,7 @@
         "atmos terraform generate backend top-level-component1 -s tenant1-ue2-dev",
         "atmos terraform generate backend infra/vpc -s tenant1-ue2-staging",
         "atmos terraform generate backend test/test-component -s tenant1-ue2-dev",
-        "atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-prod",
-        "atmos terraform generate backend test/test-component-override-3 -s tenant1-ue2-dev -f vars.json"
+        "atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-prod"
       ],
       "aliases": [],
       "inputs": [
@@ -513,18 +512,6 @@
           ],
           "spec": {
             "value": "stack"
-          }
-        },
-        {
-          "name": "file",
-          "type": "string",
-          "summary": "File name to write the backend config to",
-          "groups": [],
-          "aliases": [
-            "f"
-          ],
-          "spec": {
-            "value": "file"
           }
         }
       ],
