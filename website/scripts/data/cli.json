@@ -219,6 +219,44 @@
       "type": "global"
     },
     {
+      "name": "atmos describe component",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `describe component` command",
+      "description": "This command shows configuration for a component in a stack.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos describe component infra/vpc -s tenant1-ue2-dev",
+        "atmos describe component echo-server -s tenant1-ue2-staging",
+        "atmos describe component test/test-component-override -s tenant2-ue2-prod"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "Component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
       "name": "atmos describe stacks",
       "namespace": [
         "atmos"
@@ -305,44 +343,6 @@
           "aliases": [],
           "spec": {
             "value": "sections"
-          }
-        }
-      ],
-      "type": "global"
-    },
-    {
-      "name": "atmos describe component",
-      "namespace": [
-        "atmos"
-      ],
-      "summary": "Execute `describe component` command",
-      "description": "This command shows configuration for a component in a stack.",
-      "footnotes": [],
-      "groups": [],
-      "exampleCommands": [
-        "atmos describe component infra/vpc -s tenant1-ue2-dev",
-        "atmos describe component echo-server -s tenant1-ue2-staging",
-        "atmos describe component test/test-component-override -s tenant2-ue2-prod"
-      ],
-      "aliases": [],
-      "inputs": [
-        {
-          "name": "component",
-          "summary": "Component",
-          "required": true
-        }
-      ],
-      "options": [
-        {
-          "name": "stack",
-          "type": "string",
-          "summary": "Stack",
-          "groups": [],
-          "aliases": [
-            "s"
-          ],
-          "spec": {
-            "value": "stack"
           }
         }
       ],
@@ -479,6 +479,58 @@
       "type": "global"
     },
     {
+      "name": "atmos terraform generate backend",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `terraform generate backend` command",
+      "description": "This command generates a backend config for a `terraform` component.",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos terraform generate backend top-level-component1 -s tenant1-ue2-dev",
+        "atmos terraform generate backend infra/vpc -s tenant1-ue2-staging",
+        "atmos terraform generate backend test/test-component -s tenant1-ue2-dev",
+        "atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-prod",
+        "atmos terraform generate backend test/test-component-override-3 -s tenant1-ue2-dev -f vars.json"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "`terraform` component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "file",
+          "type": "string",
+          "summary": "File name to write the backend config to",
+          "groups": [],
+          "aliases": [
+            "f"
+          ],
+          "spec": {
+            "value": "file"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
       "name": "atmos terraform generate varfile",
       "namespace": [
         "atmos"
@@ -525,6 +577,46 @@
           ],
           "spec": {
             "value": "file"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos terraform workspace",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `terraform workspace` command",
+      "description": "This command selects a Terraform workspace for a component. If the workspace does not exist, the command creates it",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos terraform workspace top-level-component1 -s tenant1-ue2-dev",
+        "atmos terraform workspace infra/vpc -s tenant1-ue2-staging",
+        "atmos terraform workspace test/test-component -s tenant1-ue2-dev",
+        "atmos terraform workspace test/test-component-override-2 -s tenant2-ue2-prod",
+        "atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "`terraform` component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
           }
         }
       ],
