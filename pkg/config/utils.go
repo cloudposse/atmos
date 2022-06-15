@@ -8,11 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bmatcuk/doublestar/v4"
 	g "github.com/cloudposse/atmos/pkg/globals"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
@@ -36,55 +33,58 @@ func FindAllStackConfigsInPathsForStack(
 		}
 
 		// Find all matches in the glob
-		matches, err := s.GetGlobMatches(pathWithExt)
-		if err != nil {
-			return nil, nil, false, err
+		matches, err := u.GetGlobMatches(pathWithExt)
+		if err != nil || len(matches) == 0 {
+			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
+			// TODO: review `doublestar` library
+			matches, err = u.GetGlobMatches(pathWithExt)
+			if err != nil {
+				return nil, nil, false, err
+			}
 		}
 
 		// Exclude files that match any of the excludePaths
-		if len(matches) > 0 {
-			for _, matchedFileAbsolutePath := range matches {
-				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
+		for _, matchedFileAbsolutePath := range matches {
+			matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
-				// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
-				stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+g.DefaultStackConfigFileExtension)
+			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
+			stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+g.DefaultStackConfigFileExtension)
 
-				if stackMatch {
-					allExcluded := true
-					for _, excludePath := range excludeStackPaths {
-						excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
-						if err != nil {
-							color.Red("%s", err)
-							continue
-						} else if excludeMatch {
-							allExcluded = false
-							break
-						}
-					}
-
-					if allExcluded && stackIsDir {
-						return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
-					}
-				}
-
-				include := true
-
+			if stackMatch {
+				allExcluded := true
 				for _, excludePath := range excludeStackPaths {
-					excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
+					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
-						color.Red("%s", err)
-						include = false
+						u.PrintError(err)
 						continue
 					} else if excludeMatch {
-						include = false
-						continue
+						allExcluded = false
+						break
 					}
 				}
 
-				if include {
-					absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
-					relativePaths = append(relativePaths, matchedFileRelativePath)
+				if allExcluded && stackIsDir {
+					return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
 				}
+			}
+
+			include := true
+
+			for _, excludePath := range excludeStackPaths {
+				excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
+				if err != nil {
+					u.PrintError(err)
+					include = false
+					continue
+				} else if excludeMatch {
+					include = false
+					continue
+				}
+			}
+
+			if include {
+				absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
+				relativePaths = append(relativePaths, matchedFileRelativePath)
 			}
 		}
 	}
@@ -111,33 +111,36 @@ func FindAllStackConfigsInPaths(
 		}
 
 		// Find all matches in the glob
-		matches, err := s.GetGlobMatches(pathWithExt)
-		if err != nil {
-			return nil, nil, err
+		matches, err := u.GetGlobMatches(pathWithExt)
+		if err != nil || len(matches) == 0 {
+			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
+			// TODO: review `doublestar` library
+			matches, err = u.GetGlobMatches(pathWithExt)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 
 		// Exclude files that match any of the excludePaths
-		if len(matches) > 0 {
-			for _, matchedFileAbsolutePath := range matches {
-				matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
-				include := true
+		for _, matchedFileAbsolutePath := range matches {
+			matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
+			include := true
 
-				for _, excludePath := range excludeStackPaths {
-					excludeMatch, err := doublestar.PathMatch(excludePath, matchedFileAbsolutePath)
-					if err != nil {
-						color.Red("%s", err)
-						include = false
-						continue
-					} else if excludeMatch {
-						include = false
-						continue
-					}
+			for _, excludePath := range excludeStackPaths {
+				excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
+				if err != nil {
+					u.PrintError(err)
+					include = false
+					continue
+				} else if excludeMatch {
+					include = false
+					continue
 				}
+			}
 
-				if include {
-					absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
-					relativePaths = append(relativePaths, matchedFileRelativePath)
-				}
+			if include {
+				absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
+				relativePaths = append(relativePaths, matchedFileRelativePath)
 			}
 		}
 	}
@@ -334,7 +337,7 @@ func processLogsConfig() error {
 }
 
 // GetContextFromVars creates a context object from the provided variables
-func GetContextFromVars(vars map[interface{}]interface{}) Context {
+func GetContextFromVars(vars map[any]any) Context {
 	var context Context
 
 	if namespace, ok := vars["namespace"].(string); ok {

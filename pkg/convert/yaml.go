@@ -4,9 +4,9 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// YAMLToMapOfInterfaces takes a YAML string as input and returns a map[interface{}]interface{}
-func YAMLToMapOfInterfaces(input string) (map[interface{}]interface{}, error) {
-	var data map[interface{}]interface{}
+// YAMLToMapOfInterfaces takes a YAML string as input and returns a map[any]any
+func YAMLToMapOfInterfaces(input string) (map[any]any, error) {
+	var data map[any]any
 	byt := []byte(input)
 
 	if err := yaml.Unmarshal(byt, &data); err != nil {
@@ -15,9 +15,9 @@ func YAMLToMapOfInterfaces(input string) (map[interface{}]interface{}, error) {
 	return data, nil
 }
 
-// YAMLSliceOfInterfaceToSliceOfMaps takes a slice of interfaces as input and returns a slice of map[interface{}]interface{}
-func YAMLSliceOfInterfaceToSliceOfMaps(input []interface{}) ([]map[interface{}]interface{}, error) {
-	output := make([]map[interface{}]interface{}, 0)
+// YAMLSliceOfInterfaceToSliceOfMaps takes a slice of interfaces as input and returns a slice of map[any]any
+func YAMLSliceOfInterfaceToSliceOfMaps(input []any) ([]map[any]any, error) {
+	output := make([]map[any]any, 0)
 	for _, current := range input {
 		// Apply YAMLToMap only if string is passed
 		if currentYaml, ok := current.(string); ok {

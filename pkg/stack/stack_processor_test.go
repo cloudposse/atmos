@@ -37,10 +37,10 @@ func TestStackProcessor(t *testing.T) {
 	mapConfig1, err := c.YAMLToMapOfInterfaces(listResult[0])
 	assert.Nil(t, err)
 
-	imports := mapConfig1["imports"].([]interface{})
+	imports := mapConfig1["imports"].([]any)
 
 	mapConfig2 := mapResult["tenant1/ue2/dev"]
-	assert.Equal(t, len(imports), len(mapConfig2.(map[interface{}]interface{})["imports"].([]string)))
+	assert.Equal(t, len(imports), len(mapConfig2.(map[any]any)["imports"].([]string)))
 
 	assert.Equal(t, 24, len(imports))
 	assert.Equal(t, "catalog/helmfile/echo-server", imports[0])
@@ -68,14 +68,14 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "globals/tenant1-globals", imports[22])
 	assert.Equal(t, "globals/ue2-globals", imports[23])
 
-	components := mapConfig1["components"].(map[interface{}]interface{})
-	terraformComponents := components["terraform"].(map[interface{}]interface{})
-	helmfileComponents := components["helmfile"].(map[interface{}]interface{})
+	components := mapConfig1["components"].(map[any]any)
+	terraformComponents := components["terraform"].(map[any]any)
+	helmfileComponents := components["helmfile"].(map[any]any)
 
-	infraVpcComponent := terraformComponents["infra/vpc"].(map[interface{}]interface{})
-	infraVpcComponentBackend := infraVpcComponent["backend"].(map[interface{}]interface{})
+	infraVpcComponent := terraformComponents["infra/vpc"].(map[any]any)
+	infraVpcComponentBackend := infraVpcComponent["backend"].(map[any]any)
 	infraVpcComponentBackendType := infraVpcComponent["backend_type"]
-	infraVpcComponentRemoteSateBackend := infraVpcComponent["remote_state_backend"].(map[interface{}]interface{})
+	infraVpcComponentRemoteSateBackend := infraVpcComponent["remote_state_backend"].(map[any]any)
 	infraVpcComponentRemoteSateBackendType := infraVpcComponent["remote_state_backend_type"]
 	infraVpcComponentBackendWorkspaceKeyPrefix := infraVpcComponentBackend["workspace_key_prefix"]
 	infraVpcComponentRemoteStateBackendWorkspaceKeyPrefix := infraVpcComponentRemoteSateBackend["workspace_key_prefix"]
@@ -84,13 +84,13 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "s3", infraVpcComponentBackendType)
 	assert.Equal(t, "s3", infraVpcComponentRemoteSateBackendType)
 
-	testTestComponent := terraformComponents["test/test-component"].(map[interface{}]interface{})
-	testTestComponentBackend := testTestComponent["backend"].(map[interface{}]interface{})
+	testTestComponent := terraformComponents["test/test-component"].(map[any]any)
+	testTestComponentBackend := testTestComponent["backend"].(map[any]any)
 	testTestComponentBackendType := testTestComponent["backend_type"]
 	testTestComponentBackendBucket := testTestComponentBackend["bucket"]
 	testTestComponentBackendWorkspaceKeyPrefix := testTestComponentBackend["workspace_key_prefix"]
 	testTestComponentBackendRoleArn := testTestComponentBackend["role_arn"]
-	testTestComponentRemoteStateBackend := testTestComponent["remote_state_backend"].(map[interface{}]interface{})
+	testTestComponentRemoteStateBackend := testTestComponent["remote_state_backend"].(map[any]any)
 	testTestComponentRemoteStateBackendType := testTestComponent["remote_state_backend_type"]
 	testTestComponentRemoteStateBackendBucket := testTestComponentRemoteStateBackend["bucket"]
 	testTestComponentRemoteStateBackendWorkspaceKeyPrefix := testTestComponentRemoteStateBackend["workspace_key_prefix"]
@@ -104,12 +104,12 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, nil, testTestComponentBackendRoleArn)
 	assert.Equal(t, "arn:aws:iam::123456789012:role/eg-gbl-root-terraform", testTestComponentRemoteStateBackendRoleArn)
 
-	testTestComponentOverrideComponent := terraformComponents["test/test-component-override"].(map[interface{}]interface{})
-	testTestComponentOverrideComponentBackend := testTestComponentOverrideComponent["backend"].(map[interface{}]interface{})
+	testTestComponentOverrideComponent := terraformComponents["test/test-component-override"].(map[any]any)
+	testTestComponentOverrideComponentBackend := testTestComponentOverrideComponent["backend"].(map[any]any)
 	testTestComponentOverrideComponentBackendType := testTestComponentOverrideComponent["backend_type"]
 	testTestComponentOverrideComponentBackendWorkspaceKeyPrefix := testTestComponentOverrideComponentBackend["workspace_key_prefix"]
 	testTestComponentOverrideComponentBackendBucket := testTestComponentOverrideComponentBackend["bucket"]
-	testTestComponentOverrideComponentRemoteStateBackend := testTestComponentOverrideComponent["remote_state_backend"].(map[interface{}]interface{})
+	testTestComponentOverrideComponentRemoteStateBackend := testTestComponentOverrideComponent["remote_state_backend"].(map[any]any)
 	testTestComponentOverrideComponentRemoteStateBackendVal1 := testTestComponentOverrideComponentRemoteStateBackend["val1"].(bool)
 	testTestComponentOverrideComponentRemoteStateBackendVal2 := testTestComponentOverrideComponentRemoteStateBackend["val2"]
 	testTestComponentOverrideComponentRemoteStateBackendVal3 := testTestComponentOverrideComponentRemoteStateBackend["val3"].(int)
@@ -126,21 +126,21 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, 3, testTestComponentOverrideComponentRemoteStateBackendVal3)
 	assert.Equal(t, nil, testTestComponentOverrideComponentRemoteStateBackendVal4)
 
-	topLevelComponent1 := terraformComponents["top-level-component1"].(map[interface{}]interface{})
-	topLevelComponent1Backend := topLevelComponent1["backend"].(map[interface{}]interface{})
-	topLevelComponent1RemoteSateBackend := topLevelComponent1["remote_state_backend"].(map[interface{}]interface{})
+	topLevelComponent1 := terraformComponents["top-level-component1"].(map[any]any)
+	topLevelComponent1Backend := topLevelComponent1["backend"].(map[any]any)
+	topLevelComponent1RemoteSateBackend := topLevelComponent1["remote_state_backend"].(map[any]any)
 	topLevelComponent1BackendWorkspaceKeyPrefix := topLevelComponent1Backend["workspace_key_prefix"]
 	topLevelComponent1RemoteStateBackendWorkspaceKeyPrefix := topLevelComponent1RemoteSateBackend["workspace_key_prefix"]
 	assert.Equal(t, "top-level-component1", topLevelComponent1BackendWorkspaceKeyPrefix)
 	assert.Equal(t, "top-level-component1", topLevelComponent1RemoteStateBackendWorkspaceKeyPrefix)
 
-	testTestComponentOverrideComponent2 := terraformComponents["test/test-component-override-2"].(map[interface{}]interface{})
-	testTestComponentOverrideComponentBackend2 := testTestComponentOverrideComponent2["backend"].(map[interface{}]interface{})
+	testTestComponentOverrideComponent2 := terraformComponents["test/test-component-override-2"].(map[any]any)
+	testTestComponentOverrideComponentBackend2 := testTestComponentOverrideComponent2["backend"].(map[any]any)
 	testTestComponentOverrideComponentBackendType2 := testTestComponentOverrideComponent2["backend_type"]
 	testTestComponentOverrideComponentBackendWorkspaceKeyPrefix2 := testTestComponentOverrideComponentBackend2["workspace_key_prefix"]
 	testTestComponentOverrideComponentBackendBucket2 := testTestComponentOverrideComponentBackend2["bucket"]
 	testTestComponentOverrideComponentBaseComponent2 := testTestComponentOverrideComponent2["component"]
-	testTestComponentOverrideInheritance2 := testTestComponentOverrideComponent2["inheritance"].([]interface{})
+	testTestComponentOverrideInheritance2 := testTestComponentOverrideComponent2["inheritance"].([]any)
 	assert.Equal(t, "test-test-component", testTestComponentOverrideComponentBackendWorkspaceKeyPrefix2)
 	assert.Equal(t, "eg-ue2-root-tfstate", testTestComponentOverrideComponentBackendBucket2)
 	assert.Equal(t, "test/test-component", testTestComponentOverrideComponentBaseComponent2)
@@ -148,12 +148,12 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "test/test-component-override", testTestComponentOverrideInheritance2[0])
 	assert.Equal(t, "test/test-component", testTestComponentOverrideInheritance2[1])
 
-	infraInfraServerOverrideComponent := helmfileComponents["infra/infra-server-override"].(map[interface{}]interface{})
+	infraInfraServerOverrideComponent := helmfileComponents["infra/infra-server-override"].(map[any]any)
 	infraInfraServerOverrideComponentCommand := infraInfraServerOverrideComponent["command"]
-	infraInfraServerOverrideComponentDeps := infraInfraServerOverrideComponent["deps"].([]interface{})
-	infraInfraServerOverrideComponentVars := infraInfraServerOverrideComponent["vars"].(map[interface{}]interface{})
+	infraInfraServerOverrideComponentDeps := infraInfraServerOverrideComponent["deps"].([]any)
+	infraInfraServerOverrideComponentVars := infraInfraServerOverrideComponent["vars"].(map[any]any)
 	infraInfraServerOverrideComponentVarsA := infraInfraServerOverrideComponentVars["a"]
-	infraInfraServerOverrideComponentInheritance := infraInfraServerOverrideComponent["inheritance"].([]interface{})
+	infraInfraServerOverrideComponentInheritance := infraInfraServerOverrideComponent["inheritance"].([]any)
 	assert.Equal(t, "helmfile", infraInfraServerOverrideComponentCommand)
 	assert.Equal(t, "catalog/helmfile/infra-server", infraInfraServerOverrideComponentDeps[0])
 	assert.Equal(t, "catalog/helmfile/infra-server-override", infraInfraServerOverrideComponentDeps[1])
@@ -166,8 +166,8 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "infra/infra-server", infraInfraServerOverrideComponentInheritance[0])
 	assert.Equal(t, "1_override", infraInfraServerOverrideComponentVarsA)
 
-	testTestComponentOverrideComponent3 := terraformComponents["test/test-component-override-3"].(map[interface{}]interface{})
-	testTestComponentOverrideComponent3Metadata := testTestComponentOverrideComponent3["metadata"].(map[interface{}]interface{})
+	testTestComponentOverrideComponent3 := terraformComponents["test/test-component-override-3"].(map[any]any)
+	testTestComponentOverrideComponent3Metadata := testTestComponentOverrideComponent3["metadata"].(map[any]any)
 	testTestComponentOverrideComponent3TerraformWorkspace := testTestComponentOverrideComponent3Metadata["terraform_workspace"]
 	assert.Equal(t, "test-component-override-3-workspace", testTestComponentOverrideComponent3TerraformWorkspace)
 

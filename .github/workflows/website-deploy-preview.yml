@@ -29,6 +29,11 @@ jobs:
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
     runs-on: ubuntu-latest
+
+    environment:
+      name: preview
+      url: https://pr-${{ env.PR_NUMBER }}.atmos-docs.ue2.dev.plat.cloudposse.org
+
     steps:
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
@@ -61,11 +66,3 @@ jobs:
           aws sts get-caller-identity
           aws s3 sync . s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/ --recursive --human-readable --summarize
-
-      - name: Comment on PR with Website URL
-        uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            The atmos docs website preview has been deployed:
-            https://pr-${{ env.PR_NUMBER }}.atmos-docs.ue2.dev.plat.cloudposse.org
-          GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_ACCESS_TOKEN }}

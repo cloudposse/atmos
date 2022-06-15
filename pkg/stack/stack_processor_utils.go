@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bmatcuk/doublestar/v4"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -20,7 +19,6 @@ import (
 
 var (
 	getFileContentSyncMap = sync.Map{}
-	getGlobMatchesSyncMap = sync.Map{}
 )
 
 // FindComponentStacks finds all infrastructure stack config files where the component or the base component is defined
@@ -62,7 +60,7 @@ func FindComponentDependencies(
 	componentType string,
 	component string,
 	baseComponent string,
-	importsConfig map[string]map[interface{}]interface{}) ([]string, error) {
+	importsConfig map[string]map[any]any) ([]string, error) {
 
 	var deps []string
 
@@ -81,7 +79,7 @@ func FindComponentDependencies(
 		}
 
 		if sectionContainsAnyNotEmptySections(importConfig, []string{componentType}) {
-			if sectionContainsAnyNotEmptySections(importConfig[componentType].(map[interface{}]interface{}), []string{
+			if sectionContainsAnyNotEmptySections(importConfig[componentType].(map[any]any), []string{
 				"backend",
 				"backend_type",
 				"env",
@@ -96,13 +94,13 @@ func FindComponentDependencies(
 		}
 
 		if i, ok := importConfig["components"]; ok {
-			componentsSection := i.(map[interface{}]interface{})
+			componentsSection := i.(map[any]any)
 
 			if i2, ok2 := componentsSection[componentType]; ok2 {
-				componentTypeSection := i2.(map[interface{}]interface{})
+				componentTypeSection := i2.(map[any]any)
 
 				if i3, ok3 := componentTypeSection[component]; ok3 {
-					componentSection := i3.(map[interface{}]interface{})
+					componentSection := i3.(map[any]any)
 
 					if len(componentSection) > 0 {
 						deps = append(deps, imp)
@@ -112,7 +110,7 @@ func FindComponentDependencies(
 
 				if baseComponent != "" {
 					if i3, ok3 := componentTypeSection[baseComponent]; ok3 {
-						baseComponentSection := i3.(map[interface{}]interface{})
+						baseComponentSection := i3.(map[any]any)
 
 						if len(baseComponentSection) > 0 {
 							deps = append(deps, imp)
@@ -131,11 +129,11 @@ func FindComponentDependencies(
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
-func sectionContainsAnyNotEmptySections(section map[interface{}]interface{}, sectionsToCheck []string) bool {
+func sectionContainsAnyNotEmptySections(section map[any]any, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
 		if len(s) > 0 {
 			if v, ok := section[s]; ok {
-				if v2, ok2 := v.(map[interface{}]interface{}); ok2 && len(v2) > 0 {
+				if v2, ok2 := v.(map[any]any); ok2 && len(v2) > 0 {
 					return true
 				}
 				if v2, ok2 := v.(string); ok2 && len(v2) > 0 {
@@ -179,7 +177,7 @@ func CreateComponentStackMap(
 			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[interface{}]interface{}{})
+				config, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[any]any{})
 				if err != nil {
 					return err
 				}
@@ -201,11 +199,11 @@ func CreateComponentStackMap(
 				}
 
 				if componentsConfig, componentsConfigExists := finalConfig["components"]; componentsConfigExists {
-					componentsSection := componentsConfig.(map[string]interface{})
+					componentsSection := componentsConfig.(map[string]any)
 					stackName := strings.Replace(p, stacksBasePath+"/", "", 1)
 
 					if terraformConfig, terraformConfigExists := componentsSection["terraform"]; terraformConfigExists {
-						terraformSection := terraformConfig.(map[string]interface{})
+						terraformSection := terraformConfig.(map[string]any)
 
 						for k := range terraformSection {
 							stackComponentMap["terraform"][stackName] = append(stackComponentMap["terraform"][stackName], k)
@@ -213,7 +211,7 @@ func CreateComponentStackMap(
 					}
 
 					if helmfileConfig, helmfileConfigExists := componentsSection["helmfile"]; helmfileConfigExists {
-						helmfileSection := helmfileConfig.(map[string]interface{})
+						helmfileSection := helmfileConfig.(map[string]any)
 
 						for k := range helmfileSection {
 							stackComponentMap["helmfile"][stackName] = append(stackComponentMap["helmfile"][stackName], k)
@@ -261,53 +259,23 @@ func getFileContent(filePath string) (string, error) {
 	return string(content), nil
 }
 
-// GetGlobMatches tries to read and return the Glob matches content from the sync map if it exists in the map,
-// otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files
-func GetGlobMatches(pattern string) ([]string, error) {
-	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
-	if found && existingMatches != nil {
-		return strings.Split(fmt.Sprintf("%s", existingMatches), ","), nil
-	}
-
-	base, cleanPattern := doublestar.SplitPattern(pattern)
-	f := os.DirFS(base)
-
-	matches, err := doublestar.Glob(f, cleanPattern)
-	if err != nil {
-		return nil, err
-	}
-
-	if matches == nil {
-		return nil, fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", pattern, base, cleanPattern)
-	}
-
-	var fullMatches []string
-	for _, match := range matches {
-		fullMatches = append(fullMatches, path.Join(base, match))
-	}
-
-	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
-
-	return fullMatches, nil
-}
-
 type BaseComponentConfig struct {
-	BaseComponentVars                      map[interface{}]interface{}
-	BaseComponentSettings                  map[interface{}]interface{}
-	BaseComponentEnv                       map[interface{}]interface{}
+	BaseComponentVars                      map[any]any
+	BaseComponentSettings                  map[any]any
+	BaseComponentEnv                       map[any]any
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string
-	BaseComponentBackendSection            map[interface{}]interface{}
+	BaseComponentBackendSection            map[any]any
 	BaseComponentRemoteStateBackendType    string
-	BaseComponentRemoteStateBackendSection map[interface{}]interface{}
+	BaseComponentRemoteStateBackendSection map[any]any
 	ComponentInheritanceChain              []string
 }
 
 // ProcessBaseComponentConfig processes base component(s) config
 func ProcessBaseComponentConfig(
 	baseComponentConfig *BaseComponentConfig,
-	allComponentsMap map[interface{}]interface{},
+	allComponentsMap map[any]any,
 	component string,
 	stack string,
 	baseComponent string,
@@ -318,23 +286,23 @@ func ProcessBaseComponentConfig(
 		return nil
 	}
 
-	var baseComponentVars map[interface{}]interface{}
-	var baseComponentSettings map[interface{}]interface{}
-	var baseComponentEnv map[interface{}]interface{}
+	var baseComponentVars map[any]any
+	var baseComponentSettings map[any]any
+	var baseComponentEnv map[any]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
-	var baseComponentBackendSection map[interface{}]interface{}
+	var baseComponentBackendSection map[any]any
 	var baseComponentRemoteStateBackendType string
-	var baseComponentRemoteStateBackendSection map[interface{}]interface{}
-	var baseComponentMap map[interface{}]interface{}
+	var baseComponentRemoteStateBackendSection map[any]any
+	var baseComponentMap map[any]any
 	var ok bool
 
 	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
-		baseComponentMap, ok = baseComponentSection.(map[interface{}]interface{})
+		baseComponentMap, ok = baseComponentSection.(map[any]any)
 		if !ok {
-			// Depending on the code and libraries, the section can have different map types: map[interface{}]interface{} or map[string]interface{}
+			// Depending on the code and libraries, the section can have different map types: map[any]any or map[string]any
 			// We try to convert to both
-			baseComponentMapOfStrings, ok := baseComponentSection.(map[string]interface{})
+			baseComponentMapOfStrings, ok := baseComponentSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("invalid config for the base component '%s' of the component '%s' in the stack '%s'",
 					baseComponent, component, stack)
@@ -366,21 +334,21 @@ func ProcessBaseComponentConfig(
 		}
 
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
-			baseComponentVars, ok = baseComponentVarsSection.(map[interface{}]interface{})
+			baseComponentVars, ok = baseComponentVarsSection.(map[any]any)
 			if !ok {
 				return fmt.Errorf("invalid '%s.vars' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
 		if baseComponentSettingsSection, baseComponentSettingsSectionExist := baseComponentMap["settings"]; baseComponentSettingsSectionExist {
-			baseComponentSettings, ok = baseComponentSettingsSection.(map[interface{}]interface{})
+			baseComponentSettings, ok = baseComponentSettingsSection.(map[any]any)
 			if !ok {
 				return fmt.Errorf("invalid '%s.settings' section in the stack '%s'", baseComponent, stack)
 			}
 		}
 
 		if baseComponentEnvSection, baseComponentEnvSectionExist := baseComponentMap["env"]; baseComponentEnvSectionExist {
-			baseComponentEnv, ok = baseComponentEnvSection.(map[interface{}]interface{})
+			baseComponentEnv, ok = baseComponentEnvSection.(map[any]any)
 			if !ok {
 				return fmt.Errorf("invalid '%s.env' section in the stack '%s'", baseComponent, stack)
 			}
@@ -395,7 +363,7 @@ func ProcessBaseComponentConfig(
 		}
 
 		if i, ok2 := baseComponentMap["backend"]; ok2 {
-			baseComponentBackendSection, ok = i.(map[interface{}]interface{})
+			baseComponentBackendSection, ok = i.(map[any]any)
 			if !ok {
 				return fmt.Errorf("invalid '%s.backend' section in the stack '%s'", baseComponent, stack)
 			}
@@ -410,7 +378,7 @@ func ProcessBaseComponentConfig(
 		}
 
 		if i, ok2 := baseComponentMap["remote_state_backend"]; ok2 {
-			baseComponentRemoteStateBackendSection, ok = i.(map[interface{}]interface{})
+			baseComponentRemoteStateBackendSection, ok = i.(map[any]any)
 			if !ok {
 				return fmt.Errorf("invalid '%s.remote_state_backend' section in the stack '%s'", baseComponent, stack)
 			}
@@ -429,21 +397,21 @@ func ProcessBaseComponentConfig(
 		}
 
 		// Base component `vars`
-		merged, err := m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentVars, baseComponentVars})
+		merged, err := m.Merge([]map[any]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentVars = merged
 
 		// Base component `settings`
-		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
+		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentSettings = merged
 
 		// Base component `env`
-		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
+		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
 		if err != nil {
 			return err
 		}
@@ -456,7 +424,7 @@ func ProcessBaseComponentConfig(
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
 		// Base component `backend`
-		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
+		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
 		if err != nil {
 			return err
 		}
@@ -466,7 +434,7 @@ func ProcessBaseComponentConfig(
 		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 
 		// Base component `remote_state_backend`
-		merged, err = m.Merge([]map[interface{}]interface{}{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
+		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
 		if err != nil {
 			return err
 		}
@@ -492,14 +460,14 @@ func ProcessBaseComponentConfig(
 // FindComponentsDerivedFromBaseComponents finds all components that derive from the given base components
 func FindComponentsDerivedFromBaseComponents(
 	stack string,
-	allComponents map[string]interface{},
+	allComponents map[string]any,
 	baseComponents []string,
 ) ([]string, error) {
 
 	res := []string{}
 
 	for component, compSection := range allComponents {
-		componentSection, ok := compSection.(map[string]interface{})
+		componentSection, ok := compSection.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid '%s' component section in the file '%s'", component, stack)
 		}

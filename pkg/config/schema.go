@@ -99,11 +99,11 @@ type ConfigAndStacksInfo struct {
 	Command                   string
 	SubCommand                string
 	SubCommand2               string
-	ComponentSection          map[string]interface{}
-	ComponentVarsSection      map[interface{}]interface{}
-	ComponentEnvSection       map[interface{}]interface{}
+	ComponentSection          map[string]any
+	ComponentVarsSection      map[any]any
+	ComponentEnvSection       map[any]any
 	ComponentEnvList          []string
-	ComponentBackendSection   map[interface{}]interface{}
+	ComponentBackendSection   map[any]any
 	ComponentBackendType      string
 	AdditionalArgsAndFlags    []string
 	GlobalOptions             []string
@@ -123,7 +123,7 @@ type ConfigAndStacksInfo struct {
 	ComponentInheritanceChain []string
 	NeedHelp                  bool
 	ComponentIsAbstract       bool
-	ComponentMetadataSection  map[interface{}]interface{}
+	ComponentMetadataSection  map[any]any
 	TerraformWorkspace        string
 }
 

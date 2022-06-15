@@ -3,7 +3,7 @@ SHELL := /bin/bash
 #GOOS=darwin
 GOOS=linux
 GOARCH=amd64
-VERSION=test3
+VERSION=test
 
 # List of targets the `readme` target should call before generating the readme
 export README_DEPS ?= docs/targets.md

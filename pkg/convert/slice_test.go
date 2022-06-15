@@ -7,7 +7,7 @@ import (
 )
 
 func TestSliceOfInterfacesToSliceOfStrings(t *testing.T) {
-	var input []interface{}
+	var input []any
 	input = append(input, "a")
 	input = append(input, "b")
 	input = append(input, "c")

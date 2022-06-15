@@ -11,7 +11,6 @@ import (
 
 	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -346,13 +345,11 @@ func ProcessConfigForSpacelift() error {
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
 	if !u.FileExists(path) {
-		if g.LogVerbose {
-			fmt.Printf("No CLI config found in %s\n", path)
-		}
+		u.PrintInfoVerbose(fmt.Sprintf("No CLI config found in '%s'\n", path))
 		return nil
 	}
 
-	u.PrintInfoVerbose(fmt.Sprintf("Found CLI config in %s", path))
+	u.PrintInfoVerbose(fmt.Sprintf("Found CLI config in '%s'", path))
 
 	reader, err := os.Open(path)
 	if err != nil {
@@ -362,7 +359,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			color.Red("Error closing file " + path + ". " + err.Error())
+			u.PrintError(fmt.Errorf("error closing file '" + path + "'. " + err.Error()))
 		}
 	}(reader)
 
@@ -371,7 +368,7 @@ func processConfigFile(path string, v *viper.Viper) error {
 		return err
 	}
 
-	u.PrintInfoVerbose(fmt.Sprintf("Processed CLI config %s", path))
+	u.PrintInfoVerbose(fmt.Sprintf("Processed CLI config '%s'", path))
 
 	return nil
 }
