@@ -570,6 +570,65 @@
       "type": "global"
     },
     {
+      "name": "atmos terraform shell",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `terraform shell` command",
+      "description": [
+        "The command allows using native Terraform commands without atmos-specific arguments and flags. The command does the following:",
+        "\n\n- Generates all the required variables for the component in the stack and writes them to a file in the component's folder",
+        "\n\n- Generates backend config file for the component in the stack and writes it to a file in the component's folder",
+        "\n\n- Create a Terraform workspace",
+        "\n\n- Drops the user into a separate shell (process) with all the required paths and ENV vars set",
+        "\n\n- Inside the shell, the user can execute all Terraform commands using the native syntax"
+      ],
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos terraform generate varfile top-level-component1 -s tenant1-ue2-dev",
+        "atmos terraform generate varfile infra/vpc -s tenant1-ue2-staging",
+        "atmos terraform generate varfile test/test-component -s tenant1-ue2-dev",
+        "atmos terraform generate varfile test/test-component-override-2 -s tenant2-ue2-prod",
+        "atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-dev -f vars.json"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "`terraform` component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "file",
+          "type": "string",
+          "summary": "File name to write the varfile to",
+          "groups": [],
+          "aliases": [
+            "f"
+          ],
+          "spec": {
+            "value": "file"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
       "name": "atmos terraform workspace",
       "namespace": [
         "atmos"
