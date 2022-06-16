@@ -577,7 +577,7 @@
       "summary": "Execute `terraform shell` command",
       "description": [
         "The command allows using native Terraform commands without atmos-specific arguments and flags. The command does the following:",
-        "\n\n- Generates all the required variables for the component in the stack and writes them to a file in the component's folder",
+        "\n\n- Processed the YAML stack config files, generates all the required variables for the component in the stack, and writes them to a file in the component's folder",
         "\n\n- Generates backend config file for the component in the stack and writes it to a file in the component's folder",
         "\n\n- Create a Terraform workspace",
         "\n\n- Drops the user into a separate shell (process) with all the required paths and ENV vars set",
