@@ -36,12 +36,20 @@ type Logs struct {
 	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
 }
 
+type Command struct {
+	Name        string    `yaml:"name" json:"name" mapstructure:"name"`
+	Description string    `yaml:"description" json:"description" mapstructure:"description"`
+	Steps       []string  `yaml:"steps" json:"steps" mapstructure:"steps"`
+	Commands    []Command `yaml:"commands" json:"commands" mapstructure:"commands"`
+}
+
 type Configuration struct {
 	BasePath   string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components Components
 	Stacks     Stacks
 	Workflows  Workflows
 	Logs       Logs
+	Commands   []Command
 }
 
 type ProcessedConfiguration struct {

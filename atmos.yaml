@@ -64,3 +64,20 @@ workflows:
 logs:
   verbose: false
   colors: true
+
+commands:
+  - name: terraform
+    description: terraform subcommands
+    commands:
+      - name: plan
+        description: plan
+        arguments:
+          - name: component
+            description: Name of the component
+            required: true
+        flags:
+          - name: stack
+            description: Name of the stack
+            required: true
+        steps:
+          - terraform plan
