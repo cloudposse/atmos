@@ -2,10 +2,9 @@ package exec
 
 import (
 	"fmt"
-	"strings"
-
 	c "github.com/cloudposse/atmos/pkg/config"
-	"github.com/fatih/color"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"strings"
 )
 
 func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, dryRun bool, commandLineStack string) error {
@@ -15,7 +14,7 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, dryRun bool, 
 		var command = strings.TrimSpace(step.Command)
 		var commandType = strings.TrimSpace(step.Type)
 
-		color.HiCyan(fmt.Sprintf("Executing workflow step: %s", command))
+		u.PrintInfo(fmt.Sprintf("Executing workflow step: %s", command))
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -49,7 +48,7 @@ func executeWorkflowSteps(workflowDefinition c.WorkflowDefinition, dryRun bool, 
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				color.HiCyan(fmt.Sprintf("Stack: %s", finalStack))
+				u.PrintInfo(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
 			if err := ExecuteShellCommand("atmos", args, ".", []string{}, dryRun); err != nil {

@@ -30,6 +30,19 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 	return cmd.Run()
 }
 
+// ExecuteShellCommands sequentially executes the provided list of commands
+func ExecuteShellCommands(commands []string, dir string, env []string, dryRun bool) error {
+	for _, command := range commands {
+		args := strings.Fields(command)
+		if len(args) > 0 {
+			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
 func execTerraformShellCommand(
 	component string,
