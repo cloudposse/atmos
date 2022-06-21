@@ -146,6 +146,17 @@ func InitConfig() error {
 		return err
 	}
 
+	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
+	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+	if len(configFilePath4) > 0 {
+		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
+		configFile4 := path.Join(configFilePath4, g.ConfigFileName)
+		err = processConfigFile(configFile4, v)
+		if err != nil {
+			return err
+		}
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&Config)

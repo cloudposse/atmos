@@ -23,7 +23,6 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// Process and merge CLI configurations
 	// InitConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	err := c.InitConfig()
