@@ -356,7 +356,7 @@ func ProcessConfigForSpacelift() error {
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
 	if !u.FileExists(path) {
-		u.PrintInfoVerbose(fmt.Sprintf("No CLI config found in '%s'\n", path))
+		u.PrintInfoVerbose(fmt.Sprintf("No CLI config found in '%s'", path))
 		return nil
 	}
 

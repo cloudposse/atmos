@@ -49,7 +49,6 @@ func init() {
 	}
 
 	testCmd.AddCommand(testCmd2)
-	//terraformCmd.AddCommand(testCmd)
 	RootCmd.AddCommand(testCmd)
 }
 
