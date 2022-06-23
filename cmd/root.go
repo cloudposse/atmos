@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -25,31 +22,31 @@ func init() {
 
 	// InitConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	err := c.InitConfig()
-	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
-	}
-
-	var testCmd = &cobra.Command{
-		Use:   "terraform",
-		Short: "Print test",
-		Long:  `This command prints test`,
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("test-01")
-		},
-	}
-
-	var testCmd2 = &cobra.Command{
-		Use:   "test",
-		Short: "Print test",
-		Long:  `This command prints test`,
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("this is terraform test command")
-		},
-	}
-
-	testCmd.AddCommand(testCmd2)
-	RootCmd.AddCommand(testCmd)
+	//err := c.InitConfig()
+	//if err != nil {
+	//	u.PrintErrorToStdErrorAndExit(err)
+	//}
+	//
+	//var testCmd = &cobra.Command{
+	//	Use:   "terraform",
+	//	Short: "Print test",
+	//	Long:  `This command prints test`,
+	//	Run: func(cmd *cobra.Command, args []string) {
+	//		fmt.Println("test-01")
+	//	},
+	//}
+	//
+	//var testCmd2 = &cobra.Command{
+	//	Use:   "test",
+	//	Short: "Print test",
+	//	Long:  `This command prints test`,
+	//	Run: func(cmd *cobra.Command, args []string) {
+	//		fmt.Println("this is terraform test command")
+	//	},
+	//}
+	//
+	//testCmd.AddCommand(testCmd2)
+	//RootCmd.AddCommand(testCmd)
 }
 
 func initConfig() {
