@@ -74,6 +74,10 @@ func InitConfig() error {
 	// ENV vars
 	// Command-line arguments
 
+	if Config.Initialized {
+		return nil
+	}
+
 	err := processLogsConfig()
 	if err != nil {
 		return err
@@ -164,6 +168,7 @@ func InitConfig() error {
 		return err
 	}
 
+	Config.Initialized = true
 	return nil
 }
 

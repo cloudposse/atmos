@@ -44,12 +44,13 @@ type Command struct {
 }
 
 type Configuration struct {
-	BasePath   string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	Components Components
-	Stacks     Stacks
-	Workflows  Workflows
-	Logs       Logs
-	Commands   []Command
+	BasePath    string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Components  Components
+	Stacks      Stacks
+	Workflows   Workflows
+	Logs        Logs
+	Commands    []Command
+	Initialized bool
 }
 
 type ProcessedConfiguration struct {
