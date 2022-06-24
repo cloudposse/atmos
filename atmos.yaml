@@ -65,19 +65,21 @@ logs:
   verbose: false
   colors: true
 
+# Custom CLI commands
 commands:
-  - name: terraform
-    description: terraform subcommands
+  - name: play
+    description: This command plays games
+    steps:
+      - echo Playing...
+    # subcommands
     commands:
-      - name: plan
-        description: plan
-        arguments:
-          - name: component
-            description: Name of the component
-            required: true
-        flags:
-          - name: stack
-            description: Name of the stack
-            required: true
+      - name: hello
+        description: This command says hello-world
         steps:
-          - terraform plan
+          - echo Saying hello world...
+          - echo hello world
+      - name: ping
+        description: This command plays ping-pong
+        steps:
+          - echo Playing ping-pong...
+          - echo pong
