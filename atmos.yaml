@@ -121,10 +121,10 @@ commands:
     # subcommands
     commands:
       - name: hello
-        description: This command says hello-world
+        description: This command says Hello world
         steps:
-          - echo Saying hello world...
-          - echo hello world
+          - echo Saying Hello world...
+          - echo Hello world
       - name: ping
         description: This command plays ping-pong
         steps:
