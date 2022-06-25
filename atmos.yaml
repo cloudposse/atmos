@@ -73,11 +73,6 @@ commands:
     commands:
       - name: plan
         description: This command plans terraform components
-        env:
-          - key: ENV_VAR_1
-            value: ENV_VAR_1_value
-          - key: ENV_VAR_2
-            valueCommand: echo $ENV_VAR_2_value
         arguments:
           - name: component
             description: Name of the component
@@ -86,6 +81,14 @@ commands:
             shorthand: s
             description: Name of the stack
             required: true
+        env:
+          - key: ENV_VAR_1
+            value: ENV_VAR_1_value
+          - key: ENV_VAR_2
+            # `valueCommand` is an external command to execute to get the value for the ENV var
+            # Either 'value' or 'valueCommand' can be specified for the ENV var, but not both
+            valueCommand: echo ENV_VAR_2_value
+        # steps support Go templates
         steps:
           - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
   - name: terraform
@@ -94,11 +97,6 @@ commands:
     commands:
       - name: provision
         description: This command provisions terraform components
-        env:
-          - key: ENV_VAR_1
-            value: ENV_VAR_1_value
-          - key: ENV_VAR_2
-            valueCommand: echo $ENV_VAR_2_value
         arguments:
           - name: component
             description: Name of the component
@@ -107,9 +105,15 @@ commands:
             shorthand: s
             description: Name of the stack
             required: true
+        # ENV var values support Go templates
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_STACK
+            value: "{{ .Flags.stack }}"
         steps:
-          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
-          - atmos terraform apply {{ .Arguments.component }} -s {{ .Flags.stack }}
+          - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
+          - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
   - name: play
     description: This command plays games
     steps:

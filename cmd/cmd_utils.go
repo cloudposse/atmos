@@ -7,6 +7,7 @@ import (
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"os"
 	"strings"
 	"text/template"
 )
@@ -68,11 +69,13 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 						flags := cmd.Flags()
 						flagsData := map[string]string{}
 						for _, fl := range customCommandFlags {
-							providedFlag, err := flags.GetString(fl.Name)
-							if err != nil {
-								u.PrintErrorToStdErrorAndExit(err)
+							if fl.Type == "" || fl.Type == "string" {
+								providedFlag, err := flags.GetString(fl.Name)
+								if err != nil {
+									u.PrintErrorToStdErrorAndExit(err)
+								}
+								flagsData[fl.Name] = providedFlag
 							}
-							flagsData[fl.Name] = providedFlag
 						}
 
 						// Prepare full template data
@@ -81,7 +84,7 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 							"Flags":     flagsData,
 						}
 
-						// Parse and execute templates
+						// Parse and execute Go templates in the command's steps
 						t, err = template.New(fmt.Sprintf("step-%d", i)).Parse(step)
 						if err != nil {
 							u.PrintErrorToStdErrorAndExit(err)
@@ -95,17 +98,59 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 						// Prepare ENV vars
 						var envVarsList []string
 						for _, v := range customEnvVars {
-							envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", v.Key, v.Value))
-						}
-						if len(envVarsList) > 0 {
-							u.PrintInfo("\nUsing ENV vars:")
-							for _, v := range envVarsList {
-								fmt.Println(v)
+							key := v.Key
+							val := v.Value
+							valCommand := v.ValueCommand
+
+							if val != "" && valCommand != "" {
+								err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
+									"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
+									parentCommand.Name(), commandConfig.Name, val, valCommand, key)
+								u.PrintErrorToStdErrorAndExit(err)
+							}
+
+							// If the command to get the value for the ENV var is provided, execute it
+							if valCommand != "" {
+								valCommandArgs := strings.Fields(valCommand)
+								res, err := e.ExecuteShellCommandAndReturnOutput(valCommandArgs[0], valCommandArgs[1:], ".", nil, false)
+								if err != nil {
+									u.PrintErrorToStdErrorAndExit(err)
+								}
+								val = res
+							} else {
+								// Parse and execute Go templates in the values of the command's ENV vars
+								t, err = template.New(fmt.Sprintf("env-var-%d", i)).Parse(val)
+								if err != nil {
+									u.PrintErrorToStdErrorAndExit(err)
+								}
+								var tplEnvVarValue bytes.Buffer
+								err = t.Execute(&tplEnvVarValue, data)
+								if err != nil {
+									u.PrintErrorToStdErrorAndExit(err)
+								}
+								val = tplEnvVarValue.String()
+							}
+
+							envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, val))
+							err = os.Setenv(key, val)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
 							}
 						}
 
+						if c.Config.Logs.Verbose {
+							if len(envVarsList) > 0 {
+								u.PrintInfo("\nUsing ENV vars:")
+								for _, v := range envVarsList {
+									fmt.Println(v)
+								}
+							}
+						}
+
+						commandToRun := os.ExpandEnv(tpl.String())
+
 						// Execute the command step
-						stepArgs := strings.Fields(tpl.String())
+						stepArgs := strings.Fields(commandToRun)
 						err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", envVarsList, false)
 						if err != nil {
 							u.PrintErrorToStdErrorAndExit(err)
