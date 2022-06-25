@@ -13,6 +13,9 @@ import (
 )
 
 var (
+	// This map contains the existing atmos top-level commands
+	// All custom top-level commands will be checked against this map in order to not override `atmos` top-level commands,
+	// but just add subcommands to them
 	existingTopLevelCommands = map[string]*cobra.Command{
 		"terraform": terraformCmd,
 		"helmfile":  helmfileCmd,
