@@ -67,6 +67,23 @@ logs:
 
 # Custom CLI commands
 commands:
+  - name: tf
+    description: This command executes terraform commands
+    # subcommands
+    commands:
+      - name: plan
+        description: This command provisions terraform component
+        arguments:
+          - name: component
+            description: Name of the component
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        steps:
+          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
   - name: play
     description: This command plays games
     steps:

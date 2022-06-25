@@ -37,10 +37,25 @@ type Logs struct {
 }
 
 type Command struct {
-	Name        string    `yaml:"name" json:"name" mapstructure:"name"`
-	Description string    `yaml:"description" json:"description" mapstructure:"description"`
-	Steps       []string  `yaml:"steps" json:"steps" mapstructure:"steps"`
-	Commands    []Command `yaml:"commands" json:"commands" mapstructure:"commands"`
+	Name        string            `yaml:"name" json:"name" mapstructure:"name"`
+	Description string            `yaml:"description" json:"description" mapstructure:"description"`
+	Arguments   []CommandArgument `yaml:"arguments" json:"arguments" mapstructure:"arguments"`
+	Flags       []CommandFlag     `yaml:"flags" json:"flags" mapstructure:"flags"`
+	Steps       []string          `yaml:"steps" json:"steps" mapstructure:"steps"`
+	Commands    []Command         `yaml:"commands" json:"commands" mapstructure:"commands"`
+}
+
+type CommandArgument struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+}
+
+type CommandFlag struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Shorthand   string `yaml:"shorthand" json:"shorthand" mapstructure:"shorthand"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
 }
 
 type Configuration struct {
