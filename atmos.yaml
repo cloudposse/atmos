@@ -73,6 +73,11 @@ commands:
     commands:
       - name: plan
         description: This command plans terraform components
+        env:
+          - key: ENV_VAR_1
+            value: ENV_VAR_1_value
+          - key: ENV_VAR_2
+            valueCommand: echo $ENV_VAR_2_value
         arguments:
           - name: component
             description: Name of the component
@@ -89,6 +94,11 @@ commands:
     commands:
       - name: provision
         description: This command provisions terraform components
+        env:
+          - key: ENV_VAR_1
+            value: ENV_VAR_1_value
+          - key: ENV_VAR_2
+            valueCommand: echo $ENV_VAR_2_value
         arguments:
           - name: component
             description: Name of the component

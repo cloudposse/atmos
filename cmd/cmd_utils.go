@@ -40,6 +40,8 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 			copy(customCommandArguments, commandConfig.Arguments)
 			customCommandFlags := make([]c.CommandFlag, len(commandConfig.Flags))
 			copy(customCommandFlags, commandConfig.Flags)
+			customEnvVars := make([]c.CommandEnv, len(commandConfig.Env))
+			copy(customEnvVars, commandConfig.Env)
 
 			var customCommand = &cobra.Command{
 				Use:   commandConfig.Name,
@@ -90,9 +92,21 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 							u.PrintErrorToStdErrorAndExit(err)
 						}
 
+						// Prepare ENV vars
+						var envVarsList []string
+						for _, v := range customEnvVars {
+							envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", v.Key, v.Value))
+						}
+						if len(envVarsList) > 0 {
+							u.PrintInfo("\nUsing ENV vars:")
+							for _, v := range envVarsList {
+								fmt.Println(v)
+							}
+						}
+
 						// Execute the command step
 						stepArgs := strings.Fields(tpl.String())
-						err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", nil, false)
+						err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", envVarsList, false)
 						if err != nil {
 							u.PrintErrorToStdErrorAndExit(err)
 						}

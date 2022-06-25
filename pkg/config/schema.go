@@ -39,6 +39,7 @@ type Logs struct {
 type Command struct {
 	Name        string            `yaml:"name" json:"name" mapstructure:"name"`
 	Description string            `yaml:"description" json:"description" mapstructure:"description"`
+	Env         []CommandEnv      `yaml:"env" json:"env" mapstructure:"env"`
 	Arguments   []CommandArgument `yaml:"arguments" json:"arguments" mapstructure:"arguments"`
 	Flags       []CommandFlag     `yaml:"flags" json:"flags" mapstructure:"flags"`
 	Steps       []string          `yaml:"steps" json:"steps" mapstructure:"steps"`
@@ -57,6 +58,12 @@ type CommandFlag struct {
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
 	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
 	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+}
+
+type CommandEnv struct {
+	Key          string `yaml:"key" json:"key" mapstructure:"key"`
+	Value        string `yaml:"value" json:"value" mapstructure:"value"`
+	ValueCommand string `yaml:"valueCommand" json:"valueCommand" mapstructure:"valueCommand"`
 }
 
 type Configuration struct {

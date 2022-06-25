@@ -279,7 +279,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			return configAndStacksInfo, err
 		}
 
-		configAndStacksInfo.ComponentEnvList = convertEnvVars(configAndStacksInfo.ComponentEnvSection)
+		configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 		// Process context
 		configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
@@ -311,7 +311,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				continue
 			}
 
-			configAndStacksInfo.ComponentEnvList = convertEnvVars(configAndStacksInfo.ComponentEnvSection)
+			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			// Process context
 			configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
@@ -635,14 +635,4 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 			},
 		},
 	}
-}
-
-// convertEnvVars convert ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...]
-func convertEnvVars(envVarsMap map[any]any) []string {
-	res := []string{}
-
-	for k, v := range envVarsMap {
-		res = append(res, fmt.Sprintf("%s=%s", k, v))
-	}
-	return res
 }
