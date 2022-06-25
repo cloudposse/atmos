@@ -31,7 +31,7 @@ func init() {
 	}
 
 	// Add custom commands from the CLI config
-	err = processCustomCommands(c.Config.Commands, RootCmd)
+	err = processCustomCommands(c.Config.Commands, RootCmd, true)
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
