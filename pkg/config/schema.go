@@ -48,13 +48,14 @@ type Command struct {
 type CommandArgument struct {
 	Name        string `yaml:"name" json:"name" mapstructure:"name"`
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
-	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
 }
 
 type CommandFlag struct {
 	Name        string `yaml:"name" json:"name" mapstructure:"name"`
 	Shorthand   string `yaml:"shorthand" json:"shorthand" mapstructure:"shorthand"`
+	Type        string `yaml:"type" json:"type" mapstructure:"type"`
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
 	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
 }
 

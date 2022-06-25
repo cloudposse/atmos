@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bytes"
+	"fmt"
 	e "github.com/cloudposse/atmos/internal/exec"
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"strings"
+	"text/template"
 )
 
 var (
@@ -28,26 +31,99 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 		if _, exist := existingTopLevelCommands[commandConfig.Name]; exist && topLevel {
 			command = existingTopLevelCommands[commandConfig.Name]
 		} else {
-			// Deep-copy the `commandConfig.Steps` slice because of the automatic closure in the `Run` function of the command
-			// It will make a closure on the new local variable `steps` which are different in each iteration
+			// Deep-copy the slices because of the automatic closure in the `Run` function of the command.
 			// https://www.calhoun.io/gotchas-and-common-mistakes-with-closures-in-go/
-			steps := make([]string, len(commandConfig.Steps))
-			copy(steps, commandConfig.Steps)
+			// It will make a closure on the new local variables which are different in each iteration.
+			customCommandSteps := make([]string, len(commandConfig.Steps))
+			copy(customCommandSteps, commandConfig.Steps)
+			customCommandArguments := make([]c.CommandArgument, len(commandConfig.Arguments))
+			copy(customCommandArguments, commandConfig.Arguments)
+			customCommandFlags := make([]c.CommandFlag, len(commandConfig.Flags))
+			copy(customCommandFlags, commandConfig.Flags)
 
 			var customCommand = &cobra.Command{
 				Use:   commandConfig.Name,
 				Short: commandConfig.Description,
 				Long:  commandConfig.Description,
 				Run: func(cmd *cobra.Command, args []string) {
-					for _, step := range steps {
-						stepArgs := strings.Fields(step)
-						err := e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", nil, false)
+					var err error
+					var t *template.Template
+
+					if len(args) != len(customCommandArguments) {
+						err := fmt.Errorf("invalid number of arguments, %d argement(s) required", len(customCommandArguments))
+						u.PrintErrorToStdErrorAndExit(err)
+					}
+
+					// Execute command's customCommandSteps
+					for i, step := range customCommandSteps {
+						// Prepare template data for arguments
+						argumentsData := map[string]string{}
+						for ix, arg := range customCommandArguments {
+							argumentsData[arg.Name] = args[ix]
+						}
+
+						// Prepare template data for flags
+						flags := cmd.Flags()
+						flagsData := map[string]string{}
+						for _, fl := range customCommandFlags {
+							providedFlag, err := flags.GetString(fl.Name)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
+							}
+							flagsData[fl.Name] = providedFlag
+						}
+
+						// Prepare full template data
+						var data = map[string]map[string]string{
+							"Arguments": argumentsData,
+							"Flags":     flagsData,
+						}
+
+						// Parse and execute templates
+						t, err = template.New(fmt.Sprintf("step-%d", i)).Parse(step)
+						if err != nil {
+							u.PrintErrorToStdErrorAndExit(err)
+						}
+						var tpl bytes.Buffer
+						err = t.Execute(&tpl, data)
+						if err != nil {
+							u.PrintErrorToStdErrorAndExit(err)
+						}
+
+						// Execute the command step
+						stepArgs := strings.Fields(tpl.String())
+						err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", nil, false)
 						if err != nil {
 							u.PrintErrorToStdErrorAndExit(err)
 						}
 					}
 				},
 			}
+
+			// Add customCommandFlags
+			for _, flag := range customCommandFlags {
+				if flag.Type == "bool" {
+					if flag.Shorthand != "" {
+						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, false, flag.Usage)
+					} else {
+						customCommand.PersistentFlags().Bool(flag.Name, false, flag.Usage)
+					}
+				} else {
+					if flag.Shorthand != "" {
+						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, "", flag.Usage)
+					} else {
+						customCommand.PersistentFlags().String(flag.Name, "", flag.Usage)
+					}
+				}
+
+				if flag.Required {
+					err := customCommand.MarkPersistentFlagRequired(flag.Name)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
 			parentCommand.AddCommand(customCommand)
 			command = customCommand
 		}
