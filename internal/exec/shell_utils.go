@@ -37,8 +37,7 @@ func ExecuteShellCommandAndReturnOutput(command string, args []string, dir strin
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 
-	fmt.Println()
-	u.PrintInfo("Executing command:")
+	u.PrintInfo("\nExecuting command:")
 	fmt.Println(cmd.String())
 
 	if dryRun {
