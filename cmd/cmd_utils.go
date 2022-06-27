@@ -56,7 +56,7 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 					var t *template.Template
 
 					if len(args) != len(customCommandArguments) {
-						err := fmt.Errorf("invalid number of arguments, %d argement(s) required", len(customCommandArguments))
+						err := fmt.Errorf("invalid number of arguments, %d argument(s) required", len(customCommandArguments))
 						u.PrintErrorToStdErrorAndExit(err)
 					}
 
