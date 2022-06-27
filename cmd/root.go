@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	c "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -19,11 +21,27 @@ func Execute() error {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+
+	// InitConfig finds and merges CLI configurations in the following order:
+	// system dir, home dir, current dir, ENV vars, command-line arguments
+	// Here we need the custom commands from the config
+	err := c.InitConfig()
+	if err != nil {
+		u.PrintErrorToStdErrorAndExit(err)
+	}
+
+	// Add custom commands from the CLI config
+	err = processCustomCommands(c.Config.Commands, RootCmd, true)
+	if err != nil {
+		u.PrintErrorToStdErrorAndExit(err)
+	}
 }
 
 func initConfig() {
 }
 
+// https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
+// https://github.com/spf13/cobra/blob/master/user_guide.md
 // https://blog.knoldus.com/create-kubectl-like-cli-with-go-and-cobra/
 // https://pkg.go.dev/github.com/c-bata/go-prompt
 // https://pkg.go.dev/github.com/spf13/cobra

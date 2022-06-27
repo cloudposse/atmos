@@ -214,6 +214,16 @@
           "spec": {
             "value": "json/yaml"
           }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
         }
       ],
       "type": "global"
@@ -251,6 +261,16 @@
           ],
           "spec": {
             "value": "stack"
+          }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
           }
         }
       ],
@@ -344,6 +364,16 @@
           "spec": {
             "value": "sections"
           }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
         }
       ],
       "type": "global"
@@ -382,6 +412,16 @@
           ],
           "spec": {
             "value": "stack"
+          }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
           }
         }
       ],
@@ -434,6 +474,16 @@
           "spec": {
             "value": "file"
           }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
         }
       ],
       "type": "global"
@@ -474,6 +524,16 @@
           "spec": {
             "value": "stack"
           }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
         }
       ],
       "type": "global"
@@ -512,6 +572,16 @@
           ],
           "spec": {
             "value": "stack"
+          }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
           }
         }
       ],
@@ -565,6 +635,71 @@
           "spec": {
             "value": "file"
           }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos terraform shell",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `terraform shell` command",
+      "description": [
+        "The command allows using native Terraform commands without atmos-specific arguments and flags. The command does the following:",
+        "\n\n- Processes the YAML stack config files, generates the required variables for the component in the stack, and writes them to a file in the component's folder",
+        "\n\n- Generates backend config file for the component in the stack and writes it to a file in the component's folder",
+        "\n\n- Creates a Terraform workspace",
+        "\n\n- Drops the user into a separate shell (process) with all the required paths and ENV vars set",
+        "\n\n- Inside the shell, the user can execute all Terraform commands using the native syntax"
+      ],
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos terraform shell top-level-component1 -s tenant1-ue2-dev",
+        "atmos terraform shell infra/vpc -s tenant1-ue2-staging",
+        "atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "Component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
         }
       ],
       "type": "global"
@@ -605,6 +740,16 @@
           "spec": {
             "value": "stack"
           }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
         }
       ],
       "type": "global"
@@ -628,7 +773,18 @@
       ],
       "aliases": [],
       "inputs": [],
-      "options": [],
+      "options": [
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
       "type": "global"
     },
     {

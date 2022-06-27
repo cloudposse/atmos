@@ -19,8 +19,7 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	fmt.Println()
-	u.PrintInfo("Executing command:")
+	u.PrintInfo("\nExecuting command:")
 	fmt.Println(cmd.String())
 
 	if dryRun {
@@ -28,6 +27,42 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 	}
 
 	return cmd.Run()
+}
+
+// ExecuteShellCommandAndReturnOutput prints and executes the provided command with args and flags and returns the command output
+func ExecuteShellCommandAndReturnOutput(command string, args []string, dir string, env []string, dryRun bool) (string, error) {
+	cmd := exec.Command(command, args...)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Dir = dir
+	cmd.Stdin = os.Stdin
+	cmd.Stderr = os.Stderr
+
+	u.PrintInfo("\nExecuting command:")
+	fmt.Println(cmd.String())
+
+	if dryRun {
+		return "", nil
+	}
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	return string(output), nil
+}
+
+// ExecuteShellCommands sequentially executes the provided list of commands
+func ExecuteShellCommands(commands []string, dir string, env []string, dryRun bool) error {
+	for _, command := range commands {
+		args := strings.Fields(command)
+		if len(args) > 0 {
+			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell

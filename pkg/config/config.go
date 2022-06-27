@@ -74,6 +74,10 @@ func InitConfig() error {
 	// ENV vars
 	// Command-line arguments
 
+	if Config.Initialized {
+		return nil
+	}
+
 	err := processLogsConfig()
 	if err != nil {
 		return err
@@ -146,6 +150,17 @@ func InitConfig() error {
 		return err
 	}
 
+	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
+	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+	if len(configFilePath4) > 0 {
+		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
+		configFile4 := path.Join(configFilePath4, g.ConfigFileName)
+		err = processConfigFile(configFile4, v)
+		if err != nil {
+			return err
+		}
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&Config)
@@ -153,6 +168,7 @@ func InitConfig() error {
 		return err
 	}
 
+	Config.Initialized = true
 	return nil
 }
 
@@ -345,7 +361,7 @@ func ProcessConfigForSpacelift() error {
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) error {
 	if !u.FileExists(path) {
-		u.PrintInfoVerbose(fmt.Sprintf("No CLI config found in '%s'\n", path))
+		u.PrintInfoVerbose(fmt.Sprintf("No CLI config found in '%s'", path))
 		return nil
 	}
 

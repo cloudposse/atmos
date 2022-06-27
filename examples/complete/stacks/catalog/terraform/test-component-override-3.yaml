@@ -46,5 +46,5 @@ components:
           - "mixin/test-1"
           - "mixin/test-2"
         # Override Terraform workspace
-        # Note that by default, Terraform workspace is generated from the context, e.g. `<environment>-<stage>`
+        # Note that by default, Terraform workspace is generated from the context, e.g. `<tenant>-<environment>-<stage>`
         terraform_workspace: test-component-override-3-workspace

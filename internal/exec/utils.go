@@ -279,7 +279,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			return configAndStacksInfo, err
 		}
 
-		configAndStacksInfo.ComponentEnvList = convertEnvVars(configAndStacksInfo.ComponentEnvSection)
+		configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 		// Process context
 		configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
@@ -290,9 +290,10 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			return configAndStacksInfo, err
 		}
 	} else {
-		u.PrintInfoVerbose(fmt.Sprintf("Searching for stack config where the component '%s' is defined\n", configAndStacksInfo.ComponentFromArg))
-
-		stackFound := false
+		u.PrintInfoVerbose(fmt.Sprintf("Searching for stack config where the component '%s' is defined", configAndStacksInfo.ComponentFromArg))
+		foundStackCount := 0
+		var foundStacks []string
+		var foundConfigAndStacksInfo c.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
 			configAndStacksInfo.ComponentSection,
@@ -310,7 +311,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				continue
 			}
 
-			configAndStacksInfo.ComponentEnvList = convertEnvVars(configAndStacksInfo.ComponentEnvSection)
+			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			// Process context
 			configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
@@ -323,24 +324,36 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
-				stackFound = true
-				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the file '%s'\n",
+				foundConfigAndStacksInfo = configAndStacksInfo
+				foundStackCount++
+				foundStacks = append(foundStacks, stackName)
+				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the file '%s'",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					stackName,
 				))
-				break
 			}
 		}
 
-		if !stackFound {
+		if foundStackCount == 0 {
 			return configAndStacksInfo,
 				fmt.Errorf("\nSearched all stack files, but could not find config for the component '%s' in the stack '%s'.\n"+
-					"Check that all attributes in the stack name pattern '%s' are defined in the stack config files.\n"+
+					"Check that all variables in the stack name pattern '%s' are correctly defined in the stack config files.\n"+
 					"Are the component and stack names correct? Did you forget an import?",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					c.Config.Stacks.NamePattern)
+		} else if foundStackCount > 1 {
+			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
+				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
+				"Check that imports are valid.",
+				configAndStacksInfo.ComponentFromArg,
+				configAndStacksInfo.Stack,
+				strings.Join(foundStacks, ", "),
+				c.Config.Stacks.NamePattern)
+			u.PrintErrorToStdErrorAndExit(err)
+		} else {
+			configAndStacksInfo = foundConfigAndStacksInfo
 		}
 	}
 
@@ -622,14 +635,4 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 			},
 		},
 	}
-}
-
-// convertEnvVars convert ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...]
-func convertEnvVars(envVarsMap map[any]any) []string {
-	res := []string{}
-
-	for k, v := range envVarsMap {
-		res = append(res, fmt.Sprintf("%s=%s", k, v))
-	}
-	return res
 }
