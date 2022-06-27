@@ -56,11 +56,11 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 					var t *template.Template
 
 					if len(args) != len(customCommandArguments) {
-						err := fmt.Errorf("invalid number of arguments, %d argument(s) required", len(customCommandArguments))
+						err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(customCommandArguments))
 						u.PrintErrorToStdErrorAndExit(err)
 					}
 
-					// Execute command's customCommandSteps
+					// Execute custom command's steps
 					for i, step := range customCommandSteps {
 						// Prepare template data for arguments
 						argumentsData := map[string]string{}
@@ -102,13 +102,13 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 						var envVarsList []string
 						for _, v := range customEnvVars {
 							key := v.Key
-							val := v.Value
+							value := v.Value
 							valCommand := v.ValueCommand
 
-							if val != "" && valCommand != "" {
+							if value != "" && valCommand != "" {
 								err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 									"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
-									parentCommand.Name(), commandConfig.Name, val, valCommand, key)
+									parentCommand.Name(), commandConfig.Name, value, valCommand, key)
 								u.PrintErrorToStdErrorAndExit(err)
 							}
 
@@ -119,10 +119,10 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 								if err != nil {
 									u.PrintErrorToStdErrorAndExit(err)
 								}
-								val = res
+								value = res
 							} else {
 								// Parse and execute Go templates in the values of the command's ENV vars
-								t, err = template.New(fmt.Sprintf("env-var-%d", i)).Parse(val)
+								t, err = template.New(fmt.Sprintf("env-var-%d", i)).Parse(value)
 								if err != nil {
 									u.PrintErrorToStdErrorAndExit(err)
 								}
@@ -131,22 +131,20 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 								if err != nil {
 									u.PrintErrorToStdErrorAndExit(err)
 								}
-								val = tplEnvVarValue.String()
+								value = tplEnvVarValue.String()
 							}
 
-							envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, val))
-							err = os.Setenv(key, val)
+							envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
+							err = os.Setenv(key, value)
 							if err != nil {
 								u.PrintErrorToStdErrorAndExit(err)
 							}
 						}
 
-						if c.Config.Logs.Verbose {
-							if len(envVarsList) > 0 {
-								u.PrintInfo("\nUsing ENV vars:")
-								for _, v := range envVarsList {
-									fmt.Println(v)
-								}
+						if len(envVarsList) > 0 {
+							u.PrintInfo("\nUsing ENV vars:")
+							for _, v := range envVarsList {
+								fmt.Println(v)
 							}
 						}
 
