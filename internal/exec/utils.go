@@ -458,26 +458,26 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
-			info.StacksDir = inputArgsAndFlags[i+1]
+			info.ConfigDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.ConfigDirFlag) {
 			var configDirFlagParts = strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
-			info.StacksDir = configDirFlagParts[1]
+			info.ConfigDir = configDirFlagParts[1]
 		}
 
 		if arg == g.StackDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
-			info.ConfigDir = inputArgsAndFlags[i+1]
+			info.StacksDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", g.StackDirFlag) {
 			var stacksDirFlagParts = strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
-			info.ConfigDir = stacksDirFlagParts[1]
+			info.StacksDir = stacksDirFlagParts[1]
 		}
 
 		if arg == g.BasePathFlag {
