@@ -502,7 +502,8 @@
         "atmos terraform apply test/test-component-override-3 -s tenant1-ue2-dev",
         "atmos terraform destroy test/test-component-override-3 -s tenant1-ue2-dev",
         "atmos terraform init test/test-component-override-3 -s tenant1-ue2-dev",
-        "atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev"
+        "atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev",
+        "atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev"
       ],
       "aliases": [],
       "inputs": [
@@ -719,6 +720,56 @@
         "atmos terraform workspace test/test-component -s tenant1-ue2-dev",
         "atmos terraform workspace test/test-component-override-2 -s tenant2-ue2-prod",
         "atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "`terraform` component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "summary": "Dry-run",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "true/false"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
+      "name": "atmos terraform clean",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `terraform clean` command",
+      "description": "This command deletes '.terraform' folder, the folder that 'TF_DATA_DIR' ENV var points to, '.terraform.lock.hcl' file, varfile and planfile for the component in the stack",
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos terraform clean top-level-component1 -s tenant1-ue2-dev",
+        "atmos terraform clean infra/vpc -s tenant1-ue2-staging",
+        "atmos terraform clean test/test-component -s tenant1-ue2-dev",
+        "atmos terraform clean test/test-component-override-2 -s tenant2-ue2-prod",
+        "atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev"
       ],
       "aliases": [],
       "inputs": [
