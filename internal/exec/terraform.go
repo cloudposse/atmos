@@ -58,7 +58,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	if info.SubCommand == "clean" {
 		fmt.Println("Deleting '.terraform' folder")
-		_ = os.RemoveAll(path.Join(componentPath, ".terraform"))
+		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
+		if err != nil {
+			u.PrintError(err)
+		}
 
 		fmt.Println("Deleting '.terraform.lock.hcl' file")
 		_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
@@ -87,7 +90,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			}
 			if userAnswer == "yes" {
 				fmt.Printf("Deleting folder '%s'\n", tfDataDir)
-				_ = os.RemoveAll(tfDataDir)
+				err = os.RemoveAll(path.Join(componentPath, tfDataDir))
+				if err != nil {
+					u.PrintError(err)
+				}
 			}
 		}
 
