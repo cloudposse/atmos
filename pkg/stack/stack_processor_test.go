@@ -14,10 +14,10 @@ func TestStackProcessor(t *testing.T) {
 	helmfileComponentsBasePath := "../../examples/complete/components/helmfile"
 
 	filePaths := []string{
-		"../../examples/complete/stacks/tenant1/ue2/dev.yaml",
-		"../../examples/complete/stacks/tenant1/ue2/prod.yaml",
-		"../../examples/complete/stacks/tenant1/ue2/staging.yaml",
-		"../../examples/complete/stacks/tenant1/ue2/test1.yaml",
+		"../../examples/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
+		"../../examples/complete/stacks/orgs/cp/tenant1/prod/us-east-2.yaml",
+		"../../examples/complete/stacks/orgs/cp/tenant1/staging/us-east-2.yaml",
+		"../../examples/complete/stacks/orgs/cp/tenant1/test1/us-east-2.yaml",
 	}
 
 	processStackDeps := true
@@ -37,20 +37,20 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, 4, len(mapResult))
 
 	mapResultKeys := u.StringKeysFromMap(mapResult)
-	assert.Equal(t, "tenant1/ue2/dev", mapResultKeys[0])
-	assert.Equal(t, "tenant1/ue2/prod", mapResultKeys[1])
-	assert.Equal(t, "tenant1/ue2/staging", mapResultKeys[2])
-	assert.Equal(t, "tenant1/ue2/test1", mapResultKeys[3])
+	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", mapResultKeys[0])
+	assert.Equal(t, "orgs/cp/tenant1/prod/us-east-2", mapResultKeys[1])
+	assert.Equal(t, "orgs/cp/tenant1/staging/us-east-2", mapResultKeys[2])
+	assert.Equal(t, "orgs/cp/tenant1/test1/us-east-2", mapResultKeys[3])
 
 	mapConfig1, err := c.YAMLToMapOfInterfaces(listResult[0])
 	assert.Nil(t, err)
 
 	imports := mapConfig1["imports"].([]any)
 
-	mapConfig2 := mapResult["tenant1/ue2/dev"]
+	mapConfig2 := mapResult["orgs/cp/tenant1/dev/us-east-2"]
 	assert.Equal(t, len(imports), len(mapConfig2.(map[any]any)["imports"].([]string)))
 
-	assert.Equal(t, 24, len(imports))
+	assert.Equal(t, 26, len(imports))
 	assert.Equal(t, "catalog/helmfile/echo-server", imports[0])
 	assert.Equal(t, "catalog/helmfile/infra-server", imports[1])
 	assert.Equal(t, "catalog/helmfile/infra-server-override", imports[2])
@@ -72,9 +72,11 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "catalog/terraform/test-component-override-3", imports[18])
 	assert.Equal(t, "catalog/terraform/top-level-component1", imports[19])
 	assert.Equal(t, "catalog/terraform/vpc", imports[20])
-	assert.Equal(t, "globals/globals", imports[21])
-	assert.Equal(t, "globals/tenant1-globals", imports[22])
-	assert.Equal(t, "globals/ue2-globals", imports[23])
+	assert.Equal(t, "mixins/region/us-east-2", imports[21])
+	assert.Equal(t, "mixins/stage/dev", imports[22])
+	assert.Equal(t, "orgs/cp/_defaults", imports[23])
+	assert.Equal(t, "orgs/cp/tenant1/_defaults", imports[24])
+	assert.Equal(t, "orgs/cp/tenant1/dev/_defaults", imports[25])
 
 	components := mapConfig1["components"].(map[any]any)
 	terraformComponents := components["terraform"].(map[any]any)
@@ -167,10 +169,10 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "catalog/helmfile/infra-server-override", infraInfraServerOverrideComponentDeps[1])
 	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", infraInfraServerOverrideComponentDeps[2])
 	assert.Equal(t, "catalog/terraform/test-component-override-3", infraInfraServerOverrideComponentDeps[3])
-	assert.Equal(t, "globals/globals", infraInfraServerOverrideComponentDeps[4])
-	assert.Equal(t, "globals/tenant1-globals", infraInfraServerOverrideComponentDeps[5])
-	assert.Equal(t, "globals/ue2-globals", infraInfraServerOverrideComponentDeps[6])
-	assert.Equal(t, "tenant1/ue2/dev", infraInfraServerOverrideComponentDeps[7])
+	assert.Equal(t, "mixins/region/us-east-2", infraInfraServerOverrideComponentDeps[4])
+	assert.Equal(t, "mixins/stage/dev", infraInfraServerOverrideComponentDeps[5])
+	assert.Equal(t, "orgs/cp/_defaults", infraInfraServerOverrideComponentDeps[6])
+	assert.Equal(t, "orgs/cp/tenant1/_defaults", infraInfraServerOverrideComponentDeps[7])
 	assert.Equal(t, "infra/infra-server", infraInfraServerOverrideComponentInheritance[0])
 	assert.Equal(t, "1_override", infraInfraServerOverrideComponentVarsA)
 
