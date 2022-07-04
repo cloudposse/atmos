@@ -62,21 +62,85 @@ stacks:
   base_path: "stacks"
   # Can also be set using `ATMOS_STACKS_INCLUDED_PATHS` ENV var (comma-separated values string)
   included_paths:
-    - "**/*"
+    - "orgs/**/*"
   # Can also be set using `ATMOS_STACKS_EXCLUDED_PATHS` ENV var (comma-separated values string)
   excluded_paths:
-    - "globals/**/*"
-    - "catalog/**/*"
-    - "**/*globals*"
+    - "**/_defaults.yaml"
   # Can also be set using `ATMOS_STACKS_NAME_PATTERN` ENV var
   name_pattern: "{tenant}-{environment}-{stage}"
 
 workflows:
   # Can also be set using `ATMOS_WORKFLOWS_BASE_PATH` ENV var, or `--workflows-dir` command-line arguments
   # Supports both absolute and relative paths
-  base_path: "workflows"
+  base_path: "stacks/workflows"
 
 logs:
   verbose: false
   colors: true
+
+# Custom CLI commands
+commands:
+  - name: tf
+    description: Execute terraform commands
+    # subcommands
+    commands:
+      - name: plan
+        description: This command plans terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        env:
+          - key: ENV_VAR_1
+            value: ENV_VAR_1_value
+          - key: ENV_VAR_2
+            # `valueCommand` is an external command to execute to get the value for the ENV var
+            # Either 'value' or 'valueCommand' can be specified for the ENV var, but not both
+            valueCommand: echo ENV_VAR_2_value
+        # steps support Go templates
+        steps:
+          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+  - name: terraform
+    description: Execute terraform commands
+    # subcommands
+    commands:
+      - name: provision
+        description: This command provisions terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        # ENV var values support Go templates
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_STACK
+            value: "{{ .Flags.stack }}"
+        steps:
+          - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
+          - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+  - name: play
+    description: This command plays games
+    steps:
+      - echo Playing...
+    # subcommands
+    commands:
+      - name: hello
+        description: This command says Hello world
+        steps:
+          - echo Saying Hello world...
+          - echo Hello world
+      - name: ping
+        description: This command plays ping-pong
+        steps:
+          - echo Playing ping-pong...
+          - echo pong
 ```
