@@ -1,5 +1,5 @@
 vars:
-  namespace: eg
+  namespace: cp
 
 terraform:
   vars: {}

@@ -10,7 +10,7 @@ components:
       vars:
         enabled: true
         name: "common"
-        subnet_type_tag_key: eg.io/subnet/type
+        subnet_type_tag_key: cp.io/subnet/type
         nat_gateway_enabled: true
         nat_instance_enabled: false
         max_subnet_count: 3
