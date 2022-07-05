@@ -1,0 +1,5 @@
+import:
+  - orgs/cp/_defaults
+
+vars:
+  tenant: tenant2

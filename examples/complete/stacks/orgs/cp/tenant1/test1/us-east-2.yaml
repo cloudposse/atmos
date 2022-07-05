@@ -1,6 +1,6 @@
 import:
-  - globals/tenant2-globals
-  - globals/ue2-globals
+  - mixins/region/us-east-2
+  - orgs/cp/tenant1/test1/_defaults
   - catalog/terraform/top-level-component1
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
@@ -11,17 +11,8 @@ import:
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
 
-vars:
-  stage: staging
-
-terraform:
-  vars: {}
-
-helmfile:
-  vars: {}
-
 components:
   terraform:
     "infra/vpc":
       vars:
-        cidr_block: 10.9.0.0/18
+        cidr_block: 10.11.0.0/18

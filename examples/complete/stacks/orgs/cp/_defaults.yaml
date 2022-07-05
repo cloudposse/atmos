@@ -1,5 +1,5 @@
 vars:
-  namespace: eg
+  namespace: cp
 
 terraform:
   vars: {}
@@ -8,9 +8,9 @@ terraform:
   backend:
     s3:
       encrypt: true
-      bucket: "eg-ue2-root-tfstate"
+      bucket: "cp-ue2-root-tfstate"
       key: "terraform.tfstate"
-      dynamodb_table: "eg-ue2-root-tfstate-lock"
+      dynamodb_table: "cp-ue2-root-tfstate-lock"
       acl: "bucket-owner-full-control"
       region: "us-east-2"
       role_arn: null
@@ -25,7 +25,7 @@ terraform:
 
   remote_state_backend:
     s3:
-      role_arn: "arn:aws:iam::123456789012:role/eg-gbl-root-terraform"
+      role_arn: "arn:aws:iam::123456789012:role/cp-gbl-root-terraform"
 
 helmfile:
   vars: {}

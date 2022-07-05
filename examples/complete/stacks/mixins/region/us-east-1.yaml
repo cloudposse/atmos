@@ -1,0 +1,12 @@
+vars:
+  region: us-east-1
+  environment: ue1
+
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c

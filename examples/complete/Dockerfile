@@ -1,10 +1,10 @@
 # Geodesic: https://github.com/cloudposse/geodesic/
-ARG GEODESIC_VERSION=1.2.1
+ARG GEODESIC_VERSION=1.2.2
 ARG GEODESIC_OS=debian
 # atmos: https://github.com/cloudposse/atmos
-ARG ATMOS_VERSION=1.4.21
+ARG ATMOS_VERSION=1.4.24
 # Terraform: https://github.com/hashicorp/terraform/releases
-ARG TF_VERSION=1.2.2
+ARG TF_VERSION=1.2.4
 
 FROM cloudposse/geodesic:${GEODESIC_VERSION}-${GEODESIC_OS}
 
@@ -23,7 +23,7 @@ ENV AWS_VAULT_ENABLED=false
 ENV AWS_VAULT_SERVER_ENABLED=false
 ENV GEODESIC_TF_PROMPT_ACTIVE=false
 ENV DIRENV_ENABLED=false
-ENV NAMESPACE="eg"
+ENV NAMESPACE="cp"
 
 # Enable advanced AWS assume role chaining for tools using AWS SDK
 # https://docs.aws.amazon.com/sdk-for-go/api/aws/session/

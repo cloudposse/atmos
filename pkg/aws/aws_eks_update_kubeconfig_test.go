@@ -15,7 +15,7 @@ func TestClusterNamePattern(t *testing.T) {
 
 	// Define variables for a component in a stack
 	componentVars := map[any]any{
-		"namespace":   "eg",
+		"namespace":   "cp",
 		"tenant":      "plat",
 		"environment": "ue2",
 		"stage":       "dev",
@@ -29,5 +29,5 @@ func TestClusterNamePattern(t *testing.T) {
 	// cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-{attributes}-eks-cluster"
 	clusterName := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
 	u.PrintInfo(fmt.Sprintf("Cluster name: %s", clusterName))
-	assert.Equal(t, "eg-plat-ue2-dev-blue-eks-cluster", clusterName)
+	assert.Equal(t, "cp-plat-ue2-dev-blue-eks-cluster", clusterName)
 }

@@ -1,6 +1,6 @@
 import:
-  - globals/tenant2-globals
-  - globals/ue2-globals
+  - mixins/region/us-east-2
+  - orgs/cp/tenant2/prod/_defaults
   - catalog/terraform/top-level-component1
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
@@ -10,15 +10,6 @@ import:
   - catalog/helmfile/echo-server
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
-
-vars:
-  stage: prod
-
-terraform:
-  vars: {}
-
-helmfile:
-  vars: {}
 
 components:
   terraform:
