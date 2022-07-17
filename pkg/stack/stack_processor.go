@@ -804,7 +804,8 @@ func ProcessStackConfig(
 				//}
 
 				if processComponentDeps {
-					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponentName, importsConfig)
+					baseComponents := []string{baseComponentName}
+					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponents, importsConfig)
 					if err != nil {
 						return nil, err
 					}
@@ -1024,7 +1025,8 @@ func ProcessStackConfig(
 				//}
 
 				if processComponentDeps {
-					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponentName, importsConfig)
+					baseComponents := []string{baseComponentName}
+					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponents, importsConfig)
 					if err != nil {
 						return nil, err
 					}
