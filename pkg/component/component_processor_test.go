@@ -143,4 +143,32 @@ func TestComponentProcessor(t *testing.T) {
 	tenant1Ue2Test1TestTestComponentOverrideComponent2WorkspaceKeyPrefix := tenant1Ue2Test1TestTestComponentOverrideComponent2Backend["workspace_key_prefix"].(string)
 	assert.Equal(t, "tenant1-ue2-test-1-test-test-component-override-2", tenant1Ue2Test1TestTestComponentOverrideComponent2Workspace)
 	assert.Equal(t, "test-test-component", tenant1Ue2Test1TestTestComponentOverrideComponent2WorkspaceKeyPrefix)
+
+	var tenant1Ue2DevTestTestComponentOverrideComponent3 map[string]any
+	component = "test/test-component-override-3"
+	stack = "tenant1-ue2-dev"
+	tenant1Ue2DevTestTestComponentOverrideComponent3, err = ProcessComponentInStack(component, stack)
+	assert.Nil(t, err)
+	tenant1Ue2DevTestTestComponentOverrideComponent3Deps := tenant1Ue2DevTestTestComponentOverrideComponent3["deps"].([]string)
+	assert.Equal(t, 20, len(tenant1Ue2DevTestTestComponentOverrideComponent3Deps))
+	assert.Equal(t, "catalog/terraform/mixins/test-1", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[0])
+	assert.Equal(t, "catalog/terraform/mixins/test-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[1])
+	assert.Equal(t, "catalog/terraform/services/service-1", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[2])
+	assert.Equal(t, "catalog/terraform/services/service-1-override", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[3])
+	assert.Equal(t, "catalog/terraform/services/service-1-override-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[4])
+	assert.Equal(t, "catalog/terraform/services/service-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[5])
+	assert.Equal(t, "catalog/terraform/services/service-2-override", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[6])
+	assert.Equal(t, "catalog/terraform/services/service-2-override-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[7])
+	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[8])
+	assert.Equal(t, "catalog/terraform/tenant1-ue2-dev", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[9])
+	assert.Equal(t, "catalog/terraform/test-component", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[10])
+	assert.Equal(t, "catalog/terraform/test-component-override", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[11])
+	assert.Equal(t, "catalog/terraform/test-component-override-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[12])
+	assert.Equal(t, "catalog/terraform/test-component-override-3", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[13])
+	assert.Equal(t, "mixins/region/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[14])
+	assert.Equal(t, "mixins/stage/dev", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[15])
+	assert.Equal(t, "orgs/cp/_defaults", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[16])
+	assert.Equal(t, "orgs/cp/tenant1/_defaults", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[17])
+	assert.Equal(t, "orgs/cp/tenant1/dev/_defaults", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[18])
+	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[19])
 }

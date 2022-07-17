@@ -539,6 +539,7 @@ func ProcessStackConfig(
 				baseComponentRemoteStateBackendSection := map[any]any{}
 				var baseComponentConfig BaseComponentConfig
 				var componentInheritanceChain []string
+				var baseComponents []string
 
 				// Inheritance using the top-level `component` attribute
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
@@ -591,6 +592,8 @@ func ProcessStackConfig(
 					}
 				}
 
+				baseComponents = append(baseComponents, baseComponentName)
+
 				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
 					for _, v := range inheritList {
 						baseComponentFromInheritList, ok := v.(string)
@@ -609,6 +612,8 @@ func ProcessStackConfig(
 								return nil, errors.New(errorMessage)
 							}
 						}
+
+						baseComponents = append(baseComponents, baseComponentFromInheritList)
 
 						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
 						err = ProcessBaseComponentConfig(
@@ -804,7 +809,7 @@ func ProcessStackConfig(
 				//}
 
 				if processComponentDeps {
-					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponentName, importsConfig)
+					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponents, importsConfig)
 					if err != nil {
 						return nil, err
 					}
@@ -885,6 +890,7 @@ func ProcessStackConfig(
 				baseComponentHelmfileCommand := ""
 				var baseComponentConfig BaseComponentConfig
 				var componentInheritanceChain []string
+				var baseComponents []string
 
 				// Inheritance using the top-level `component` attribute
 				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
@@ -933,6 +939,8 @@ func ProcessStackConfig(
 					}
 				}
 
+				baseComponents = append(baseComponents, baseComponentName)
+
 				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
 					for _, v := range inheritList {
 						baseComponentFromInheritList, ok := v.(string)
@@ -951,6 +959,8 @@ func ProcessStackConfig(
 								return nil, errors.New(errorMessage)
 							}
 						}
+
+						baseComponents = append(baseComponents, baseComponentFromInheritList)
 
 						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
 						err = ProcessBaseComponentConfig(
@@ -1024,7 +1034,7 @@ func ProcessStackConfig(
 				//}
 
 				if processComponentDeps {
-					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponentName, importsConfig)
+					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponents, importsConfig)
 					if err != nil {
 						return nil, err
 					}

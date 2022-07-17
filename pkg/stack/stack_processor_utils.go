@@ -47,19 +47,19 @@ func FindComponentStacks(
 	return unique, nil
 }
 
-// FindComponentDependencies finds all imports where the component or the base component is defined
+// FindComponentDependencies finds all imports where the component or the base component(s) are defined
 // Component depends on the imported config file if any of the following conditions is true:
 // 1. The imported file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
 //    `settings` or `vars` sections which are not empty
 // 2. The imported file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
 //    `remote_state_backend_type`, `settings` or `vars` sections which are not empty
 // 3. The imported config file has the "components" section, which has the component type section, which has the component section
-// 4. The imported config file has the "components" section, which has the component type section, which has the base component section
+// 4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section
 func FindComponentDependencies(
 	stack string,
 	componentType string,
 	component string,
-	baseComponent string,
+	baseComponents []string,
 	importsConfig map[string]map[any]any) ([]string, error) {
 
 	var deps []string
@@ -108,7 +108,7 @@ func FindComponentDependencies(
 					}
 				}
 
-				if baseComponent != "" {
+				for _, baseComponent := range baseComponents {
 					if i3, ok3 := componentTypeSection[baseComponent]; ok3 {
 						baseComponentSection := i3.(map[any]any)
 
