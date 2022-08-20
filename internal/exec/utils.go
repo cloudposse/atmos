@@ -329,9 +329,10 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				stackName,
 			)
 			if err != nil {
+				// If any of the stack config files throws error (which also means that we can't find the component in that stack),
+				// print the error to the console and continue searching for the component in the other stck config files
 				u.PrintErrorVerbose(err)
 				continue
-				// return configAndStacksInfo, err
 			}
 
 			// Check if we've found the stack
