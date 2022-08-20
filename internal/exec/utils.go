@@ -296,6 +296,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		var foundConfigAndStacksInfo c.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
+			// Check if we've found the component config
 			configAndStacksInfo.ComponentSection,
 				configAndStacksInfo.ComponentVarsSection,
 				configAndStacksInfo.ComponentEnvSection,
