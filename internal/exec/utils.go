@@ -86,7 +86,7 @@ func FindComponentConfig(
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack '%s'", componentType, stack)
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("invalid or missing configuration for the component '%s' in the stack '%s'", component, stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing config for the component '%s' in the stack '%s'", component, stack)
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack '%s'", component, stack)
@@ -285,7 +285,11 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-		configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
+		configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack,
+			configAndStacksInfo.Context,
+			c.Config.Stacks.NamePattern,
+			configAndStacksInfo.Stack,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -319,9 +323,15 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-			configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
+			configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack,
+				configAndStacksInfo.Context,
+				c.Config.Stacks.NamePattern,
+				stackName,
+			)
 			if err != nil {
-				return configAndStacksInfo, err
+				u.PrintErrorVerbose(err)
+				continue
+				// return configAndStacksInfo, err
 			}
 
 			// Check if we've found the stack
