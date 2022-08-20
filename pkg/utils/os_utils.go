@@ -32,7 +32,14 @@ func PrintErrorToStdError(err error) {
 // PrintError prints errors to std.Output
 func PrintError(err error) {
 	if err != nil {
-		color.Red("%s\n\n", err)
+		color.Red("%s\n", err)
+	}
+}
+
+// PrintErrorVerbose checks the log level and prints errors to std.Output
+func PrintErrorVerbose(err error) {
+	if g.LogVerbose {
+		PrintError(err)
 	}
 }
 
