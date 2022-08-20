@@ -80,16 +80,16 @@ func FindComponentConfig(
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("could not find the stack '%s'", stack)
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components' section is missing in the stack '%s'", stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components' section is missing in the stack file '%s'", stack)
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack '%s'", componentType, stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack file '%s'", componentType, stack)
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing config for the component '%s' in the stack '%s'", component, stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("no config found for the component '%s' in the stack file '%s'", component, stack)
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack '%s'", component, stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[any]any); !ok {
 		componentBackendSection = nil
@@ -339,7 +339,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				foundConfigAndStacksInfo = configAndStacksInfo
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
-				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the file '%s'",
+				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					stackName,
