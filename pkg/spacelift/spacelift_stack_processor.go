@@ -111,7 +111,7 @@ func TransformStackConfigToSpaceliftStacks(
 					var contextPrefix string
 
 					if stackNamePattern != "" {
-						contextPrefix, err = c.GetContextPrefix(stackName, context, stackNamePattern)
+						contextPrefix, err = c.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
 							u.PrintErrorToStdError(err)
 							return nil, err
@@ -230,7 +230,7 @@ func TransformStackConfigToSpaceliftStacks(
 					var contextPrefix string
 
 					if stackNamePattern != "" {
-						contextPrefix, err = c.GetContextPrefix(stackName, context, stackNamePattern)
+						contextPrefix, err = c.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
 							u.PrintErrorToStdError(err)
 							return nil, err
