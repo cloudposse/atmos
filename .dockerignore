@@ -10,6 +10,7 @@
 **/terraform.tfvars.json
 **/*.terraform.tfvars.json
 **/*.helmfile.vars.yaml
+**/.terraform.lock.hcl
 
 # Module directory
 .terraform
