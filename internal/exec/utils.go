@@ -80,16 +80,16 @@ func FindComponentConfig(
 		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("could not find the stack '%s'", stack)
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components' section is missing in the stack '%s'", stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components' section is missing in the stack file '%s'", stack)
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack '%s'", componentType, stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack file '%s'", componentType, stack)
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("invalid or missing configuration for the component '%s' in the stack '%s'", component, stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("no config found for the component '%s' in the stack file '%s'", component, stack)
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack '%s'", component, stack)
+		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[any]any); !ok {
 		componentBackendSection = nil
@@ -253,7 +253,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		if c.ProcessedConfig.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
-			msg = "Found config files:"
+			msg = "Found stack config files:"
 		}
 		u.PrintInfo(msg)
 		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
@@ -285,7 +285,11 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-		configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
+		configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack,
+			configAndStacksInfo.Context,
+			c.Config.Stacks.NamePattern,
+			configAndStacksInfo.Stack,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -296,6 +300,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		var foundConfigAndStacksInfo c.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
+			// Check if we've found the component config
 			configAndStacksInfo.ComponentSection,
 				configAndStacksInfo.ComponentVarsSection,
 				configAndStacksInfo.ComponentEnvSection,
@@ -308,6 +313,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				configAndStacksInfo.ComponentMetadataSection,
 				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
+				u.PrintErrorVerbose(err)
 				continue
 			}
 
@@ -317,9 +323,16 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-			configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, c.Config.Stacks.NamePattern)
+			configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack,
+				configAndStacksInfo.Context,
+				c.Config.Stacks.NamePattern,
+				stackName,
+			)
 			if err != nil {
-				return configAndStacksInfo, err
+				// If any of the stack config files throws error (which also means that we can't find the component in that stack),
+				// print the error to the console and continue searching for the component in the other stack config files.
+				u.PrintErrorVerbose(err)
+				continue
 			}
 
 			// Check if we've found the stack
@@ -327,7 +340,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				foundConfigAndStacksInfo = configAndStacksInfo
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
-				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the file '%s'",
+				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					stackName,
@@ -346,7 +359,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
 				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
-				"Check that imports are valid.",
+				"Check that all imports are valid.",
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),

@@ -368,7 +368,7 @@ func GetContextFromVars(vars map[any]any) Context {
 }
 
 // GetContextPrefix calculates context prefix from the context
-func GetContextPrefix(stack string, context Context, stackNamePattern string) (string, error) {
+func GetContextPrefix(stack string, context Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
 			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
@@ -381,9 +381,11 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		if part == "{namespace}" {
 			if len(context.Namespace) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'namespace`, but the stack '%s' does not have a namespace defined",
+					fmt.Errorf("the stack name pattern '%s' specifies 'namespace`, but the stack '%s' does not have a namespace defined in the stack file '%s'",
 						stackNamePattern,
-						stack)
+						stack,
+						stackFile,
+					)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Namespace
@@ -393,9 +395,11 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'tenant`, but the stack '%s' does not have a tenant defined",
+					fmt.Errorf("the stack name pattern '%s' specifies 'tenant`, but the stack '%s' does not have a tenant defined in the stack file '%s'",
 						stackNamePattern,
-						stack)
+						stack,
+						stackFile,
+					)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Tenant
@@ -405,9 +409,11 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{environment}" {
 			if len(context.Environment) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'environment`, but the stack '%s' does not have an environment defined",
+					fmt.Errorf("the stack name pattern '%s' specifies 'environment`, but the stack '%s' does not have an environment defined in the stack file '%s'",
 						stackNamePattern,
-						stack)
+						stack,
+						stackFile,
+					)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Environment
@@ -417,9 +423,11 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string) (s
 		} else if part == "{stage}" {
 			if len(context.Stage) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'stage`, but the stack '%s' does not have a stage defined",
+					fmt.Errorf("the stack name pattern '%s' specifies 'stage`, but the stack '%s' does not have a stage defined in the stack file '%s'",
 						stackNamePattern,
-						stack)
+						stack,
+						stackFile,
+					)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Stage

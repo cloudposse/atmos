@@ -18,7 +18,7 @@ func BuildTerraformWorkspace(
 	var err error
 
 	if stackNamePattern != "" {
-		contextPrefix, err = c.GetContextPrefix(stack, context, stackNamePattern)
+		contextPrefix, err = c.GetContextPrefix(stack, context, stackNamePattern, stack)
 		if err != nil {
 			return "", err
 		}

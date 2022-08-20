@@ -1,0 +1,20 @@
+import:
+  - mixins/region/us-east-2
+  - orgs/cp/tenant1/dev/_defaults
+
+components:
+  terraform:
+    vpc/new:
+      metadata:
+        component: infra/vpc
+      settings:
+        spacelift:
+          workspace_enabled: false
+      vars:
+        cidr_block: 10.12.0.0/18
+        enabled: true
+        name: "new"
+        subnet_type_tag_key: cp.io/subnet/type
+        nat_gateway_enabled: false
+        nat_instance_enabled: false
+        max_subnet_count: 3
