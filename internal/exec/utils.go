@@ -253,7 +253,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		if c.ProcessedConfig.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
-			msg = "Found config files:"
+			msg = "Found stack config files:"
 		}
 		u.PrintInfo(msg)
 		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
