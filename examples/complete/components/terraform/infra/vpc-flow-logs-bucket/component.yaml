@@ -28,7 +28,7 @@ metadata:
   description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
 spec:
   source:
-    # 'uri' supports all protocols: local files (absolute and relative paths), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # Source 'uri' supports the following protocols: Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
     # and all URL and archive formats as described in https://github.com/hashicorp/go-getter
     # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
@@ -53,11 +53,10 @@ spec:
   # mixins are processed in the order they are declared in the list
   mixins:
     # https://github.com/hashicorp/go-getter/issues/98
-    # 'uri' supports all protocols: local files (absolute and relative paths), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # Mixins 'uri' supports the following protocols: local files (absolute and relative paths), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP
     # - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
     - uri: ../../mixins/context.tf
       filename: context.tf
     - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
-    # - uri: ../../mixins/introspection.mixin.tf
       version: 0.196.1
       filename: introspection.mixin.tf
