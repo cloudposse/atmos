@@ -166,6 +166,13 @@ func ExecuteComponentVendorCommandInternal(
 			uri = vendorComponentSpec.Source.Uri
 		}
 
+		// Check if `uri` is a file path.
+		// If it's a file path, check if it's an absolute path.
+		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
+		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+			uri = absPath
+		}
+
 		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
 			component,
 			uri,
@@ -305,6 +312,13 @@ func ExecuteComponentVendorCommandInternal(
 					uri = tpl.String()
 				} else {
 					uri = mixin.Uri
+				}
+
+				// Check if `uri` is a file path.
+				// If it's a file path, check if it's an absolute path.
+				// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
+				if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+					uri = absPath
 				}
 
 				u.PrintInfo(fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
