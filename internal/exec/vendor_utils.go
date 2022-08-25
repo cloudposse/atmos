@@ -166,6 +166,13 @@ func ExecuteComponentVendorCommandInternal(
 			uri = vendorComponentSpec.Source.Uri
 		}
 
+		// Check if `uri` is a file path.
+		// If it's a file path, check if it's an absolute path.
+		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
+		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+			uri = absPath
+		}
+
 		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
 			component,
 			uri,
@@ -177,7 +184,8 @@ func ExecuteComponentVendorCommandInternal(
 			// We are using a temp folder for the following reasons:
 			// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
 			// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-			tempDir, err = ioutil.TempDir("", strconv.FormatInt(time.Now().Unix(), 10))
+			// ioutil.TempDir is deprecated. As of Go 1.17, this function simply calls os.MkdirTemp
+			tempDir, err = os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 			if err != nil {
 				return err
 			}
@@ -194,7 +202,6 @@ func ExecuteComponentVendorCommandInternal(
 				Ctx: context.Background(),
 				// Define the destination to where the files will be stored. This will create the directory if it doesn't exist
 				Dst: tempDir,
-				Dir: true,
 				// Source
 				Src:  uri,
 				Mode: getter.ClientModeDir,
@@ -307,6 +314,13 @@ func ExecuteComponentVendorCommandInternal(
 					uri = mixin.Uri
 				}
 
+				// Check if `uri` is a file path.
+				// If it's a file path, check if it's an absolute path.
+				// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
+				if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+					uri = absPath
+				}
+
 				u.PrintInfo(fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
 					uri,
 					component,
@@ -323,7 +337,6 @@ func ExecuteComponentVendorCommandInternal(
 					client := &getter.Client{
 						Ctx:  context.Background(),
 						Dst:  path.Join(tempDir, mixin.Filename),
-						Dir:  false,
 						Src:  uri,
 						Mode: getter.ClientModeFile,
 					}
