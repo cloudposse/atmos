@@ -352,6 +352,14 @@ func ExecuteComponentVendorCommandInternal(
 
 						// Preserve the uid and the gid of all entries
 						PreserveOwner: false,
+
+						// OnSymlink specifies what to do on symlink
+						// Override the destination file if it already exists
+						// Prevent the error:
+						// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
+						OnSymlink: func(src string) cp.SymlinkAction {
+							return cp.Deep
+						},
 					}
 
 					if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
