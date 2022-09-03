@@ -143,7 +143,7 @@ integrations:
         parallel_apply: true
         projects:
           # generate a project entry for each component in every stack
-          - name: "{tenant}-{environment}-{stage}-{name}"
+          - name: "{tenant}-{environment}-{stage}-{component}"
             workspace: "{workspace}"
             workflow: my-custom-workflow
             dir: "{component_path}"
@@ -152,7 +152,7 @@ integrations:
             autoplan:
               when_modified:
                 - "**/*.tf"
-                - "tfvars/{tenant}-{environment}-{stage}-{name}.json"
+                - "tfvars/{tenant}-{environment}-{stage}-{component}.json"
               enabled: true
               apply_requirements:
                 - "approved"
