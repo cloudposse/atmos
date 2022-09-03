@@ -133,32 +133,36 @@ commands:
 integrations:
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
-    version: 3
-    automerge: true
-    delete_source_branch_on_merge: true
-    parallel_plan: true
-    parallel_apply: true
-    projects:
-      - name: my-project-name
-        dir: .
-        workspace: default
-        terraform_version: v0.11.0
+    repo_config:
+      path: "/etc/atlantis.yaml"
+      template:
+        version: 3
+        automerge: true
         delete_source_branch_on_merge: true
-        autoplan:
-          when_modified: ["*.tf", "../modules/**/*.tf"]
-          enabled: true
-        apply_requirements: [mergeable, approved]
-        workflow: myworkflow
-    workflows:
-      myworkflow:
-        plan:
-          steps:
-            - run: my-custom-command arg1 arg2
-            - init
-            - plan:
-                extra_args: ["-lock", "false"]
-            - run: my-custom-command arg1 arg2
-        apply:
-          steps:
-            - run: echo hi
-            - apply
+        parallel_plan: true
+        parallel_apply: true
+        projects:
+          # generate a project entry for each component in every stack
+          - name: "{tenant}-{environment}-{stage}-{name}"
+            workspace: "{workspace}"
+            workflow: my-custom-workflow
+            dir: "{component_path}"
+            terraform_version: "{terraform_version}"
+            delete_source_branch_on_merge: true
+            autoplan:
+              when_modified:
+                - "**/*.tf"
+                - "tfvars/{tenant}-{environment}-{stage}-{name}.yaml"
+              enabled: true
+              apply_requirements:
+                - "approved"
+        workflows:
+          my-custom-workflow:
+            plan:
+              steps:
+                - init
+                - plan:
+                    extra_args: ["-lock", "false"]
+            apply:
+              steps:
+                - apply
