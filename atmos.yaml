@@ -152,7 +152,7 @@ integrations:
             autoplan:
               when_modified:
                 - "**/*.tf"
-                - "tfvars/{tenant}-{environment}-{stage}-{name}.yaml"
+                - "tfvars/{tenant}-{environment}-{stage}-{name}.json"
               enabled: true
               apply_requirements:
                 - "approved"
