@@ -61,8 +61,10 @@ func ExecuteTerraformGenerateVarfiles(stacks []string, components []string) erro
 						}
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
-							if _, ok := componentSection["vars"].(map[any]any); ok {
+							if varsSection, ok := componentSection["vars"].(map[any]any); ok {
 								u.PrintInfo(fmt.Sprintf("Processing component '%s'", componentName))
+								context := c.GetContextFromVars(varsSection)
+								u.PrintInfo(context.Component)
 							}
 						}
 					}
