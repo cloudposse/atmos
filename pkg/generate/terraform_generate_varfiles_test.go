@@ -13,7 +13,8 @@ func TestTerraformGenerateVarfiles(t *testing.T) {
 
 	var stacks []string
 	var components []string
+	filePattern := "./varfiles/{tenant}/{environment}/{stage}/{component}.tfvars.json"
 
-	err = e.ExecuteTerraformGenerateVarfiles(stacks, components)
+	err = e.ExecuteTerraformGenerateVarfiles(filePattern, stacks, components)
 	assert.Nil(t, err)
 }

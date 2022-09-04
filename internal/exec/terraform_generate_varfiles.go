@@ -5,6 +5,7 @@ import (
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"path"
 	"strings"
 )
 
@@ -60,19 +61,25 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, comp
 
 							if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 								if varsSection, ok := componentSection["vars"].(map[any]any); ok {
-									context := c.GetContextFromVars(varsSection)
-
-									if context.Component == "" {
-
+									// Find terraform component.
+									// If `component` attribute is present, it's the terraform component.
+									// Otherwise, the YAML component name is the terraform component.
+									terraformComponent := componentName
+									if componentAttribute, ok := componentSection["component"].(string); ok {
+										terraformComponent = componentAttribute
 									}
-								}
 
-								terraformComponent := componentName
-								if componentAttribute, ok := componentSection["component"].(string); ok {
-									terraformComponent = componentAttribute
-								}
+									// Absolute path to the terraform component
+									terraformComponentPath := path.Join(
+										c.Config.BasePath,
+										c.Config.Components.Terraform.BasePath,
+										terraformComponent,
+									)
 
-								u.PrintInfo(terraformComponent)
+									context := c.GetContextFromVars(varsSection)
+									context.Component = strings.Replace(terraformComponent, "/", "-", -1)
+									context.ComponentPath = terraformComponentPath
+								}
 							}
 						}
 					}
