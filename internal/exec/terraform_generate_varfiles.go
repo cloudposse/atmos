@@ -36,13 +36,10 @@ func ExecuteTerraformGenerateVarfiles(cmd *cobra.Command, args []string) error {
 
 	finalStacksMap := make(map[string]any)
 
-	var includeSections = []string{"metadata", "component", "vars", "workspace"}
+	var includeSections = []string{"component", "vars"}
 
 	for stackName, stackSection := range stacksMap {
 		if filterByStack == "" || filterByStack == stackName {
-			// Delete the stack-wide imports
-			delete(stackSection.(map[any]any), "imports")
-
 			if !u.MapKeyExists(finalStacksMap, stackName) {
 				finalStacksMap[stackName] = make(map[string]any)
 			}
