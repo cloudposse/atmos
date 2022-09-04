@@ -79,6 +79,9 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, comp
 									context := c.GetContextFromVars(varsSection)
 									context.Component = strings.Replace(terraformComponent, "/", "-", -1)
 									context.ComponentPath = terraformComponentPath
+
+									fileName := c.ReplaceContextTokens(context, fileTemplate)
+									u.PrintInfo(fileName)
 								}
 							}
 						}
