@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// terraformGenerateVarfileCmd generates varfile for a terraform component
+// terraformGenerateVarfilesCmd generates varfiles for all terraform components in all stacks
 var terraformGenerateVarfilesCmd = &cobra.Command{
 	Use:                "varfiles",
 	Short:              "Execute 'terraform generate varfiles' command",
@@ -22,12 +22,11 @@ var terraformGenerateVarfilesCmd = &cobra.Command{
 
 func init() {
 	terraformGenerateVarfilesCmd.DisableFlagParsing = false
-	terraformGenerateVarfilesCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform generate varfiles <component> -s <stack>")
-	terraformGenerateVarfilesCmd.PersistentFlags().String("file", "", "atmos terraform generate varfiles --file <file_template>")
-	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "yaml", "Specify output format: atmos terraform generate varfiles --format=yaml/json ('json' is default)")
-	terraformGenerateVarfilesCmd.PersistentFlags().String("components", "", "Filter by specific components: atmos terraform generate varfiles --components=<component1>,<component2>")
+	terraformGenerateVarfilesCmd.PersistentFlags().String("path-template", "", "atmos terraform generate varfiles --path-template <path_template>")
+	terraformGenerateVarfilesCmd.PersistentFlags().StringP("stack", "s", "", "Filter by specific stack: atmos terraform generate varfiles --path-template <path_template> -s <stack>")
+	terraformGenerateVarfilesCmd.PersistentFlags().String("components", "", "Filter by specific components: atmos terraform generate varfiles --path-template <path_template> --components=<component1>,<component2>")
 
-	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("stack")
+	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("path-template")
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
