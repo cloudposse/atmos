@@ -18,19 +18,6 @@ func ExecuteTerraformGenerateVarfiles(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-	if format == "" {
-		format = "yaml"
-	}
-
-	file, err := flags.GetString("file")
-	if err != nil {
-		return err
-	}
-
 	componentsCsv, err := flags.GetString("components")
 	if err != nil {
 		return err
@@ -48,6 +35,8 @@ func ExecuteTerraformGenerateVarfiles(cmd *cobra.Command, args []string) error {
 	}
 
 	finalStacksMap := make(map[string]any)
+
+	var includeSections = []string{"vars", "workspace"}
 
 	for stackName, stackSection := range stacksMap {
 		if filterByStack == "" || filterByStack == stackName {
@@ -84,7 +73,7 @@ func ExecuteTerraformGenerateVarfiles(cmd *cobra.Command, args []string) error {
 							}
 
 							for sectionName, section := range componentSection {
-								if sectionName == "vars" {
+								if u.SliceContainsString(includeSections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
 								}
 							}
@@ -92,34 +81,46 @@ func ExecuteTerraformGenerateVarfiles(cmd *cobra.Command, args []string) error {
 					}
 				}
 			}
+
+			// Filter out empty stacks (stacks without any components)
+			if st, ok := finalStacksMap[stackName].(map[string]any); ok {
+				if len(st) == 0 {
+					delete(finalStacksMap, stackName)
+				}
+			}
 		}
 	}
 
-	if format == "yaml" {
-		if file == "" {
-			err = u.PrintAsYAML(finalStacksMap)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = u.WriteToFileAsYAML(file, finalStacksMap, 0644)
-			if err != nil {
-				return err
-			}
-		}
-	} else if format == "json" {
-		if file == "" {
-			err = u.PrintAsJSON(finalStacksMap)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = u.WriteToFileAsJSON(file, finalStacksMap, 0644)
-			if err != nil {
-				return err
-			}
-		}
+	err = u.PrintAsYAML(finalStacksMap)
+	if err != nil {
+		return err
 	}
+
+	//if format == "yaml" {
+	//	if file == "" {
+	//		err = u.PrintAsYAML(finalStacksMap)
+	//		if err != nil {
+	//			return err
+	//		}
+	//	} else {
+	//		err = u.WriteToFileAsYAML(file, finalStacksMap, 0644)
+	//		if err != nil {
+	//			return err
+	//		}
+	//	}
+	//} else if format == "json" {
+	//	if file == "" {
+	//		err = u.PrintAsJSON(finalStacksMap)
+	//		if err != nil {
+	//			return err
+	//		}
+	//	} else {
+	//		err = u.WriteToFileAsJSON(file, finalStacksMap, 0644)
+	//		if err != nil {
+	//			return err
+	//		}
+	//	}
+	//}
 
 	return nil
 }
