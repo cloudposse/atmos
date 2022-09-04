@@ -445,8 +445,10 @@ func ReplaceContextTokens(context Context, pattern string) string {
 	r := strings.NewReplacer(
 		"{base-component}", context.BaseComponent,
 		"{component}", context.Component,
+		"{component-path}", context.ComponentPath,
 		"{namespace}", context.Namespace,
 		"{environment}", context.Environment,
+		"{region}", context.Region,
 		"{tenant}", context.Tenant,
 		"{stage}", context.Stage,
 		"{attributes}", strings.Join(context.Attributes, "-"),

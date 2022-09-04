@@ -12,6 +12,11 @@ import (
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
 
+	fileTemplate, err := flags.GetString("file-template")
+	if err != nil {
+		return err
+	}
+
 	stacksCsv, err := flags.GetString("stacks")
 	if err != nil {
 		return err
@@ -30,11 +35,11 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		components = strings.Split(componentsCsv, ",")
 	}
 
-	return ExecuteTerraformGenerateVarfiles(stacks, components)
+	return ExecuteTerraformGenerateVarfiles(fileTemplate, stacks, components)
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
-func ExecuteTerraformGenerateVarfiles(stacks []string, components []string) error {
+func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, components []string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	stacksMap, err := FindStacksMap(configAndStacksInfo, false)
 	if err != nil {

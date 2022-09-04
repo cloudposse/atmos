@@ -95,6 +95,7 @@ type Context struct {
 	Region        string
 	Component     string
 	BaseComponent string
+	ComponentPath string
 	Attributes    []string
 }
 

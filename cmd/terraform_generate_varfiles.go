@@ -27,10 +27,10 @@ func init() {
 		"Varfile template (the file path, file name, and file extension).\n"+
 			"The file extension from the template will be applied to all generated varfiles\n"+
 			"Supports absolute and relative paths.\n"+
-			"Supports context tokens: {namespace}, {tenant}, {environment}, {stage}, {component}, {component_path}.\n"+
-			"atmos terraform generate varfiles --file-template {component_path}/{environment}-{stage}.tfvars.json\n"+
+			"Supports context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {component}, {component-path}.\n"+
+			"atmos terraform generate varfiles --file-template {component-path}/{environment}-{stage}.tfvars.json\n"+
 			"atmos terraform generate varfiles --file-template /configs/{tenant}/{environment}/{stage}/{component}.json\n"+
-			"atmos terraform generate varfiles --file-template /{tenant}/{environment}/{stage}/{component}.yaml",
+			"atmos terraform generate varfiles --file-template /{tenant}/{stage}/{region}/{component}.yaml",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("stacks", "",
