@@ -22,9 +22,6 @@ func ExecuteTerraformGenerateVarfiles(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
-	}
 	if format == "" {
 		format = "yaml"
 	}
@@ -41,24 +38,6 @@ func ExecuteTerraformGenerateVarfiles(cmd *cobra.Command, args []string) error {
 	var components []string
 	if componentsCsv != "" {
 		components = strings.Split(componentsCsv, ",")
-	}
-
-	componentTypesCsv, err := flags.GetString("component-types")
-	if err != nil {
-		return err
-	}
-	var componentTypes []string
-	if componentTypesCsv != "" {
-		componentTypes = strings.Split(componentTypesCsv, ",")
-	}
-
-	sectionsCsv, err := flags.GetString("sections")
-	if err != nil {
-		return err
-	}
-	var sections []string
-	if sectionsCsv != "" {
-		sections = strings.Split(sectionsCsv, ",")
 	}
 
 	var configAndStacksInfo c.ConfigAndStacksInfo
@@ -80,46 +59,37 @@ func ExecuteTerraformGenerateVarfiles(cmd *cobra.Command, args []string) error {
 			}
 
 			if componentsSection, ok := stackSection.(map[any]any)["components"].(map[string]any); ok {
-				if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "terraform") {
-					if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
-						for componentName, compSection := range terraformSection {
-							componentSection, ok := compSection.(map[string]any)
-							if !ok {
-								return fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackName)
+				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+					for componentName, compSection := range terraformSection {
+						componentSection, ok := compSection.(map[string]any)
+						if !ok {
+							return fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackName)
+						}
+
+						// Find all derived components of the provided components and include them in the output
+						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackName, terraformSection, components)
+						if err != nil {
+							return err
+						}
+
+						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
+								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any), "terraform") {
+								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"] = make(map[string]any)
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any), componentName) {
+								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
-							// Find all derived components of the provided components and include them in the output
-							derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackName, terraformSection, components)
-							if err != nil {
-								return err
-							}
-
-							if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
-								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
-									finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
-								}
-								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any), "terraform") {
-									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"] = make(map[string]any)
-								}
-								if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any), componentName) {
-									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
-								}
-
-								for sectionName, section := range componentSection {
-									if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
-										finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
-									}
+							for sectionName, section := range componentSection {
+								if sectionName == "vars" {
+									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
 								}
 							}
 						}
 					}
-				}
-			}
-
-			// Filter out empty stacks (stacks without any components)
-			if st, ok := finalStacksMap[stackName].(map[string]any); ok {
-				if len(st) == 0 {
-					delete(finalStacksMap, stackName)
 				}
 			}
 		}
