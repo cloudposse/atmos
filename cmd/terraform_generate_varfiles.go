@@ -44,6 +44,9 @@ func init() {
 			"atmos terraform generate varfiles --file-template <file_template> --components=<component1>,<component2>",
 	)
 
+	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "json", "Output format.\n"+
+		"atmos terraform generate varfiles --file-template <file_template> --format=json/yaml ('json' is default)")
+
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)

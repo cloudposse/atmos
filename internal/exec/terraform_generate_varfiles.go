@@ -7,7 +7,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"path"
-	"path/filepath"
 	"strings"
 )
 
@@ -38,11 +37,22 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		components = strings.Split(componentsCsv, ",")
 	}
 
-	return ExecuteTerraformGenerateVarfiles(fileTemplate, stacks, components)
+	format, err := flags.GetString("format")
+	if err != nil {
+		return err
+	}
+	if format != "" && format != "yaml" && format != "json" {
+		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", format)
+	}
+	if format == "" {
+		format = "json"
+	}
+
+	return ExecuteTerraformGenerateVarfiles(fileTemplate, format, stacks, components)
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
-func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, components []string) error {
+func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks []string, components []string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	stacksMap, err := FindStacksMap(configAndStacksInfo, false)
 	if err != nil {
@@ -97,13 +107,6 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, comp
 									u.SliceContainsString(stacks, contextPrefix) {
 
 									fileName := c.ReplaceContextTokens(context, fileTemplate)
-
-									// Check if the file template has a file extension
-									// If it does not, use `.json` as default
-									ext := filepath.Ext(fileName)
-									if ext == "" {
-										fileName = fileName + ".json"
-									}
 
 									u.PrintInfo(fmt.Sprintf("Varfile: %s", fileName))
 									u.PrintMessage(fmt.Sprintf("Terraform component: %s", terraformComponent))
