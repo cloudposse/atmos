@@ -30,18 +30,21 @@ func init() {
 			"atmos terraform generate varfiles --file-template {component-path}/{environment}-{stage}.tfvars.json\n"+
 			"atmos terraform generate varfiles --file-template /configs/{tenant}/{environment}/{stage}/{component}.json\n"+
 			"atmos terraform generate varfiles --file-template /{tenant}/{stage}/{region}/{component}.yaml\n"+
-			"All sub-folders in the path will be created automatically.\n"+
-			"The file extension from the template will be applied to all generated varfiles.",
+			"All subfolders in the path will be created automatically.",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("stacks", "",
 		"Only process the specified stacks (comma-separated values).\n"+
-			"atmos terraform generate varfiles --file-template <file_template> --stacks <stack1>,<stack2>",
+			"atmos terraform generate varfiles --file-template <file_template> --stacks <stack1>,<stack2>\n"+
+			"The filter can contain the names of the top-level stack config files and the logical stack names (derived from the context vars)\n"+
+			"atmos terraform generate varfiles --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
+			"atmos terraform generate varfiles --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
+			"atmos terraform generate varfiles --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("components", "",
 		"Only process the specified components (comma-separated values).\n"+
-			"atmos terraform generate varfiles --file-template <file_template> --components=<component1>,<component2>",
+			"atmos terraform generate varfiles --file-template <file_template> --components <component1>,<component2>",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "json", "Output format.\n"+
