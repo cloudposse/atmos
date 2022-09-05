@@ -48,6 +48,8 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, comp
 		return err
 	}
 
+	fmt.Println()
+
 	for stackName, stackSection := range stacksMap {
 		if len(stacks) == 0 || u.SliceContainsString(stacks, stackName) {
 			if componentsSection, ok := stackSection.(map[any]any)["components"].(map[string]any); ok {
@@ -86,12 +88,13 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, comp
 									}
 
 									fileName := c.ReplaceContextTokens(context, fileTemplate)
-									u.PrintInfo(fmt.Sprintf("Varfile for the component '%s' in the stack '%s' defined in the top-level stack config file '%s':",
-										componentName,
-										contextPrefix,
-										stackName,
-									))
-									u.PrintMessage(fileName + "\n")
+
+									u.PrintInfo(fmt.Sprintf("Varfile: %s", fileName))
+									u.PrintMessage(fmt.Sprintf("Terraform component: %s", terraformComponent))
+									u.PrintMessage(fmt.Sprintf("YAML component: %s", componentName))
+									u.PrintMessage(fmt.Sprintf("Stack: %s", contextPrefix))
+									u.PrintMessage(fmt.Sprintf("Stack config file: %s", stackName))
+									fmt.Println()
 								}
 							}
 						}
