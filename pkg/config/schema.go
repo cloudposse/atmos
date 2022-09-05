@@ -16,8 +16,8 @@ type Helmfile struct {
 }
 
 type Components struct {
-	Terraform Terraform
-	Helmfile  Helmfile
+	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 }
 
 type Stacks struct {
@@ -36,44 +36,15 @@ type Logs struct {
 	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
 }
 
-type Command struct {
-	Name        string            `yaml:"name" json:"name" mapstructure:"name"`
-	Description string            `yaml:"description" json:"description" mapstructure:"description"`
-	Env         []CommandEnv      `yaml:"env" json:"env" mapstructure:"env"`
-	Arguments   []CommandArgument `yaml:"arguments" json:"arguments" mapstructure:"arguments"`
-	Flags       []CommandFlag     `yaml:"flags" json:"flags" mapstructure:"flags"`
-	Steps       []string          `yaml:"steps" json:"steps" mapstructure:"steps"`
-	Commands    []Command         `yaml:"commands" json:"commands" mapstructure:"commands"`
-}
-
-type CommandArgument struct {
-	Name        string `yaml:"name" json:"name" mapstructure:"name"`
-	Description string `yaml:"description" json:"description" mapstructure:"description"`
-}
-
-type CommandFlag struct {
-	Name        string `yaml:"name" json:"name" mapstructure:"name"`
-	Shorthand   string `yaml:"shorthand" json:"shorthand" mapstructure:"shorthand"`
-	Type        string `yaml:"type" json:"type" mapstructure:"type"`
-	Description string `yaml:"description" json:"description" mapstructure:"description"`
-	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
-	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
-}
-
-type CommandEnv struct {
-	Key          string `yaml:"key" json:"key" mapstructure:"key"`
-	Value        string `yaml:"value" json:"value" mapstructure:"value"`
-	ValueCommand string `yaml:"valueCommand" json:"valueCommand" mapstructure:"valueCommand"`
-}
-
 type Configuration struct {
-	BasePath    string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	Components  Components
-	Stacks      Stacks
-	Workflows   Workflows
-	Logs        Logs
-	Commands    []Command
-	Initialized bool
+	BasePath     string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Components   Components   `yaml:"components" json:"components" mapstructure:"components"`
+	Stacks       Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Workflows    Workflows    `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
+	Logs         Logs         `yaml:"logs" json:"logs" mapstructure:"logs"`
+	Commands     []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
+	Integrations Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
+	Initialized  bool
 }
 
 type ProcessedConfiguration struct {
@@ -224,4 +195,52 @@ type VendorComponentConfig struct {
 	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
 	Metadata   VendorComponentMetadata
 	Spec       VendorComponentSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
+}
+
+// Custom CLI commands
+
+type Command struct {
+	Name        string            `yaml:"name" json:"name" mapstructure:"name"`
+	Description string            `yaml:"description" json:"description" mapstructure:"description"`
+	Env         []CommandEnv      `yaml:"env" json:"env" mapstructure:"env"`
+	Arguments   []CommandArgument `yaml:"arguments" json:"arguments" mapstructure:"arguments"`
+	Flags       []CommandFlag     `yaml:"flags" json:"flags" mapstructure:"flags"`
+	Steps       []string          `yaml:"steps" json:"steps" mapstructure:"steps"`
+	Commands    []Command         `yaml:"commands" json:"commands" mapstructure:"commands"`
+}
+
+type CommandArgument struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type CommandFlag struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Shorthand   string `yaml:"shorthand" json:"shorthand" mapstructure:"shorthand"`
+	Type        string `yaml:"type" json:"type" mapstructure:"type"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
+	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+}
+
+type CommandEnv struct {
+	Key          string `yaml:"key" json:"key" mapstructure:"key"`
+	Value        string `yaml:"value" json:"value" mapstructure:"value"`
+	ValueCommand string `yaml:"valueCommand" json:"valueCommand" mapstructure:"valueCommand"`
+}
+
+// Integrations
+
+type Integrations struct {
+	Atlantis Atlantis `yaml:"atlantis" json:"atlantis" mapstructure:"atlantis"`
+}
+
+// Atlantis integration
+
+type Atlantis struct {
+	AtlantisRepoConfig AtlantisRepoConfig `yaml:"repo_config" json:"repo_config" mapstructure:"repo_config"`
+}
+
+type AtlantisRepoConfig struct {
+	Path string `yaml:"path" json:"path" mapstructure:"path"`
 }
