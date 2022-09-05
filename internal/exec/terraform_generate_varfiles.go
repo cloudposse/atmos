@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -79,9 +80,18 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, comp
 									context := c.GetContextFromVars(varsSection)
 									context.Component = strings.Replace(componentName, "/", "-", -1)
 									context.ComponentPath = terraformComponentPath
+									contextPrefix, err := c.GetContextPrefix(stackName, context, c.Config.Stacks.NamePattern, stackName)
+									if err != nil {
+										return err
+									}
 
 									fileName := c.ReplaceContextTokens(context, fileTemplate)
-									u.PrintInfo(fileName)
+									u.PrintInfo(fmt.Sprintf("Varfile for the component '%s' in the stack '%s' defined in the top-level stack config file '%s':",
+										componentName,
+										contextPrefix,
+										stackName,
+									))
+									u.PrintMessage(fileName + "\n")
 								}
 							}
 						}
