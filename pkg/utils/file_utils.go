@@ -97,3 +97,15 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 
 	return absPath, nil
 }
+
+// EnsureDir accepts a file path and creates all the intermediate subdirectories
+func EnsureDir(fileName string) error {
+	dirName := filepath.Dir(fileName)
+	if _, err := os.Stat(dirName); err != nil {
+		err := os.MkdirAll(dirName, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

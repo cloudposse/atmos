@@ -7,6 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -107,6 +108,29 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 									u.SliceContainsString(stacks, contextPrefix) {
 
 									fileName := c.ReplaceContextTokens(context, fileTemplate)
+									fileAbsolutePath, err := filepath.Abs(fileName)
+									if err != nil {
+										return err
+									}
+
+									// Create all the intermediate subdirectories
+									err = u.EnsureDir(fileAbsolutePath)
+									if err != nil {
+										return err
+									}
+
+									// Write the varfile
+									if format == "yaml" {
+										err = u.WriteToFileAsYAML(fileAbsolutePath, varsSection, 0644)
+										if err != nil {
+											return err
+										}
+									} else if format == "json" {
+										err = u.WriteToFileAsJSON(fileAbsolutePath, varsSection, 0644)
+										if err != nil {
+											return err
+										}
+									}
 
 									u.PrintInfo(fmt.Sprintf("Varfile: %s", fileName))
 									u.PrintMessage(fmt.Sprintf("Terraform component: %s", terraformComponent))

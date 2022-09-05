@@ -3,7 +3,6 @@ package utils
 import (
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
-	"io/ioutil"
 	"os"
 	"strings"
 )
@@ -26,7 +25,7 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(filePath, j, fileMode)
+	err = os.WriteFile(filePath, j, fileMode)
 	if err != nil {
 		return err
 	}
