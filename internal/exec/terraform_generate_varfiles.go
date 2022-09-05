@@ -7,6 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -96,6 +97,13 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, stacks []string, comp
 									u.SliceContainsString(stacks, contextPrefix) {
 
 									fileName := c.ReplaceContextTokens(context, fileTemplate)
+
+									// Check if the file template has a file extension
+									// If it does not, use `.json` as default
+									ext := filepath.Ext(fileName)
+									if ext == "" {
+										fileName = fileName + ".json"
+									}
 
 									u.PrintInfo(fmt.Sprintf("Varfile: %s", fileName))
 									u.PrintMessage(fmt.Sprintf("Terraform component: %s", terraformComponent))
