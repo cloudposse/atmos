@@ -239,19 +239,19 @@ type Integrations struct {
 // Atlantis integration
 
 type Atlantis struct {
-	Path             string                           `yaml:"path" json:"path" mapstructure:"path"`
-	ConfigTemplates  map[string]AtlantisRepoConfig    `yaml:"config_templates" json:"config_templates" mapstructure:"config_templates"`
-	ProjectTemplates map[string]AtlantisProjectConfig `yaml:"project_templates" json:"project_templates" mapstructure:"project_templates"`
+	Path              string                            `yaml:"path" json:"path" mapstructure:"path"`
+	ConfigTemplates   map[string]AtlantisRepoConfig     `yaml:"config_templates" json:"config_templates" mapstructure:"config_templates"`
+	ProjectTemplates  map[string]AtlantisProjectConfig  `yaml:"project_templates" json:"project_templates" mapstructure:"project_templates"`
+	WorkflowTemplates map[string]AtlantisWorkflowConfig `yaml:"workflow_templates" json:"workflow_templates" mapstructure:"workflow_templates"`
 }
 
 type AtlantisRepoConfig struct {
-	Version                   int            `yaml:"version" json:"version" mapstructure:"version"`
-	Automerge                 bool           `yaml:"automerge" json:"automerge" mapstructure:"automerge"`
-	DeleteSourceBranchOnMerge bool           `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
-	ParallelPlan              bool           `yaml:"parallel_plan" json:"parallel_plan" mapstructure:"parallel_plan"`
-	ParallelApply             bool           `yaml:"parallel_apply" json:"parallel_apply" mapstructure:"parallel_apply"`
-	Workflows                 map[string]any `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
-	AllowedRegexpPrefixes     []string       `yaml:"allowed_regexp_prefixes" json:"allowed_regexp_prefixes" mapstructure:"allowed_regexp_prefixes"`
+	Version                   int      `yaml:"version" json:"version" mapstructure:"version"`
+	Automerge                 bool     `yaml:"automerge" json:"automerge" mapstructure:"automerge"`
+	DeleteSourceBranchOnMerge bool     `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
+	ParallelPlan              bool     `yaml:"parallel_plan" json:"parallel_plan" mapstructure:"parallel_plan"`
+	ParallelApply             bool     `yaml:"parallel_apply" json:"parallel_apply" mapstructure:"parallel_apply"`
+	AllowedRegexpPrefixes     []string `yaml:"allowed_regexp_prefixes" json:"allowed_regexp_prefixes" mapstructure:"allowed_regexp_prefixes"`
 }
 
 type AtlantisProjectConfig struct {
@@ -264,6 +264,16 @@ type AtlantisProjectConfig struct {
 	Autoplan                  AtlantisProjectAutoplanConfig `yaml:"autoplan" json:"autoplan" mapstructure:"autoplan"`
 }
 
+type AtlantisWorkflowConfig struct {
+	Plan  map[string]any `yaml:"plan" json:"plan" mapstructure:"plan"`
+	Apply map[string]any `yaml:"apply" json:"apply" mapstructure:"apply"`
+}
+
+type AtlantisWorkflowStepConfig struct {
+	Enabled      bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	WhenModified []string `yaml:"when_modified" json:"when_modified" mapstructure:"when_modified"`
+}
+
 type AtlantisProjectAutoplanConfig struct {
 	Enabled           bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 	WhenModified      []string `yaml:"when_modified" json:"when_modified" mapstructure:"when_modified"`
@@ -271,12 +281,12 @@ type AtlantisProjectAutoplanConfig struct {
 }
 
 type AtlantisConfigOutput struct {
-	Version                   int                     `yaml:"version" json:"version" mapstructure:"version"`
-	Automerge                 bool                    `yaml:"automerge" json:"automerge" mapstructure:"automerge"`
-	DeleteSourceBranchOnMerge bool                    `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
-	ParallelPlan              bool                    `yaml:"parallel_plan" json:"parallel_plan" mapstructure:"parallel_plan"`
-	ParallelApply             bool                    `yaml:"parallel_apply" json:"parallel_apply" mapstructure:"parallel_apply"`
-	Projects                  []AtlantisProjectConfig `yaml:"projects" json:"projects" mapstructure:"projects"`
-	Workflows                 map[string]any          `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
-	AllowedRegexpPrefixes     []string                `yaml:"allowed_regexp_prefixes" json:"allowed_regexp_prefixes" mapstructure:"allowed_regexp_prefixes"`
+	Version                   int                               `yaml:"version" json:"version" mapstructure:"version"`
+	Automerge                 bool                              `yaml:"automerge" json:"automerge" mapstructure:"automerge"`
+	DeleteSourceBranchOnMerge bool                              `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
+	ParallelPlan              bool                              `yaml:"parallel_plan" json:"parallel_plan" mapstructure:"parallel_plan"`
+	ParallelApply             bool                              `yaml:"parallel_apply" json:"parallel_apply" mapstructure:"parallel_apply"`
+	Projects                  []AtlantisProjectConfig           `yaml:"projects" json:"projects" mapstructure:"projects"`
+	Workflows                 map[string]AtlantisWorkflowConfig `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
+	AllowedRegexpPrefixes     []string                          `yaml:"allowed_regexp_prefixes" json:"allowed_regexp_prefixes" mapstructure:"allowed_regexp_prefixes"`
 }

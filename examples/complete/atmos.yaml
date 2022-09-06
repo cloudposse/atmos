@@ -128,3 +128,53 @@ commands:
         steps:
           - echo Playing ping-pong...
           - echo pong
+
+# Integrations
+integrations:
+
+  # Atlantis
+  # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
+  atlantis:
+    path: "atlantis.yaml"
+    config_templates:
+      config-template-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+    project_templates:
+      project-template-1:
+        # generate a project entry for each component in every stack
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        dir: "{component-path}"
+        terraform_version: v1.2
+        delete_source_branch_on_merge: true
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
+          apply_requirements:
+            - "approved"
+    workflow_templates:
+      # generate a workflow entry for each component in every stack
+      workflow-template-1:
+        plan:
+          steps:
+            - init
+            - plan:
+                extra_args:
+                  - "-var-file"
+                  - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
+        apply:
+          steps:
+            - apply:
+                extra_args:
+                  - "-var-file"
+                  - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
