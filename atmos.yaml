@@ -136,7 +136,7 @@ integrations:
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
     # Path and name of the Atlantis config file `atlantis.yaml`
-    # Support absolute and relative paths
+    # Supports absolute and relative paths
     # All the intermediate folders will be created automatically (e.g. `path: /config/atlantis/atlantis.yaml`)
     # Can be overridden on the command line by using `--output-path` command-line argument in `atmos atlantis generate repo-config` command
     # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to `stdout`
