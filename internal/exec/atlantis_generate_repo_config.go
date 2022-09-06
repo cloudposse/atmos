@@ -173,7 +173,8 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, contextPrefix) {
 
-					// Generate an atlantis project and workflow for the component in the stack
+					// Generate an atlantis project for the component in the stack
+					// Replace the context tokens
 					var whenModified []string
 
 					for _, item := range projectTemplate.Autoplan.WhenModified {
