@@ -109,20 +109,17 @@ integrations:
             - "approved"
 
     # Workflow templates
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
     # Select a template by using the `--workflow-template <workflow_template>` command-line argument in `atmos atlantis generate repo-config` command
     workflow_templates:
-      # generate a workflow entry for each component in every stack
       workflow-template-1:
         plan:
           steps:
-            - init
-            - plan:
-                extra_args:
-                  - "-var-file"
-                  - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
+            - run: terraform init -input=false
+            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
+            - run: terraform workspace select $WORKSPACE
+            # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
         apply:
           steps:
-            - apply:
-                extra_args:
-                  - "-var-file"
-                  - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
+            - run: terraform apply $PLANFILE

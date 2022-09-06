@@ -86,23 +86,20 @@ integrations:
             - "approved"
 
     # Workflow templates
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
     # Select a template by using the `--workflow-template <workflow_template>` command-line argument in `atmos atlantis generate repo-config` command
     workflow_templates:
-      # generate a workflow entry for each component in every stack
       workflow-template-1:
         plan:
           steps:
-            - init
-            - plan:
-                extra_args:
-                  - "-var-file"
-                  - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
+            - run: terraform init -input=false
+            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
+            - run: terraform workspace select $WORKSPACE
+            # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
         apply:
           steps:
-            - apply:
-                extra_args:
-                  - "-var-file"
-                  - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
+            - run: terraform apply $PLANFILE
 ```
 
 Using the config, project and workflow templates, `atmos` generates a separate `atlantis` project for each `atmos` component in every stack:
@@ -176,3 +173,4 @@ workflows:
 - [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html)
 - [Pre-workflow Hooks](https://www.runatlantis.io/docs/pre-workflow-hooks.html#pre-workflow-hooks)
 - [Dynamic Repo Config Generation](https://www.runatlantis.io/docs/pre-workflow-hooks.html#dynamic-repo-config-generation)
+- [Custom init/plan/apply Commands](https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands)
