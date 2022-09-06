@@ -132,10 +132,16 @@ commands:
 # Integrations
 integrations:
 
-  # Atlantis
+  # Atlantis integration
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
+    # Path and name of the Atlantis config file `atlantis.yaml`
+    # Can be overridden on the command line by using `--output-path` command-line argument in `atmos atlantis generate repo-config` command
+    # If not specified (can be empty here, or set to an empty string on the command line), the content of the file will be dumped to `stdout`
     path: "atlantis.yaml"
+
+    # Config templates
+    # Select a template by using the `--config-template <config_template>` command-line argument in `atmos atlantis generate repo-config` command
     config_templates:
       config-template-1:
         version: 3
@@ -147,6 +153,9 @@ integrations:
           - dev/
           - staging/
           - prod/
+
+    # Project templates
+    # Select a template by using the `--project-template <project_template>` command-line argument in `atmos atlantis generate repo-config` command
     project_templates:
       project-template-1:
         # generate a project entry for each component in every stack
@@ -162,6 +171,9 @@ integrations:
             - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
           apply_requirements:
             - "approved"
+
+    # Workflow templates
+    # Select a template by using the `--workflow-template <workflow_template>` command-line argument in `atmos atlantis generate repo-config` command
     workflow_templates:
       # generate a workflow entry for each component in every stack
       workflow-template-1:
