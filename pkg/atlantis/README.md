@@ -3,24 +3,20 @@
 ## Dynamic Repo Config Generation
 
 If you want to generate `atlantis.yaml` before Atlantis can parse it,
-you can add the following run command to [pre_workflow_hooks](https://www.runatlantis.io/docs/pre-workflow-hooks.html#pre-workflow-hooks).
-The `atlantis.yaml` repo config file will be generated right before Atlantis will parse it.
+you can add the following run commands to [pre_workflow_hooks](https://www.runatlantis.io/docs/pre-workflow-hooks.html#pre-workflow-hooks).
+The `atlantis.yaml` repo config file will be generated right before Atlantis parses it.
 
 ```yaml
 repos:
   - id: /.*/
     pre_workflow_hooks:
-      - run: ./repo-config-generator.sh
+      - run: |
+          atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
+          atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1
 ```
 
-In `repo-config-generator.sh`, you need to first generate the varfiles for all components in all stacks,
-then generate `atlantis.yaml` repo config file using the following `atmos` commands:
-
-```shell
-atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
-
-atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1
-```
+The commands will first generate the varfiles for all components in all stacks,
+then generate the `atlantis.yaml` repo config file.
 
 You can also run these commands manually and commit the generated varfiles and `atlantis.yaml` repo config.
 
@@ -40,6 +36,20 @@ integrations:
   # Atlantis
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
+    path: "atlantis.yaml"
+
+    config_templates:
+      config-template-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+
     project_templates:
       project-template-1:
         # generate a project entry for each component in every stack
