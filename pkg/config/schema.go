@@ -255,16 +255,16 @@ type AtlantisRepoConfig struct {
 }
 
 type AtlantisProjectConfig struct {
-	Name                      string                  `yaml:"name" json:"name" mapstructure:"name"`
-	Workspace                 string                  `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
-	Workflow                  string                  `yaml:"workflow" json:"workflow" mapstructure:"workflow"`
-	Dir                       string                  `yaml:"dir" json:"dir" mapstructure:"dir"`
-	TerraformVersion          string                  `yaml:"terraform_version" json:"terraform_version" mapstructure:"terraform_version"`
-	DeleteSourceBranchOnMerge bool                    `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
-	Autoplan                  AtlantisProjectAutoplan `yaml:"autoplan" json:"autoplan" mapstructure:"autoplan"`
+	Name                      string                        `yaml:"name" json:"name" mapstructure:"name"`
+	Workspace                 string                        `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
+	Workflow                  string                        `yaml:"workflow" json:"workflow" mapstructure:"workflow"`
+	Dir                       string                        `yaml:"dir" json:"dir" mapstructure:"dir"`
+	TerraformVersion          string                        `yaml:"terraform_version" json:"terraform_version" mapstructure:"terraform_version"`
+	DeleteSourceBranchOnMerge bool                          `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
+	Autoplan                  AtlantisProjectAutoplanConfig `yaml:"autoplan" json:"autoplan" mapstructure:"autoplan"`
 }
 
-type AtlantisProjectAutoplan struct {
+type AtlantisProjectAutoplanConfig struct {
 	Enabled           bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 	WhenModified      []string `yaml:"when_modified" json:"when_modified" mapstructure:"when_modified"`
 	ApplyRequirements []string `yaml:"apply_requirements" json:"apply_requirements" mapstructure:"apply_requirements"`

@@ -97,8 +97,8 @@ integrations:
         name: "{tenant}-{environment}-{stage}-{component}"
         workspace: "{workspace}"
         workflow: my-custom-workflow
-        dir: "{component_path}"
-        terraform_version: "{terraform_version}"
+        dir: "{component-path}"
+        terraform_version: 1.2
         delete_source_branch_on_merge: true
         autoplan:
           enabled: true

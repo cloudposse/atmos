@@ -451,6 +451,7 @@ func ReplaceContextTokens(context Context, pattern string) string {
 		"{region}", context.Region,
 		"{tenant}", context.Tenant,
 		"{stage}", context.Stage,
+		"{workspace}", context.Workspace,
 		"{attributes}", strings.Join(context.Attributes, "-"),
 	)
 	return r.Replace(pattern)

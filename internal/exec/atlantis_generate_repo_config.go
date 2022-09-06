@@ -98,6 +98,12 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 									terraformComponent,
 								)
 
+								// Component metadata
+								metadata := map[any]any{}
+								if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+									metadata = metadataSection
+								}
+
 								context := c.GetContextFromVars(varsSection)
 								context.Component = strings.Replace(componentName, "/", "-", -1)
 								context.ComponentPath = terraformComponentPath
@@ -105,6 +111,19 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 								if err != nil {
 									return err
 								}
+
+								// Terraform workspace
+								workspace, err := BuildTerraformWorkspace(
+									stackConfigFileName,
+									c.Config.Stacks.NamePattern,
+									metadata,
+									context,
+								)
+								if err != nil {
+									return err
+								}
+
+								context.Workspace = workspace
 
 								// Check if `stacks` filter is provided
 								if len(stacks) == 0 ||
@@ -114,9 +133,33 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 									// `stacks` filter can also contain the logical stack names (derived from the context vars):
 									// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 									u.SliceContainsString(stacks, contextPrefix) {
-								}
 
-								atlantisProjects = append(atlantisProjects, projectTemplate)
+									// Generate atlantis project for the component in the stack
+									var whenModified []string
+
+									for _, item := range projectTemplate.Autoplan.WhenModified {
+										processedItem := c.ReplaceContextTokens(context, item)
+										whenModified = append(whenModified, processedItem)
+									}
+
+									atlantisProjectAutoplanConfig := c.AtlantisProjectAutoplanConfig{
+										Enabled:           projectTemplate.Autoplan.Enabled,
+										ApplyRequirements: projectTemplate.Autoplan.ApplyRequirements,
+										WhenModified:      whenModified,
+									}
+
+									atlantisProject := c.AtlantisProjectConfig{
+										Name:                      c.ReplaceContextTokens(context, projectTemplate.Name),
+										Workspace:                 c.ReplaceContextTokens(context, projectTemplate.Workspace),
+										Workflow:                  c.ReplaceContextTokens(context, projectTemplate.Workflow),
+										Dir:                       c.ReplaceContextTokens(context, projectTemplate.Dir),
+										TerraformVersion:          c.ReplaceContextTokens(context, projectTemplate.TerraformVersion),
+										DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
+										Autoplan:                  atlantisProjectAutoplanConfig,
+									}
+
+									atlantisProjects = append(atlantisProjects, atlantisProject)
+								}
 							}
 						}
 					}
