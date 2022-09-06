@@ -22,6 +22,8 @@ atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment
 atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1
 ```
 
+You can also run these commands manually and commit the generated varfiles and `atlantis.yaml` repo config.
+
 Note that the `-file-template` parameter in the `atmos terraform generate varfiles` command must correspond to the two settings in `atmos.yaml`:
 
 - `when_modified` must use the same template with the context tokens - this will allow Atlantis to check if any of the generated variables were
