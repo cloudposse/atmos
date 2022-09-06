@@ -251,22 +251,30 @@ func ExecuteAtlantisGenerateRepoConfig(
 		fileName = c.Config.Integrations.Atlantis.Path
 	}
 
-	u.PrintInfo(fmt.Sprintf("Writing atlantis config to file '%s'", fileName))
+	// If the path is empty, dump to `stdout`
+	if fileName != "" {
+		u.PrintInfo(fmt.Sprintf("Writing atlantis config to file '%s'", fileName))
 
-	fileAbsolutePath, err := filepath.Abs(fileName)
-	if err != nil {
-		return err
-	}
+		fileAbsolutePath, err := filepath.Abs(fileName)
+		if err != nil {
+			return err
+		}
 
-	// Create all the intermediate subdirectories
-	err = u.EnsureDir(fileAbsolutePath)
-	if err != nil {
-		return err
-	}
+		// Create all the intermediate subdirectories
+		err = u.EnsureDir(fileAbsolutePath)
+		if err != nil {
+			return err
+		}
 
-	err = u.WriteToFileAsYAML(fileAbsolutePath, atlantisYaml, 0644)
-	if err != nil {
-		return err
+		err = u.WriteToFileAsYAML(fileAbsolutePath, atlantisYaml, 0644)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = u.PrintAsYAML(atlantisYaml)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
