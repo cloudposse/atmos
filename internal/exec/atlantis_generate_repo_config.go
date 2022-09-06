@@ -17,6 +17,11 @@ import (
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
 
+	outputPath, err := flags.GetString("output-path")
+	if err != nil {
+		return err
+	}
+
 	configTemplateName, err := flags.GetString("config-template")
 	if err != nil {
 		return err
@@ -50,11 +55,18 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		components = strings.Split(componentsCsv, ",")
 	}
 
-	return ExecuteAtlantisGenerateRepoConfig(configTemplateName, projectTemplateName, workflowTemplateName, stacks, components)
+	return ExecuteAtlantisGenerateRepoConfig(outputPath, configTemplateName, projectTemplateName, workflowTemplateName, stacks, components)
 }
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
-func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplateName string, workflowTemplateName string, stacks []string, components []string) error {
+func ExecuteAtlantisGenerateRepoConfig(
+	outputPath string,
+	configTemplateName string,
+	projectTemplateName string,
+	workflowTemplateName string,
+	stacks []string,
+	components []string) error {
+
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	stacksMap, err := FindStacksMap(configAndStacksInfo, false)
 	if err != nil {
@@ -232,7 +244,13 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 	atlantisYaml.Workflows = atlantisWorkflows
 
 	// Write the atlantis config to a file at the specified path
-	fileName := c.Config.Integrations.Atlantis.Path
+	// Check the command line argument `--output-path` first
+	// Then check the `atlantis.path` setting in `atmos.yaml`
+	fileName := outputPath
+	if fileName == "" {
+		fileName = c.Config.Integrations.Atlantis.Path
+	}
+
 	u.PrintInfo(fmt.Sprintf("Writing atlantis config to file '%s'", fileName))
 
 	fileAbsolutePath, err := filepath.Abs(fileName)

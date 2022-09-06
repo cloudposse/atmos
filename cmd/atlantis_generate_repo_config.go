@@ -23,6 +23,7 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 func init() {
 	atlantisGenerateRepoConfigCmd.DisableFlagParsing = false
 
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("output-path", "", "atmos atlantis generate repo-config --output-path ./atmos.yaml --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("config-template", "", "atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("project-template", "", "atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("workflow-template", "", "atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1")
