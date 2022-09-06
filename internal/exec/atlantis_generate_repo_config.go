@@ -256,7 +256,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 	// If the path is empty, dump to `stdout`
 	if fileName != "" {
-		u.PrintInfo(fmt.Sprintf("Writing atlantis config to file '%s'", fileName))
+		u.PrintInfo(fmt.Sprintf("Writing atlantis repo config file to '%s'", fileName))
 
 		fileAbsolutePath, err := filepath.Abs(fileName)
 		if err != nil {
