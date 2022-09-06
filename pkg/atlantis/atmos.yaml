@@ -66,6 +66,7 @@ logs:
 # Integrations
 integrations:
 
+  # Atlantis
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
     path: "atlantis.yaml"

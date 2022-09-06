@@ -26,6 +26,20 @@ func init() {
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("config-template", "", "atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("project-template", "", "atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1")
 
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("stacks", "",
+		"Only generate config for the specified stacks (comma-separated values).\n"+
+			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks <stack1>,<stack2>\n"+
+			"The filter can contain the names of the top-level stack config files and the logical stack names (derived from the context vars)\n"+
+			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
+			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
+			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
+	)
+
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("components", "",
+		"Only generate config for the specified components (comma-separated values).\n"+
+			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --components <component1>,<component2>",
+	)
+
 	err := atlantisGenerateRepoConfigCmd.MarkPersistentFlagRequired("config-template")
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
