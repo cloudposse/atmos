@@ -70,7 +70,7 @@ integrations:
   atlantis:
     path: "atlantis.yaml"
     config_templates:
-      atlantis-template-1:
+      config-template-1:
         version: 3
         automerge: true
         delete_source_branch_on_merge: true

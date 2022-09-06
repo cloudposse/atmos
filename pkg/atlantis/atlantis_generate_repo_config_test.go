@@ -15,7 +15,7 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	assert.Nil(t, err)
 
 	atlantisConfig := c.Config.Integrations.Atlantis
-	configTemplateName := "atlantis-template-1"
+	configTemplateName := "config-template-1"
 	configTemplate := atlantisConfig.ConfigTemplates[configTemplateName]
 	projectTemplateName := "project-template-1"
 	projectTemplate := atlantisConfig.ProjectTemplates[projectTemplateName]

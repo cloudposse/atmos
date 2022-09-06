@@ -67,6 +67,7 @@ type Context struct {
 	Component     string
 	BaseComponent string
 	ComponentPath string
+	Workspace     string
 	Attributes    []string
 }
 
