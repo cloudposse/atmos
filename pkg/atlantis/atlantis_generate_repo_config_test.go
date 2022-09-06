@@ -14,19 +14,21 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	err = utils.PrintAsYAML(c.Config)
 	assert.Nil(t, err)
 
-	atlantisConfig := c.Config.Integrations.Atlantis.AtlantisRepoConfig
-	templateName := "atlantis-template-1"
-	template := atlantisConfig.Templates[templateName]
+	atlantisConfig := c.Config.Integrations.Atlantis
+	configTemplateName := "atlantis-template-1"
+	configTemplate := atlantisConfig.ConfigTemplates[configTemplateName]
+	projectTemplateName := "project-template-1"
+	projectTemplate := atlantisConfig.ProjectTemplates[projectTemplateName]
 
-	atlantisYaml := c.AtlantisRepoConfigOutput{}
-	atlantisYaml.Version = template.Version
-	atlantisYaml.Automerge = template.Automerge
-	atlantisYaml.DeleteSourceBranchOnMerge = template.DeleteSourceBranchOnMerge
-	atlantisYaml.ParallelPlan = template.ParallelPlan
-	atlantisYaml.ParallelApply = template.ParallelApply
-	atlantisYaml.Workflows = template.Workflows
-	atlantisYaml.AllowedRegexpPrefixes = template.AllowedRegexpPrefixes
-	atlantisYaml.Projects = []c.AtlantisProjectConfig{atlantisConfig.ProjectTemplate}
+	atlantisYaml := c.AtlantisConfigOutput{}
+	atlantisYaml.Version = configTemplate.Version
+	atlantisYaml.Automerge = configTemplate.Automerge
+	atlantisYaml.DeleteSourceBranchOnMerge = configTemplate.DeleteSourceBranchOnMerge
+	atlantisYaml.ParallelPlan = configTemplate.ParallelPlan
+	atlantisYaml.ParallelApply = configTemplate.ParallelApply
+	atlantisYaml.Workflows = configTemplate.Workflows
+	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
+	atlantisYaml.Projects = []c.AtlantisProjectConfig{projectTemplate}
 
 	err = utils.PrintAsYAML(atlantisYaml)
 	assert.Nil(t, err)

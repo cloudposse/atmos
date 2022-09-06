@@ -68,30 +68,30 @@ integrations:
 
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
-    repo_config:
-      path: "atlantis.yaml"
-      templates:
-        atlantis-template-1:
-          version: 3
-          automerge: true
-          delete_source_branch_on_merge: true
-          parallel_plan: true
-          parallel_apply: true
-          workflows:
-            my-custom-workflow:
-              plan:
-                steps:
-                  - init
-                  - plan:
-                      extra_args: ["-lock", "false"]
-              apply:
-                steps:
-                  - apply
-          allowed_regexp_prefixes:
-            - dev/
-            - staging/
-            - prod/
-      project_template:
+    path: "atlantis.yaml"
+    config_templates:
+      atlantis-template-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        workflows:
+          my-custom-workflow:
+            plan:
+              steps:
+                - init
+                - plan:
+                    extra_args: [ "-lock", "false" ]
+            apply:
+              steps:
+                - apply
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+    project_templates:
+      project-template-1:
         # generate a project entry for each component in every stack
         name: "{tenant}-{environment}-{stage}-{component}"
         workspace: "{workspace}"
