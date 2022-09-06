@@ -3,7 +3,6 @@ package utils
 import (
 	"fmt"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
 	"os"
 )
 
@@ -23,7 +22,7 @@ func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(filePath, y, fileMode)
+	err = os.WriteFile(filePath, y, fileMode)
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 	"path"
 	"path/filepath"
 	"strings"
@@ -62,7 +63,7 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 
 	var configTemplate c.AtlantisRepoConfig
 	var projectTemplate c.AtlantisProjectConfig
-	var workflowTemplate c.AtlantisWorkflowConfig
+	var workflowTemplate any
 	var ok bool
 
 	if configTemplate, ok = c.Config.Integrations.Atlantis.ConfigTemplates[configTemplateName]; !ok {
@@ -78,7 +79,7 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 	}
 
 	var atlantisProjects []c.AtlantisProjectConfig
-	var atlantisWorkflows map[string]c.AtlantisWorkflowConfig
+	atlantisWorkflows := map[string]any{}
 
 	// Iterate over all components in all stacks and generate atlantis projects
 	for stackConfigFileName, stackSection := range stacksMap {
@@ -150,7 +151,7 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 									// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 									u.SliceContainsString(stacks, contextPrefix) {
 
-									// Generate atlantis project for the component in the stack
+									// Generate an atlantis project and workflow for the component in the stack
 									var whenModified []string
 
 									for _, item := range projectTemplate.Autoplan.WhenModified {
@@ -177,14 +178,16 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 										Autoplan:                  atlantisProjectAutoplanConfig,
 									}
 
-									atlantisWorkflow := c.AtlantisWorkflowConfig{
-										Name:                      atlantisProjectName,
-										Workspace:                 c.ReplaceContextTokens(context, projectTemplate.Workspace),
-										Workflow:                  "workflow-" + atlantisProjectName,
-										Dir:                       c.ReplaceContextTokens(context, projectTemplate.Dir),
-										TerraformVersion:          projectTemplate.TerraformVersion,
-										DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
-										Autoplan:                  atlantisProjectAutoplanConfig,
+									y, err := yaml.Marshal(workflowTemplate)
+									if err != nil {
+										return err
+									}
+
+									atlantisWorkflowStr := c.ReplaceContextTokens(context, string(y))
+									var atlantisWorkflow any
+
+									if err = yaml.Unmarshal([]byte(atlantisWorkflowStr), &atlantisWorkflow); err != nil {
+										return err
 									}
 
 									atlantisProjects = append(atlantisProjects, atlantisProject)
@@ -198,7 +201,7 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 		}
 	}
 
-	// atlantis config
+	// Final atlantis config
 	atlantisYaml := c.AtlantisConfigOutput{}
 	atlantisYaml.Version = configTemplate.Version
 	atlantisYaml.Automerge = configTemplate.Automerge
@@ -209,7 +212,7 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 	atlantisYaml.Projects = atlantisProjects
 	atlantisYaml.Workflows = atlantisWorkflows
 
-	// Write atlantis config to a file at the specified path
+	// Write the atlantis config to a file at the specified path
 	fileName := c.Config.Integrations.Atlantis.Path
 	u.PrintInfo(fmt.Sprintf("Writing atlantis config to file '%s'", fileName))
 
