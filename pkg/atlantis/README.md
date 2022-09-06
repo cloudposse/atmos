@@ -9,8 +9,8 @@ The following `atmos` commands will first generate the varfiles for all componen
 then generate the `atlantis.yaml` repo config file:
 
 ```bash
-  atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
-  atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1
+atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
+atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1
 ```
 
 Supported context tokens: `{namespace}`, `{tenant}`, `{environment}`, `{region}`, `{stage}`, `{component}`, `{component-path}`.
