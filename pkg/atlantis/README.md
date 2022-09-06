@@ -31,6 +31,8 @@ Note that the `-file-template` parameter in the `atmos terraform generate varfil
 - workflow `extra_args` must use the same template with the context tokens - this will allow Atlantis to run Terraform commands with the
   correct `-var-file` parameters
 
+Supported context tokens: `{namespace}`, `{tenant}`, `{environment}`, `{region}`, `{stage}`, `{component}`, `{component-path}`.
+
 ```yaml
 # Integrations
 integrations:
