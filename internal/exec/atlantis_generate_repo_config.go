@@ -249,6 +249,9 @@ func ExecuteAtlantisGenerateRepoConfig(
 	fileName := outputPath
 	if fileName == "" {
 		fileName = c.Config.Integrations.Atlantis.Path
+		u.PrintInfo(fmt.Sprintf("Using 'atlantis.path: %s' from atmos.yaml", fileName))
+	} else {
+		u.PrintInfo(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
 	}
 
 	// If the path is empty, dump to `stdout`
