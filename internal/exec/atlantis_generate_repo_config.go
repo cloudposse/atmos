@@ -80,122 +80,140 @@ func ExecuteAtlantisGenerateRepoConfig(configTemplateName string, projectTemplat
 
 	var atlantisProjects []c.AtlantisProjectConfig
 	atlantisWorkflows := map[string]any{}
+	var componentsSection map[string]any
+	var terraformSection map[string]any
+	var componentSection map[string]any
+	var varsSection map[any]any
 
 	// Iterate over all components in all stacks and generate atlantis projects
 	for stackConfigFileName, stackSection := range stacksMap {
-		if componentsSection, ok := stackSection.(map[any]any)["components"].(map[string]any); ok {
-			if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
-				for componentName, compSection := range terraformSection {
-					if componentSection, ok := compSection.(map[string]any); ok {
-						// Find all derived components of the provided components
-						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackConfigFileName, terraformSection, components)
-						if err != nil {
-							return err
-						}
+		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
+			continue
+		}
 
-						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
-							if varsSection, ok := componentSection["vars"].(map[any]any); ok {
-								// Component metadata
-								metadataSection := map[any]any{}
-								if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
-									if componentType, ok := metadataSection["type"].(string); ok {
-										// Don't include abstract components
-										if componentType == "abstract" {
-											continue
-										}
-									}
-								}
+		if terraformSection, ok = componentsSection["terraform"].(map[string]any); !ok {
+			continue
+		}
 
-								// Find terraform component
-								// If `component` attribute is present, it's the terraform component
-								// Otherwise, the YAML component name is the terraform component
-								terraformComponent := componentName
-								if componentAttribute, ok := componentSection["component"].(string); ok {
-									terraformComponent = componentAttribute
-								}
+		for componentName, compSection := range terraformSection {
+			if componentSection, ok = compSection.(map[string]any); !ok {
+				continue
+			}
 
-								// Absolute path to the terraform component
-								terraformComponentPath := path.Join(
-									c.Config.BasePath,
-									c.Config.Components.Terraform.BasePath,
-									terraformComponent,
-								)
+			// Find all derived components of the provided components
+			derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackConfigFileName, terraformSection, components)
+			if err != nil {
+				return err
+			}
 
-								context := c.GetContextFromVars(varsSection)
-								context.Component = strings.Replace(componentName, "/", "-", -1)
-								context.ComponentPath = terraformComponentPath
-								contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, c.Config.Stacks.NamePattern, stackConfigFileName)
-								if err != nil {
-									return err
-								}
+			// Check if `components` filter is provided
+			if len(components) == 0 ||
+				u.SliceContainsString(components, componentName) ||
+				u.SliceContainsString(derivedComponents, componentName) {
 
-								// Terraform workspace
-								workspace, err := BuildTerraformWorkspace(
-									stackConfigFileName,
-									c.Config.Stacks.NamePattern,
-									metadataSection,
-									context,
-								)
-								if err != nil {
-									return err
-								}
+				// Component vars
+				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
+					continue
+				}
 
-								context.Workspace = workspace
-
-								// Check if `stacks` filter is provided
-								if len(stacks) == 0 ||
-									// `stacks` filter can contain the names of the top-level stack config files:
-									// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-									u.SliceContainsString(stacks, stackConfigFileName) ||
-									// `stacks` filter can also contain the logical stack names (derived from the context vars):
-									// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-									u.SliceContainsString(stacks, contextPrefix) {
-
-									// Generate an atlantis project and workflow for the component in the stack
-									var whenModified []string
-
-									for _, item := range projectTemplate.Autoplan.WhenModified {
-										processedItem := c.ReplaceContextTokens(context, item)
-										whenModified = append(whenModified, processedItem)
-									}
-
-									atlantisProjectAutoplanConfig := c.AtlantisProjectAutoplanConfig{
-										Enabled:           projectTemplate.Autoplan.Enabled,
-										ApplyRequirements: projectTemplate.Autoplan.ApplyRequirements,
-										WhenModified:      whenModified,
-									}
-
-									atlantisProjectName := c.ReplaceContextTokens(context, projectTemplate.Name)
-									atlantisWorkflowName := "workflow-" + atlantisProjectName
-
-									atlantisProject := c.AtlantisProjectConfig{
-										Name:                      atlantisProjectName,
-										Workspace:                 c.ReplaceContextTokens(context, projectTemplate.Workspace),
-										Workflow:                  atlantisWorkflowName,
-										Dir:                       c.ReplaceContextTokens(context, projectTemplate.Dir),
-										TerraformVersion:          projectTemplate.TerraformVersion,
-										DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
-										Autoplan:                  atlantisProjectAutoplanConfig,
-									}
-
-									y, err := yaml.Marshal(workflowTemplate)
-									if err != nil {
-										return err
-									}
-
-									atlantisWorkflowStr := c.ReplaceContextTokens(context, string(y))
-									var atlantisWorkflow any
-
-									if err = yaml.Unmarshal([]byte(atlantisWorkflowStr), &atlantisWorkflow); err != nil {
-										return err
-									}
-
-									atlantisProjects = append(atlantisProjects, atlantisProject)
-									atlantisWorkflows[atlantisWorkflowName] = atlantisWorkflow
-								}
-							}
+				// Component metadata
+				metadataSection := map[any]any{}
+				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+					if componentType, ok := metadataSection["type"].(string); ok {
+						// Don't include abstract components
+						if componentType == "abstract" {
+							continue
 						}
 					}
+				}
+
+				// Find the terraform component
+				// If `component` attribute is present, it's the terraform component
+				// Otherwise, the YAML component name is the terraform component (by default)
+				terraformComponent := componentName
+				if componentAttribute, ok := componentSection["component"].(string); ok {
+					terraformComponent = componentAttribute
+				}
+
+				// Absolute path to the terraform component
+				terraformComponentPath := path.Join(
+					c.Config.BasePath,
+					c.Config.Components.Terraform.BasePath,
+					terraformComponent,
+				)
+
+				// Context
+				context := c.GetContextFromVars(varsSection)
+				context.Component = strings.Replace(componentName, "/", "-", -1)
+				context.ComponentPath = terraformComponentPath
+				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, c.Config.Stacks.NamePattern, stackConfigFileName)
+				if err != nil {
+					return err
+				}
+
+				// Terraform workspace
+				workspace, err := BuildTerraformWorkspace(
+					stackConfigFileName,
+					c.Config.Stacks.NamePattern,
+					metadataSection,
+					context,
+				)
+				if err != nil {
+					return err
+				}
+
+				context.Workspace = workspace
+
+				// Check if `stacks` filter is provided
+				if len(stacks) == 0 ||
+					// `stacks` filter can contain the names of the top-level stack config files:
+					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
+					u.SliceContainsString(stacks, stackConfigFileName) ||
+					// `stacks` filter can also contain the logical stack names (derived from the context vars):
+					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
+					u.SliceContainsString(stacks, contextPrefix) {
+
+					// Generate an atlantis project and workflow for the component in the stack
+					var whenModified []string
+
+					for _, item := range projectTemplate.Autoplan.WhenModified {
+						processedItem := c.ReplaceContextTokens(context, item)
+						whenModified = append(whenModified, processedItem)
+					}
+
+					atlantisProjectAutoplanConfig := c.AtlantisProjectAutoplanConfig{
+						Enabled:           projectTemplate.Autoplan.Enabled,
+						ApplyRequirements: projectTemplate.Autoplan.ApplyRequirements,
+						WhenModified:      whenModified,
+					}
+
+					atlantisProjectName := c.ReplaceContextTokens(context, projectTemplate.Name)
+					atlantisWorkflowName := "workflow-" + atlantisProjectName
+
+					atlantisProject := c.AtlantisProjectConfig{
+						Name:                      atlantisProjectName,
+						Workspace:                 c.ReplaceContextTokens(context, projectTemplate.Workspace),
+						Workflow:                  atlantisWorkflowName,
+						Dir:                       c.ReplaceContextTokens(context, projectTemplate.Dir),
+						TerraformVersion:          projectTemplate.TerraformVersion,
+						DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
+						Autoplan:                  atlantisProjectAutoplanConfig,
+					}
+
+					y, err := yaml.Marshal(workflowTemplate)
+					if err != nil {
+						return err
+					}
+
+					atlantisWorkflowStr := c.ReplaceContextTokens(context, string(y))
+					var atlantisWorkflow any
+
+					if err = yaml.Unmarshal([]byte(atlantisWorkflowStr), &atlantisWorkflow); err != nil {
+						return err
+					}
+
+					atlantisProjects = append(atlantisProjects, atlantisProject)
+					atlantisWorkflows[atlantisWorkflowName] = atlantisWorkflow
 				}
 			}
 		}
