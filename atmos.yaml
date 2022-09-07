@@ -140,6 +140,7 @@ integrations:
     # All the intermediate folders will be created automatically (e.g. `path: /config/atlantis/atlantis.yaml`)
     # Can be overridden on the command line by using `--output-path` command-line argument in `atmos atlantis generate repo-config` command
     # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to `stdout`
+    # On Linux/macOS, you can also use `--output-path=/dev/stdout` to dump the content to `stdout` without setting it to an empty string in `atlantis.path`
     path: "atlantis.yaml"
 
     # Config templates
