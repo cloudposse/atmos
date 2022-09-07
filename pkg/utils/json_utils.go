@@ -3,14 +3,14 @@ package utils
 import (
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
-	"io/ioutil"
 	"os"
 	"strings"
 )
 
 // PrintAsJSON prints the provided value as YAML document to the console
 func PrintAsJSON(data any) error {
-	var json = jsoniter.ConfigDefault
+	// ConfigCompatibleWithStandardLibrary will sort the map keys in the alphabetical order
+	var json = jsoniter.ConfigCompatibleWithStandardLibrary
 	j, err := json.MarshalIndent(data, "", strings.Repeat(" ", 2))
 	if err != nil {
 		return err
@@ -21,12 +21,13 @@ func PrintAsJSON(data any) error {
 
 // WriteToFileAsJSON converts the provided value to YAML and writes it to the provided file
 func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
-	var json = jsoniter.ConfigDefault
+	// ConfigCompatibleWithStandardLibrary will sort the map keys in the alphabetical order
+	var json = jsoniter.ConfigCompatibleWithStandardLibrary
 	j, err := json.MarshalIndent(data, "", strings.Repeat(" ", 2))
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(filePath, j, fileMode)
+	err = os.WriteFile(filePath, j, fileMode)
 	if err != nil {
 		return err
 	}
