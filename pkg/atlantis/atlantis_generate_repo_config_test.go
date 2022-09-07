@@ -15,11 +15,11 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	assert.Nil(t, err)
 
 	atlantisConfig := c.Config.Integrations.Atlantis
-	configTemplateName := "config-template-1"
+	configTemplateName := "config-1"
 	configTemplate := atlantisConfig.ConfigTemplates[configTemplateName]
-	projectTemplateName := "project-template-1"
+	projectTemplateName := "project-1"
 	projectTemplate := atlantisConfig.ProjectTemplates[projectTemplateName]
-	workflowTemplateName := "workflow-template-1"
+	workflowTemplateName := "workflow-1"
 	workflowTemplate := atlantisConfig.ProjectTemplates[workflowTemplateName]
 	projectTemplate.Workflow = workflowTemplateName
 

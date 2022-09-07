@@ -10,7 +10,7 @@ then generate the `atlantis.yaml` repo config file:
 
 ```bash
 atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
-atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
 ```
 
 Supported context tokens: `{namespace}`, `{tenant}`, `{environment}`, `{region}`, `{stage}`, `{component}`, `{component-path}`.
@@ -27,7 +27,7 @@ repos:
     pre_workflow_hooks:
       - run: |
           atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
-          atmos atlantis generate repo-config --config-template config-template-1 --project-template project-template-1 --workflow-template workflow-template-1
+          atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
 ```
 
 Note that the `-file-template` parameter in the `atmos terraform generate varfiles` command must match the following two settings in `atmos.yaml`:
@@ -56,7 +56,7 @@ integrations:
     # Config templates
     # Select a template by using the `--config-template <config_template>` command-line argument in `atmos atlantis generate repo-config` command
     config_templates:
-      config-template-1:
+      config-1:
         version: 3
         automerge: true
         delete_source_branch_on_merge: true
@@ -70,7 +70,7 @@ integrations:
     # Project templates
     # Select a template by using the `--project-template <project_template>` command-line argument in `atmos atlantis generate repo-config` command
     project_templates:
-      project-template-1:
+      project-1:
         # generate a project entry for each component in every stack
         name: "{tenant}-{environment}-{stage}-{component}"
         workspace: "{workspace}"
@@ -90,7 +90,7 @@ integrations:
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
     # Select a template by using the `--workflow-template <workflow_template>` command-line argument in `atmos atlantis generate repo-config` command
     workflow_templates:
-      workflow-template-1:
+      workflow-1:
         plan:
           steps:
             - run: terraform init -input=false
@@ -114,7 +114,7 @@ parallel_apply: true
 projects:
   - name: tenant1-ue2-staging-test-test-component-override-3
     workspace: test-component-override-3-workspace
-    workflow: workflow-template-1
+    workflow: workflow-1
     dir: examples/complete/components/terraform/test/test-component
     terraform_version: v1.2
     delete_source_branch_on_merge: true
@@ -127,7 +127,7 @@ projects:
         - approved
   - name: tenant1-ue2-staging-infra-vpc
     workspace: tenant1-ue2-staging
-    workflow: workflow-template-1
+    workflow: workflow-1
     dir: examples/complete/components/terraform/infra/vpc
     terraform_version: v1.2
     delete_source_branch_on_merge: true
@@ -139,7 +139,7 @@ projects:
       apply_requirements:
         - approved
 workflows:
-  workflow-template-1:
+  workflow-1:
     apply:
       steps:
         - run: terraform apply $PLANFILE
