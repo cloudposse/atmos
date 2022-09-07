@@ -170,7 +170,7 @@ integrations:
           enabled: true
           when_modified:
             - "**/*.tf"
-            - "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json"
+            - "varfiles/$PROJECT_NAME.tfvars.json"
           apply_requirements:
             - "approved"
 
