@@ -7,7 +7,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 	"path"
 	"path/filepath"
 	"strings"
@@ -91,7 +90,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 	}
 
 	var atlantisProjects []c.AtlantisProjectConfig
-	atlantisWorkflows := map[string]any{}
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
@@ -201,35 +199,26 @@ func ExecuteAtlantisGenerateRepoConfig(
 					}
 
 					atlantisProjectName := c.ReplaceContextTokens(context, projectTemplate.Name)
-					atlantisWorkflowName := "workflow-" + atlantisProjectName
 
 					atlantisProject := c.AtlantisProjectConfig{
 						Name:                      atlantisProjectName,
 						Workspace:                 c.ReplaceContextTokens(context, projectTemplate.Workspace),
-						Workflow:                  atlantisWorkflowName,
+						Workflow:                  workflowTemplateName,
 						Dir:                       c.ReplaceContextTokens(context, projectTemplate.Dir),
 						TerraformVersion:          projectTemplate.TerraformVersion,
 						DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
 						Autoplan:                  atlantisProjectAutoplanConfig,
 					}
 
-					y, err := yaml.Marshal(workflowTemplate)
-					if err != nil {
-						return err
-					}
-
-					atlantisWorkflowStr := c.ReplaceContextTokens(context, string(y))
-					var atlantisWorkflow any
-
-					if err = yaml.Unmarshal([]byte(atlantisWorkflowStr), &atlantisWorkflow); err != nil {
-						return err
-					}
-
 					atlantisProjects = append(atlantisProjects, atlantisProject)
-					atlantisWorkflows[atlantisWorkflowName] = atlantisWorkflow
 				}
 			}
 		}
+	}
+
+	// Workflows
+	atlantisWorkflows := map[string]any{
+		workflowTemplateName: workflowTemplate,
 	}
 
 	// Final atlantis config

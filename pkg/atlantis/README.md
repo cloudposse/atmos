@@ -114,7 +114,7 @@ parallel_apply: true
 projects:
   - name: tenant1-ue2-staging-test-test-component-override-3
     workspace: test-component-override-3-workspace
-    workflow: workflow-tenant1-ue2-staging-test-test-component-override-3
+    workflow: workflow-template-1
     dir: examples/complete/components/terraform/test/test-component
     terraform_version: v1.2
     delete_source_branch_on_merge: true
@@ -127,7 +127,7 @@ projects:
         - approved
   - name: tenant1-ue2-staging-infra-vpc
     workspace: tenant1-ue2-staging
-    workflow: workflow-tenant1-ue2-staging-infra-vpc
+    workflow: workflow-template-1
     dir: examples/complete/components/terraform/infra/vpc
     terraform_version: v1.2
     delete_source_branch_on_merge: true
@@ -139,34 +139,19 @@ projects:
       apply_requirements:
         - approved
 workflows:
-  workflow-tenant1-ue2-staging-test-test-component-override-3:
+  workflow-template-1:
     apply:
       steps:
-        - apply:
-            extra_args:
-              - -var-file
-              - varfiles/tenant1-ue2-staging-test-test-component-override-3.tfvars.json
+        - run: terraform apply $PLANFILE
     plan:
       steps:
-        - init
-        - plan:
-            extra_args:
-              - -var-file
-              - varfiles/tenant1-ue2-staging-test-test-component-override-3.tfvars.json
-    workflow-tenant1-ue2-staging-infra-vpc:
-      apply:
-        steps:
-          - apply:
-              extra_args:
-                - -var-file
-                - varfiles/tenant1-ue2-staging-infra-vpc.tfvars.json
-      plan:
-        steps:
-          - init
-          - plan:
-              extra_args:
-                - -var-file
-                - varfiles/tenant1-ue2-staging-infra-vpc.tfvars.json
+        - run: terraform init -input=false
+        - run: terraform workspace select $WORKSPACE
+        - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+allowed_regexp_prefixes:
+  - dev/
+  - staging/
+  - prod/
 ```
 
 ## References
