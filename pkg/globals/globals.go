@@ -24,6 +24,7 @@ const (
 
 	FromPlanFlag = "--from-plan"
 	DryRunFlag   = "--dry-run"
+	SkipInitFlag = "--skip-init"
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
