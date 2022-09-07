@@ -13,6 +13,9 @@ atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment
 atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
 ```
 
+__NOTE:__ All paths, `--file-template` in the `atmos terraform generate varfiles` command, and in the `atlantis` config in `atmos.yaml`,
+should be relative to the root of the repo. 
+
 Supported context tokens: `{namespace}`, `{tenant}`, `{environment}`, `{region}`, `{stage}`, `{component}`, `{component-path}`.
 
 You can run these commands manually and commit the generated varfiles and `atlantis.yaml` repo config.
