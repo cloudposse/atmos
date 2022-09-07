@@ -114,6 +114,10 @@ automerge: true
 delete_source_branch_on_merge: true
 parallel_plan: true
 parallel_apply: true
+allowed_regexp_prefixes:
+  - dev/
+  - staging/
+  - prod/
 projects:
   - name: tenant1-ue2-staging-test-test-component-override-3
     workspace: test-component-override-3-workspace
@@ -151,10 +155,6 @@ workflows:
         - run: terraform init -input=false
         - run: terraform workspace select $WORKSPACE
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
-allowed_regexp_prefixes:
-  - dev/
-  - staging/
-  - prod/
 ```
 
 ## References
