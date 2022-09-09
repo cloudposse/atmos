@@ -8,7 +8,7 @@ const BASE_URL = '';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-    title: 'Atmos Docs',
+    title: 'atmos',
     tagline: 'atmos is a universal tool for DevOps and Cloud Automation (works with terraform, helm, helmfile, aws, etc.)',
     url: 'https://atmos.tools',
     baseUrl: `${BASE_URL}/`,
@@ -59,7 +59,7 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
         ({
             navbar: {
-                title: 'Atmos Docs',
+                title: 'atmos',
                 logo: {
                     alt: 'atmos logo',
                     src: '/img/atmos-logo.svg',
@@ -73,7 +73,7 @@ const config = {
                         type: 'doc',
                         docId: 'intro',
                         position: 'left',
-                        label: 'Guide',
+                        label: 'Docs',
                     },
                     {
                         to: '/blog',
