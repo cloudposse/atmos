@@ -88,6 +88,7 @@ type ArgsAndFlagsInfo struct {
 	AutoGenerateBackendFile string
 	UseTerraformPlan        bool
 	DryRun                  bool
+	SkipInit                bool
 	NeedHelp                bool
 }
 
@@ -125,6 +126,7 @@ type ConfigAndStacksInfo struct {
 	AutoGenerateBackendFile   string
 	UseTerraformPlan          bool
 	DryRun                    bool
+	SkipInit                  bool
 	ComponentInheritanceChain []string
 	NeedHelp                  bool
 	ComponentIsAbstract       bool
