@@ -29,7 +29,7 @@ func WriteToFileAsHcl(filePath string, data any, fileMode os.FileMode) error {
 		return err
 	}
 
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, fileMode)
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, fileMode)
 	if err != nil {
 		return err
 	}
