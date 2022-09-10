@@ -9,7 +9,7 @@ import:
 
 components:
   terraform:
-    # Note that you can name this YAML component anything that fits your needs.
+    # Note that you can name this atmos YAML component anything that fits your needs.
     # For example, it can be named `test/test-component-override-3` or `test-test-component-override-3`
     # This affects only the `atmos` command you use to provision the component:
     # For example:

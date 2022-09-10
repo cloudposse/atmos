@@ -169,10 +169,10 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 					}
 
 					u.PrintInfo(fmt.Sprintf("Varfile: %s", fileName))
-					u.PrintMessage(fmt.Sprintf("Terraform component: %s", terraformComponent))
-					u.PrintMessage(fmt.Sprintf("YAML component: %s", componentName))
-					u.PrintMessage(fmt.Sprintf("Stack: %s", contextPrefix))
-					u.PrintMessage(fmt.Sprintf("Stack config file: %s", stackConfigFileName))
+					u.PrintMessage(fmt.Sprintf("terraform component: %s", terraformComponent))
+					u.PrintMessage(fmt.Sprintf("atmos component: %s", componentName))
+					u.PrintMessage(fmt.Sprintf("atmos stack: %s", contextPrefix))
+					u.PrintMessage(fmt.Sprintf("stack config file: %s", stackConfigFileName))
 					fmt.Println()
 				}
 			}
