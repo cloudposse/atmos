@@ -25,7 +25,7 @@ func TestTerraformGenerateVarfiles(t *testing.T) {
 
 	var stacks []string
 	var components []string
-	filePattern := path.Join(tempDir, "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.hcl")
+	filePattern := path.Join(tempDir, "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars")
 	format := "hcl"
 
 	err = e.ExecuteTerraformGenerateVarfiles(filePattern, format, stacks, components)

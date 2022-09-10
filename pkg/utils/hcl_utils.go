@@ -5,6 +5,7 @@ import (
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
 	"os"
+	"strings"
 )
 
 // PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console
@@ -14,7 +15,7 @@ func PrintAsHcl(data any) error {
 		return err
 	}
 
-	err = printer.Fprint(os.Stdout, astree.Node)
+	err = printer.Fprint(os.Stdout, astree)
 	if err != nil {
 		return err
 	}
@@ -41,7 +42,7 @@ func WriteToFileAsHcl(filePath string, data any, fileMode os.FileMode) error {
 		}
 	}(f)
 
-	err = printer.Fprint(f, astree.Node)
+	err = printer.Fprint(f, astree)
 	if err != nil {
 		return err
 	}
@@ -50,7 +51,7 @@ func WriteToFileAsHcl(filePath string, data any, fileMode os.FileMode) error {
 }
 
 // ConvertToHclAst converts the provided value to an HCL abstract syntax tree
-func ConvertToHclAst(data any) (*ast.File, error) {
+func ConvertToHclAst(data any) (ast.Node, error) {
 	j, err := ConvertToJSONFast(data)
 	if err != nil {
 		return nil, err
@@ -61,5 +62,15 @@ func ConvertToHclAst(data any) (*ast.File, error) {
 		return nil, err
 	}
 
-	return astree, nil
+	// Remove the double quotes around the terraform variable names (the double quotes come from JSON keys)
+	// since they will be written to the terraform varfiles and terraform does not like it
+	if objectList, ok := astree.Node.(*ast.ObjectList); ok {
+		for _, item := range objectList.Items {
+			for i, key := range item.Keys {
+				item.Keys[i].Token.Text = strings.Replace(key.Token.Text, "\"", "", -1)
+			}
+		}
+	}
+
+	return astree.Node, nil
 }
