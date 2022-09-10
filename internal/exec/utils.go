@@ -13,10 +13,13 @@ import (
 )
 
 var (
+	// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.)
+	// These flags get removed from the arg list after atmos uses them so the underlying tool does not get passed a flag it doesn't accept.
 	commonFlags = []string{
 		"--stack",
 		"-s",
 		g.DryRunFlag,
+		g.SkipInitFlag,
 		g.KubeConfigConfigFlag,
 		g.TerraformDirFlag,
 		g.HelmfileDirFlag,
@@ -175,6 +178,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
 	configAndStacksInfo.DryRun = argsAndFlagsInfo.DryRun
+	configAndStacksInfo.SkipInit = argsAndFlagsInfo.SkipInit
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 
 	// Check if `-h` or `--help` flags are specified
@@ -564,6 +568,10 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 
 		if arg == g.DryRunFlag {
 			info.DryRun = true
+		}
+
+		if arg == g.SkipInitFlag {
+			info.SkipInit = true
 		}
 
 		if arg == g.HelpFlag1 || arg == g.HelpFlag2 {

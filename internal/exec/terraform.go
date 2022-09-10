@@ -173,6 +173,13 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		(info.SubCommand == "deploy" && !c.Config.Components.Terraform.DeployRunInit) {
 		runTerraformInit = false
 	}
+
+	if info.SkipInit {
+		fmt.Println()
+		u.PrintInfo("Skipping over `terraform init` due to `--skip-init` being passed.")
+		runTerraformInit = false
+	}
+
 	if runTerraformInit {
 		initCommandWithArguments := []string{"init"}
 		if info.SubCommand == "workspace" || c.Config.Components.Terraform.InitRunReconfigure {
