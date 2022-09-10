@@ -86,19 +86,6 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant1-ue2-dev-infra-vpc
-  workspace: tenant1-ue2-dev
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/infra/vpc
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
 - name: tenant1-ue2-dev-vpc-new
   workspace: tenant1-ue2-dev
   workflow: workflow-1

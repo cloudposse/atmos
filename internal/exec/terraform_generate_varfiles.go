@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"path"
@@ -82,16 +81,9 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 				continue
 			}
 
-			// Find all derived components of the provided components
-			derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackConfigFileName, terraformSection, components)
-			if err != nil {
-				return err
-			}
-
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) ||
-				u.SliceContainsString(derivedComponents, componentName) {
+				u.SliceContainsString(components, componentName) {
 
 				// Component vars
 				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
