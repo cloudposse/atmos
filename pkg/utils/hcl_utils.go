@@ -51,7 +51,7 @@ func WriteToFileAsHcl(filePath string, data any, fileMode os.FileMode) error {
 
 // ConvertToHclAst converts the provided value to an HCL abstract syntax tree
 func ConvertToHclAst(data any) (*ast.File, error) {
-	j, err := ConvertToJSON(data)
+	j, err := ConvertToJSONFast(data)
 	if err != nil {
 		return nil, err
 	}

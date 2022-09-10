@@ -43,10 +43,17 @@ func ConvertToJSON(data any) (string, error) {
 
 // ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents
 func ConvertToJSONFast(data any) (string, error) {
-	var json = jsoniter.ConfigFastest
-	j, err := json.Marshal(data)
+	var json = jsoniter.Config{
+		EscapeHTML:                    false,
+		MarshalFloatWith6Digits:       true,
+		ObjectFieldMustBeSimpleString: true,
+		SortMapKeys:                   true,
+		ValidateJsonRawMessage:        true,
+	}
+
+	j, err := json.Froze().MarshalToString(data)
 	if err != nil {
 		return "", err
 	}
-	return string(j), nil
+	return j, nil
 }
