@@ -1,0 +1,60 @@
+package cmd
+
+import (
+	e "github.com/cloudposse/atmos/internal/exec"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/spf13/cobra"
+)
+
+// terraformGenerateBackendsCmd generates varfiles for all terraform components in all stacks
+var terraformGenerateBackendsCmd = &cobra.Command{
+	Use:                "varfiles",
+	Short:              "Execute 'terraform generate backends' command",
+	Long:               `This command generates backends for all terraform components`,
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Run: func(cmd *cobra.Command, args []string) {
+		err := e.ExecuteTerraformGenerateBackendsCmd(cmd, args)
+		if err != nil {
+			u.PrintErrorToStdErrorAndExit(err)
+		}
+	},
+}
+
+func init() {
+	terraformGenerateBackendsCmd.DisableFlagParsing = false
+
+	terraformGenerateBackendsCmd.PersistentFlags().String("file-template", "",
+		"Varfile template (the file path, file name, and file extension).\n"+
+			"Supports absolute and relative paths.\n"+
+			"Supports context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {component}, {component-path}.\n"+
+			"atmos terraform generate backends --file-template {component-path}/{environment}-{stage}.tfvars.json\n"+
+			"atmos terraform generate backends --file-template /configs/{tenant}/{environment}/{stage}/{component}.json\n"+
+			"atmos terraform generate backends --file-template /{tenant}/{stage}/{region}/{component}.yaml\n"+
+			"All subdirectories in the path will be created automatically.",
+	)
+
+	terraformGenerateBackendsCmd.PersistentFlags().String("stacks", "",
+		"Only process the specified stacks (comma-separated values).\n"+
+			"atmos terraform generate backends --file-template <file_template> --stacks <stack1>,<stack2>\n"+
+			"The filter can contain the names of the top-level stack config files and the logical stack names (derived from the context vars)\n"+
+			"atmos terraform generate backends --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
+			"atmos terraform generate backends --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
+			"atmos terraform generate backends --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
+	)
+
+	terraformGenerateBackendsCmd.PersistentFlags().String("components", "",
+		"Only process the specified components (comma-separated values).\n"+
+			"atmos terraform generate backends --file-template <file_template> --components <component1>,<component2>",
+	)
+
+	terraformGenerateBackendsCmd.PersistentFlags().String("format", "json", "Output format.\n"+
+		"Supported formats: json, yaml, hcl.\n"+
+		"atmos terraform generate backends --file-template <file_template> --format=json/yaml/hcl ('json' is default)")
+
+	err := terraformGenerateBackendsCmd.MarkPersistentFlagRequired("file-template")
+	if err != nil {
+		u.PrintErrorToStdErrorAndExit(err)
+	}
+
+	terraformGenerateCmd.AddCommand(terraformGenerateBackendsCmd)
+}
