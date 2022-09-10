@@ -90,6 +90,17 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 					continue
 				}
 
+				// Component metadata
+				metadataSection := map[any]any{}
+				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+					if componentType, ok := metadataSection["type"].(string); ok {
+						// Don't include abstract components
+						if componentType == "abstract" {
+							continue
+						}
+					}
+				}
+
 				// Find terraform component.
 				// If `component` attribute is present, it's the terraform component.
 				// Otherwise, the YAML component name is the terraform component.
