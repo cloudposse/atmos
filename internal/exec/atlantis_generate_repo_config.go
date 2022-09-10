@@ -96,7 +96,12 @@ func ExecuteAtlantisGenerateRepoConfig(
 	var varsSection map[any]any
 
 	// Iterate over all components in all stacks and generate atlantis projects
-	for stackConfigFileName, stackSection := range stacksMap {
+	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
+	stacksMapSortedKeys := u.StringKeysFromMap(stacksMap)
+
+	for _, stackConfigFileName := range stacksMapSortedKeys {
+		stackSection := stacksMap[stackConfigFileName]
+
 		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
 			continue
 		}
