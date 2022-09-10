@@ -8,10 +8,10 @@ allowed_regexp_prefixes:
 - staging/
 - prod/
 projects:
-- name: tenant1-ue2-dev-top-level-component1
+- name: tenant1-ue2-dev-infra-vpc
   workspace: tenant1-ue2-dev
   workflow: workflow-1
-  dir: examples/complete/components/terraform/top-level-component1
+  dir: examples/complete/components/terraform/infra/vpc
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:
@@ -73,10 +73,10 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant1-ue2-dev-infra-vpc
+- name: tenant1-ue2-dev-top-level-component1
   workspace: tenant1-ue2-dev
   workflow: workflow-1
-  dir: examples/complete/components/terraform/infra/vpc
+  dir: examples/complete/components/terraform/top-level-component1
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:
@@ -116,19 +116,6 @@ projects:
   workspace: tenant1-ue2-prod
   workflow: workflow-1
   dir: examples/complete/components/terraform/infra/vpc
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
-- name: tenant1-ue2-prod-top-level-component1
-  workspace: tenant1-ue2-prod
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/top-level-component1
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:
@@ -190,23 +177,10 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant1-ue2-staging-test-test-component-override-2
-  workspace: tenant1-ue2-staging-test-test-component-override-2
+- name: tenant1-ue2-prod-top-level-component1
+  workspace: tenant1-ue2-prod
   workflow: workflow-1
-  dir: examples/complete/components/terraform/test/test-component
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
-- name: tenant1-ue2-staging-test-test-component-override-3
-  workspace: test-component-override-3-workspace
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/test/test-component
+  dir: examples/complete/components/terraform/top-level-component1
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:
@@ -220,19 +194,6 @@ projects:
   workspace: tenant1-ue2-staging
   workflow: workflow-1
   dir: examples/complete/components/terraform/infra/vpc
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
-- name: tenant1-ue2-staging-top-level-component1
-  workspace: tenant1-ue2-staging
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/top-level-component1
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:
@@ -259,6 +220,58 @@ projects:
   workspace: test-component-override-workspace-override
   workflow: workflow-1
   dir: examples/complete/components/terraform/test/test-component
+  terraform_version: v1.2
+  delete_source_branch_on_merge: true
+  autoplan:
+    enabled: true
+    when_modified:
+    - '**/*.tf'
+    - varfiles/$PROJECT_NAME.tfvars.json
+    apply_requirements:
+    - approved
+- name: tenant1-ue2-staging-test-test-component-override-2
+  workspace: tenant1-ue2-staging-test-test-component-override-2
+  workflow: workflow-1
+  dir: examples/complete/components/terraform/test/test-component
+  terraform_version: v1.2
+  delete_source_branch_on_merge: true
+  autoplan:
+    enabled: true
+    when_modified:
+    - '**/*.tf'
+    - varfiles/$PROJECT_NAME.tfvars.json
+    apply_requirements:
+    - approved
+- name: tenant1-ue2-staging-test-test-component-override-3
+  workspace: test-component-override-3-workspace
+  workflow: workflow-1
+  dir: examples/complete/components/terraform/test/test-component
+  terraform_version: v1.2
+  delete_source_branch_on_merge: true
+  autoplan:
+    enabled: true
+    when_modified:
+    - '**/*.tf'
+    - varfiles/$PROJECT_NAME.tfvars.json
+    apply_requirements:
+    - approved
+- name: tenant1-ue2-staging-top-level-component1
+  workspace: tenant1-ue2-staging
+  workflow: workflow-1
+  dir: examples/complete/components/terraform/top-level-component1
+  terraform_version: v1.2
+  delete_source_branch_on_merge: true
+  autoplan:
+    enabled: true
+    when_modified:
+    - '**/*.tf'
+    - varfiles/$PROJECT_NAME.tfvars.json
+    apply_requirements:
+    - approved
+- name: tenant1-ue2-test-1-infra-vpc
+  workspace: tenant1-ue2-test-1
+  workflow: workflow-1
+  dir: examples/complete/components/terraform/infra/vpc
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:
@@ -320,19 +333,6 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant1-ue2-test-1-infra-vpc
-  workspace: tenant1-ue2-test-1
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/infra/vpc
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
 - name: tenant1-ue2-test-1-top-level-component1
   workspace: tenant1-ue2-test-1
   workflow: workflow-1
@@ -346,10 +346,10 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant2-ue2-dev-top-level-component1
+- name: tenant2-ue2-dev-infra-vpc
   workspace: tenant2-ue2-dev
   workflow: workflow-1
-  dir: examples/complete/components/terraform/top-level-component1
+  dir: examples/complete/components/terraform/infra/vpc
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:
@@ -411,10 +411,36 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant2-ue2-dev-infra-vpc
+- name: tenant2-ue2-dev-top-level-component1
   workspace: tenant2-ue2-dev
   workflow: workflow-1
+  dir: examples/complete/components/terraform/top-level-component1
+  terraform_version: v1.2
+  delete_source_branch_on_merge: true
+  autoplan:
+    enabled: true
+    when_modified:
+    - '**/*.tf'
+    - varfiles/$PROJECT_NAME.tfvars.json
+    apply_requirements:
+    - approved
+- name: tenant2-ue2-prod-infra-vpc
+  workspace: tenant2-ue2-prod
+  workflow: workflow-1
   dir: examples/complete/components/terraform/infra/vpc
+  terraform_version: v1.2
+  delete_source_branch_on_merge: true
+  autoplan:
+    enabled: true
+    when_modified:
+    - '**/*.tf'
+    - varfiles/$PROJECT_NAME.tfvars.json
+    apply_requirements:
+    - approved
+- name: tenant2-ue2-prod-test-test-component
+  workspace: tenant2-ue2-prod
+  workflow: workflow-1
+  dir: examples/complete/components/terraform/test/test-component
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:
@@ -463,19 +489,6 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant2-ue2-prod-infra-vpc
-  workspace: tenant2-ue2-prod
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/infra/vpc
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
 - name: tenant2-ue2-prod-top-level-component1
   workspace: tenant2-ue2-prod
   workflow: workflow-1
@@ -489,8 +502,34 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant2-ue2-prod-test-test-component
-  workspace: tenant2-ue2-prod
+- name: tenant2-ue2-staging-infra-vpc
+  workspace: tenant2-ue2-staging
+  workflow: workflow-1
+  dir: examples/complete/components/terraform/infra/vpc
+  terraform_version: v1.2
+  delete_source_branch_on_merge: true
+  autoplan:
+    enabled: true
+    when_modified:
+    - '**/*.tf'
+    - varfiles/$PROJECT_NAME.tfvars.json
+    apply_requirements:
+    - approved
+- name: tenant2-ue2-staging-test-test-component
+  workspace: tenant2-ue2-staging
+  workflow: workflow-1
+  dir: examples/complete/components/terraform/test/test-component
+  terraform_version: v1.2
+  delete_source_branch_on_merge: true
+  autoplan:
+    enabled: true
+    when_modified:
+    - '**/*.tf'
+    - varfiles/$PROJECT_NAME.tfvars.json
+    apply_requirements:
+    - approved
+- name: tenant2-ue2-staging-test-test-component-override
+  workspace: test-component-override-workspace-override
   workflow: workflow-1
   dir: examples/complete/components/terraform/test/test-component
   terraform_version: v1.2
@@ -528,49 +567,10 @@ projects:
     - varfiles/$PROJECT_NAME.tfvars.json
     apply_requirements:
     - approved
-- name: tenant2-ue2-staging-infra-vpc
-  workspace: tenant2-ue2-staging
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/infra/vpc
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
 - name: tenant2-ue2-staging-top-level-component1
   workspace: tenant2-ue2-staging
   workflow: workflow-1
   dir: examples/complete/components/terraform/top-level-component1
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
-- name: tenant2-ue2-staging-test-test-component
-  workspace: tenant2-ue2-staging
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/test/test-component
-  terraform_version: v1.2
-  delete_source_branch_on_merge: true
-  autoplan:
-    enabled: true
-    when_modified:
-    - '**/*.tf'
-    - varfiles/$PROJECT_NAME.tfvars.json
-    apply_requirements:
-    - approved
-- name: tenant2-ue2-staging-test-test-component-override
-  workspace: test-component-override-workspace-override
-  workflow: workflow-1
-  dir: examples/complete/components/terraform/test/test-component
   terraform_version: v1.2
   delete_source_branch_on_merge: true
   autoplan:

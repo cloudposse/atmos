@@ -110,7 +110,12 @@ func ExecuteAtlantisGenerateRepoConfig(
 			continue
 		}
 
-		for componentName, compSection := range terraformSection {
+		// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
+		componentMapSortedKeys := u.StringKeysFromMap(terraformSection)
+
+		for _, componentName := range componentMapSortedKeys {
+			compSection := terraformSection[componentName]
+
 			if componentSection, ok = compSection.(map[string]any); !ok {
 				continue
 			}
