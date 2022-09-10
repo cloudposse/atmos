@@ -41,8 +41,8 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
-	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", format)
+	if format != "" && format != "yaml" && format != "json" && format != "hcl" {
+		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 	}
 	if format == "" {
 		format = "json"
@@ -159,6 +159,13 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 						if err != nil {
 							return err
 						}
+					} else if format == "hcl" {
+						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0644)
+						if err != nil {
+							return err
+						}
+					} else {
+						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
 					u.PrintInfo(fmt.Sprintf("Varfile: %s", fileName))
