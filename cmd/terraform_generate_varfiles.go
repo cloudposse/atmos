@@ -10,7 +10,7 @@ import (
 var terraformGenerateVarfilesCmd = &cobra.Command{
 	Use:                "varfiles",
 	Short:              "Execute 'terraform generate varfiles' command",
-	Long:               `This command generates varfiles for all terraform components in all stacks`,
+	Long:               `This command generates varfiles for all atmos terraform components in all stacks`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
@@ -48,8 +48,8 @@ func init() {
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "json", "Output format.\n"+
-		"Supported formats: json, yaml, hcl.\n"+
-		"atmos terraform generate varfiles --file-template <file_template> --format=json/yaml/hcl ('json' is default)")
+		"Supported formats: json, yaml, hcl ('json' is default).\n"+
+		"atmos terraform generate varfiles --file-template <file_template> --format=json/yaml/hcl")
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {

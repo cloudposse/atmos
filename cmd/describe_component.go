@@ -10,7 +10,7 @@ import (
 var describeComponentCmd = &cobra.Command{
 	Use:                "component",
 	Short:              "Execute 'describe component' command",
-	Long:               `This command shows configuration for a component in a stack: atmos describe component <component> -s <stack>`,
+	Long:               `This command shows configuration for an atmos component in a stack: atmos describe component <component> -s <stack>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeComponent(cmd, args)
