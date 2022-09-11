@@ -95,8 +95,6 @@ func ExecuteTerraformGenerateBackends(format string) error {
 				}
 			}
 
-			componentBackendConfig := generateComponentBackendConfig(backendType, backendSection)
-
 			// Absolute path to the terraform component
 			backendFilePath := path.Join(
 				c.Config.BasePath,
@@ -114,16 +112,17 @@ func ExecuteTerraformGenerateBackends(format string) error {
 				return err
 			}
 
-			// Write the backend config to a file
+			// Write the backend config to the file
 			u.PrintMessage(fmt.Sprintf("Writing backend config for the terraform component '%s' to file '%s'", terraformComponent, backendFilePath))
 
 			if format == "json" {
+				componentBackendConfig := generateComponentBackendConfig(backendType, backendSection)
 				err = u.WriteToFileAsJSON(backendFileAbsolutePath, componentBackendConfig, 0644)
 				if err != nil {
 					return err
 				}
 			} else if format == "hcl" {
-				err = u.WriteToFileAsHcl(backendFileAbsolutePath, componentBackendConfig, 0644)
+				err = u.WriteTerraformBackendConfigToFileAsHcl(backendFileAbsolutePath, backendType, backendSection)
 				if err != nil {
 					return err
 				}

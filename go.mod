@@ -7,6 +7,7 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/go-getter v1.6.2
 	github.com/hashicorp/hcl v1.0.0
+	github.com/hashicorp/hcl/v2 v2.14.0
 	github.com/imdario/mergo v0.3.13
 	github.com/json-iterator/go v1.1.12
 	github.com/mitchellh/go-homedir v1.1.0
@@ -15,6 +16,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.8.0
+	github.com/zclconf/go-cty v1.11.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -23,6 +25,8 @@ require (
 	cloud.google.com/go/compute v1.7.0 // indirect
 	cloud.google.com/go/iam v0.4.0 // indirect
 	cloud.google.com/go/storage v1.22.1 // indirect
+	github.com/agext/levenshtein v1.2.1 // indirect
+	github.com/apparentlymart/go-textseg/v13 v13.0.0 // indirect
 	github.com/aws/aws-sdk-go v1.15.78 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -44,6 +48,7 @@ require (
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
+	github.com/mitchellh/go-wordwrap v0.0.0-20150314170334-ad45545899c7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
