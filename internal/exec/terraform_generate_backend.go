@@ -43,7 +43,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("\nCould not find 'backend' config for the '%s' component.\n", component)
 	}
 
-	var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
+	componentBackendConfig := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 
 	u.PrintInfoVerbose("Component backend config:\n\n")
 	err = u.PrintAsJSON(componentBackendConfig)
@@ -67,7 +67,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	u.PrintInfo("Writing the backend config to file:")
-	fmt.Println(backendFilePath)
+	u.PrintMessage(backendFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)

@@ -32,9 +32,14 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 
 // ConvertToJSON converts the provided value to a JSON-encoded string
 func ConvertToJSON(data any) (string, error) {
-	// ConfigCompatibleWithStandardLibrary will sort the map keys in the alphabetical order
-	var json = jsoniter.ConfigCompatibleWithStandardLibrary
-	j, err := json.MarshalIndent(data, "", strings.Repeat(" ", 2))
+	var json = jsoniter.Config{
+		EscapeHTML:                    true,
+		ObjectFieldMustBeSimpleString: false,
+		SortMapKeys:                   true,
+		ValidateJsonRawMessage:        true,
+	}
+
+	j, err := json.Froze().MarshalIndent(data, "", strings.Repeat(" ", 3))
 	if err != nil {
 		return "", err
 	}

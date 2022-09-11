@@ -48,8 +48,8 @@ func init() {
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "json", "Output format.\n"+
-		"Supported formats: json, yaml, hcl.\n"+
-		"atmos terraform generate varfiles --file-template <file_template> --format=json/yaml/hcl ('json' is default)")
+		"Supported formats: json, yaml, hcl ('json' is default).\n"+
+		"atmos terraform generate varfiles --file-template <file_template> --format=json/yaml/hcl")
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {
