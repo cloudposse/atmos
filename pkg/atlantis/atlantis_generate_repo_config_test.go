@@ -1,6 +1,7 @@
 package atlantis
 
 import (
+	e "github.com/cloudposse/atmos/internal/exec"
 	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
@@ -34,5 +35,18 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	atlantisYaml.Projects = []c.AtlantisProjectConfig{projectTemplate}
 
 	err = utils.PrintAsYAML(atlantisYaml)
+	assert.Nil(t, err)
+}
+
+func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
+	err := e.ExecuteAtlantisGenerateRepoConfig(
+		"/dev/stdout",
+		"config-1",
+		"project-1",
+		"workflow-1",
+		nil,
+		nil,
+	)
+
 	assert.Nil(t, err)
 }

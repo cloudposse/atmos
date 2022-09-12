@@ -18,6 +18,8 @@ func processHelp(componentType string, command string) error {
 			fmt.Println()
 			u.PrintInfo("Additions and differences from native terraform:")
 			fmt.Println(" - before executing other 'terraform' commands, 'atmos' calls 'terraform init'")
+			fmt.Println(" - you can skip over atmos calling 'terraform init' if you know your project is already in a good working state by using " +
+				"the '--skip-init' flag like so 'atmos terraform <command> <component> -s <stack> --skip-init")
 			fmt.Println(" - 'atmos terraform deploy' command executes 'terraform plan' and then 'terraform apply'")
 			fmt.Println(" - 'atmos terraform deploy' command supports '--deploy-run-init=true/false' flag to enable/disable running 'terraform init' " +
 				"before executing the command")

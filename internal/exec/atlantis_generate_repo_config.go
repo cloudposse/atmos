@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -96,7 +95,12 @@ func ExecuteAtlantisGenerateRepoConfig(
 	var varsSection map[any]any
 
 	// Iterate over all components in all stacks and generate atlantis projects
-	for stackConfigFileName, stackSection := range stacksMap {
+	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
+	stacksMapSortedKeys := u.StringKeysFromMap(stacksMap)
+
+	for _, stackConfigFileName := range stacksMapSortedKeys {
+		stackSection := stacksMap[stackConfigFileName]
+
 		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
 			continue
 		}
@@ -105,21 +109,19 @@ func ExecuteAtlantisGenerateRepoConfig(
 			continue
 		}
 
-		for componentName, compSection := range terraformSection {
+		// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
+		componentMapSortedKeys := u.StringKeysFromMap(terraformSection)
+
+		for _, componentName := range componentMapSortedKeys {
+			compSection := terraformSection[componentName]
+
 			if componentSection, ok = compSection.(map[string]any); !ok {
 				continue
 			}
 
-			// Find all derived components of the provided components
-			derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackConfigFileName, terraformSection, components)
-			if err != nil {
-				return err
-			}
-
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) ||
-				u.SliceContainsString(derivedComponents, componentName) {
+				u.SliceContainsString(components, componentName) {
 
 				// Component vars
 				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {

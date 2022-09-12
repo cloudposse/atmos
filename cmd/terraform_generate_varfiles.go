@@ -10,7 +10,7 @@ import (
 var terraformGenerateVarfilesCmd = &cobra.Command{
 	Use:                "varfiles",
 	Short:              "Execute 'terraform generate varfiles' command",
-	Long:               `This command generates varfiles for all terraform components in all stacks`,
+	Long:               `This command generates varfiles for all atmos terraform components in all stacks`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
@@ -30,7 +30,7 @@ func init() {
 			"atmos terraform generate varfiles --file-template {component-path}/{environment}-{stage}.tfvars.json\n"+
 			"atmos terraform generate varfiles --file-template /configs/{tenant}/{environment}/{stage}/{component}.json\n"+
 			"atmos terraform generate varfiles --file-template /{tenant}/{stage}/{region}/{component}.yaml\n"+
-			"All subfolders in the path will be created automatically.",
+			"All subdirectories in the path will be created automatically.",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("stacks", "",
@@ -48,7 +48,8 @@ func init() {
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "json", "Output format.\n"+
-		"atmos terraform generate varfiles --file-template <file_template> --format=json/yaml ('json' is default)")
+		"Supported formats: json, yaml, hcl ('json' is default).\n"+
+		"atmos terraform generate varfiles --file-template <file_template> --format=json/yaml/hcl")
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {

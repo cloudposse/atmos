@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"path"
@@ -42,8 +41,8 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
-	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", format)
+	if format != "" && format != "yaml" && format != "json" && format != "hcl" {
+		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 	}
 	if format == "" {
 		format = "json"
@@ -82,20 +81,24 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 				continue
 			}
 
-			// Find all derived components of the provided components
-			derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackConfigFileName, terraformSection, components)
-			if err != nil {
-				return err
-			}
-
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) ||
-				u.SliceContainsString(derivedComponents, componentName) {
+				u.SliceContainsString(components, componentName) {
 
 				// Component vars
 				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
 					continue
+				}
+
+				// Component metadata
+				metadataSection := map[any]any{}
+				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+					if componentType, ok := metadataSection["type"].(string); ok {
+						// Don't include abstract components
+						if componentType == "abstract" {
+							continue
+						}
+					}
 				}
 
 				// Find terraform component.
@@ -156,13 +159,20 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 						if err != nil {
 							return err
 						}
+					} else if format == "hcl" {
+						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0644)
+						if err != nil {
+							return err
+						}
+					} else {
+						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
 					u.PrintInfo(fmt.Sprintf("Varfile: %s", fileName))
-					u.PrintMessage(fmt.Sprintf("Terraform component: %s", terraformComponent))
-					u.PrintMessage(fmt.Sprintf("YAML component: %s", componentName))
-					u.PrintMessage(fmt.Sprintf("Stack: %s", contextPrefix))
-					u.PrintMessage(fmt.Sprintf("Stack config file: %s", stackConfigFileName))
+					u.PrintMessage(fmt.Sprintf("terraform component: %s", terraformComponent))
+					u.PrintMessage(fmt.Sprintf("atmos component: %s", componentName))
+					u.PrintMessage(fmt.Sprintf("atmos stack: %s", contextPrefix))
+					u.PrintMessage(fmt.Sprintf("stack config file: %s", stackConfigFileName))
 					fmt.Println()
 				}
 			}
