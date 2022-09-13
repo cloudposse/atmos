@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"github.com/pkg/errors"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,7 +21,11 @@ func IsDirectory(path string) (bool, error) {
 // FileExists checks if a file exists and is not a directory
 func FileExists(filename string) bool {
 	fileInfo, err := os.Stat(filename)
-	if os.IsNotExist(err) || err != nil {
+	// os.isNotExist returns a boolean indicating whether the error is known to report that a file or directory does not exist.
+	// It is satisfied by ErrNotExist as well as some syscall errors.
+	// This function predates errors.Is.
+	// It only supports errors returned by the os package. New code should use errors.Is(err, fs.ErrNotExist).
+	if errors.Is(err, fs.ErrNotExist) || err != nil {
 		return false
 	}
 	return !fileInfo.IsDir()
@@ -83,7 +89,7 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 		return joinedPath, nil
 	}
 
-	// Convert the joined path to an absolute path
+	// Convert the joined path to the absolute path
 	absPath, err := filepath.Abs(joinedPath)
 	if err != nil {
 		return "", err
@@ -91,7 +97,12 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 
 	// Check if the final absolute path exists in the file system
 	_, err = os.Stat(absPath)
-	if os.IsNotExist(err) {
+
+	// os.isNotExist returns a boolean indicating whether the error is known to report that a file or directory does not exist.
+	// It is satisfied by ErrNotExist as well as some syscall errors.
+	// This function predates errors.Is.
+	// It only supports errors returned by the os package. New code should use errors.Is(err, fs.ErrNotExist).
+	if errors.Is(err, fs.ErrNotExist) {
 		return "", err
 	}
 
