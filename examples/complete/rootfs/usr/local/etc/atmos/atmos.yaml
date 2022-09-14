@@ -62,3 +62,132 @@ workflows:
 logs:
   verbose: false
   colors: true
+
+# Custom CLI commands
+commands:
+  - name: tf
+    description: Execute terraform commands
+    # subcommands
+    commands:
+      - name: plan
+        description: This command plans terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        env:
+          - key: ENV_VAR_1
+            value: ENV_VAR_1_value
+          - key: ENV_VAR_2
+            # `valueCommand` is an external command to execute to get the value for the ENV var
+            # Either 'value' or 'valueCommand' can be specified for the ENV var, but not both
+            valueCommand: echo ENV_VAR_2_value
+        # steps support Go templates
+        steps:
+          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+  - name: terraform
+    description: Execute terraform commands
+    # subcommands
+    commands:
+      - name: provision
+        description: This command provisions terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        # ENV var values support Go templates
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_STACK
+            value: "{{ .Flags.stack }}"
+        steps:
+          - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
+          - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+  - name: play
+    description: This command plays games
+    steps:
+      - echo Playing...
+    # subcommands
+    commands:
+      - name: hello
+        description: This command says Hello world
+        steps:
+          - echo Saying Hello world...
+          - echo Hello world
+      - name: ping
+        description: This command plays ping-pong
+        steps:
+          - echo Playing ping-pong...
+          - echo pong
+
+# Integrations
+integrations:
+
+  # Atlantis integration
+  # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
+  atlantis:
+    # Path and name of the Atlantis config file `atlantis.yaml`
+    # Supports absolute and relative paths
+    # All the intermediate folders will be created automatically (e.g. `path: /config/atlantis/atlantis.yaml`)
+    # Can be overridden on the command line by using `--output-path` command-line argument in `atmos atlantis generate repo-config` command
+    # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to `stdout`
+    # On Linux/macOS, you can also use `--output-path=/dev/stdout` to dump the content to `stdout` without setting it to an empty string in `atlantis.path`
+    path: "atlantis.yaml"
+
+    # Config templates
+    # Select a template by using the `--config-template <config_template>` command-line argument in `atmos atlantis generate repo-config` command
+    config_templates:
+      config-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+
+    # Project templates
+    # Select a template by using the `--project-template <project_template>` command-line argument in `atmos atlantis generate repo-config` command
+    project_templates:
+      project-1:
+        # generate a project entry for each component in every stack
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        dir: "{component-path}"
+        terraform_version: v1.2
+        delete_source_branch_on_merge: true
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/$PROJECT_NAME.tfvars.json"
+          apply_requirements:
+            - "approved"
+
+    # Workflow templates
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
+    # Select a template by using the `--workflow-template <workflow_template>` command-line argument in `atmos atlantis generate repo-config` command
+    workflow_templates:
+      workflow-1:
+        plan:
+          steps:
+            - run: terraform init -input=false
+            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
+            - run: terraform workspace select $WORKSPACE
+            # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE

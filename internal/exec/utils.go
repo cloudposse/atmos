@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.)
+	// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.).
 	// These flags get removed from the arg list after atmos uses them so the underlying tool does not get passed a flag it doesn't accept.
 	commonFlags = []string{
 		"--stack",
