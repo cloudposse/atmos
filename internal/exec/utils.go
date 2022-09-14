@@ -109,9 +109,12 @@ func FindComponentConfig(
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
+
+	// Find base component
 	if baseComponentName, ok = componentSection["component"].(string); !ok {
 		baseComponentName = ""
 	}
+
 	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
 		componentMetadata = componentMetadataSection.(map[any]any)
 		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
@@ -124,6 +127,7 @@ func FindComponentConfig(
 		}
 	}
 
+	// If `component` or `metadata.component` is the same as the atmos component, the atmos component does not have a base component
 	if component == baseComponentName {
 		baseComponentName = ""
 	}

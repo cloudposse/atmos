@@ -270,7 +270,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 					spaceliftConfig["metadata"] = componentMetadata
 
-					// workspace
+					// Terraform workspace
 					workspace, err := e.BuildTerraformWorkspace(
 						stackName,
 						stackNamePattern,

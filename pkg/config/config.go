@@ -1,8 +1,6 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -18,44 +16,6 @@ import (
 )
 
 var (
-	// Default values
-	defaultConfig = Configuration{
-		BasePath: "",
-		Components: Components{
-			Terraform: Terraform{
-				BasePath:                "components/terraform",
-				ApplyAutoApprove:        false,
-				DeployRunInit:           true,
-				InitRunReconfigure:      true,
-				AutoGenerateBackendFile: false,
-			},
-			Helmfile: Helmfile{
-				BasePath:              "components/helmfile",
-				KubeconfigPath:        "/dev/shm",
-				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
-				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
-			},
-		},
-		Stacks: Stacks{
-			BasePath: "stacks",
-			IncludedPaths: []string{
-				"**/*",
-			},
-			ExcludedPaths: []string{
-				"globals/**/*",
-				"catalog/**/*",
-				"**/*globals*",
-			},
-		},
-		Workflows: Workflows{
-			BasePath: "workflows",
-		},
-		Logs: Logs{
-			Verbose: false,
-			Colors:  true,
-		},
-	}
-
 	// Config is the CLI configuration structure
 	Config Configuration
 
@@ -92,17 +52,6 @@ func InitConfig() error {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
-
-	// Add default config
-	j, err := json.Marshal(defaultConfig)
-	if err != nil {
-		return err
-	}
-	reader := bytes.NewReader(j)
-	err = v.MergeConfig(reader)
-	if err != nil {
-		return err
-	}
 
 	// Process config in system folder
 	configFilePath1 := ""
