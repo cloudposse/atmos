@@ -126,7 +126,9 @@ func InitConfig() error {
 	}
 
 	if !configFound {
-		return errors.New("\nno CLI config files 'atmos.yaml' found in any of the searched paths: system dir, home dir, current dir, ENV vars")
+		return errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+			"\nYou can download a sample config and adapt it to your requirements from " +
+			"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/complete/atmos.yaml")
 	}
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
