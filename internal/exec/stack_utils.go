@@ -42,3 +42,39 @@ func BuildTerraformWorkspace(
 
 	return strings.Replace(workspace, "/", "-", -1), nil
 }
+
+// ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether the component is real or abstract
+func ProcessComponentMetadata(
+	component string,
+	componentSection map[string]any,
+) (map[any]any, string, bool) {
+	baseComponentName := ""
+	componentIsAbstract := false
+	var componentMetadata map[any]any
+
+	// Find base component in the `component` attribute
+	if base, ok := componentSection["component"].(string); ok {
+		baseComponentName = base
+	}
+
+	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
+		componentMetadata = componentMetadataSection.(map[any]any)
+		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
+			if componentMetadataType == "abstract" {
+				componentIsAbstract = true
+			}
+		}
+		// Find base component in the `metadata.component` attribute
+		// `metadata.component` overrides `component`
+		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
+			baseComponentName = componentMetadataComponent
+		}
+	}
+
+	// If `component` or `metadata.component` is the same as the atmos component, the atmos component does not have a base component
+	if component == baseComponentName {
+		baseComponentName = ""
+	}
+
+	return componentMetadata, baseComponentName, componentIsAbstract
+}

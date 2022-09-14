@@ -206,21 +206,11 @@ func TransformStackConfigToSpaceliftStacks(
 						componentInheritance = i.([]string)
 					}
 
-					// Process base component
-					// Base component can be specified in two places:
-					// `component` attribute (legacy)
-					// `metadata.component` attribute
-					// `metadata.component` takes precedence over `component`
-					baseComponentName := ""
-					if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
-						baseComponentName = baseComponent.(string)
-					}
-					// First check if component's `metadata` section exists
-					// Then check if `metadata.component` exists
-					if componentMetadata, componentMetadataExists := componentMap["metadata"].(map[any]any); componentMetadataExists {
-						if componentFromMetadata, componentFromMetadataExists := componentMetadata["component"].(string); componentFromMetadataExists {
-							baseComponentName = componentFromMetadata
-						}
+					// Process component metadata and find a base component (if any) and whether the component is real or abstract
+					componentMetadata, baseComponentName, componentIsAbstract := e.ProcessComponentMetadata(component, componentMap)
+
+					if componentIsAbstract {
+						continue
 					}
 
 					context := c.GetContextFromVars(componentVars)
@@ -249,6 +239,7 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
 					spaceliftConfig["base_component"] = baseComponentName
+					spaceliftConfig["metadata"] = componentMetadata
 
 					// backend
 					backendTypeName := ""
@@ -263,14 +254,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 					spaceliftConfig["backend"] = componentBackend
 
-					// metadata
-					componentMetadata := map[any]any{}
-					if i, ok2 := componentMap["metadata"]; ok2 {
-						componentMetadata = i.(map[any]any)
-					}
-					spaceliftConfig["metadata"] = componentMetadata
-
-					// workspace
+					// Terraform workspace
 					workspace, err := e.BuildTerraformWorkspace(
 						stackName,
 						stackNamePattern,

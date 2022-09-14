@@ -1,8 +1,6 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -18,44 +16,6 @@ import (
 )
 
 var (
-	// Default values
-	defaultConfig = Configuration{
-		BasePath: "",
-		Components: Components{
-			Terraform: Terraform{
-				BasePath:                "components/terraform",
-				ApplyAutoApprove:        false,
-				DeployRunInit:           true,
-				InitRunReconfigure:      true,
-				AutoGenerateBackendFile: false,
-			},
-			Helmfile: Helmfile{
-				BasePath:              "components/helmfile",
-				KubeconfigPath:        "/dev/shm",
-				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
-				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
-			},
-		},
-		Stacks: Stacks{
-			BasePath: "stacks",
-			IncludedPaths: []string{
-				"**/*",
-			},
-			ExcludedPaths: []string{
-				"globals/**/*",
-				"catalog/**/*",
-				"**/*globals*",
-			},
-		},
-		Workflows: Workflows{
-			BasePath: "workflows",
-		},
-		Logs: Logs{
-			Verbose: false,
-			Colors:  true,
-		},
-	}
-
 	// Config is the CLI configuration structure
 	Config Configuration
 
@@ -84,25 +44,17 @@ func InitConfig() error {
 	}
 
 	if g.LogVerbose {
-		u.PrintInfo("\nProcessing and merging configurations in the following order:")
+		u.PrintInfo("\nSearching, processing and merging atmos CLI configurations (atmos.yaml) in the following order:")
 		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments")
 		fmt.Println()
 	}
 
+	configFound := false
+	var found bool
+
 	v := viper.New()
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
-
-	// Add default config
-	j, err := json.Marshal(defaultConfig)
-	if err != nil {
-		return err
-	}
-	reader := bytes.NewReader(j)
-	err = v.MergeConfig(reader)
-	if err != nil {
-		return err
-	}
 
 	// Process config in system folder
 	configFilePath1 := ""
@@ -122,9 +74,12 @@ func InitConfig() error {
 
 	if len(configFilePath1) > 0 {
 		configFile1 := path.Join(configFilePath1, g.ConfigFileName)
-		err = processConfigFile(configFile1, v)
+		found, err = processConfigFile(configFile1, v)
 		if err != nil {
 			return err
+		}
+		if found {
+			configFound = true
 		}
 	}
 
@@ -134,9 +89,12 @@ func InitConfig() error {
 		return err
 	}
 	configFile2 := path.Join(configFilePath2, ".atmos", g.ConfigFileName)
-	err = processConfigFile(configFile2, v)
+	found, err = processConfigFile(configFile2, v)
 	if err != nil {
 		return err
+	}
+	if found {
+		configFound = true
 	}
 
 	// Process config in the current dir
@@ -145,9 +103,12 @@ func InitConfig() error {
 		return err
 	}
 	configFile3 := path.Join(configFilePath3, g.ConfigFileName)
-	err = processConfigFile(configFile3, v)
+	found, err = processConfigFile(configFile3, v)
 	if err != nil {
 		return err
+	}
+	if found {
+		configFound = true
 	}
 
 	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
@@ -155,10 +116,19 @@ func InitConfig() error {
 	if len(configFilePath4) > 0 {
 		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
 		configFile4 := path.Join(configFilePath4, g.ConfigFileName)
-		err = processConfigFile(configFile4, v)
+		found, err = processConfigFile(configFile4, v)
 		if err != nil {
 			return err
 		}
+		if found {
+			configFound = true
+		}
+	}
+
+	if !configFound {
+		return errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+			"\nYou can download a sample config and adapt it to your requirements from " +
+			"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/complete/atmos.yaml")
 	}
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
@@ -359,17 +329,17 @@ func ProcessConfigForSpacelift() error {
 // https://github.com/NCAR/go-figure
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func processConfigFile(path string, v *viper.Viper) error {
+func processConfigFile(path string, v *viper.Viper) (bool, error) {
 	if !u.FileExists(path) {
 		u.PrintInfoVerbose(fmt.Sprintf("No config file atmos.yaml found in path '%s'.", path))
-		return nil
+		return false, nil
 	}
 
 	u.PrintInfoVerbose(fmt.Sprintf("Found CLI config in '%s'", path))
 
 	reader, err := os.Open(path)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	defer func(reader *os.File) {
@@ -381,10 +351,10 @@ func processConfigFile(path string, v *viper.Viper) error {
 
 	err = v.MergeConfig(reader)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	u.PrintInfoVerbose(fmt.Sprintf("Processed CLI config '%s'", path))
 
-	return nil
+	return true, nil
 }

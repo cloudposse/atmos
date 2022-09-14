@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.)
+	// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.).
 	// These flags get removed from the arg list after atmos uses them so the underlying tool does not get passed a flag it doesn't accept.
 	commonFlags = []string{
 		"--stack",
@@ -63,11 +63,8 @@ func FindComponentConfig(
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
 	var componentBackendType string
-	var baseComponentName string
 	var command string
 	var componentInheritanceChain []string
-	var componentIsAbstract bool
-	var componentMetadata map[any]any
 	var ok bool
 
 	if len(stack) == 0 {
@@ -109,24 +106,9 @@ func FindComponentConfig(
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
-	if baseComponentName, ok = componentSection["component"].(string); !ok {
-		baseComponentName = ""
-	}
-	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
-		componentMetadata = componentMetadataSection.(map[any]any)
-		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
-			if componentMetadataType == "abstract" {
-				componentIsAbstract = true
-			}
-		}
-		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
-			baseComponentName = componentMetadataComponent
-		}
-	}
 
-	if component == baseComponentName {
-		baseComponentName = ""
-	}
+	// Process component metadata and find a base component (if any) and whether the component is real or abstract
+	componentMetadata, baseComponentName, componentIsAbstract := ProcessComponentMetadata(component, componentSection)
 
 	return componentSection,
 		componentVarsSection,
