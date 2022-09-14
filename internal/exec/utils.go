@@ -63,11 +63,8 @@ func FindComponentConfig(
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
 	var componentBackendType string
-	var baseComponentName string
 	var command string
 	var componentInheritanceChain []string
-	var componentIsAbstract bool
-	var componentMetadata map[any]any
 	var ok bool
 
 	if len(stack) == 0 {
@@ -110,27 +107,8 @@ func FindComponentConfig(
 		componentInheritanceChain = []string{}
 	}
 
-	// Find base component
-	if baseComponentName, ok = componentSection["component"].(string); !ok {
-		baseComponentName = ""
-	}
-
-	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
-		componentMetadata = componentMetadataSection.(map[any]any)
-		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
-			if componentMetadataType == "abstract" {
-				componentIsAbstract = true
-			}
-		}
-		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
-			baseComponentName = componentMetadataComponent
-		}
-	}
-
-	// If `component` or `metadata.component` is the same as the atmos component, the atmos component does not have a base component
-	if component == baseComponentName {
-		baseComponentName = ""
-	}
+	// Process component metadata and find a base component (if any) and whether the component is real or abstract
+	componentMetadata, baseComponentName, componentIsAbstract := ProcessComponentMetadata(component, componentSection)
 
 	return componentSection,
 		componentVarsSection,
