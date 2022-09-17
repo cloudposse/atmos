@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// terraformCmd represents the base command for all terraform sub-commands
+// helmfileCmd represents the base command for all terraform sub-commands
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
 	Short:              "Execute 'helmfile' commands",
