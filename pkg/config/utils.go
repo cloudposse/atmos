@@ -35,7 +35,7 @@ func FindAllStackConfigsInPathsForStack(
 		// Find all matches in the glob
 		matches, err := u.GetGlobMatches(pathWithExt)
 		if err != nil || len(matches) == 0 {
-			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
+			// Retry (b/c we are using `doublestar` library, and it sometimes has issues reading many files in a Docker container)
 			// TODO: review `doublestar` library
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
@@ -113,7 +113,7 @@ func FindAllStackConfigsInPaths(
 		// Find all matches in the glob
 		matches, err := u.GetGlobMatches(pathWithExt)
 		if err != nil || len(matches) == 0 {
-			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
+			// Retry (b/c we are using `doublestar` library, and it sometimes has issues reading many files in a Docker container)
 			// TODO: review `doublestar` library
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
@@ -458,7 +458,14 @@ func ReplaceContextTokens(context Context, pattern string) string {
 }
 
 // GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern
-func GetStackNameFromContextAndStackNamePattern(tenant string, environment string, stage string, stackNamePattern string) (string, error) {
+func GetStackNameFromContextAndStackNamePattern(
+	namespace string,
+	tenant string,
+	environment string,
+	stage string,
+	stackNamePattern string,
+) (string, error) {
+
 	if len(stackNamePattern) == 0 {
 		return "",
 			fmt.Errorf("stack name pattern must be provided")
@@ -468,7 +475,16 @@ func GetStackNameFromContextAndStackNamePattern(tenant string, environment strin
 	stackNamePatternParts := strings.Split(stackNamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
-		if part == "{tenant}" {
+		if part == "{namespace}" {
+			if len(namespace) == 0 {
+				return "", fmt.Errorf("stack name pattern '%s' includes '{namespace}', but namespace is not provided", stackNamePattern)
+			}
+			if len(stack) == 0 {
+				stack = namespace
+			} else {
+				stack = fmt.Sprintf("%s-%s", stack, namespace)
+			}
+		} else if part == "{tenant}" {
 			if len(tenant) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", stackNamePattern)
 			}

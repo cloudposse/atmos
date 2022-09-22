@@ -160,6 +160,7 @@ type AwsEksUpdateKubeconfigContext struct {
 	DryRun      bool
 	Verbose     bool
 	Alias       string
+	Namespace   string
 	Tenant      string
 	Environment string
 	Stage       string
