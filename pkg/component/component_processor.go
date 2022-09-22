@@ -27,8 +27,15 @@ func ProcessComponentInStack(component string, stack string) (map[string]any, er
 	return configAndStacksInfo.ComponentSection, nil
 }
 
-// ProcessComponentFromContext accepts context (tenant, environment, stage) and returns the component configuration in the stack
-func ProcessComponentFromContext(component string, tenant string, environment string, stage string) (map[string]any, error) {
+// ProcessComponentFromContext accepts context (namespace, tenant, environment, stage) and returns the component configuration in the stack
+func ProcessComponentFromContext(
+	component string,
+	namespace string,
+	tenant string,
+	environment string,
+	stage string,
+) (map[string]any, error) {
+
 	err := c.InitConfig()
 	if err != nil {
 		u.PrintErrorToStdError(err)
@@ -41,7 +48,7 @@ func ProcessComponentFromContext(component string, tenant string, environment st
 		return nil, er
 	}
 
-	stack, err := c.GetStackNameFromContextAndStackNamePattern(tenant, environment, stage, c.Config.Stacks.NamePattern)
+	stack, err := c.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, c.Config.Stacks.NamePattern)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err
