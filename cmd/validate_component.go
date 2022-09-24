@@ -10,10 +10,10 @@ import (
 var validateComponentCmd = &cobra.Command{
 	Use:                "component",
 	Short:              "Execute 'validate component' command",
-	Long:               `This command validates atmos components using JsonSchema, OPA or CUE schemas: atmos validate component <component> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>`,
+	Long:               `This command validates a component in a stack using JsonSchema, OPA or CUE schemas: atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteValidateStacks(cmd, args)
+		err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}
@@ -23,10 +23,16 @@ var validateComponentCmd = &cobra.Command{
 func init() {
 	validateComponentCmd.DisableFlagParsing = false
 
-	validateComponentCmd.PersistentFlags().String("schema-path", "", "atmos validate component <component> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
-	validateComponentCmd.PersistentFlags().String("schema-type", "", "atmos validate component <component> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
+	validateComponentCmd.PersistentFlags().StringP("stack", "s", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
+	validateComponentCmd.PersistentFlags().String("schema-path", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
+	validateComponentCmd.PersistentFlags().String("schema-type", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
 
-	err := validateComponentCmd.MarkPersistentFlagRequired("schema-path")
+	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
+	if err != nil {
+		u.PrintErrorToStdErrorAndExit(err)
+	}
+
+	err = validateComponentCmd.MarkPersistentFlagRequired("schema-path")
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
