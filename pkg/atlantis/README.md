@@ -86,8 +86,8 @@ integrations:
           when_modified:
             - "**/*.tf"
             - "varfiles/$PROJECT_NAME.tfvars.json"
-          apply_requirements:
-            - "approved"
+        apply_requirements:
+          - "approved"
 
     # Workflow templates
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
@@ -131,8 +131,8 @@ projects:
       when_modified:
         - '**/*.tf'
         - varfiles/tenant1-ue2-staging-test-test-component-override-3.tfvars.json
-      apply_requirements:
-        - approved
+    apply_requirements:
+      - approved
   - name: tenant1-ue2-staging-infra-vpc
     workspace: tenant1-ue2-staging
     workflow: workflow-1
@@ -144,8 +144,8 @@ projects:
       when_modified:
         - '**/*.tf'
         - varfiles/tenant1-ue2-staging-infra-vpc.tfvars.json
-      apply_requirements:
-        - approved
+    apply_requirements:
+      - approved
 workflows:
   workflow-1:
     apply:
