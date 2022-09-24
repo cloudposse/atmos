@@ -14,6 +14,8 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
 
+	component := args[0]
+
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
@@ -21,14 +23,27 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	component := args[0]
+	schemaPath, err := flags.GetString("schema-path")
+	if err != nil {
+		return err
+	}
 
+	schemaType, err := flags.GetString("schema-type")
+	if err != nil {
+		return err
+	}
+
+	return ExecuteValidateComponent(component, stack, schemaPath, schemaType)
+}
+
+// ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema
+func ExecuteValidateComponent(component string, stack string, schemaPath string, schemaType string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
+	configAndStacksInfo, err := ProcessStacks(configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorVerbose(err)
 		configAndStacksInfo.ComponentType = "helmfile"
