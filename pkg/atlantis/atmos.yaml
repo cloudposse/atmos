@@ -106,8 +106,8 @@ integrations:
           when_modified:
             - "**/*.tf"
             - "varfiles/$PROJECT_NAME.tfvars.json"
-          apply_requirements:
-            - "approved"
+        apply_requirements:
+          - "approved"
 
     # Workflow templates
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands

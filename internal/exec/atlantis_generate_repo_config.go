@@ -195,9 +195,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 					}
 
 					atlantisProjectAutoplanConfig := c.AtlantisProjectAutoplanConfig{
-						Enabled:           projectTemplate.Autoplan.Enabled,
-						ApplyRequirements: projectTemplate.Autoplan.ApplyRequirements,
-						WhenModified:      whenModified,
+						Enabled:      projectTemplate.Autoplan.Enabled,
+						WhenModified: whenModified,
 					}
 
 					atlantisProjectName := c.ReplaceContextTokens(context, projectTemplate.Name)
@@ -210,6 +209,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						TerraformVersion:          projectTemplate.TerraformVersion,
 						DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
 						Autoplan:                  atlantisProjectAutoplanConfig,
+						ApplyRequirements:         projectTemplate.ApplyRequirements,
 					}
 
 					atlantisProjects = append(atlantisProjects, atlantisProject)

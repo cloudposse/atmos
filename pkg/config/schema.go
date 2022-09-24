@@ -265,12 +265,12 @@ type AtlantisProjectConfig struct {
 	TerraformVersion          string                        `yaml:"terraform_version" json:"terraform_version" mapstructure:"terraform_version"`
 	DeleteSourceBranchOnMerge bool                          `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
 	Autoplan                  AtlantisProjectAutoplanConfig `yaml:"autoplan" json:"autoplan" mapstructure:"autoplan"`
+	ApplyRequirements         []string                      `yaml:"apply_requirements" json:"apply_requirements" mapstructure:"apply_requirements"`
 }
 
 type AtlantisProjectAutoplanConfig struct {
-	Enabled           bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	WhenModified      []string `yaml:"when_modified" json:"when_modified" mapstructure:"when_modified"`
-	ApplyRequirements []string `yaml:"apply_requirements" json:"apply_requirements" mapstructure:"apply_requirements"`
+	Enabled      bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	WhenModified []string `yaml:"when_modified" json:"when_modified" mapstructure:"when_modified"`
 }
 
 type AtlantisConfigOutput struct {
