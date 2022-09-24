@@ -99,7 +99,7 @@ integrations:
           steps:
             - run: terraform init -input=false
             # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
-            - run: terraform workspace select $WORKSPACE
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
             # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
             - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
         apply:
@@ -154,7 +154,7 @@ workflows:
     plan:
       steps:
         - run: terraform init -input=false
-        - run: terraform workspace select $WORKSPACE
+        - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
 ```
 
