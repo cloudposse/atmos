@@ -29,7 +29,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 
 	// ProcessConfig processes all the ENV vars and command line arguments
 	// Even if all workflow steps of type `atmos` process the ENV vars by calling InitConfig/ProcessConfig,
-	// we need call it from `atmos workflow` command to take into account the `ATMOS_WORKFLOWS_BASE_PATH` ENV var
+	// we need to call it from `atmos workflow` command to take into account the `ATMOS_WORKFLOWS_BASE_PATH` ENV var
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	err = c.ProcessConfig(configAndStacksInfo, false)
 	if err != nil {

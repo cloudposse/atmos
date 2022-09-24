@@ -255,6 +255,24 @@ func processEnvVars() error {
 		Config.Workflows.BasePath = workflowsBasePath
 	}
 
+	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
+	if len(jsonschemaBasePath) > 0 {
+		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH=%s", jsonschemaBasePath))
+		Config.Schemas.JsonSchema.BasePath = jsonschemaBasePath
+	}
+
+	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
+	if len(opaBasePath) > 0 {
+		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_OPA_BASE_PATH=%s", opaBasePath))
+		Config.Schemas.Opa.BasePath = opaBasePath
+	}
+
+	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
+	if len(cueBasePath) > 0 {
+		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_CUE_BASE_PATH=%s", cueBasePath))
+		Config.Schemas.Cue.BasePath = cueBasePath
+	}
+
 	return nil
 }
 
@@ -319,6 +337,19 @@ func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
 		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
 		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s=%s'", g.InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
 	}
+	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
+		Config.Schemas.JsonSchema.BasePath = configAndStacksInfo.JsonSchemaDir
+		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
+	}
+	if len(configAndStacksInfo.OpaDir) > 0 {
+		Config.Schemas.Opa.BasePath = configAndStacksInfo.OpaDir
+		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
+	}
+	if len(configAndStacksInfo.CueDir) > 0 {
+		Config.Schemas.Cue.BasePath = configAndStacksInfo.CueDir
+		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
+	}
+
 	return nil
 }
 

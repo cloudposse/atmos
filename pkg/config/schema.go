@@ -92,6 +92,9 @@ type ArgsAndFlagsInfo struct {
 	DryRun                  bool
 	SkipInit                bool
 	NeedHelp                bool
+	JsonSchemaDir           string
+	OpaDir                  string
+	CueDir                  string
 }
 
 type ConfigAndStacksInfo struct {
@@ -134,6 +137,9 @@ type ConfigAndStacksInfo struct {
 	ComponentIsAbstract       bool
 	ComponentMetadataSection  map[any]any
 	TerraformWorkspace        string
+	JsonSchemaDir             string
+	OpaDir                    string
+	CueDir                    string
 }
 
 type WorkflowStep struct {

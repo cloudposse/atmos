@@ -17,6 +17,9 @@ const (
 	BasePathFlag         = "--base-path"
 	WorkflowDirFlag      = "--workflows-dir"
 	KubeConfigConfigFlag = "--kubeconfig-path"
+	JsonSchemaDirFlag    = "--schemas-jsonschema-dir"
+	OpaDirFlag           = "--schemas-opa-dir"
+	CueDirFlag           = "--schemas-cue-dir"
 
 	DeployRunInitFlag           = "--deploy-run-init"
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
