@@ -25,7 +25,7 @@ func init() {
 
 	validateComponentCmd.PersistentFlags().StringP("stack", "s", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
 	validateComponentCmd.PersistentFlags().String("schema-path", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
-	validateComponentCmd.PersistentFlags().String("schema-type", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
+	validateComponentCmd.PersistentFlags().String("schema-type", "jsonschema", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
@@ -33,11 +33,6 @@ func init() {
 	}
 
 	err = validateComponentCmd.MarkPersistentFlagRequired("schema-path")
-	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
-	}
-
-	err = validateComponentCmd.MarkPersistentFlagRequired("schema-type")
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
 	}

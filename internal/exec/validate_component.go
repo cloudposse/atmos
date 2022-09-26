@@ -41,6 +41,10 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
 func ExecuteValidateComponent(component string, stack string, schemaPath string, schemaType string) error {
+	if schemaType == "" {
+		schemaType = "jsonschema"
+	}
+
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
 		return fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema, opa, cue", schemaType)
 	}
