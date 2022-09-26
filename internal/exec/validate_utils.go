@@ -1,8 +1,10 @@
 package exec
 
 import (
-	"github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/pkg/errors"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 // ValidateWithJsonSchema validates the data structure using the provided JSON Schema document
@@ -35,5 +37,5 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) error {
 // ValidateWithCue validates the data structure using the provided CUE schema document
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
 func ValidateWithCue(data any, schemaName string, schemaText string) error {
-	return nil
+	return errors.New("validation using CUE is not implemented yet")
 }

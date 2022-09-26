@@ -46,7 +46,7 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 	}
 
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema, opa, cue", schemaType)
+		return fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema (default), opa, cue", schemaType)
 	}
 
 	var configAndStacksInfo c.ConfigAndStacksInfo
