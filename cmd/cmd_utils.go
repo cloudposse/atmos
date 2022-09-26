@@ -17,15 +17,15 @@ var (
 	// All custom top-level commands will be checked against this map in order to not override `atmos` top-level commands,
 	// but just add subcommands to them
 	existingTopLevelCommands = map[string]*cobra.Command{
-		"terraform": terraformCmd,
-		"helmfile":  helmfileCmd,
-		"describe":  describeCmd,
+		"atlantis":  atlantisCmd,
 		"aws":       awsCmd,
+		"describe":  describeCmd,
+		"helmfile":  helmfileCmd,
+		"terraform": terraformCmd,
 		"validate":  validateCmd,
 		"vendor":    vendorCmd,
-		"workflow":  workflowCmd,
 		"version":   versionCmd,
-		"atlantis":  atlantisCmd,
+		"workflow":  workflowCmd,
 	}
 )
 
