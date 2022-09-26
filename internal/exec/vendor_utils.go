@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strconv"
@@ -107,7 +106,7 @@ func ReadAndProcessComponentConfigFile(component string, componentType string) (
 		return componentConfig, "", fmt.Errorf("vendor config file '%s' does not exist in the '%s' folder", componentConfigFileName, componentPath)
 	}
 
-	componentConfigFileContent, err := ioutil.ReadFile(componentConfigFile)
+	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
 	if err != nil {
 		return componentConfig, "", err
 	}

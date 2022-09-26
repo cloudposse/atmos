@@ -2,18 +2,19 @@ package exec
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"os"
+	"path"
+
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
-	"github.com/santhosh-tekuri/jsonschema/v5"
-	"github.com/spf13/cobra"
-	"strings"
 )
 
 // ExecuteValidateComponentCmd executes `validate component` command
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `component`")
+		return errors.New("invalid arguments. The command requires one argument 'component'")
 	}
 
 	component := args[0]
@@ -34,15 +35,16 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema, opa, cue", schemaType)
-	}
 
 	return ExecuteValidateComponent(component, stack, schemaPath, schemaType)
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
 func ExecuteValidateComponent(component string, stack string, schemaPath string, schemaType string) error {
+	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
+		return fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema, opa, cue", schemaType)
+	}
+
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -58,42 +60,54 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 		}
 	}
 
-	fmt.Println()
-	err = u.PrintAsYAML(configAndStacksInfo.ComponentSection)
+	// Check if the file pointed to by 'schemaPath' exists.
+	// If not, join it with the schemas `base_path` from the CLI config
+	var filePath string
+	if u.FileExists(schemaPath) {
+		filePath = schemaPath
+	} else {
+		switch schemaType {
+		case "jsonschema":
+			{
+				filePath = path.Join(c.Config.BasePath, c.Config.Schemas.JsonSchema.BasePath, schemaPath)
+			}
+		case "opa":
+			{
+				filePath = path.Join(c.Config.BasePath, c.Config.Schemas.Opa.BasePath, schemaPath)
+			}
+		case "cue":
+			{
+				filePath = path.Join(c.Config.BasePath, c.Config.Schemas.Cue.BasePath, schemaPath)
+			}
+		}
+
+		if !u.FileExists(filePath) {
+			return fmt.Errorf("the schema file 'schema-path=%s' does not exist", schemaPath)
+		}
+	}
+
+	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
 
-	return nil
-}
+	schemaText := string(fileContent)
+	componentSection := configAndStacksInfo.ComponentSection
 
-// validateWithJsonSchema validates the data structure using the provided JSON Schema document
-// https://github.com/santhosh-tekuri/jsonschema
-// https://go.dev/play/p/Hhax3MrtD8r
-func validateWithJsonSchema(data any, schemaText string) error {
-	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("schema.json", strings.NewReader(schemaText)); err != nil {
-		return err
+	switch schemaType {
+	case "jsonschema":
+		{
+			return ValidateWithJsonSchema(componentSection, filePath, schemaText)
+		}
+	case "opa":
+		{
+			return ValidateWithOpa(componentSection, filePath, schemaText)
+		}
+	case "cue":
+		{
+			return ValidateWithCue(componentSection, filePath, schemaText)
+		}
 	}
 
-	schema, err := compiler.Compile("schema.json")
-	if err != nil {
-		return err
-	}
-
-	if err = schema.Validate(data); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// validateWithOpa validates the data structure using the provided OPA schema document
-func validateWithOpa(data any, schemaText string) error {
-	return nil
-}
-
-// validateWithCue validates the data structure using the provided CUE schema document
-func validateWithCue(data any, schemaText string) error {
 	return nil
 }
