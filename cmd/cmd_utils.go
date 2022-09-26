@@ -25,6 +25,7 @@ var (
 		"vendor":    vendorCmd,
 		"workflow":  workflowCmd,
 		"version":   versionCmd,
+		"atlantis":  atlantisCmd,
 	}
 )
 

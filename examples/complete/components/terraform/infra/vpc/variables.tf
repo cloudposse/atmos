@@ -58,3 +58,37 @@ variable "max_subnet_count" {
   default     = 0
   description = "Sets the maximum amount of subnets to deploy. 0 will deploy a subnet for every provided availability zone (in `region_availability_zones` variable) within the region"
 }
+
+variable "instance_tenancy" {
+  type        = string
+  description = "A tenancy option for instances launched into the VPC"
+  default     = "default"
+  validation {
+    condition     = contains(["default", "dedicated", "host"], var.instance_tenancy)
+    error_message = "Instance tenancy must be one of \"default\", \"dedicated\", or \"host\"."
+  }
+}
+
+variable "dns_hostnames_enabled" {
+  type        = bool
+  description = "A boolean flag to enable/disable DNS hostnames in the VPC"
+  default     = true
+}
+
+variable "dns_support_enabled" {
+  type        = bool
+  description = "A boolean flag to enable/disable DNS support in the VPC"
+  default     = true
+}
+
+variable "classiclink_enabled" {
+  type        = bool
+  description = "A boolean flag to enable/disable ClassicLink for the VPC"
+  default     = false
+}
+
+variable "classiclink_dns_support_enabled" {
+  type        = bool
+  description = "A boolean flag to enable/disable ClassicLink DNS Support for the VPC"
+  default     = false
+}
