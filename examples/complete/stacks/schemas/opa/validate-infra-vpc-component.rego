@@ -1,14 +1,7 @@
 package validate
 
-contains(list, elem) {
-  list[_] = elem
-}
+default allow := false
 
-denied_resources := [
-  "xxxxxx",
-]
-
-deny[sprintf("Must not create: %s", [resource])] {
-  some resource
-  contains(denied_resources, resource)
+allow {
+    input.vars.tenant == "tenant1"
 }
