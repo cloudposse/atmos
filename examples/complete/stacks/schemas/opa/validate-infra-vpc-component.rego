@@ -1,6 +1,6 @@
 package validate
 
-default allow = true
+default allow := true
 
 # In production, don't allow mapping public IPs on launch
 deny_map_public_ip_on_launch_in_prod {
@@ -9,6 +9,6 @@ deny_map_public_ip_on_launch_in_prod {
 }
 
 # 'atmos' looks for the 'allow' output from all OPA policies
-allow = false {
+allow := false {
     deny_map_public_ip_on_launch_in_prod
 }
