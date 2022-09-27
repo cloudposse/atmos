@@ -8,7 +8,8 @@ import (
 )
 
 func TestValidateComponent(t *testing.T) {
-	err := e.ExecuteValidateComponent("infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
+	_, msg, err := e.ExecuteValidateComponent("infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
 	u.PrintError(err)
 	assert.Nil(t, err)
+	u.PrintMessage(msg)
 }

@@ -41,7 +41,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println(msg)
+	u.PrintMessage(msg)
 	return nil
 }
 
