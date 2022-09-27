@@ -36,17 +36,23 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return ExecuteValidateComponent(component, stack, schemaPath, schemaType)
+	res, err := ExecuteValidateComponent(component, stack, schemaPath, schemaType)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(res)
+	return nil
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponent(component string, stack string, schemaPath string, schemaType string) error {
+func ExecuteValidateComponent(component string, stack string, schemaPath string, schemaType string) (string, error) {
 	if schemaType == "" {
 		schemaType = "jsonschema"
 	}
 
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema (default), opa, cue", schemaType)
+		return "", fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema (default), opa, cue", schemaType)
 	}
 
 	var configAndStacksInfo c.ConfigAndStacksInfo
@@ -60,7 +66,7 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
@@ -86,13 +92,13 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 		}
 
 		if !u.FileExists(filePath) {
-			return fmt.Errorf("the schema file 'schema-path=%s' does not exist", schemaPath)
+			return "", fmt.Errorf("the file '%s' does not exist", schemaPath)
 		}
 	}
 
 	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	schemaText := string(fileContent)
@@ -113,5 +119,5 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 		}
 	}
 
-	return nil
+	return "", nil
 }
