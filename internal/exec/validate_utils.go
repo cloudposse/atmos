@@ -17,17 +17,17 @@ import (
 // ValidateWithJsonSchema validates the data structure using the provided JSON Schema document
 // https://github.com/santhosh-tekuri/jsonschema
 // https://go.dev/play/p/Hhax3MrtD8r
-func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (string, error) {
+func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (bool, string, error) {
 	compiler := jsonschema.NewCompiler()
 	if err := compiler.AddResource(schemaName, strings.NewReader(schemaText)); err != nil {
-		return "", err
+		return false, "", err
 	}
 
 	compiler.Draft = jsonschema.Draft2020
 
 	schema, err := compiler.Compile(schemaName)
 	if err != nil {
-		return "", err
+		return false, "", err
 	}
 
 	if err = schema.Validate(data); err != nil {
@@ -35,31 +35,31 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (str
 		case *jsonschema.ValidationError:
 			b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 			if err2 != nil {
-				return "", err2
+				return false, "", err2
 			}
-			return "", errors.New(string(b))
+			return false, string(b), nil
 		default:
-			return "", err
+			return false, "", err
 		}
 	}
 
-	return "{\"valid\": true}", nil
+	return true, `{"valid": true}`, nil
 }
 
 // ValidateWithOpa validates the data structure using the provided OPA document
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
-func ValidateWithOpa(data any, schemaName string, schemaText string) (string, error) {
+func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, string, error) {
 	// The OPA SDK does not support map[any]any data types (which can be part of 'data' input)
 	// ast: interface conversion: json: unsupported type: map[interface {}]interface {}
 	// Convert the data to JSON and back to Go map
 	dataJson, err := u.ConvertToJSONFast(data)
 	if err != nil {
-		return "", err
+		return false, "", err
 	}
 
 	dataFromJson, err := u.ConvertFromJSON(dataJson)
 	if err != nil {
-		return "", err
+		return false, "", err
 	}
 
 	ctx := context.Background()
@@ -70,7 +70,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (string, er
 	// Create a bundle server
 	server, err := opaTestServer.NewServer(opaTestServer.MockBundle(bundleSchemaName, map[string]string{schemaName: schemaText}))
 	if err != nil {
-		return "", err
+		return false, "", err
 	}
 
 	defer server.Stop()
@@ -97,7 +97,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (string, er
 		Config: bytes.NewReader(config),
 	})
 	if err != nil {
-		return "", err
+		return false, "", err
 	}
 
 	defer opa.Stop(ctx)
@@ -108,14 +108,19 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (string, er
 		Path:  "/validate/allow",
 		Input: dataFromJson,
 	}); err != nil {
-		return "", err
+		return false, "", err
 	}
 
-	return fmt.Sprintf("%v", result.Result), nil
+	res := true
+	if decision, ok := result.Result.(bool); !ok || !decision {
+		res = false
+	}
+
+	return res, fmt.Sprintf(`{"allow": %v}`, res), nil
 }
 
 // ValidateWithCue validates the data structure using the provided CUE document
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
-func ValidateWithCue(data any, schemaName string, schemaText string) (string, error) {
-	return "", errors.New("validation using CUE is not implemented yet")
+func ValidateWithCue(data any, schemaName string, schemaText string) (bool, string, error) {
+	return false, "", errors.New("validation using CUE is not implemented yet")
 }
