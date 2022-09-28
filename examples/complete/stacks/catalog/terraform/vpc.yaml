@@ -1,12 +1,23 @@
 components:
   terraform:
     "infra/vpc":
+      metadata:
+        component: infra/vpc
       backend:
         s3:
           workspace_key_prefix: infra-vpc
       settings:
         spacelift:
           workspace_enabled: true
+        validation:
+          validate-infra-vpc-component:
+            schema_type: jsonschema
+            schema_path: validate-infra-vpc-component.json
+            description: Validate infra/vpc component variables using JSON Schema
+          check-infra-vpc-component:
+            schema_type: opa
+            schema_path: validate-infra-vpc-component.rego
+            description: Check infra/vpc component configuration using OPA policy
       vars:
         enabled: true
         name: "common"

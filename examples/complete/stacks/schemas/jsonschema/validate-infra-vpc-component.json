@@ -18,6 +18,7 @@
           "type": "boolean"
         }
       },
+      "additionalProperties": true,
       "required": [
         "region",
         "cidr_block",
