@@ -2,13 +2,12 @@ package exec
 
 import (
 	"fmt"
+	c "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"os"
 	"path"
-
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteValidateComponentCmd executes `validate component` command
@@ -104,20 +103,25 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 	schemaText := string(fileContent)
 	componentSection := configAndStacksInfo.ComponentSection
 
+	return ValidateComponentData(componentSection, schemaType, filePath, schemaText)
+}
+
+// ValidateComponentData validates the component data using the provided schema document
+func ValidateComponentData(data any, schemaType string, schemaName string, schemaText string) (bool, string, error) {
 	switch schemaType {
 	case "jsonschema":
 		{
-			return ValidateWithJsonSchema(componentSection, filePath, schemaText)
+			return ValidateWithJsonSchema(data, schemaName, schemaText)
 		}
 	case "opa":
 		{
-			return ValidateWithOpa(componentSection, filePath, schemaText)
+			return ValidateWithOpa(data, schemaName, schemaText)
 		}
 	case "cue":
 		{
-			return ValidateWithCue(componentSection, filePath, schemaText)
+			return ValidateWithCue(data, schemaName, schemaText)
 		}
 	}
 
-	return false, "", nil
+	return false, "", fmt.Errorf("invalid 'schema type '%s'. Supported values: jsonschema (default), opa, cue", schemaType)
 }

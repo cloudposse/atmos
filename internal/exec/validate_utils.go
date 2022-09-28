@@ -118,7 +118,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, stri
 	var result *sdk.DecisionResult
 	// Get the named policy decision for the specified input
 	if result, err = opa.Decision(ctx, sdk.DecisionOptions{
-		Path:  "/validate/allow",
+		Path:  "/atmos/allow",
 		Input: dataFromJson,
 	}); err != nil {
 		return false, "", err

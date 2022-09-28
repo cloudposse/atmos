@@ -6,8 +6,8 @@
 # https://github.com/open-policy-agent/opa/issues/2104
 # https://www.fugue.co/blog/5-tips-for-using-the-rego-language-for-open-policy-agent-opa
 
-# 'package validate' is required in all `atmos` OPA policies
-package validate
+# 'package atmos' is required in all `atmos` OPA policies
+package atmos
 
 default allow := true
 

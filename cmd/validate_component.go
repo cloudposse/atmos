@@ -32,10 +32,5 @@ func init() {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
 
-	err = validateComponentCmd.MarkPersistentFlagRequired("schema-path")
-	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
-	}
-
 	validateCmd.AddCommand(validateComponentCmd)
 }
