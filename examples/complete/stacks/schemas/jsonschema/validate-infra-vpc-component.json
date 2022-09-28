@@ -1,3 +1,28 @@
 {
-
+  "$id": "infra-vpc-component",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "infra/vpc component validation",
+  "description": "JSON Schema for infra/vpc atmos component.",
+  "type": "object",
+  "properties": {
+    "vars": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "cidr_block": {
+          "type": "string"
+        },
+        "map_public_ip_on_launch": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "region",
+        "cidr_block",
+        "map_public_ip_on_launch"
+      ]
+    }
+  }
 }

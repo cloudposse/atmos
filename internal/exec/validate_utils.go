@@ -18,6 +18,18 @@ import (
 // https://github.com/santhosh-tekuri/jsonschema
 // https://go.dev/play/p/Hhax3MrtD8r
 func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (bool, string, error) {
+	// Convert the data to JSON and back to Go map to prevent the error:
+	// jsonschema: invalid jsonType: map[interface {}]interface {}
+	dataJson, err := u.ConvertToJSONFast(data)
+	if err != nil {
+		return false, "", err
+	}
+
+	dataFromJson, err := u.ConvertFromJSON(dataJson)
+	if err != nil {
+		return false, "", err
+	}
+
 	compiler := jsonschema.NewCompiler()
 	if err := compiler.AddResource(schemaName, strings.NewReader(schemaText)); err != nil {
 		return false, "", err
@@ -30,10 +42,10 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 		return false, "", err
 	}
 
-	if err = schema.Validate(data); err != nil {
+	if err = schema.Validate(dataFromJson); err != nil {
 		switch e := err.(type) {
 		case *jsonschema.ValidationError:
-			b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
+			b, err2 := json.MarshalIndent(e.DetailedOutput(), "", "  ")
 			if err2 != nil {
 				return false, "", err2
 			}
@@ -43,7 +55,8 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 		}
 	}
 
-	return true, `{"valid": true}`, nil
+	validResponse := `{ "valid": true }`
+	return true, validResponse, nil
 }
 
 // ValidateWithOpa validates the data structure using the provided OPA document
@@ -116,7 +129,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, stri
 		res = false
 	}
 
-	return res, fmt.Sprintf(`{"allow": %v}`, res), nil
+	return res, fmt.Sprintf(`{ "allow": %v }`, res), nil
 }
 
 // ValidateWithCue validates the data structure using the provided CUE document
