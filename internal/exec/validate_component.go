@@ -103,23 +103,23 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 	schemaText := string(fileContent)
 	componentSection := configAndStacksInfo.ComponentSection
 
-	return ValidateComponentData(componentSection, schemaType, filePath, schemaText)
+	return ValidateComponentConfig(componentSection, schemaType, filePath, schemaText)
 }
 
-// ValidateComponentData validates the component data using the provided schema document
-func ValidateComponentData(data any, schemaType string, schemaName string, schemaText string) (bool, string, error) {
+// ValidateComponentConfig validates the component configuration using the provided schema document
+func ValidateComponentConfig(componentConfig any, schemaType string, schemaName string, schemaText string) (bool, string, error) {
 	switch schemaType {
 	case "jsonschema":
 		{
-			return ValidateWithJsonSchema(data, schemaName, schemaText)
+			return ValidateWithJsonSchema(componentConfig, schemaName, schemaText)
 		}
 	case "opa":
 		{
-			return ValidateWithOpa(data, schemaName, schemaText)
+			return ValidateWithOpa(componentConfig, schemaName, schemaText)
 		}
 	case "cue":
 		{
-			return ValidateWithCue(data, schemaName, schemaText)
+			return ValidateWithCue(componentConfig, schemaName, schemaText)
 		}
 	}
 
