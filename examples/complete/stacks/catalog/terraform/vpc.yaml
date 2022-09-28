@@ -9,13 +9,18 @@ components:
       settings:
         spacelift:
           workspace_enabled: true
+        # Validation
+        # Supports JSON Schema and OPA policies
+        # All validation steps must succeed to allow the component to be provisioned
         validation:
-          validate-infra-vpc-component:
+          validate-infra-vpc-component-with-jsonschema:
             schema_type: jsonschema
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.jsonschema.base_path' defined in `atmos.yaml`
             schema_path: validate-infra-vpc-component.json
             description: Validate infra/vpc component variables using JSON Schema
-          check-infra-vpc-component:
+          check-infra-vpc-component-config-with-opa-policy:
             schema_type: opa
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
             schema_path: validate-infra-vpc-component.rego
             description: Check infra/vpc component configuration using OPA policy
       vars:
