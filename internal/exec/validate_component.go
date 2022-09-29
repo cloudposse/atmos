@@ -35,25 +35,21 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, msg, err := ExecuteValidateComponent(component, stack, schemaPath, schemaType)
+	res, msg, err := ExecuteValidateComponent(component, stack, schemaPath, schemaType)
 	if err != nil {
 		return err
 	}
 
-	u.PrintMessage(msg)
+	if res {
+		u.PrintMessage(msg)
+	} else {
+		u.PrintError(errors.New(msg))
+	}
 	return nil
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
 func ExecuteValidateComponent(component string, stack string, schemaPath string, schemaType string) (bool, string, error) {
-	if schemaType == "" {
-		schemaType = "jsonschema"
-	}
-
-	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return false, "", fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema (default), opa, cue", schemaType)
-	}
-
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -67,6 +63,29 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 		if err != nil {
 			return false, "", err
 		}
+	}
+
+	componentSection := configAndStacksInfo.ComponentSection
+	searchForValidationInComponentSettings := false
+
+	if schemaPath == "" {
+		searchForValidationInComponentSettings = true
+	}
+	if schemaType == "" {
+		searchForValidationInComponentSettings = true
+	}
+
+	if searchForValidationInComponentSettings {
+
+	}
+
+	return ExecuteValidateComponentSection(componentSection, schemaPath, schemaType)
+}
+
+// ExecuteValidateComponentSection validates the component config using JsonSchema, OPA or CUE schema documents
+func ExecuteValidateComponentSection(componentSection any, schemaPath string, schemaType string) (bool, string, error) {
+	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
+		return false, "", fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema (default), opa, cue", schemaType)
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
@@ -91,7 +110,7 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 		}
 
 		if !u.FileExists(filePath) {
-			return false, "", fmt.Errorf("the file '%s' does not exist", schemaPath)
+			return false, "", fmt.Errorf("the file '%s' does not exist for schema type '%s'", schemaPath, schemaType)
 		}
 	}
 
@@ -101,7 +120,6 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 	}
 
 	schemaText := string(fileContent)
-	componentSection := configAndStacksInfo.ComponentSection
 
 	return ValidateComponentConfig(componentSection, schemaType, filePath, schemaText)
 }
