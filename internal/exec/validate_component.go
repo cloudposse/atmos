@@ -63,12 +63,14 @@ func ExecuteValidateComponent(componentName string, stack string, schemaPath str
 
 	componentSection := configAndStacksInfo.ComponentSection
 
-	return ValidateComponent(componentSection, schemaPath, schemaType)
+	return ValidateComponent(componentName, componentSection, schemaPath, schemaType)
 }
 
 // ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
-func ValidateComponent(componentSection any, schemaPath string, schemaType string) error {
+func ValidateComponent(componentName string, componentSection any, schemaPath string, schemaType string) error {
 	if schemaPath != "" && schemaType != "" {
+		u.PrintInfo(fmt.Sprintf("Validating component '%s' using schema file '%s' of type '%s'", componentName, schemaPath, schemaType))
+
 		err := validateComponentInternal(componentSection, schemaPath, schemaType)
 		if err != nil {
 			return err
@@ -82,6 +84,12 @@ func ValidateComponent(componentSection any, schemaPath string, schemaType strin
 		for _, v := range validations {
 			schemaPath = v.SchemaPath
 			schemaType = v.SchemaType
+
+			if v.Description != "" {
+				u.PrintInfo(v.Description)
+			} else {
+				u.PrintInfo(fmt.Sprintf("Validating component '%s' using schema file '%s' of type '%s'", componentName, schemaPath, schemaType))
+			}
 
 			err = validateComponentInternal(componentSection, schemaPath, schemaType)
 			if err != nil {
@@ -158,6 +166,7 @@ func validateComponentInternal(componentSection any, schemaPath string, schemaTy
 	}
 
 	u.PrintMessage(msg)
+	fmt.Println()
 	return nil
 }
 

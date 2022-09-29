@@ -17,12 +17,12 @@ components:
             schema_type: jsonschema
             # 'schema_path' can be an absolute path or a path relative to 'schemas.jsonschema.base_path' defined in `atmos.yaml`
             schema_path: validate-infra-vpc-component.json
-            description: Validate infra/vpc component variables using JSON Schema
+            description: Validate 'infra/vpc' component variables using JSON Schema
           check-infra-vpc-component-config-with-opa-policy:
             schema_type: opa
             # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
             schema_path: validate-infra-vpc-component.rego
-            description: Check infra/vpc component configuration using OPA policy
+            description: Check 'infra/vpc' component configuration using OPA policy
       vars:
         enabled: true
         name: "common"
