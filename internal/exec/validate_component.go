@@ -4,6 +4,7 @@ import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"os"
@@ -13,10 +14,10 @@ import (
 // ExecuteValidateComponentCmd executes `validate component` command
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument 'component'")
+		return errors.New("invalid arguments. The command requires one argument 'componentName'")
 	}
 
-	component := args[0]
+	componentName := args[0]
 
 	flags := cmd.Flags()
 
@@ -35,23 +36,19 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	res, msg, err := ExecuteValidateComponent(component, stack, schemaPath, schemaType)
+	_, msg, err := ExecuteValidateComponent(componentName, stack, schemaPath, schemaType)
 	if err != nil {
 		return err
 	}
 
-	if res {
-		u.PrintMessage(msg)
-	} else {
-		u.PrintError(errors.New(msg))
-	}
+	u.PrintMessage(msg)
 	return nil
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponent(component string, stack string, schemaPath string, schemaType string) (bool, string, error) {
+func ExecuteValidateComponent(componentName string, stack string, schemaPath string, schemaType string) (bool, string, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
-	configAndStacksInfo.ComponentFromArg = component
+	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
@@ -66,26 +63,26 @@ func ExecuteValidateComponent(component string, stack string, schemaPath string,
 	}
 
 	componentSection := configAndStacksInfo.ComponentSection
-	searchForValidationInComponentSettings := false
 
-	if schemaPath == "" {
-		searchForValidationInComponentSettings = true
+	if schemaPath == "" || schemaType == "" {
+		validations, err := FindValidationSection(componentSection)
+		if err != nil {
+			return false, "", err
+		}
+
+		for _, v := range validations {
+			schemaPath = v.SchemaPath
+			schemaType = v.SchemaType
+		}
 	}
-	if schemaType == "" {
-		searchForValidationInComponentSettings = true
-	}
 
-	if searchForValidationInComponentSettings {
-
-	}
-
-	return ExecuteValidateComponentSection(componentSection, schemaPath, schemaType)
+	return ValidateComponentSection(componentSection, schemaPath, schemaType)
 }
 
-// ExecuteValidateComponentSection validates the component config using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponentSection(componentSection any, schemaPath string, schemaType string) (bool, string, error) {
+// ValidateComponentSection validates the component config using JsonSchema, OPA or CUE schema documents
+func ValidateComponentSection(componentSection any, schemaPath string, schemaType string) (bool, string, error) {
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return false, "", fmt.Errorf("invalid 'schema-type=%s' argument. Supported values: jsonschema (default), opa, cue", schemaType)
+		return false, "", fmt.Errorf("invalid schema type '%s'. Supported values: jsonschema, opa, cue", schemaType)
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
@@ -142,4 +139,24 @@ func ValidateComponentConfig(componentConfig any, schemaType string, schemaName 
 	}
 
 	return false, "", fmt.Errorf("invalid 'schema type '%s'. Supported values: jsonschema (default), opa, cue", schemaType)
+}
+
+// FindValidationSection finds 'validation' section in the component config
+func FindValidationSection(componentSection map[string]any) (c.Validation, error) {
+	validationSection := map[any]any{}
+
+	if i, ok := componentSection["settings"].(map[any]any); ok {
+		if i2, ok2 := i["validation"].(map[any]any); ok2 {
+			validationSection = i2
+		}
+	}
+
+	var result c.Validation
+
+	err := mapstructure.Decode(validationSection, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

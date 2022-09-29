@@ -13,3 +13,10 @@ func TestValidateComponent(t *testing.T) {
 	assert.Nil(t, err)
 	u.PrintMessage(msg)
 }
+
+func TestValidateComponent2(t *testing.T) {
+	_, msg, err := e.ExecuteValidateComponent("infra/vpc", "tenant1-ue2-dev", "", "")
+	u.PrintError(err)
+	assert.Nil(t, err)
+	u.PrintMessage(msg)
+}

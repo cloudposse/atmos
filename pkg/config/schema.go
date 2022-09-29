@@ -311,3 +311,11 @@ type Schemas struct {
 	Cue        Cue        `yaml:"cue" json:"cue" mapstructure:"cue"`
 	Opa        Opa        `yaml:"opa" json:"opa" mapstructure:"opa"`
 }
+
+type ValidationItem struct {
+	SchemaType  string `yaml:"schema_type" json:"schema_type" mapstructure:"schema_type"`
+	SchemaPath  string `yaml:"schema_path" json:"schema_path" mapstructure:"schema_path"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type Validation map[string]ValidationItem
