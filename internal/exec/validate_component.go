@@ -118,23 +118,18 @@ func ValidateComponentSection(componentSection any, schemaPath string, schemaTyp
 
 	schemaText := string(fileContent)
 
-	return ValidateComponentConfig(componentSection, schemaType, filePath, schemaText)
-}
-
-// ValidateComponentConfig validates the component configuration using the provided schema document
-func ValidateComponentConfig(componentConfig any, schemaType string, schemaName string, schemaText string) (bool, string, error) {
 	switch schemaType {
 	case "jsonschema":
 		{
-			return ValidateWithJsonSchema(componentConfig, schemaName, schemaText)
+			return ValidateWithJsonSchema(componentSection, filePath, schemaText)
 		}
 	case "opa":
 		{
-			return ValidateWithOpa(componentConfig, schemaName, schemaText)
+			return ValidateWithOpa(componentSection, filePath, schemaText)
 		}
 	case "cue":
 		{
-			return ValidateWithCue(componentConfig, schemaName, schemaText)
+			return ValidateWithCue(componentSection, filePath, schemaText)
 		}
 	}
 
