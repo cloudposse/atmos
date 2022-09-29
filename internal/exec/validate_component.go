@@ -88,6 +88,7 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 			schemaPath = v.SchemaPath
 			schemaType = v.SchemaType
 
+			fmt.Println()
 			if v.Description != "" {
 				u.PrintInfo(v.Description)
 			} else {
@@ -173,7 +174,6 @@ func validateComponentInternal(componentSection any, schemaPath string, schemaTy
 	}
 
 	u.PrintMessage(msg)
-	fmt.Println()
 	return ok, nil
 }
 

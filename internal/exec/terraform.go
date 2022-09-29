@@ -146,6 +146,26 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Check if component 'settings.validation' section is specified and validate the component
+	valid, err := ValidateComponent(info.ComponentFromArg, info.ComponentSection, "", "")
+	if err != nil {
+		return err
+	}
+	if !valid {
+		validationSection, err := FindValidationSection(info.ComponentSection)
+		if err != nil {
+			return err
+		}
+
+		y, err := u.ConvertToYAML(validationSection)
+		if err != nil {
+			return err
+		}
+
+		return fmt.Errorf("\ncomponent '%s' did not pass the validation policies defined in 'settings.validation' section:\n\n%v",
+			info.ComponentFromArg, y)
+	}
+
 	// Auto generate backend file
 	if c.Config.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := path.Join(
@@ -176,7 +196,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	if info.SkipInit {
 		fmt.Println()
-		u.PrintInfo("Skipping over `terraform init` due to `--skip-init` being passed.")
+		u.PrintInfo("Skipping over 'terraform init' due to '--skip-init' flag being passed")
 		runTerraformInit = false
 	}
 
