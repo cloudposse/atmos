@@ -36,12 +36,11 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, msg, err := ExecuteValidateComponent(componentName, stack, schemaPath, schemaType)
+	_, _, err = ExecuteValidateComponent(componentName, stack, schemaPath, schemaType)
 	if err != nil {
 		return err
 	}
 
-	u.PrintMessage(msg)
 	return nil
 }
 
@@ -64,8 +63,18 @@ func ExecuteValidateComponent(componentName string, stack string, schemaPath str
 
 	componentSection := configAndStacksInfo.ComponentSection
 
+	return ValidateComponent(componentSection, schemaPath, schemaType)
+}
+
+// ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
+func ValidateComponent(componentSection any, schemaPath string, schemaType string) (bool, string, error) {
+	var validations c.Validation
+	var msg string
+	var err error
+	var ok bool
+
 	if schemaPath == "" || schemaType == "" {
-		validations, err := FindValidationSection(componentSection)
+		validations, err = FindValidationSection(componentSection.(map[string]any))
 		if err != nil {
 			return false, "", err
 		}
@@ -76,13 +85,8 @@ func ExecuteValidateComponent(componentName string, stack string, schemaPath str
 		}
 	}
 
-	return ValidateComponentSection(componentSection, schemaPath, schemaType)
-}
-
-// ValidateComponentSection validates the component config using JsonSchema, OPA or CUE schema documents
-func ValidateComponentSection(componentSection any, schemaPath string, schemaType string) (bool, string, error) {
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return false, "", fmt.Errorf("invalid schema type '%s'. Supported values: jsonschema, opa, cue", schemaType)
+		return false, "", fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
@@ -121,19 +125,29 @@ func ValidateComponentSection(componentSection any, schemaPath string, schemaTyp
 	switch schemaType {
 	case "jsonschema":
 		{
-			return ValidateWithJsonSchema(componentSection, filePath, schemaText)
+			ok, msg, err = ValidateWithJsonSchema(componentSection, filePath, schemaText)
+			if err != nil {
+				return false, msg, err
+			}
 		}
 	case "opa":
 		{
-			return ValidateWithOpa(componentSection, filePath, schemaText)
+			ok, msg, err = ValidateWithOpa(componentSection, filePath, schemaText)
+			if err != nil {
+				return false, msg, err
+			}
 		}
 	case "cue":
 		{
-			return ValidateWithCue(componentSection, filePath, schemaText)
+			ok, msg, err = ValidateWithCue(componentSection, filePath, schemaText)
+			if err != nil {
+				return false, msg, err
+			}
 		}
 	}
 
-	return false, "", fmt.Errorf("invalid 'schema type '%s'. Supported values: jsonschema (default), opa, cue", schemaType)
+	u.PrintMessage(msg)
+	return ok, msg, nil
 }
 
 // FindValidationSection finds 'validation' section in the component config
