@@ -10,7 +10,7 @@ import (
 var validateComponentCmd = &cobra.Command{
 	Use:                "component",
 	Short:              "Execute 'validate component' command",
-	Long:               `This command validates a component in a stack using JsonSchema, OPA or CUE schemas: atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>`,
+	Long:               `This command validates an atmos component in a stack using Json Schema, OPA or CUE policies: atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteValidateComponentCmd(cmd, args)

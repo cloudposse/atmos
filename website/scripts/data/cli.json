@@ -839,6 +839,66 @@
       "type": "global"
     },
     {
+      "name": "atmos validate component",
+      "namespace": [
+        "atmos"
+      ],
+      "summary": "Execute `validate component` command",
+      "description": [
+        "This command validates an atmos component in a stack using Json Schema and OPA policies"
+      ],
+      "footnotes": [],
+      "groups": [],
+      "exampleCommands": [
+        "atmos validate component infra/vpc -s tenant1-ue2-dev",
+        "atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-infra-vpc-component.json --schema-type jsonschema",
+        "atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-infra-vpc-component.rego --schema-type opa"
+      ],
+      "aliases": [],
+      "inputs": [
+        {
+          "name": "component",
+          "summary": "`terraform` component",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "stack",
+          "type": "string",
+          "summary": "Stack",
+          "groups": [],
+          "aliases": [
+            "s"
+          ],
+          "spec": {
+            "value": "stack"
+          }
+        },
+        {
+          "name": "schema-type",
+          "type": "string",
+          "summary": "Schema type (`jsonschema` or `opa`)",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "jsonschema/opa"
+          }
+        },
+        {
+          "name": "schema-path",
+          "type": "string",
+          "summary": "Schema path. Can be an absolute path or a path relative to 'schemas.jsonschema.base_path' and 'schemas.opa.base_path' defined in `atmos.yaml`",
+          "groups": [],
+          "aliases": [],
+          "spec": {
+            "value": "path"
+          }
+        }
+      ],
+      "type": "global"
+    },
+    {
       "name": "atmos vendor pull",
       "namespace": [
         "atmos"
