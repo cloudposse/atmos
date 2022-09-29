@@ -36,7 +36,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = ExecuteValidateComponent(componentName, stack, schemaPath, schemaType)
+	_, err = ExecuteValidateComponent(componentName, stack, schemaPath, schemaType)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponent(componentName string, stack string, schemaPath string, schemaType string) error {
+func ExecuteValidateComponent(componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
@@ -57,7 +57,7 @@ func ExecuteValidateComponent(componentName string, stack string, schemaPath str
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -67,18 +67,21 @@ func ExecuteValidateComponent(componentName string, stack string, schemaPath str
 }
 
 // ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
-func ValidateComponent(componentName string, componentSection any, schemaPath string, schemaType string) error {
+func ValidateComponent(componentName string, componentSection any, schemaPath string, schemaType string) (bool, error) {
+	ok := true
+	var err error
+
 	if schemaPath != "" && schemaType != "" {
 		u.PrintInfo(fmt.Sprintf("Validating component '%s' using schema file '%s' of type '%s'", componentName, schemaPath, schemaType))
 
-		err := validateComponentInternal(componentSection, schemaPath, schemaType)
+		ok, err = validateComponentInternal(componentSection, schemaPath, schemaType)
 		if err != nil {
-			return err
+			return false, err
 		}
 	} else {
 		validations, err := FindValidationSection(componentSection.(map[string]any))
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		for _, v := range validations {
@@ -91,21 +94,25 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 				u.PrintInfo(fmt.Sprintf("Validating component '%s' using schema file '%s' of type '%s'", componentName, schemaPath, schemaType))
 			}
 
-			err = validateComponentInternal(componentSection, schemaPath, schemaType)
+			ok2, err := validateComponentInternal(componentSection, schemaPath, schemaType)
 			if err != nil {
-				return err
+				return false, err
+			}
+			if !ok2 {
+				ok = false
 			}
 		}
 	}
 
-	return nil
+	return ok, nil
 }
 
-func validateComponentInternal(componentSection any, schemaPath string, schemaType string) error {
+func validateComponentInternal(componentSection any, schemaPath string, schemaType string) (bool, error) {
 	var msg string
+	var ok bool
 
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
+		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
@@ -130,13 +137,13 @@ func validateComponentInternal(componentSection any, schemaPath string, schemaTy
 		}
 
 		if !u.FileExists(filePath) {
-			return fmt.Errorf("the file '%s' does not exist for schema type '%s'", schemaPath, schemaType)
+			return false, fmt.Errorf("the file '%s' does not exist for schema type '%s'", schemaPath, schemaType)
 		}
 	}
 
 	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	schemaText := string(fileContent)
@@ -144,30 +151,30 @@ func validateComponentInternal(componentSection any, schemaPath string, schemaTy
 	switch schemaType {
 	case "jsonschema":
 		{
-			_, msg, err = ValidateWithJsonSchema(componentSection, filePath, schemaText)
+			ok, msg, err = ValidateWithJsonSchema(componentSection, filePath, schemaText)
 			if err != nil {
-				return err
+				return false, err
 			}
 		}
 	case "opa":
 		{
-			_, msg, err = ValidateWithOpa(componentSection, filePath, schemaText)
+			ok, msg, err = ValidateWithOpa(componentSection, filePath, schemaText)
 			if err != nil {
-				return err
+				return false, err
 			}
 		}
 	case "cue":
 		{
-			_, msg, err = ValidateWithCue(componentSection, filePath, schemaText)
+			ok, msg, err = ValidateWithCue(componentSection, filePath, schemaText)
 			if err != nil {
-				return err
+				return false, err
 			}
 		}
 	}
 
 	u.PrintMessage(msg)
 	fmt.Println()
-	return nil
+	return ok, nil
 }
 
 // FindValidationSection finds 'validation' section in the component config
