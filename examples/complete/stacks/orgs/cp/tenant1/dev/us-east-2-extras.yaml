@@ -14,7 +14,6 @@ components:
         cidr_block: 10.12.0.0/18
         enabled: true
         name: "new"
-        subnet_type_tag_key: cp.io/subnet/type
         nat_gateway_enabled: false
         nat_instance_enabled: false
         max_subnet_count: 3

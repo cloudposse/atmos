@@ -44,7 +44,7 @@ variable "map_public_ip_on_launch" {
 
 variable "subnet_type_tag_key" {
   type        = string
-  default     = "cp.io/subnet/type"
+  default     = "cpco.io/subnet/type"
   description = "Key for subnet type tag to provide information about the type of subnets, e.g. `cpco/subnet/type=private` or `cpcp/subnet/type=public`"
 }
 
