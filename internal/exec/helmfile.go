@@ -64,18 +64,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !valid {
-		validationSection, err := FindValidationSection(info.ComponentSection)
-		if err != nil {
-			return err
-		}
-
-		y, err := u.ConvertToYAML(validationSection)
-		if err != nil {
-			return err
-		}
-
-		return fmt.Errorf("\ncomponent '%s' did not pass the validation policies defined in 'settings.validation' section:\n\n%v",
-			info.ComponentFromArg, y)
+		return fmt.Errorf("\nComponent '%s' did not pass the validation policies.\n", info.ComponentFromArg)
 	}
 
 	// Write variables to a file

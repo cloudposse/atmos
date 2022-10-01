@@ -1,6 +1,6 @@
 components:
   terraform:
-    "infra/vpc":
+    infra/vpc:
       metadata:
         component: infra/vpc
       backend:

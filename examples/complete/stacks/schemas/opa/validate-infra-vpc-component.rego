@@ -12,12 +12,20 @@ package atmos
 default allow := true
 
 # In production, don't allow mapping public IPs on launch
-deny_map_public_ip_on_launch_in_prod {
+errors[message] {
     input.vars.stage == "prod"
     input.vars.map_public_ip_on_launch == true
+    message = "Mapping public IPs on launch is not allowed in 'prod'"
+}
+
+# In 'sandbox', only 2 AZs are allowed
+errors[message] {
+    input.vars.stage == "sandbox"
+    count(input.vars.availability_zones) != 2
+    message = "In 'sandbox', only 2 AZs are allowed"
 }
 
 # 'atmos' looks for the 'allow' output (boolean) from OPA policies
 allow := false {
-    deny_map_public_ip_on_launch_in_prod
+    count(errors) > 0
 }
