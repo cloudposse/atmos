@@ -72,7 +72,8 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
-		u.PrintInfo(fmt.Sprintf("Validating component '%s' using schema file '%s' of type '%s'", componentName, schemaPath, schemaType))
+		fmt.Println()
+		u.PrintInfo(fmt.Sprintf("Validating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
 		ok, err = validateComponentInternal(componentSection, schemaPath, schemaType)
 		if err != nil {
@@ -89,10 +90,9 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 			schemaType = v.SchemaType
 
 			fmt.Println()
+			u.PrintInfo(fmt.Sprintf("Validating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 			if v.Description != "" {
-				u.PrintInfo(v.Description)
-			} else {
-				u.PrintInfo(fmt.Sprintf("Validating component '%s' using schema file '%s' of type '%s'", componentName, schemaPath, schemaType))
+				u.PrintMessage(v.Description)
 			}
 
 			ok2, err := validateComponentInternal(componentSection, schemaPath, schemaType)
@@ -104,6 +104,8 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 			}
 		}
 	}
+
+	fmt.Println()
 
 	return ok, nil
 }
