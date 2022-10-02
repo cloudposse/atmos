@@ -45,7 +45,7 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 	if err = schema.Validate(dataFromJson); err != nil {
 		switch e := err.(type) {
 		case *jsonschema.ValidationError:
-			b, err2 := json.MarshalIndent(e.DetailedOutput(), "", "  ")
+			b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 			if err2 != nil {
 				return false, err2
 			}

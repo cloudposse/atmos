@@ -18,3 +18,9 @@ func TestValidateComponent2(t *testing.T) {
 	u.PrintError(err)
 	assert.Error(t, err)
 }
+
+func TestValidateComponent3(t *testing.T) {
+	_, err := e.ExecuteValidateComponent("infra/vpc", "tenant1-ue2-staging", "", "")
+	u.PrintError(err)
+	assert.Error(t, err)
+}

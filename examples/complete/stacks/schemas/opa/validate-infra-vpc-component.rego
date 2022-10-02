@@ -7,7 +7,7 @@
 # https://www.fugue.co/blog/5-tips-for-using-the-rego-language-for-open-policy-agent-opa
 # https://medium.com/@agarwalshubhi17/rego-cheat-sheet-5e25faa6eee8
 
-# 'atmos' looks for 'errors' (array of strings) output from all OPA policies
+# 'atmos' looks for the 'errors' (array of strings) output from all OPA policies
 # If the 'errors' output contains one or more error messages, 'atmos' considers the policy failed
 
 # 'package atmos' is required in all `atmos` OPA policies
