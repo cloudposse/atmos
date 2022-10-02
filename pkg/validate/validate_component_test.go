@@ -10,11 +10,11 @@ import (
 func TestValidateComponent(t *testing.T) {
 	_, err := e.ExecuteValidateComponent("infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
 	u.PrintError(err)
-	assert.Nil(t, err)
+	assert.Error(t, err)
 }
 
 func TestValidateComponent2(t *testing.T) {
-	_, err := e.ExecuteValidateComponent("infra/vpc", "tenant1-ue2-dev", "", "")
+	_, err := e.ExecuteValidateComponent("infra/vpc", "tenant1-ue2-prod", "", "")
 	u.PrintError(err)
-	assert.Nil(t, err)
+	assert.Error(t, err)
 }

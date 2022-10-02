@@ -109,9 +109,6 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 }
 
 func validateComponentInternal(componentSection any, schemaPath string, schemaType string) (bool, error) {
-	var msg string
-	var ok bool
-
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
 		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
 	}
@@ -148,32 +145,32 @@ func validateComponentInternal(componentSection any, schemaPath string, schemaTy
 	}
 
 	schemaText := string(fileContent)
+	var ok bool
 
 	switch schemaType {
 	case "jsonschema":
 		{
-			ok, msg, err = ValidateWithJsonSchema(componentSection, filePath, schemaText)
+			ok, err = ValidateWithJsonSchema(componentSection, filePath, schemaText)
 			if err != nil {
 				return false, err
 			}
 		}
 	case "opa":
 		{
-			ok, msg, err = ValidateWithOpa(componentSection, filePath, schemaText)
+			ok, err = ValidateWithOpa(componentSection, filePath, schemaText)
 			if err != nil {
 				return false, err
 			}
 		}
 	case "cue":
 		{
-			ok, msg, err = ValidateWithCue(componentSection, filePath, schemaText)
+			ok, err = ValidateWithCue(componentSection, filePath, schemaText)
 			if err != nil {
 				return false, err
 			}
 		}
 	}
 
-	u.PrintMessage(msg)
 	return ok, nil
 }
 

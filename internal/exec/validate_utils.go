@@ -17,29 +17,29 @@ import (
 // ValidateWithJsonSchema validates the data structure using the provided JSON Schema document
 // https://github.com/santhosh-tekuri/jsonschema
 // https://go.dev/play/p/Hhax3MrtD8r
-func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (bool, string, error) {
+func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (bool, error) {
 	// Convert the data to JSON and back to Go map to prevent the error:
 	// jsonschema: invalid jsonType: map[interface {}]interface {}
 	dataJson, err := u.ConvertToJSONFast(data)
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	dataFromJson, err := u.ConvertFromJSON(dataJson)
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	compiler := jsonschema.NewCompiler()
 	if err := compiler.AddResource(schemaName, strings.NewReader(schemaText)); err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	compiler.Draft = jsonschema.Draft2020
 
 	schema, err := compiler.Compile(schemaName)
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	if err = schema.Validate(dataFromJson); err != nil {
@@ -47,32 +47,31 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 		case *jsonschema.ValidationError:
 			b, err2 := json.MarshalIndent(e.DetailedOutput(), "", "  ")
 			if err2 != nil {
-				return false, "", err2
+				return false, err2
 			}
-			return false, string(b), nil
+			return false, errors.New(string(b))
 		default:
-			return false, "", err
+			return false, err
 		}
 	}
 
-	validResponse := `{ "valid": true }`
-	return true, validResponse, nil
+	return true, nil
 }
 
 // ValidateWithOpa validates the data structure using the provided OPA document
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
-func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, string, error) {
+func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, error) {
 	// The OPA SDK does not support map[any]any data types (which can be part of 'data' input)
 	// ast: interface conversion: json: unsupported type: map[interface {}]interface {}
-	// Convert the data to JSON and back to Go map
+	// To fix the issue, convert the data to JSON and back to Go map
 	dataJson, err := u.ConvertToJSONFast(data)
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	dataFromJson, err := u.ConvertFromJSON(dataJson)
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	ctx := context.Background()
@@ -83,7 +82,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, stri
 	// Create a bundle server
 	server, err := opaTestServer.NewServer(opaTestServer.MockBundle(bundleSchemaName, map[string]string{schemaName: schemaText}))
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	defer server.Stop()
@@ -110,30 +109,29 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, stri
 		Config: bytes.NewReader(config),
 	})
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	defer opa.Stop(ctx)
 
 	var result *sdk.DecisionResult
-	// Get the named policy decision for the specified input
 	if result, err = opa.Decision(ctx, sdk.DecisionOptions{
-		Path:  "/atmos/allow",
+		Path:  "/atmos/errors",
 		Input: dataFromJson,
 	}); err != nil {
-		return false, "", err
+		return false, err
 	}
 
-	res := true
-	if decision, ok := result.Result.(bool); !ok || !decision {
-		res = false
+	ers, ok := result.Result.([]interface{})
+	if ok && len(ers) > 0 {
+		return false, errors.New(strings.Join(u.SliceOfInterfacesToSliceOdStrings(ers), "\n"))
 	}
 
-	return res, fmt.Sprintf(`{ "allow": %v }`, res), nil
+	return true, nil
 }
 
 // ValidateWithCue validates the data structure using the provided CUE document
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
-func ValidateWithCue(data any, schemaName string, schemaText string) (bool, string, error) {
-	return false, "", errors.New("validation using CUE is not implemented yet")
+func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
+	return false, errors.New("validation using CUE is not implemented yet")
 }
