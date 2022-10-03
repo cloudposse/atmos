@@ -8,10 +8,18 @@ import (
 )
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
-func ProcessComponentInStack(component string, stack string) (map[string]any, error) {
+func ProcessComponentInStack(
+	component string,
+	stack string,
+	atmosCliConfigPath string,
+	atmosBasePath string,
+) (map[string]any, error) {
+
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
+	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
+	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
 	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err := e.ProcessStacks(configAndStacksInfo, true)
@@ -34,6 +42,8 @@ func ProcessComponentFromContext(
 	tenant string,
 	environment string,
 	stage string,
+	atmosCliConfigPath string,
+	atmosBasePath string,
 ) (map[string]any, error) {
 
 	err := c.InitConfig()
@@ -54,5 +64,5 @@ func ProcessComponentFromContext(
 		return nil, err
 	}
 
-	return ProcessComponentInStack(component, stack)
+	return ProcessComponentInStack(component, stack, atmosCliConfigPath, atmosBasePath)
 }

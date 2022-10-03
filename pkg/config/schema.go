@@ -140,6 +140,8 @@ type ConfigAndStacksInfo struct {
 	JsonSchemaDir             string
 	OpaDir                    string
 	CueDir                    string
+	AtmosCliConfigPath        string
+	AtmosBasePath             string
 }
 
 type WorkflowStep struct {
