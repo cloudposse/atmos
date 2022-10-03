@@ -58,6 +58,15 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Check if component 'settings.validation' section is specified and validate the component
+	valid, err := ValidateComponent(info.ComponentFromArg, info.ComponentSection, "", "")
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return fmt.Errorf("\nComponent '%s' did not pass the validation policies.\n", info.ComponentFromArg)
+	}
+
 	// Write variables to a file
 	varFile := constructHelmfileComponentVarfileName(info)
 	varFilePath := constructHelmfileComponentVarfilePath(info)

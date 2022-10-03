@@ -1,5 +1,18 @@
 package config
 
+// Configuration structure represents schema for `atmos.yaml` CLI config
+type Configuration struct {
+	BasePath     string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Components   Components   `yaml:"components" json:"components" mapstructure:"components"`
+	Stacks       Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Workflows    Workflows    `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
+	Logs         Logs         `yaml:"logs" json:"logs" mapstructure:"logs"`
+	Commands     []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
+	Integrations Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
+	Schemas      Schemas      `yaml:"schemas" json:"schemas" mapstructure:"schemas"`
+	Initialized  bool
+}
+
 type Terraform struct {
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
@@ -34,17 +47,6 @@ type Workflows struct {
 type Logs struct {
 	Verbose bool `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
 	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
-}
-
-type Configuration struct {
-	BasePath     string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	Components   Components   `yaml:"components" json:"components" mapstructure:"components"`
-	Stacks       Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
-	Workflows    Workflows    `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
-	Logs         Logs         `yaml:"logs" json:"logs" mapstructure:"logs"`
-	Commands     []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
-	Integrations Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
-	Initialized  bool
 }
 
 type ProcessedConfiguration struct {
@@ -90,6 +92,9 @@ type ArgsAndFlagsInfo struct {
 	DryRun                  bool
 	SkipInit                bool
 	NeedHelp                bool
+	JsonSchemaDir           string
+	OpaDir                  string
+	CueDir                  string
 }
 
 type ConfigAndStacksInfo struct {
@@ -132,6 +137,9 @@ type ConfigAndStacksInfo struct {
 	ComponentIsAbstract       bool
 	ComponentMetadataSection  map[any]any
 	TerraformWorkspace        string
+	JsonSchemaDir             string
+	OpaDir                    string
+	CueDir                    string
 }
 
 type WorkflowStep struct {
@@ -283,3 +291,31 @@ type AtlantisConfigOutput struct {
 	Projects                  []AtlantisProjectConfig `yaml:"projects" json:"projects" mapstructure:"projects"`
 	Workflows                 map[string]any          `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
 }
+
+// Validation schemas
+
+type JsonSchema struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+
+type Cue struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+
+type Opa struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+
+type Schemas struct {
+	JsonSchema JsonSchema `yaml:"jsonschema" json:"jsonschema" mapstructure:"jsonschema"`
+	Cue        Cue        `yaml:"cue" json:"cue" mapstructure:"cue"`
+	Opa        Opa        `yaml:"opa" json:"opa" mapstructure:"opa"`
+}
+
+type ValidationItem struct {
+	SchemaType  string `yaml:"schema_type" json:"schema_type" mapstructure:"schema_type"`
+	SchemaPath  string `yaml:"schema_path" json:"schema_path" mapstructure:"schema_path"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type Validation map[string]ValidationItem

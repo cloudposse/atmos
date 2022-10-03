@@ -33,6 +33,10 @@ var (
 		g.FromPlanFlag,
 		g.HelpFlag1,
 		g.HelpFlag2,
+		g.WorkflowDirFlag,
+		g.JsonSchemaDirFlag,
+		g.OpaDirFlag,
+		g.CueDirFlag,
 	}
 )
 
@@ -162,6 +166,9 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.DryRun = argsAndFlagsInfo.DryRun
 	configAndStacksInfo.SkipInit = argsAndFlagsInfo.SkipInit
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
+	configAndStacksInfo.JsonSchemaDir = argsAndFlagsInfo.JsonSchemaDir
+	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
+	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
@@ -542,6 +549,45 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.InitRunReconfigure = initRunReconfigureParts[1]
+		}
+
+		if arg == g.JsonSchemaDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.JsonSchemaDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.JsonSchemaDirFlag) {
+			var jsonschemaDirFlagParts = strings.Split(arg, "=")
+			if len(jsonschemaDirFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.JsonSchemaDir = jsonschemaDirFlagParts[1]
+		}
+
+		if arg == g.OpaDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.OpaDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.OpaDirFlag) {
+			var opaDirFlagParts = strings.Split(arg, "=")
+			if len(opaDirFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.OpaDir = opaDirFlagParts[1]
+		}
+
+		if arg == g.CueDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.CueDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", g.CueDirFlag) {
+			var cueDirFlagParts = strings.Split(arg, "=")
+			if len(cueDirFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.CueDir = cueDirFlagParts[1]
 		}
 
 		if arg == g.FromPlanFlag {

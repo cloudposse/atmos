@@ -119,9 +119,27 @@ integrations:
           steps:
             - run: terraform init -input=false
             # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
-            - run: terraform workspace select $WORKSPACE
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
             # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
             - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
         apply:
           steps:
             - run: terraform apply $PLANFILE
+
+# Validation schemas (for validating atmos stacks and components)
+schemas:
+  # https://json-schema.org
+  jsonschema:
+    # Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` ENV var, or `--schemas-jsonschema-dir` command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/jsonschema"
+  # https://www.openpolicyagent.org
+  opa:
+    # Can also be set using `ATMOS_SCHEMAS_OPA_BASE_PATH` ENV var, or `--schemas-opa-dir` command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/opa"
+  # https://cuelang.org
+  cue:
+    # Can also be set using `ATMOS_SCHEMAS_CUE_BASE_PATH` ENV var, or `--schemas-cue-dir` command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/cue"

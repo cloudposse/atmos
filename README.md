@@ -351,13 +351,13 @@ Workflows are a way of combining multiple commands into one executable unit of w
 In the CLI, workflows can be defined using two different methods:
 
 - In the configuration file for a stack (see [workflows in ue2-dev.yaml](example/stacks/ue2-dev.yaml) for an example)
-- In a separate file (see [workflows.yaml](example/stacks/workflows.yaml)
+- In a separate file (see [workflow1.yaml](example/stacks/workflows/workflow1.yaml)
 
 In the first case, we define workflows in the configuration file for the stack (which we specify on the command line).
 To execute the workflows from [workflows in ue2-dev.yaml](example/stacks/ue2-dev.yaml), run the following commands:
 
 ```console
-atmos workflow deploy-all -s ue2-dev
+atmos workflow terraform-plan-all-tenant1-ue2-dev -s tenant1-ue2-dev
 ```
 
 Note that workflows defined in the stack config files can be executed only for the particular stack (environment and stage).
@@ -378,30 +378,211 @@ As we can see, in multi-environment workflows, each workflow job specifies the s
 
 ```yaml
 workflows:
-  plan-all:
-    description: Run 'terraform plan' and 'helmfile diff' on all components for all stacks
-    steps:
-      - job: terraform plan vpc
-        stack: ue2-dev
-      - job: terraform plan eks
-        stack: ue2-dev
-      - job: helmfile diff nginx-ingress
-        stack: ue2-dev
-      - job: terraform plan vpc
-        stack: ue2-staging
-      - job: terraform plan eks
-        stack: ue2-staging
+terraform-plan-all-test-components:
+  description: |
+    Run 'terraform plan' on 'test/test-component' and all its derived components.
+    The stack must be provided on the command line: atmos workflow terraform-plan-all-test-components -f workflow1 -s <stack>
+  steps:
+    - command: terraform plan test/test-component
+    - command: terraform plan test/test-component-override
+    - command: terraform plan test/test-component-override-2
+    - command: terraform plan test/test-component-override-3
 ```
 
 You can also define a workflow in a separate file without specifying the stack in the workflow's job config.
 In this case, the stack needs to be provided on the command line.
 
-For example, to run the `deploy-all` workflow from the [workflows](example/stacks/workflows.yaml) file for the `ue2-dev` stack,
+For example, to run the `terraform-plan-all-tenant1-ue2-dev` workflow from the [workflows](example/stacks/workflows/workflow1.yaml) file for the `tenant1-ue2-dev` stack,
 execute the following command:
 
 ```console
-atmos workflow deploy-all -f workflows -s ue2-dev
+atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1 -s tenant1-ue2-dev
 ```
+
+## Validation
+
+`atmos` component validation allows:
+
+* Validate component config (vars, settings, backend, and other sections) using JSON Schema
+* Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using OPA/Rego policies
+
+`atmos` `validate component` command supports `--schema-path` and `--schema-type` command line arguments.
+If the arguments are not provided, `atmos` will try to find and use the `settings.validation` section defined in the component's YAML config.
+
+```bash
+atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path validate-infra-vpc-component.json --schema-type jsonschema
+
+atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path validate-infra-vpc-component.rego --schema-type opa
+
+atmos validate component infra/vpc -s tenant1-ue2-prod
+
+atmos validate component infra/vpc -s tenant1-ue2-dev
+```
+
+### Configure component validation
+
+In `atmos.yaml`, add the `schemas` config:
+
+```yaml
+# Validation schemas (for validating atmos stacks and components)
+schemas:
+  # https://json-schema.org
+  jsonschema:
+    # Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` ENV var, or `--schemas-jsonschema-dir` command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/jsonschema"
+  # https://www.openpolicyagent.org
+  opa:
+    # Can also be set using `ATMOS_SCHEMAS_OPA_BASE_PATH` ENV var, or `--schemas-opa-dir` command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/opa"
+```
+
+In the component YAML config, add the `settings.validation` section:
+
+```yaml
+components:
+  terraform:
+    infra/vpc:
+      settings:
+        # Validation
+        # Supports JSON Schema and OPA policies
+        # All validation steps must succeed to allow the component to be provisioned
+        validation:
+          validate-infra-vpc-component-with-jsonschema:
+            schema_type: jsonschema
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.jsonschema.base_path' defined in `atmos.yaml`
+            schema_path: validate-infra-vpc-component.json
+            description: Validate 'infra/vpc' component variables using JSON Schema
+          check-infra-vpc-component-config-with-opa-policy:
+            schema_type: opa
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
+            schema_path: validate-infra-vpc-component.rego
+            description: Check 'infra/vpc' component configuration using OPA policy
+```
+
+Add the following JSON Schema in the file `stacks/schemas/jsonschema/validate-infra-vpc-component.json`:
+
+```json
+{
+  "$id": "infra-vpc-component",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "infra/vpc component validation",
+  "description": "JSON Schema for infra/vpc atmos component.",
+  "type": "object",
+  "properties": {
+    "vars": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "cidr_block": {
+          "type": "string",
+          "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))?$"
+        },
+        "map_public_ip_on_launch": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "region",
+        "cidr_block",
+        "map_public_ip_on_launch"
+      ]
+    }
+  }
+}
+```
+
+Add the following OPA policy in the file `stacks/schemas/opa/validate-infra-vpc-component.rego`:
+
+```rego
+# 'atmos' looks for the 'errors' (array of strings) output from all OPA policies
+# If the 'errors' output contains one or more error messages, 'atmos' considers the policy failed
+
+# 'package atmos' is required in all `atmos` OPA policies
+package atmos
+
+# In production, don't allow mapping public IPs on launch
+errors[message] {
+  input.vars.stage == "prod"
+  input.vars.map_public_ip_on_launch == true
+  message = "Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'"
+}
+
+# In 'dev', only 2 Availability Zones are allowed
+  errors[message] {
+  input.vars.stage == "dev"
+  count(input.vars.availability_zones) != 2
+  message = "In 'dev', only 2 Availability Zones are allowed"
+}
+```
+
+Run the following commands to validate the component in the stacks:
+
+```bash
+> atmos validate component infra/vpc -s tenant1-ue2-prod
+
+Check 'infra/vpc' component configuration using OPA policy
+Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'
+
+exit status 1
+```
+
+```bash
+> atmos validate component infra/vpc -s tenant1-ue2-dev
+
+Check 'infra/vpc' component configuration using OPA policy
+In 'dev', only 2 Availability Zones are allowed
+
+exit status 1
+```
+
+```bash
+> atmos validate component infra/vpc -s tenant1-ue2-staging
+
+Validate 'infra/vpc' component variables using JSON Schema
+{
+  "valid": false,
+  "errors": [
+    {
+      "keywordLocation": "",
+      "absoluteKeywordLocation": "file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#",
+      "instanceLocation": "",
+      "error": "doesn't validate with file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#"
+    },
+    {
+      "keywordLocation": "/properties/vars/properties/cidr_block/pattern",
+      "absoluteKeywordLocation": "file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#/properties/vars/properties/cidr_block/pattern",
+      "instanceLocation": "/vars/cidr_block",
+      "error": "does not match pattern '^([0-9]{1,3}\\\\.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))?$'"
+    }
+  ]
+}
+
+exit status 1
+```
+
+Run the following commands to provision the component in the stacks:
+
+```bash
+atmos terraform apply component infra/vpc -s tenant1-ue2-prod
+atmos terraform apply component infra/vpc -s tenant1-ue2-dev
+```
+
+Since the OPA validation policies don't pass, `atmos` does not allow provisioning the component in the stacks:
+
+<br>
+
+![atmos-validate-infra-vpc-in-tenant1-ue2-prod](docs/img/atmos-validate-infra-vpc-in-tenant1-ue2-prod.png)
+
+<br>
+
+![atmos-validate-infra-vpc-in-tenant1-ue2-dev](docs/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
+
+<br>
 
 
 
