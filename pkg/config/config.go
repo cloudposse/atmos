@@ -26,7 +26,7 @@ var (
 // InitConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitConfig() error {
+func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// Config is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
@@ -125,6 +125,21 @@ func InitConfig() error {
 		}
 	}
 
+	// Process config from the path specified in the Terraform provider (which calls into the atmos code)
+	if configAndStacksInfo.AtmosCliConfigPath != "" {
+		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
+		if len(configFilePath5) > 0 {
+			configFile5 := path.Join(configFilePath5, g.ConfigFileName)
+			found, err = processConfigFile(configFile5, v)
+			if err != nil {
+				return err
+			}
+			if found {
+				configFound = true
+			}
+		}
+	}
+
 	if !configFound {
 		return errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
 			"\nYou can download a sample config and adapt it to your requirements from " +
@@ -136,6 +151,11 @@ func InitConfig() error {
 	err = v.Unmarshal(&Config)
 	if err != nil {
 		return err
+	}
+
+	// Process the base path specified in the Terraform provider (which calls into the atmos code)
+	if configAndStacksInfo.AtmosBasePath != "" {
+		Config.BasePath = configAndStacksInfo.AtmosBasePath
 	}
 
 	Config.Initialized = true
@@ -331,7 +351,7 @@ func ProcessConfigForSpacelift() error {
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(path string, v *viper.Viper) (bool, error) {
 	if !u.FileExists(path) {
-		u.PrintInfoVerbose(fmt.Sprintf("No config file atmos.yaml found in path '%s'.", path))
+		u.PrintInfoVerbose(fmt.Sprintf("No config file 'atmos.yaml' found in path '%s'.", path))
 		return false, nil
 	}
 

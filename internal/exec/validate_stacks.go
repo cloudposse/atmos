@@ -13,12 +13,13 @@ import (
 
 // ExecuteValidateStacks executes `validate stacks` command
 func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
-	err := c.InitConfig()
+	var configAndStacksInfo c.ConfigAndStacksInfo
+
+	err := c.InitConfig(configAndStacksInfo)
 	if err != nil {
 		return err
 	}
 
-	var configAndStacksInfo c.ConfigAndStacksInfo
 	err = c.ProcessConfig(configAndStacksInfo, false)
 	if err != nil {
 		return err

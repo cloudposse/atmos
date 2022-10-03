@@ -28,7 +28,7 @@ const (
 func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand string) error {
 	// InitConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	err := c.InitConfig()
+	err := c.InitConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		return err
 	}

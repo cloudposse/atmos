@@ -10,7 +10,7 @@ import (
 
 func TestClusterNamePattern(t *testing.T) {
 	// InitConfig finds and processes `atmos.yaml` CLI config
-	err := c.InitConfig()
+	err := c.InitConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
 	// Define variables for a component in a stack

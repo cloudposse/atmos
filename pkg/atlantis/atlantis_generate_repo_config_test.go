@@ -9,7 +9,7 @@ import (
 )
 
 func TestAtlantisGenerateRepoConfig(t *testing.T) {
-	err := c.InitConfig()
+	err := c.InitConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
 	err = utils.PrintAsYAML(c.Config)
