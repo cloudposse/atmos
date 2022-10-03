@@ -46,7 +46,7 @@ func ProcessComponentFromContext(
 	atmosBasePath string,
 ) (map[string]any, error) {
 
-	err := c.InitConfig()
+	err := c.InitConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err

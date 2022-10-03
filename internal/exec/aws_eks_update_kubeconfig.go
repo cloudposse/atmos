@@ -120,10 +120,12 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 
 	shellCommandWorkingDir := ""
 
+	var configAndStacksInfo c.ConfigAndStacksInfo
+
 	if !requiredParamsProvided {
 		// If stack is not provided, calculate the stack name from the context (tenant, environment, stage)
 		if kubeconfigContext.Stack == "" {
-			err := c.InitConfig()
+			err := c.InitConfig(configAndStacksInfo)
 			if err != nil {
 				return err
 			}
@@ -147,7 +149,6 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 		}
 
 		var err error
-		var configAndStacksInfo c.ConfigAndStacksInfo
 		configAndStacksInfo.ComponentFromArg = kubeconfigContext.Component
 		configAndStacksInfo.Stack = kubeconfigContext.Stack
 

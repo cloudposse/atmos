@@ -192,7 +192,7 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 // FindStacksMap processes stack config and returns a map of all stacks
 func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]any, error) {
 	// Process and merge CLI configurations
-	err := c.InitConfig()
+	err := c.InitConfig(configAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
