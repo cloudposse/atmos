@@ -12,7 +12,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/open-policy-agent/opa v0.44.0
+	github.com/open-policy-agent/opa v0.45.0
 	github.com/otiai10/copy v1.7.0
 	github.com/pkg/errors v0.9.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.0.1
@@ -36,7 +36,7 @@ require (
 	github.com/aws/aws-sdk-go v1.15.78 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
-	github.com/bytecodealliance/wasmtime-go v0.36.0 // indirect
+	github.com/bytecodealliance/wasmtime-go v1.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/containerd/containerd v1.6.8 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
