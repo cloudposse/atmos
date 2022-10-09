@@ -71,8 +71,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	stacks []string,
 	components []string) error {
 
-	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(cliConfig, configAndStacksInfo, false)
+	stacksMap, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return err
 	}

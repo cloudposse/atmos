@@ -35,8 +35,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components
 func ExecuteTerraformGenerateBackends(cliConfig c.CliConfiguration, format string) error {
-	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(cliConfig, configAndStacksInfo, false)
+	stacksMap, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return err
 	}

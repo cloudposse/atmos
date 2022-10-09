@@ -59,8 +59,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
 func ExecuteTerraformGenerateVarfiles(cliConfig c.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
-	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(cliConfig, configAndStacksInfo, false)
+	stacksMap, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return err
 	}

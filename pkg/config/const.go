@@ -1,4 +1,4 @@
-package globals
+package config
 
 const (
 	DefaultStackConfigFileExtension = ".yaml"
@@ -31,8 +31,4 @@ const (
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
-)
-
-var (
-	LogVerbose = false
 )

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
-	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
@@ -101,7 +101,7 @@ func ProcessYAMLConfigFiles(
 			stackName := strings.TrimSuffix(
 				strings.TrimSuffix(
 					u.TrimBasePathFromPath(stackBasePath+"/", p),
-					g.DefaultStackConfigFileExtension),
+					cfg.DefaultStackConfigFileExtension),
 				".yml",
 			)
 
@@ -168,7 +168,7 @@ func ProcessYAMLConfigFile(
 			impWithExt := imp
 			ext := filepath.Ext(imp)
 			if ext == "" {
-				ext = g.DefaultStackConfigFileExtension
+				ext = cfg.DefaultStackConfigFileExtension
 				impWithExt = imp + ext
 			}
 
@@ -211,7 +211,7 @@ func ProcessYAMLConfigFile(
 				importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
 				ext2 := filepath.Ext(importRelativePathWithExt)
 				if ext2 == "" {
-					ext2 = g.DefaultStackConfigFileExtension
+					ext2 = cfg.DefaultStackConfigFileExtension
 				}
 				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 				importsConfig[importRelativePathWithoutExt] = yamlConfig
@@ -249,7 +249,7 @@ func ProcessStackConfig(
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			g.DefaultStackConfigFileExtension),
+			cfg.DefaultStackConfigFileExtension),
 		".yml",
 	)
 
@@ -584,7 +584,7 @@ func ProcessStackConfig(
 				// For example: `metadata.inherits: [componentA, componentB]`
 				// will deep-merge all the base components of `componentA` (each component overriding its base),
 				// then all the base components of `componentB` (each component overriding its base),
-				// then the two results are deep-merged together (`componentB` inheritance chain will override values from `componentA' inheritance chain).
+				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
 				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"]; baseComponentFromMetadataExist {
 					baseComponentName, ok = baseComponentFromMetadata.(string)
 					if !ok {
@@ -931,7 +931,7 @@ func ProcessStackConfig(
 				// For example: `metadata.inherits: [componentA, componentB]`
 				// will deep-merge all the base components of `componentA` (each component overriding its base),
 				// then all the base components of `componentB` (each component overriding its base),
-				// then the two results are deep-merged together (`componentB` inheritance chain will override values from `componentA' inheritance chain).
+				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
 				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"]; baseComponentFromMetadataExist {
 					baseComponentName, ok = baseComponentFromMetadata.(string)
 					if !ok {

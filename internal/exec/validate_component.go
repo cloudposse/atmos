@@ -59,7 +59,7 @@ func ExecuteValidateComponent(cliConfig c.CliConfiguration, componentName string
 	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err := ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
-		u.PrintErrorVerbose(err)
+		u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {

@@ -30,13 +30,13 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	info.Stack = stack
 	info.ComponentType = "terraform"
 
-	Config, err := c.InitCliConfig(info)
+	cliConfig, err := c.InitCliConfig(info)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
 	}
 
-	info, err = ProcessStacks(Config, info, true)
+	info, err = ProcessStacks(cliConfig, info, true)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	componentBackendConfig := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 
-	u.PrintInfoVerbose("Component backend config:\n\n")
+	u.PrintInfoVerbose(cliConfig.Logs.Verbose, "Component backend config:\n\n")
 	err = u.PrintAsJSON(componentBackendConfig)
 	if err != nil {
 		return err
@@ -64,8 +64,8 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	// Write backend config to file
 	var backendFilePath = path.Join(
-		Config.BasePath,
-		Config.Components.Terraform.BasePath,
+		cliConfig.BasePath,
+		cliConfig.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 		"backend.tf.json",

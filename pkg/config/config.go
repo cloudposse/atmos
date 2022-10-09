@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -33,7 +32,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 		return cliConfig, err
 	}
 
-	if g.LogVerbose {
+	if cliConfig.Logs.Verbose {
 		u.PrintInfo("\nSearching, processing and merging atmos CLI configurations (atmos.yaml) in the following order:")
 		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments")
 		fmt.Println()
@@ -54,17 +53,17 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	// https://softwareengineering.stackexchange.com/questions/299869/where-is-the-appropriate-place-to-put-application-configuration-files-for-each-p
 	// https://stackoverflow.com/questions/37946282/why-does-appdata-in-windows-7-seemingly-points-to-wrong-folder
 	if runtime.GOOS == "windows" {
-		appDataDir := os.Getenv(g.WindowsAppDataEnvVar)
+		appDataDir := os.Getenv(WindowsAppDataEnvVar)
 		if len(appDataDir) > 0 {
 			configFilePath1 = appDataDir
 		}
 	} else {
-		configFilePath1 = g.SystemDirConfigFilePath
+		configFilePath1 = SystemDirConfigFilePath
 	}
 
 	if len(configFilePath1) > 0 {
-		configFile1 := path.Join(configFilePath1, g.ConfigFileName)
-		found, err = processConfigFile(configFile1, v)
+		configFile1 := path.Join(configFilePath1, ConfigFileName)
+		found, err = processConfigFile(cliConfig.Logs.Verbose, configFile1, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -78,8 +77,8 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	if err != nil {
 		return cliConfig, err
 	}
-	configFile2 := path.Join(configFilePath2, ".atmos", g.ConfigFileName)
-	found, err = processConfigFile(configFile2, v)
+	configFile2 := path.Join(configFilePath2, ".atmos", ConfigFileName)
+	found, err = processConfigFile(cliConfig.Logs.Verbose, configFile2, v)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -92,8 +91,8 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	if err != nil {
 		return cliConfig, err
 	}
-	configFile3 := path.Join(configFilePath3, g.ConfigFileName)
-	found, err = processConfigFile(configFile3, v)
+	configFile3 := path.Join(configFilePath3, ConfigFileName)
+	found, err = processConfigFile(cliConfig.Logs.Verbose, configFile3, v)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -104,9 +103,9 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
 	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
 	if len(configFilePath4) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
-		configFile4 := path.Join(configFilePath4, g.ConfigFileName)
-		found, err = processConfigFile(configFile4, v)
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
+		configFile4 := path.Join(configFilePath4, ConfigFileName)
+		found, err = processConfigFile(cliConfig.Logs.Verbose, configFile4, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -119,8 +118,8 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	if configAndStacksInfo.AtmosCliConfigPath != "" {
 		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
 		if len(configFilePath5) > 0 {
-			configFile5 := path.Join(configFilePath5, g.ConfigFileName)
-			found, err = processConfigFile(configFile5, v)
+			configFile5 := path.Join(configFilePath5, ConfigFileName)
+			found, err = processConfigFile(cliConfig.Logs.Verbose, configFile5, v)
 			if err != nil {
 				return cliConfig, err
 			}
@@ -227,7 +226,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	cliConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	if stackIsPhysicalPath {
-		u.PrintInfoVerbose(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
 			configAndStacksInfo.Stack,
 			stackConfigFilesRelativePaths[0]),
 		)
@@ -237,7 +236,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 		cliConfig.StackType = "Logical"
 	}
 
-	if g.LogVerbose {
+	if cliConfig.Logs.Verbose {
 		u.PrintInfo("\nFinal CLI configuration:")
 		err = u.PrintAsYAML(cliConfig)
 		if err != nil {
@@ -257,13 +256,13 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 // https://github.com/NCAR/go-figure
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func processConfigFile(path string, v *viper.Viper) (bool, error) {
+func processConfigFile(verbose bool, path string, v *viper.Viper) (bool, error) {
 	if !u.FileExists(path) {
-		u.PrintInfoVerbose(fmt.Sprintf("No config file 'atmos.yaml' found in path '%s'.", path))
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("No config file 'atmos.yaml' found in path '%s'.", path))
 		return false, nil
 	}
 
-	u.PrintInfoVerbose(fmt.Sprintf("Found CLI config in '%s'", path))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found CLI config in '%s'", path))
 
 	reader, err := os.Open(path)
 	if err != nil {
@@ -282,7 +281,7 @@ func processConfigFile(path string, v *viper.Viper) (bool, error) {
 		return false, err
 	}
 
-	u.PrintInfoVerbose(fmt.Sprintf("Processed CLI config '%s'", path))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Processed CLI config '%s'", path))
 
 	return true, nil
 }

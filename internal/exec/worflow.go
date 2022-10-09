@@ -7,8 +7,7 @@ import (
 	"path"
 	"path/filepath"
 
-	c "github.com/cloudposse/atmos/pkg/config"
-	g "github.com/cloudposse/atmos/pkg/globals"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
@@ -22,7 +21,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	Config, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{})
 	if err != nil {
 		return err
 	}
@@ -54,7 +53,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	// If the file is specified without an extension, use the default extension
 	ext := filepath.Ext(workflowPath)
 	if ext == "" {
-		ext = g.DefaultStackConfigFileExtension
+		ext = cfg.DefaultStackConfigFileExtension
 		workflowPath = workflowPath + ext
 	}
 
@@ -67,9 +66,9 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var yamlContent c.WorkflowFile
-	var workflowConfig c.WorkflowConfig
-	var workflowDefinition c.WorkflowDefinition
+	var yamlContent cfg.WorkflowFile
+	var workflowConfig cfg.WorkflowConfig
+	var workflowDefinition cfg.WorkflowDefinition
 
 	if err = yaml.Unmarshal(fileContent, &yamlContent); err != nil {
 		return err
