@@ -10,7 +10,7 @@ import (
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
-	err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
 	componentType := "terraform"
@@ -18,7 +18,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Test 'infra/vpc-flow-logs-bucket' component
 	component := "infra/vpc-flow-logs-bucket"
-	componentConfig, componentPath, err := e.ReadAndProcessComponentConfigFile(component, componentType)
+	componentConfig, componentPath, err := e.ReadAndProcessComponentConfigFile(Config, component, componentType)
 	assert.Nil(t, err)
 
 	err = e.ExecuteComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, false, vendorCommand)
@@ -57,7 +57,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Test 'infra/account-map' component
 	component = "infra/account-map"
-	componentConfig, componentPath, err = e.ReadAndProcessComponentConfigFile(component, componentType)
+	componentConfig, componentPath, err = e.ReadAndProcessComponentConfigFile(Config, component, componentType)
 	assert.Nil(t, err)
 
 	err = e.ExecuteComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, false, vendorCommand)

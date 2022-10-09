@@ -12,7 +12,7 @@ import (
 )
 
 func TestTerraformGenerateVarfiles(t *testing.T) {
-	err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
@@ -28,6 +28,6 @@ func TestTerraformGenerateVarfiles(t *testing.T) {
 	filePattern := path.Join(tempDir, "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars")
 	format := "hcl"
 
-	err = e.ExecuteTerraformGenerateVarfiles(filePattern, format, stacks, components)
+	err = e.ExecuteTerraformGenerateVarfiles(Config, filePattern, format, stacks, components)
 	assert.Nil(t, err)
 }

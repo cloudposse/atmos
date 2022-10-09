@@ -9,13 +9,13 @@ import (
 )
 
 func TestAtlantisGenerateRepoConfig(t *testing.T) {
-	err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
-	err = utils.PrintAsYAML(c.Config)
+	err = utils.PrintAsYAML(Config)
 	assert.Nil(t, err)
 
-	atlantisConfig := c.Config.Integrations.Atlantis
+	atlantisConfig := Config.Integrations.Atlantis
 	configTemplateName := "config-1"
 	configTemplate := atlantisConfig.ConfigTemplates[configTemplateName]
 	projectTemplateName := "project-1"
@@ -39,7 +39,11 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
-	err := e.ExecuteAtlantisGenerateRepoConfig(
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	assert.Nil(t, err)
+
+	err = e.ExecuteAtlantisGenerateRepoConfig(
+		Config,
 		"/dev/stdout",
 		"config-1",
 		"project-1",
