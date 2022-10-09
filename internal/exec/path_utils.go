@@ -2,22 +2,23 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
 	"path"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack
-func constructTerraformComponentWorkingDir(info c.ConfigAndStacksInfo) string {
+func constructTerraformComponentWorkingDir(cliConfig cfg.CliConfiguration, info cfg.ConfigAndStacksInfo) string {
 	return path.Join(
-		c.Config.BasePath,
-		c.Config.Components.Terraform.BasePath,
+		cliConfig.BasePath,
+		cliConfig.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 	)
 }
 
 // constructTerraformComponentPlanfileName constructs the planfile name for a terraform component in a stack
-func constructTerraformComponentPlanfileName(info c.ConfigAndStacksInfo) string {
+func constructTerraformComponentPlanfileName(info cfg.ConfigAndStacksInfo) string {
 	var planFile string
 	if len(info.ComponentFolderPrefix) == 0 {
 		planFile = fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
@@ -29,7 +30,7 @@ func constructTerraformComponentPlanfileName(info c.ConfigAndStacksInfo) string 
 }
 
 // constructTerraformComponentVarfileName constructs the varfile name for a terraform component in a stack
-func constructTerraformComponentVarfileName(info c.ConfigAndStacksInfo) string {
+func constructTerraformComponentVarfileName(info cfg.ConfigAndStacksInfo) string {
 	var varFile string
 	if len(info.ComponentFolderPrefix) == 0 {
 		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
@@ -41,33 +42,33 @@ func constructTerraformComponentVarfileName(info c.ConfigAndStacksInfo) string {
 }
 
 // constructTerraformComponentVarfilePath constructs the varfile path for a terraform component in a stack
-func constructTerraformComponentVarfilePath(info c.ConfigAndStacksInfo) string {
+func constructTerraformComponentVarfilePath(Config cfg.CliConfiguration, info cfg.ConfigAndStacksInfo) string {
 	return path.Join(
-		constructTerraformComponentWorkingDir(info),
+		constructTerraformComponentWorkingDir(Config, info),
 		constructTerraformComponentVarfileName(info),
 	)
 }
 
 // constructTerraformComponentPlanfilePath constructs the planfile path for a terraform component in a stack
-func constructTerraformComponentPlanfilePath(info c.ConfigAndStacksInfo) string {
+func constructTerraformComponentPlanfilePath(cliConfig cfg.CliConfiguration, info cfg.ConfigAndStacksInfo) string {
 	return path.Join(
-		constructTerraformComponentWorkingDir(info),
+		constructTerraformComponentWorkingDir(cliConfig, info),
 		constructTerraformComponentPlanfileName(info),
 	)
 }
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack
-func constructHelmfileComponentWorkingDir(info c.ConfigAndStacksInfo) string {
+func constructHelmfileComponentWorkingDir(cliConfig cfg.CliConfiguration, info cfg.ConfigAndStacksInfo) string {
 	return path.Join(
-		c.Config.BasePath,
-		c.Config.Components.Helmfile.BasePath,
+		cliConfig.BasePath,
+		cliConfig.Components.Helmfile.BasePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 	)
 }
 
 // constructHelmfileComponentVarfileName constructs the varfile name for a helmfile component in a stack
-func constructHelmfileComponentVarfileName(info c.ConfigAndStacksInfo) string {
+func constructHelmfileComponentVarfileName(info cfg.ConfigAndStacksInfo) string {
 	var varFile string
 	if len(info.ComponentFolderPrefix) == 0 {
 		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
@@ -78,9 +79,9 @@ func constructHelmfileComponentVarfileName(info c.ConfigAndStacksInfo) string {
 }
 
 // constructHelmfileComponentVarfilePath constructs the varfile path for a helmfile component in a stack
-func constructHelmfileComponentVarfilePath(info c.ConfigAndStacksInfo) string {
+func constructHelmfileComponentVarfilePath(cliConfig cfg.CliConfiguration, info cfg.ConfigAndStacksInfo) string {
 	return path.Join(
-		constructHelmfileComponentWorkingDir(info),
+		constructHelmfileComponentWorkingDir(cliConfig, info),
 		constructHelmfileComponentVarfileName(info),
 	)
 }

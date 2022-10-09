@@ -2,12 +2,12 @@ package exec
 
 import (
 	"fmt"
-	"path"
-
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"path"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGenerateBackend executes `terraform generate backend` command
@@ -25,12 +25,18 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	var info c.ConfigAndStacksInfo
+	var info cfg.ConfigAndStacksInfo
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
 
-	info, err = ProcessStacks(info, true)
+	cliConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
+	info, err = ProcessStacks(cliConfig, info, true)
 	if err != nil {
 		return err
 	}
@@ -45,7 +51,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	componentBackendConfig := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 
-	u.PrintInfoVerbose("Component backend config:\n\n")
+	u.PrintInfoVerbose(cliConfig.Logs.Verbose, "Component backend config:\n\n")
 	err = u.PrintAsJSON(componentBackendConfig)
 	if err != nil {
 		return err
@@ -58,8 +64,8 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	// Write backend config to file
 	var backendFilePath = path.Join(
-		c.Config.BasePath,
-		c.Config.Components.Terraform.BasePath,
+		cliConfig.BasePath,
+		cliConfig.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 		"backend.tf.json",

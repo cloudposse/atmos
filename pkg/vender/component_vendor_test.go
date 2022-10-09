@@ -1,16 +1,17 @@
 package vender
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"testing"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
-	err := c.InitConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	componentType := "terraform"
@@ -18,7 +19,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Test 'infra/vpc-flow-logs-bucket' component
 	component := "infra/vpc-flow-logs-bucket"
-	componentConfig, componentPath, err := e.ReadAndProcessComponentConfigFile(component, componentType)
+	componentConfig, componentPath, err := e.ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
 	assert.Nil(t, err)
 
 	err = e.ExecuteComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, false, vendorCommand)
@@ -57,7 +58,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Test 'infra/account-map' component
 	component = "infra/account-map"
-	componentConfig, componentPath, err = e.ReadAndProcessComponentConfigFile(component, componentType)
+	componentConfig, componentPath, err = e.ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
 	assert.Nil(t, err)
 
 	err = e.ExecuteComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, false, vendorCommand)

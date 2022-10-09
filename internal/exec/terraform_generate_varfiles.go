@@ -2,16 +2,23 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"path"
 	"path/filepath"
 	"strings"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
 	flags := cmd.Flags()
 
 	fileTemplate, err := flags.GetString("file-template")
@@ -48,13 +55,12 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		format = "json"
 	}
 
-	return ExecuteTerraformGenerateVarfiles(fileTemplate, format, stacks, components)
+	return ExecuteTerraformGenerateVarfiles(cliConfig, fileTemplate, format, stacks, components)
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
-func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks []string, components []string) error {
-	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(configAndStacksInfo, false)
+func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
+	stacksMap, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return err
 	}
@@ -111,16 +117,16 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 
 				// Absolute path to the terraform component
 				terraformComponentPath := path.Join(
-					c.Config.BasePath,
-					c.Config.Components.Terraform.BasePath,
+					cliConfig.BasePath,
+					cliConfig.Components.Terraform.BasePath,
 					terraformComponent,
 				)
 
 				// Context
-				context := c.GetContextFromVars(varsSection)
+				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, c.Config.Stacks.NamePattern, stackConfigFileName)
+				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, cliConfig.Stacks.NamePattern, stackConfigFileName)
 				if err != nil {
 					return err
 				}
@@ -136,7 +142,7 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {component}, {component-path}
-					fileName := c.ReplaceContextTokens(context, fileTemplate)
+					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
 					fileAbsolutePath, err := filepath.Abs(fileName)
 					if err != nil {
 						return err

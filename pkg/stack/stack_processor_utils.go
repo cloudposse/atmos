@@ -3,7 +3,6 @@ package stack
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
-	g "github.com/cloudposse/atmos/pkg/globals"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -49,12 +48,12 @@ func FindComponentStacks(
 
 // FindComponentDependencies finds all imports where the component or the base component(s) are defined
 // Component depends on the imported config file if any of the following conditions is true:
-// 1. The imported file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
-//    `settings` or `vars` sections which are not empty
-// 2. The imported file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
-//    `remote_state_backend_type`, `settings` or `vars` sections which are not empty
-// 3. The imported config file has the "components" section, which has the component type section, which has the component section
-// 4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section
+//  1. The imported file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
+//     `settings` or `vars` sections which are not empty
+//  2. The imported file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
+//     `remote_state_backend_type`, `settings` or `vars` sections which are not empty
+//  3. The imported config file has the "components" section, which has the component type section, which has the component section
+//  4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section
 func FindComponentDependencies(
 	stack string,
 	componentType string,
@@ -229,13 +228,13 @@ func CreateComponentStackMap(
 
 	for stack, components := range stackComponentMap["terraform"] {
 		for _, component := range components {
-			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, g.DefaultStackConfigFileExtension, "", 1))
+			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, cfg.DefaultStackConfigFileExtension, "", 1))
 		}
 	}
 
 	for stack, components := range stackComponentMap["helmfile"] {
 		for _, component := range components {
-			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, g.DefaultStackConfigFileExtension, "", 1))
+			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, cfg.DefaultStackConfigFileExtension, "", 1))
 		}
 	}
 
@@ -250,7 +249,7 @@ func getFileContent(filePath string) (string, error) {
 		return fmt.Sprintf("%s", existingContent), nil
 	}
 
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", err
 	}

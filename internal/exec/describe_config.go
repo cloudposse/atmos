@@ -1,10 +1,11 @@
 package exec
 
 import (
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeConfig executes `describe config` command
@@ -16,15 +17,15 @@ func ExecuteDescribeConfig(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = c.InitConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
 
 	if format == "json" {
-		err = u.PrintAsJSON(c.Config)
+		err = u.PrintAsJSON(cliConfig)
 	} else if format == "yaml" {
-		err = u.PrintAsYAML(c.Config)
+		err = u.PrintAsYAML(cliConfig)
 	} else {
 		err = errors.New("invalid flag '--format'. Accepted values are 'json' or 'yaml'")
 	}

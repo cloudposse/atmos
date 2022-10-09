@@ -2,15 +2,22 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"path"
 	"path/filepath"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
 	flags := cmd.Flags()
 
 	format, err := flags.GetString("format")
@@ -24,13 +31,12 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 		format = "hcl"
 	}
 
-	return ExecuteTerraformGenerateBackends(format)
+	return ExecuteTerraformGenerateBackends(cliConfig, format)
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components
-func ExecuteTerraformGenerateBackends(format string) error {
-	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(configAndStacksInfo, false)
+func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, format string) error {
+	stacksMap, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return err
 	}
@@ -97,8 +103,8 @@ func ExecuteTerraformGenerateBackends(format string) error {
 
 			// Absolute path to the terraform component
 			backendFilePath := path.Join(
-				c.Config.BasePath,
-				c.Config.Components.Terraform.BasePath,
+				cliConfig.BasePath,
+				cliConfig.Components.Terraform.BasePath,
 				terraformComponent,
 				"backend.tf",
 			)

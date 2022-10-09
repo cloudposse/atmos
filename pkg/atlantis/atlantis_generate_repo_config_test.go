@@ -1,21 +1,22 @@
 package atlantis
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"testing"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 func TestAtlantisGenerateRepoConfig(t *testing.T) {
-	err := c.InitConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	err = utils.PrintAsYAML(c.Config)
+	err = utils.PrintAsYAML(cliConfig)
 	assert.Nil(t, err)
 
-	atlantisConfig := c.Config.Integrations.Atlantis
+	atlantisConfig := cliConfig.Integrations.Atlantis
 	configTemplateName := "config-1"
 	configTemplate := atlantisConfig.ConfigTemplates[configTemplateName]
 	projectTemplateName := "project-1"
@@ -24,7 +25,7 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	workflowTemplate := atlantisConfig.ProjectTemplates[workflowTemplateName]
 	projectTemplate.Workflow = workflowTemplateName
 
-	atlantisYaml := c.AtlantisConfigOutput{}
+	atlantisYaml := cfg.AtlantisConfigOutput{}
 	atlantisYaml.Version = configTemplate.Version
 	atlantisYaml.Automerge = configTemplate.Automerge
 	atlantisYaml.DeleteSourceBranchOnMerge = configTemplate.DeleteSourceBranchOnMerge
@@ -32,14 +33,18 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	atlantisYaml.ParallelApply = configTemplate.ParallelApply
 	atlantisYaml.Workflows = map[string]any{workflowTemplateName: workflowTemplate}
 	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
-	atlantisYaml.Projects = []c.AtlantisProjectConfig{projectTemplate}
+	atlantisYaml.Projects = []cfg.AtlantisProjectConfig{projectTemplate}
 
 	err = utils.PrintAsYAML(atlantisYaml)
 	assert.Nil(t, err)
 }
 
 func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
-	err := e.ExecuteAtlantisGenerateRepoConfig(
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	err = e.ExecuteAtlantisGenerateRepoConfig(
+		cliConfig,
 		"/dev/stdout",
 		"config-1",
 		"project-1",

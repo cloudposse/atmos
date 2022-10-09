@@ -3,13 +3,14 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	e "github.com/cloudposse/atmos/internal/exec"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"os"
 	"strings"
 	"text/template"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -29,7 +30,7 @@ var (
 	}
 )
 
-func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, topLevel bool) error {
+func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command, topLevel bool) error {
 	var command *cobra.Command
 
 	for _, commandConfig := range commands {
@@ -41,11 +42,11 @@ func processCustomCommands(commands []c.Command, parentCommand *cobra.Command, t
 			// It will make a closure on the new local variables which are different in each iteration.
 			customCommandSteps := make([]string, len(commandConfig.Steps))
 			copy(customCommandSteps, commandConfig.Steps)
-			customCommandArguments := make([]c.CommandArgument, len(commandConfig.Arguments))
+			customCommandArguments := make([]cfg.CommandArgument, len(commandConfig.Arguments))
 			copy(customCommandArguments, commandConfig.Arguments)
-			customCommandFlags := make([]c.CommandFlag, len(commandConfig.Flags))
+			customCommandFlags := make([]cfg.CommandFlag, len(commandConfig.Flags))
 			copy(customCommandFlags, commandConfig.Flags)
-			customEnvVars := make([]c.CommandEnv, len(commandConfig.Env))
+			customEnvVars := make([]cfg.CommandEnv, len(commandConfig.Env))
 			copy(customEnvVars, commandConfig.Env)
 
 			var customCommand = &cobra.Command{

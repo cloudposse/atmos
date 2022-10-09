@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hashicorp/go-getter"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"strconv"
@@ -12,23 +15,16 @@ import (
 	"text/template"
 	"time"
 
-	c "github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
-)
-
-const (
-	componentConfigFileName = "component.yaml"
 )
 
 // ExecuteVendorCommand executes `atmos vendor` commands
 func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand string) error {
-	// InitConfig finds and merges CLI configurations in the following order:
+	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	err := c.InitConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -65,7 +61,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 			componentType = "terraform"
 		}
 
-		componentConfig, componentPath, err := ReadAndProcessComponentConfigFile(component, componentType)
+		componentConfig, componentPath, err := ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
 		if err != nil {
 			return err
 		}
@@ -78,19 +74,19 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
-func ReadAndProcessComponentConfigFile(component string, componentType string) (c.VendorComponentConfig, string, error) {
+func ReadAndProcessComponentConfigFile(cliConfig cfg.CliConfiguration, component string, componentType string) (cfg.VendorComponentConfig, string, error) {
 	var componentBasePath string
-	var componentConfig c.VendorComponentConfig
+	var componentConfig cfg.VendorComponentConfig
 
 	if componentType == "terraform" {
-		componentBasePath = c.Config.Components.Terraform.BasePath
+		componentBasePath = cliConfig.Components.Terraform.BasePath
 	} else if componentType == "helmfile" {
-		componentBasePath = c.Config.Components.Helmfile.BasePath
+		componentBasePath = cliConfig.Components.Helmfile.BasePath
 	} else {
 		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
-	componentPath := path.Join(c.Config.BasePath, componentBasePath, component)
+	componentPath := path.Join(cliConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
 	if err != nil {
@@ -101,9 +97,9 @@ func ReadAndProcessComponentConfigFile(component string, componentType string) (
 		return componentConfig, "", fmt.Errorf("folder '%s' does not exist", componentPath)
 	}
 
-	componentConfigFile := path.Join(componentPath, componentConfigFileName)
+	componentConfigFile := path.Join(componentPath, cfg.ComponentConfigFileName)
 	if !u.FileExists(componentConfigFile) {
-		return componentConfig, "", fmt.Errorf("vendor config file '%s' does not exist in the '%s' folder", componentConfigFileName, componentPath)
+		return componentConfig, "", fmt.Errorf("vendor config file '%s' does not exist in the '%s' folder", cfg.ComponentConfigFileName, componentPath)
 	}
 
 	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
@@ -118,7 +114,7 @@ func ReadAndProcessComponentConfigFile(component string, componentType string) (
 	if componentConfig.Kind != "ComponentVendorConfig" {
 		return componentConfig, "", fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'ComponentVendorConfig'",
 			componentConfig.Kind,
-			componentConfigFileName)
+			cfg.ComponentConfigFileName)
 	}
 
 	return componentConfig, componentPath, nil
@@ -130,7 +126,7 @@ func ReadAndProcessComponentConfigFile(component string, componentType string) (
 // https://www.allee.xyz/en/posts/getting-started-with-go-getter
 // https://github.com/otiai10/copy
 func ExecuteComponentVendorCommandInternal(
-	vendorComponentSpec c.VendorComponentSpec,
+	vendorComponentSpec cfg.VendorComponentSpec,
 	component string,
 	componentPath string,
 	dryRun bool,
