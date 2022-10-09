@@ -2,13 +2,13 @@ package spacelift
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	c "github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 // CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
@@ -39,7 +39,7 @@ func CreateSpaceliftStacks(
 
 		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports)
 	} else {
-		cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+		cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
@@ -100,12 +100,12 @@ func TransformStackConfigToSpaceliftStacks(
 						spaceliftSettings = i.(map[any]any)
 					}
 
-					context := c.GetContextFromVars(componentVars)
+					context := cfg.GetContextFromVars(componentVars)
 
 					var contextPrefix string
 
 					if stackNamePattern != "" {
-						contextPrefix, err = c.GetContextPrefix(stackName, context, stackNamePattern, stackName)
+						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
 							u.PrintErrorToStdError(err)
 							return nil, err
@@ -207,14 +207,14 @@ func TransformStackConfigToSpaceliftStacks(
 						continue
 					}
 
-					context := c.GetContextFromVars(componentVars)
+					context := cfg.GetContextFromVars(componentVars)
 					context.Component = component
 					context.BaseComponent = baseComponentName
 
 					var contextPrefix string
 
 					if stackNamePattern != "" {
-						contextPrefix, err = c.GetContextPrefix(stackName, context, stackNamePattern, stackName)
+						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
 							u.PrintErrorToStdError(err)
 							return nil, err
@@ -357,9 +357,9 @@ func buildSpaceliftDependsOnStackName(
 }
 
 // buildSpaceliftStackName build a Spacelift stack name from the provided context and state name pattern
-func buildSpaceliftStackName(spaceliftSettings map[any]any, context c.Context, contextPrefix string) (string, string) {
+func buildSpaceliftStackName(spaceliftSettings map[any]any, context cfg.Context, contextPrefix string) (string, string) {
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
-		return c.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
+		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
 	} else {
 		defaultSpaceliftStackNamePattern := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
 		return strings.Replace(defaultSpaceliftStackNamePattern, "/", "-", -1), contextPrefix

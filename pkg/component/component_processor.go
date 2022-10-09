@@ -1,10 +1,11 @@
 package component
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
@@ -15,13 +16,13 @@ func ProcessComponentInStack(
 	atmosBasePath string,
 ) (map[string]any, error) {
 
-	var configAndStacksInfo c.ConfigAndStacksInfo
+	var configAndStacksInfo cfg.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
-	cliConfig, err := c.InitCliConfig(configAndStacksInfo, true)
+	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err
@@ -52,12 +53,12 @@ func ProcessComponentFromContext(
 	atmosBasePath string,
 ) (map[string]any, error) {
 
-	var configAndStacksInfo c.ConfigAndStacksInfo
+	var configAndStacksInfo cfg.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
-	cliConfig, err := c.InitCliConfig(configAndStacksInfo, true)
+	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err
@@ -69,7 +70,7 @@ func ProcessComponentFromContext(
 		return nil, er
 	}
 
-	stack, err := c.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, cliConfig.Stacks.NamePattern)
+	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, cliConfig.Stacks.NamePattern)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err

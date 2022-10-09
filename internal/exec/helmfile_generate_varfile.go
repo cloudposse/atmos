@@ -3,9 +3,10 @@ package exec
 import (
 	"errors"
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteHelmfileGenerateVarfile executes `helmfile generate varfile` command
@@ -23,12 +24,12 @@ func ExecuteHelmfileGenerateVarfile(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	var info c.ConfigAndStacksInfo
+	var info cfg.ConfigAndStacksInfo
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "helmfile"
 
-	cliConfig, err := c.InitCliConfig(info, true)
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

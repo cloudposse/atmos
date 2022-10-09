@@ -2,14 +2,14 @@ package exec
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"os"
 	"path"
 	"strings"
 
-	c "github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

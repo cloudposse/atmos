@@ -2,17 +2,17 @@ package exec
 
 import (
 	"fmt"
+	"github.com/spf13/cobra"
 	"strings"
 
-	c "github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 // ExecuteDescribeStacks executes `describe stacks` command
 func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

@@ -2,10 +2,11 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeComponent executes `describe component` command
@@ -23,11 +24,11 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	var configAndStacksInfo c.ConfigAndStacksInfo
+	var configAndStacksInfo cfg.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 
-	cliConfig, err := c.InitCliConfig(configAndStacksInfo, true)
+	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

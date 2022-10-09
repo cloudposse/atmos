@@ -4,18 +4,18 @@ package exec
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"os"
 	"path"
 
-	c "github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 )
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
@@ -91,15 +91,15 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		info.SubCommand = "sync"
 	}
 
-	context := c.GetContextFromVars(info.ComponentVarsSection)
+	context := cfg.GetContextFromVars(info.ComponentVarsSection)
 
 	// Prepare AWS profile
-	helmAwsProfile := c.ReplaceContextTokens(context, cliConfig.Components.Helmfile.HelmAwsProfilePattern)
+	helmAwsProfile := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.HelmAwsProfilePattern)
 	u.PrintInfo(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
 	// Download kubeconfig by running `aws eks update-kubeconfig`
 	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", cliConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
-	clusterName := c.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
+	clusterName := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
 	u.PrintInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
 	err = ExecuteShellCommand("aws",
@@ -184,7 +184,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func checkHelmfileConfig(cliConfig c.CliConfiguration) error {
+func checkHelmfileConfig(cliConfig cfg.CliConfiguration) error {
 	if len(cliConfig.Components.Helmfile.BasePath) < 1 {
 		return errors.New("Base path to helmfile components must be provided in 'components.helmfile.base_path' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV variable")

@@ -31,4 +31,6 @@ const (
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
+
+	ComponentConfigFileName = "component.yaml"
 )

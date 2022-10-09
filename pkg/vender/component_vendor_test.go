@@ -1,16 +1,17 @@
 package vender
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	c "github.com/cloudposse/atmos/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"testing"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	componentType := "terraform"

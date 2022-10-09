@@ -2,16 +2,17 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"path"
 	"path/filepath"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
@@ -34,7 +35,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components
-func ExecuteTerraformGenerateBackends(cliConfig c.CliConfiguration, format string) error {
+func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, format string) error {
 	stacksMap, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return err

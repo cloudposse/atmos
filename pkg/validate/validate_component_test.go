@@ -1,15 +1,16 @@
 package validate
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"testing"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestValidateComponent(t *testing.T) {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(cliConfig, "infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
@@ -18,7 +19,7 @@ func TestValidateComponent(t *testing.T) {
 }
 
 func TestValidateComponent2(t *testing.T) {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(cliConfig, "infra/vpc", "tenant1-ue2-prod", "", "")
@@ -27,7 +28,7 @@ func TestValidateComponent2(t *testing.T) {
 }
 
 func TestValidateComponent3(t *testing.T) {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(cliConfig, "infra/vpc", "tenant1-ue2-staging", "", "")

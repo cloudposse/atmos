@@ -1,10 +1,11 @@
 package exec
 
 import (
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeConfig executes `describe config` command
@@ -16,7 +17,7 @@ func ExecuteDescribeConfig(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}

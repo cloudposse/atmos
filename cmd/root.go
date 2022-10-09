@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -25,7 +26,7 @@ func init() {
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, false)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
 	}

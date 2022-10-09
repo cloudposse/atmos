@@ -2,12 +2,12 @@ package exec
 
 import (
 	"fmt"
-	"path"
-
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"path"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGenerateBackend executes `terraform generate backend` command
@@ -25,12 +25,12 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	var info c.ConfigAndStacksInfo
+	var info cfg.ConfigAndStacksInfo
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
 
-	cliConfig, err := c.InitCliConfig(info, true)
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

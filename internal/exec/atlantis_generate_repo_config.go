@@ -2,18 +2,19 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
 	"path/filepath"
 	"strings"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteAtlantisGenerateRepoConfigCmd executes `atlantis generate repo-config` command
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
 func ExecuteAtlantisGenerateRepoConfig(
-	cliConfig c.CliConfiguration,
+	cliConfig cfg.CliConfiguration,
 	outputPath string,
 	configTemplateName string,
 	projectTemplateName string,
@@ -76,8 +77,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 		return err
 	}
 
-	var configTemplate c.AtlantisRepoConfig
-	var projectTemplate c.AtlantisProjectConfig
+	var configTemplate cfg.AtlantisRepoConfig
+	var projectTemplate cfg.AtlantisProjectConfig
 	var workflowTemplate any
 	var ok bool
 
@@ -93,7 +94,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 		return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in atmos.yaml", workflowTemplateName)
 	}
 
-	var atlantisProjects []c.AtlantisProjectConfig
+	var atlantisProjects []cfg.AtlantisProjectConfig
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
@@ -160,10 +161,10 @@ func ExecuteAtlantisGenerateRepoConfig(
 				)
 
 				// Context
-				context := c.GetContextFromVars(varsSection)
+				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, cliConfig.Stacks.NamePattern, stackConfigFileName)
+				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, cliConfig.Stacks.NamePattern, stackConfigFileName)
 				if err != nil {
 					return err
 				}
@@ -195,22 +196,22 @@ func ExecuteAtlantisGenerateRepoConfig(
 					var whenModified []string
 
 					for _, item := range projectTemplate.Autoplan.WhenModified {
-						processedItem := c.ReplaceContextTokens(context, item)
+						processedItem := cfg.ReplaceContextTokens(context, item)
 						whenModified = append(whenModified, processedItem)
 					}
 
-					atlantisProjectAutoplanConfig := c.AtlantisProjectAutoplanConfig{
+					atlantisProjectAutoplanConfig := cfg.AtlantisProjectAutoplanConfig{
 						Enabled:      projectTemplate.Autoplan.Enabled,
 						WhenModified: whenModified,
 					}
 
-					atlantisProjectName := c.ReplaceContextTokens(context, projectTemplate.Name)
+					atlantisProjectName := cfg.ReplaceContextTokens(context, projectTemplate.Name)
 
-					atlantisProject := c.AtlantisProjectConfig{
+					atlantisProject := cfg.AtlantisProjectConfig{
 						Name:                      atlantisProjectName,
-						Workspace:                 c.ReplaceContextTokens(context, projectTemplate.Workspace),
+						Workspace:                 cfg.ReplaceContextTokens(context, projectTemplate.Workspace),
 						Workflow:                  workflowTemplateName,
-						Dir:                       c.ReplaceContextTokens(context, projectTemplate.Dir),
+						Dir:                       cfg.ReplaceContextTokens(context, projectTemplate.Dir),
 						TerraformVersion:          projectTemplate.TerraformVersion,
 						DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
 						Autoplan:                  atlantisProjectAutoplanConfig,
@@ -229,7 +230,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	}
 
 	// Final atlantis config
-	atlantisYaml := c.AtlantisConfigOutput{}
+	atlantisYaml := cfg.AtlantisConfigOutput{}
 	atlantisYaml.Version = configTemplate.Version
 	atlantisYaml.Automerge = configTemplate.Automerge
 	atlantisYaml.DeleteSourceBranchOnMerge = configTemplate.DeleteSourceBranchOnMerge

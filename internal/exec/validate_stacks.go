@@ -2,18 +2,19 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
-	s "github.com/cloudposse/atmos/pkg/stack"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"path"
 	"strings"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	s "github.com/cloudposse/atmos/pkg/stack"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteValidateStacks executes `validate stacks` command
 func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -27,7 +28,7 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	stackConfigFilesAbsolutePaths, _, err := c.FindAllStackConfigsInPaths(cliConfig, includeStackAbsPaths, excludedPaths)
+	stackConfigFilesAbsolutePaths, _, err := cfg.FindAllStackConfigsInPaths(cliConfig, includeStackAbsPaths, excludedPaths)
 	if err != nil {
 		return err
 	}

@@ -2,8 +2,9 @@ package exec
 
 import (
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/config"
 	"strings"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // BuildTerraformWorkspace builds Terraform workspace
@@ -11,14 +12,14 @@ func BuildTerraformWorkspace(
 	stack string,
 	stackNamePattern string,
 	componentMetadata map[any]any,
-	context c.Context,
+	context cfg.Context,
 ) (string, error) {
 
 	var contextPrefix string
 	var err error
 
 	if stackNamePattern != "" {
-		contextPrefix, err = c.GetContextPrefix(stack, context, stackNamePattern, stack)
+		contextPrefix, err = cfg.GetContextPrefix(stack, context, stackNamePattern, stack)
 		if err != nil {
 			return "", err
 		}
@@ -30,7 +31,7 @@ func BuildTerraformWorkspace(
 
 	if terraformWorkspacePattern, terraformWorkspacePatternExist := componentMetadata["terraform_workspace_pattern"].(string); terraformWorkspacePatternExist {
 		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace_pattern`
-		workspace = c.ReplaceContextTokens(context, terraformWorkspacePattern)
+		workspace = cfg.ReplaceContextTokens(context, terraformWorkspacePattern)
 	} else if terraformWorkspace, terraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); terraformWorkspaceExist {
 		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
 		workspace = terraformWorkspace
