@@ -10,15 +10,15 @@ type Configuration struct {
 	Commands                      []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
 	Integrations                  Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
 	Schemas                       Schemas      `yaml:"schemas" json:"schemas" mapstructure:"schemas"`
-	Initialized                   bool
-	StacksBaseAbsolutePath        string   `yaml:"StacksBaseAbsolutePath" json:"StacksBaseAbsolutePath"`
-	IncludeStackAbsolutePaths     []string `yaml:"IncludeStackAbsolutePaths" json:"IncludeStackAbsolutePaths"`
-	ExcludeStackAbsolutePaths     []string `yaml:"ExcludeStackAbsolutePaths" json:"ExcludeStackAbsolutePaths"`
-	TerraformDirAbsolutePath      string   `yaml:"TerraformDirAbsolutePath" json:"TerraformDirAbsolutePath"`
-	HelmfileDirAbsolutePath       string   `yaml:"HelmfileDirAbsolutePath" json:"HelmfileDirAbsolutePath"`
-	StackConfigFilesRelativePaths []string `yaml:"StackConfigFilesRelativePaths" json:"StackConfigFilesRelativePaths"`
-	StackConfigFilesAbsolutePaths []string `yaml:"StackConfigFilesAbsolutePaths" json:"StackConfigFilesAbsolutePaths"`
-	StackType                     string   `yaml:"StackType" json:"StackType"`
+	Initialized                   bool         `yaml:"Initialized" json:"Initialized" mapstructure:"Initialized"`
+	StacksBaseAbsolutePath        string       `yaml:"StacksBaseAbsolutePath" json:"StacksBaseAbsolutePath"`
+	IncludeStackAbsolutePaths     []string     `yaml:"IncludeStackAbsolutePaths" json:"IncludeStackAbsolutePaths"`
+	ExcludeStackAbsolutePaths     []string     `yaml:"ExcludeStackAbsolutePaths" json:"ExcludeStackAbsolutePaths"`
+	TerraformDirAbsolutePath      string       `yaml:"TerraformDirAbsolutePath" json:"TerraformDirAbsolutePath"`
+	HelmfileDirAbsolutePath       string       `yaml:"HelmfileDirAbsolutePath" json:"HelmfileDirAbsolutePath"`
+	StackConfigFilesRelativePaths []string     `yaml:"StackConfigFilesRelativePaths" json:"StackConfigFilesRelativePaths"`
+	StackConfigFilesAbsolutePaths []string     `yaml:"StackConfigFilesAbsolutePaths" json:"StackConfigFilesAbsolutePaths"`
+	StackType                     string       `yaml:"StackType" json:"StackType"`
 }
 
 type Terraform struct {
