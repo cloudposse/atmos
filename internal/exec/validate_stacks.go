@@ -29,7 +29,7 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 	includedPaths := []string{"**/*"}
 	// Don't exclude any YAML files for validation
 	excludedPaths := []string{}
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(c.ProcessedConfig.StacksBaseAbsolutePath, includedPaths)
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(c.Config.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
 	}
@@ -44,16 +44,16 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 
 	var errorMessages []string
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, err := s.ProcessYAMLConfigFile(c.ProcessedConfig.StacksBaseAbsolutePath, filePath, map[string]map[any]any{})
+		stackConfig, importsConfig, err := s.ProcessYAMLConfigFile(c.Config.StacksBaseAbsolutePath, filePath, map[string]map[any]any{})
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}
 
 		componentStackMap := map[string]map[string][]string{}
 		_, err = s.ProcessStackConfig(
-			c.ProcessedConfig.StacksBaseAbsolutePath,
-			c.ProcessedConfig.TerraformDirAbsolutePath,
-			c.ProcessedConfig.HelmfileDirAbsolutePath,
+			c.Config.StacksBaseAbsolutePath,
+			c.Config.TerraformDirAbsolutePath,
+			c.Config.HelmfileDirAbsolutePath,
 			filePath,
 			stackConfig,
 			false,

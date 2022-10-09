@@ -154,11 +154,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 
 		configAndStacksInfo.ComponentType = "terraform"
 		configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
-		shellCommandWorkingDir = path.Join(c.ProcessedConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+		shellCommandWorkingDir = path.Join(c.Config.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
 			configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
-			shellCommandWorkingDir = path.Join(c.ProcessedConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+			shellCommandWorkingDir = path.Join(c.Config.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err
 			}

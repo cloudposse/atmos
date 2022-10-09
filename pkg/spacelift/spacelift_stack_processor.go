@@ -52,10 +52,10 @@ func CreateSpaceliftStacks(
 		}
 
 		_, stacks, err := s.ProcessYAMLConfigFiles(
-			c.ProcessedConfig.StacksBaseAbsolutePath,
-			c.ProcessedConfig.TerraformDirAbsolutePath,
-			c.ProcessedConfig.HelmfileDirAbsolutePath,
-			c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+			c.Config.StacksBaseAbsolutePath,
+			c.Config.TerraformDirAbsolutePath,
+			c.Config.HelmfileDirAbsolutePath,
+			c.Config.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,
 		)

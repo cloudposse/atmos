@@ -204,10 +204,10 @@ func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.ProcessedConfig.StacksBaseAbsolutePath,
-		c.ProcessedConfig.TerraformDirAbsolutePath,
-		c.ProcessedConfig.HelmfileDirAbsolutePath,
-		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		c.Config.StacksBaseAbsolutePath,
+		c.Config.TerraformDirAbsolutePath,
+		c.Config.HelmfileDirAbsolutePath,
+		c.Config.StackConfigFilesAbsolutePaths,
 		false,
 		true)
 
@@ -243,20 +243,20 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 	if g.LogVerbose {
 		fmt.Println()
 		var msg string
-		if c.ProcessedConfig.StackType == "Directory" {
+		if c.Config.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
 			msg = "Found stack config files:"
 		}
 		u.PrintInfo(msg)
-		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAML(c.Config.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
 	}
 
 	// Check and process stacks
-	if c.ProcessedConfig.StackType == "Directory" {
+	if c.Config.StackType == "Directory" {
 		configAndStacksInfo.ComponentSection,
 			configAndStacksInfo.ComponentVarsSection,
 			configAndStacksInfo.ComponentEnvSection,

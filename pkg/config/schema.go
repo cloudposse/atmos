@@ -2,15 +2,23 @@ package config
 
 // Configuration structure represents schema for `atmos.yaml` CLI config
 type Configuration struct {
-	BasePath     string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	Components   Components   `yaml:"components" json:"components" mapstructure:"components"`
-	Stacks       Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
-	Workflows    Workflows    `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
-	Logs         Logs         `yaml:"logs" json:"logs" mapstructure:"logs"`
-	Commands     []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
-	Integrations Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
-	Schemas      Schemas      `yaml:"schemas" json:"schemas" mapstructure:"schemas"`
-	Initialized  bool
+	BasePath                      string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Components                    Components   `yaml:"components" json:"components" mapstructure:"components"`
+	Stacks                        Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Workflows                     Workflows    `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
+	Logs                          Logs         `yaml:"logs" json:"logs" mapstructure:"logs"`
+	Commands                      []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
+	Integrations                  Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
+	Schemas                       Schemas      `yaml:"schemas" json:"schemas" mapstructure:"schemas"`
+	Initialized                   bool
+	StacksBaseAbsolutePath        string   `yaml:"StacksBaseAbsolutePath" json:"StacksBaseAbsolutePath"`
+	IncludeStackAbsolutePaths     []string `yaml:"IncludeStackAbsolutePaths" json:"IncludeStackAbsolutePaths"`
+	ExcludeStackAbsolutePaths     []string `yaml:"ExcludeStackAbsolutePaths" json:"ExcludeStackAbsolutePaths"`
+	TerraformDirAbsolutePath      string   `yaml:"TerraformDirAbsolutePath" json:"TerraformDirAbsolutePath"`
+	HelmfileDirAbsolutePath       string   `yaml:"HelmfileDirAbsolutePath" json:"HelmfileDirAbsolutePath"`
+	StackConfigFilesRelativePaths []string `yaml:"StackConfigFilesRelativePaths" json:"StackConfigFilesRelativePaths"`
+	StackConfigFilesAbsolutePaths []string `yaml:"StackConfigFilesAbsolutePaths" json:"StackConfigFilesAbsolutePaths"`
+	StackType                     string   `yaml:"StackType" json:"StackType"`
 }
 
 type Terraform struct {
@@ -47,17 +55,6 @@ type Workflows struct {
 type Logs struct {
 	Verbose bool `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
 	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
-}
-
-type ProcessedConfiguration struct {
-	StacksBaseAbsolutePath        string   `yaml:"StacksBaseAbsolutePath" json:"StacksBaseAbsolutePath"`
-	IncludeStackAbsolutePaths     []string `yaml:"IncludeStackAbsolutePaths" json:"IncludeStackAbsolutePaths"`
-	ExcludeStackAbsolutePaths     []string `yaml:"ExcludeStackAbsolutePaths" json:"ExcludeStackAbsolutePaths"`
-	TerraformDirAbsolutePath      string   `yaml:"TerraformDirAbsolutePath" json:"TerraformDirAbsolutePath"`
-	HelmfileDirAbsolutePath       string   `yaml:"HelmfileDirAbsolutePath" json:"HelmfileDirAbsolutePath"`
-	StackConfigFilesRelativePaths []string `yaml:"StackConfigFilesRelativePaths" json:"StackConfigFilesRelativePaths"`
-	StackConfigFilesAbsolutePaths []string `yaml:"StackConfigFilesAbsolutePaths" json:"StackConfigFilesAbsolutePaths"`
-	StackType                     string   `yaml:"StackType" json:"StackType"`
 }
 
 type Context struct {

@@ -18,9 +18,6 @@ import (
 var (
 	// Config is the CLI configuration structure
 	Config Configuration
-
-	// ProcessedConfig holds all the calculated values
-	ProcessedConfig ProcessedConfiguration
 )
 
 // InitConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
@@ -188,21 +185,21 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
+	Config.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
 	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
+	Config.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
 	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
+	Config.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert terraform dir to absolute path
 	terraformBasePath := path.Join(Config.BasePath, Config.Components.Terraform.BasePath)
@@ -210,7 +207,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
+	Config.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert helmfile dir to absolute path
 	helmfileBasePath := path.Join(Config.BasePath, Config.Components.Helmfile.BasePath)
@@ -218,7 +215,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
+	Config.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
 	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
@@ -242,18 +239,18 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 		return errors.New(errorMessage)
 	}
 
-	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
-	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
+	Config.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+	Config.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	if stackIsPhysicalPath {
 		u.PrintInfoVerbose(fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
 			configAndStacksInfo.Stack,
 			stackConfigFilesRelativePaths[0]),
 		)
-		ProcessedConfig.StackType = "Directory"
+		Config.StackType = "Directory"
 	} else {
 		// The stack is a logical name
-		ProcessedConfig.StackType = "Logical"
+		Config.StackType = "Logical"
 	}
 
 	if g.LogVerbose {
@@ -287,21 +284,21 @@ func ProcessConfigForSpacelift() error {
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
+	Config.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
 	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
+	Config.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
 	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
+	Config.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert terraform dir to absolute path
 	terraformBasePath := path.Join(Config.BasePath, Config.Components.Terraform.BasePath)
@@ -309,7 +306,7 @@ func ProcessConfigForSpacelift() error {
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.TerraformDirAbsolutePath = terraformDirAbsPath
+	Config.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert helmfile dir to absolute path
 	helmfileBasePath := path.Join(Config.BasePath, Config.Components.Helmfile.BasePath)
@@ -317,7 +314,7 @@ func ProcessConfigForSpacelift() error {
 	if err != nil {
 		return err
 	}
-	ProcessedConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
+	Config.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
 	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, err := FindAllStackConfigsInPaths(
@@ -340,8 +337,8 @@ func ProcessConfigForSpacelift() error {
 		return errors.New(errorMessage)
 	}
 
-	ProcessedConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
-	ProcessedConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
+	Config.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+	Config.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	return nil
 }
