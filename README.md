@@ -568,8 +568,8 @@ exit status 1
 Run the following commands to provision the component in the stacks:
 
 ```bash
-atmos terraform apply component infra/vpc -s tenant1-ue2-prod
-atmos terraform apply component infra/vpc -s tenant1-ue2-dev
+atmos terraform apply infra/vpc -s tenant1-ue2-prod
+atmos terraform apply infra/vpc -s tenant1-ue2-dev
 ```
 
 Since the OPA validation policies don't pass, `atmos` does not allow provisioning the component in the stacks:
