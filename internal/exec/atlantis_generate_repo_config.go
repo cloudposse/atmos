@@ -13,7 +13,7 @@ import (
 
 // ExecuteAtlantisGenerateRepoConfigCmd executes `atlantis generate repo-config` command
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		components = strings.Split(componentsCsv, ",")
 	}
 
-	return ExecuteAtlantisGenerateRepoConfig(Config, outputPath, configTemplateName, projectTemplateName, workflowTemplateName, stacks, components)
+	return ExecuteAtlantisGenerateRepoConfig(cliConfig, outputPath, configTemplateName, projectTemplateName, workflowTemplateName, stacks, components)
 }
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis

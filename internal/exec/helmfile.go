@@ -16,13 +16,13 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
 	}
 
-	info, err := processArgsConfigAndStacks(Config, "helmfile", cmd, args)
+	info, err := processArgsConfigAndStacks(cliConfig, "helmfile", cmd, args)
 	if err != nil {
 		return err
 	}
@@ -35,19 +35,19 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return errors.New("stack must be specified")
 	}
 
-	err = checkHelmfileConfig(Config)
+	err = checkHelmfileConfig(cliConfig)
 	if err != nil {
 		return err
 	}
 
 	// Check if the component exists as a helmfile component
-	componentPath := path.Join(Config.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath := path.Join(cliConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			path.Join(Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
+			path.Join(cliConfig.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
@@ -65,7 +65,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if component 'settings.validation' section is specified and validate the component
-	valid, err := ValidateComponent(Config, info.ComponentFromArg, info.ComponentSection, "", "")
+	valid, err := ValidateComponent(cliConfig, info.ComponentFromArg, info.ComponentSection, "", "")
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Write variables to a file
 	varFile := constructHelmfileComponentVarfileName(info)
-	varFilePath := constructHelmfileComponentVarfilePath(Config, info)
+	varFilePath := constructHelmfileComponentVarfilePath(cliConfig, info)
 
 	u.PrintInfo("Writing the variables to file:")
 	fmt.Println(varFilePath)
@@ -95,12 +95,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	context := c.GetContextFromVars(info.ComponentVarsSection)
 
 	// Prepare AWS profile
-	helmAwsProfile := c.ReplaceContextTokens(context, Config.Components.Helmfile.HelmAwsProfilePattern)
+	helmAwsProfile := c.ReplaceContextTokens(context, cliConfig.Components.Helmfile.HelmAwsProfilePattern)
 	u.PrintInfo(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
 	// Download kubeconfig by running `aws eks update-kubeconfig`
-	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", Config.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
-	clusterName := c.ReplaceContextTokens(context, Config.Components.Helmfile.ClusterNamePattern)
+	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", cliConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
+	clusterName := c.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
 	u.PrintInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
 	err = ExecuteShellCommand("aws",
@@ -143,10 +143,10 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Println("Stack: " + info.StackFromArg)
 	} else {
 		fmt.Println("Stack: " + info.StackFromArg)
-		fmt.Println("Stack path: " + path.Join(Config.BasePath, Config.Stacks.BasePath, info.Stack))
+		fmt.Println("Stack path: " + path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := constructHelmfileComponentWorkingDir(Config, info)
+	workingDir := constructHelmfileComponentWorkingDir(cliConfig, info)
 	fmt.Printf("Working dir: %s\n\n", workingDir)
 
 	// Prepare arguments and flags

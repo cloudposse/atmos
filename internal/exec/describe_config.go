@@ -16,15 +16,15 @@ func ExecuteDescribeConfig(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
 
 	if format == "json" {
-		err = u.PrintAsJSON(Config)
+		err = u.PrintAsJSON(cliConfig)
 	} else if format == "yaml" {
-		err = u.PrintAsYAML(Config)
+		err = u.PrintAsYAML(cliConfig)
 	} else {
 		err = errors.New("invalid flag '--format'. Accepted values are 'json' or 'yaml'")
 	}

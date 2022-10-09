@@ -10,12 +10,6 @@ import (
 
 // ExecuteHelmfileGenerateVarfile executes `helmfile generate varfile` command
 func ExecuteHelmfileGenerateVarfile(cmd *cobra.Command, args []string) error {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
-	if err != nil {
-		u.PrintErrorToStdError(err)
-		return err
-	}
-
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
@@ -34,7 +28,13 @@ func ExecuteHelmfileGenerateVarfile(cmd *cobra.Command, args []string) error {
 	info.Stack = stack
 	info.ComponentType = "helmfile"
 
-	info, err = ProcessStacks(Config, info, true)
+	cliConfig, err := c.InitCliConfig(info, true)
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
+	info, err = ProcessStacks(cliConfig, info, true)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func ExecuteHelmfileGenerateVarfile(cmd *cobra.Command, args []string) error {
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = constructHelmfileComponentVarfilePath(Config, info)
+		varFilePath = constructHelmfileComponentVarfilePath(cliConfig, info)
 	}
 
 	// Print the component variables
