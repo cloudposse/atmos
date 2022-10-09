@@ -121,16 +121,18 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	shellCommandWorkingDir := ""
 
 	var configAndStacksInfo c.ConfigAndStacksInfo
+	var Config c.Configuration
+	var err error
 
 	if !requiredParamsProvided {
 		// If stack is not provided, calculate the stack name from the context (tenant, environment, stage)
 		if kubeconfigContext.Stack == "" {
-			err := c.InitConfig(configAndStacksInfo)
+			Config, err = c.InitConfig(configAndStacksInfo)
 			if err != nil {
 				return err
 			}
 
-			if len(c.Config.Stacks.NamePattern) < 1 {
+			if len(Config.Stacks.NamePattern) < 1 {
 				return errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 			}
 
@@ -139,7 +141,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 				kubeconfigContext.Tenant,
 				kubeconfigContext.Environment,
 				kubeconfigContext.Stage,
-				c.Config.Stacks.NamePattern,
+				Config.Stacks.NamePattern,
 			)
 			if err != nil {
 				return err
@@ -153,12 +155,12 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 		configAndStacksInfo.Stack = kubeconfigContext.Stack
 
 		configAndStacksInfo.ComponentType = "terraform"
-		configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
-		shellCommandWorkingDir = path.Join(c.Config.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+		configAndStacksInfo, err = ProcessStacks(Config, configAndStacksInfo, true)
+		shellCommandWorkingDir = path.Join(Config.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
-			configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
-			shellCommandWorkingDir = path.Join(c.Config.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+			configAndStacksInfo, err = ProcessStacks(Config, configAndStacksInfo, true)
+			shellCommandWorkingDir = path.Join(Config.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err
 			}
@@ -171,16 +173,16 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 
 		// `kubeconfig` can be overridden on the command line
 		if kubeconfigPath == "" {
-			kubeconfigPath = fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, kubeconfigContext.Stack)
+			kubeconfigPath = fmt.Sprintf("%s/%s-kubecfg", Config.Components.Helmfile.KubeconfigPath, kubeconfigContext.Stack)
 		}
 		// `clusterName` can be overridden on the command line
 		if clusterName == "" {
-			clusterName = c.ReplaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
+			clusterName = c.ReplaceContextTokens(context, Config.Components.Helmfile.ClusterNamePattern)
 		}
 		// `profile` can be overridden on the command line
 		// `--role-arn` suppresses `profile` being automatically set
 		if profile == "" && roleArn == "" {
-			profile = c.ReplaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
+			profile = c.ReplaceContextTokens(context, Config.Components.Helmfile.HelmAwsProfilePattern)
 		}
 		// `region` can be overridden on the command line
 		if region == "" {
@@ -220,7 +222,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err := ExecuteShellCommand("aws", args, shellCommandWorkingDir, nil, dryRun)
+	err = ExecuteShellCommand("aws", args, shellCommandWorkingDir, nil, dryRun)
 	if err != nil {
 		return err
 	}

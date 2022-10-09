@@ -39,23 +39,23 @@ func CreateSpaceliftStacks(
 
 		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports)
 	} else {
-		err := c.InitConfig(c.ConfigAndStacksInfo{})
+		Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
-		err = c.ProcessConfigForSpacelift()
+		err = c.ProcessConfigForSpacelift(Config)
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
 		_, stacks, err := s.ProcessYAMLConfigFiles(
-			c.Config.StacksBaseAbsolutePath,
-			c.Config.TerraformDirAbsolutePath,
-			c.Config.HelmfileDirAbsolutePath,
-			c.Config.StackConfigFilesAbsolutePaths,
+			Config.StacksBaseAbsolutePath,
+			Config.TerraformDirAbsolutePath,
+			Config.HelmfileDirAbsolutePath,
+			Config.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,
 		)
@@ -64,7 +64,7 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
-		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, c.Config.Stacks.NamePattern, processImports)
+		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, Config.Stacks.NamePattern, processImports)
 	}
 }
 

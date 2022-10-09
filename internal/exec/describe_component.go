@@ -27,12 +27,18 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 
+	Config, err := c.InitConfig(configAndStacksInfo)
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
+	configAndStacksInfo, err = ProcessStacks(Config, configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorVerbose(err)
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
+		configAndStacksInfo, err = ProcessStacks(Config, configAndStacksInfo, true)
 		if err != nil {
 			return err
 		}

@@ -18,7 +18,13 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	info, err := processArgsConfigAndStacks("terraform", cmd, args)
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
+	info, err := processArgsConfigAndStacks(Config, "terraform", cmd, args)
 	if err != nil {
 		return err
 	}
@@ -31,19 +37,19 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		return errors.New("stack must be specified")
 	}
 
-	err = checkTerraformConfig()
+	err = checkTerraformConfig(Config)
 	if err != nil {
 		return err
 	}
 
 	// Check if the component (or base component) exists as Terraform component
-	componentPath := path.Join(c.Config.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath := path.Join(Config.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			path.Join(c.Config.Components.Terraform.BasePath, info.ComponentFolderPrefix),
+			path.Join(Config.Components.Terraform.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
@@ -73,7 +79,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		_ = os.Remove(path.Join(componentPath, planFile))
 
 		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
-		if c.Config.Components.Terraform.AutoGenerateBackendFile {
+		if Config.Components.Terraform.AutoGenerateBackendFile {
 			fmt.Println("Deleting 'backend.tf.json' file")
 			_ = os.Remove(path.Join(componentPath, "backend.tf.json"))
 		}
@@ -126,7 +132,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		if len(varFileNameFromArg) > 0 {
 			varFilePath = varFileNameFromArg
 		} else {
-			varFilePath = constructTerraformComponentVarfilePath(info)
+			varFilePath = constructTerraformComponentVarfilePath(Config, info)
 		}
 
 		u.PrintInfo("Writing the variables to file:")
@@ -147,7 +153,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if component 'settings.validation' section is specified and validate the component
-	valid, err := ValidateComponent(info.ComponentFromArg, info.ComponentSection, "", "")
+	valid, err := ValidateComponent(Config, info.ComponentFromArg, info.ComponentSection, "", "")
 	if err != nil {
 		return err
 	}
@@ -156,9 +162,9 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto generate backend file
-	if c.Config.Components.Terraform.AutoGenerateBackendFile {
+	if Config.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := path.Join(
-			constructTerraformComponentWorkingDir(info),
+			constructTerraformComponentWorkingDir(Config, info),
 			"backend.tf.json",
 		)
 
@@ -179,7 +185,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
 		info.SubCommand == "clean" ||
-		(info.SubCommand == "deploy" && !c.Config.Components.Terraform.DeployRunInit) {
+		(info.SubCommand == "deploy" && !Config.Components.Terraform.DeployRunInit) {
 		runTerraformInit = false
 	}
 
@@ -191,7 +197,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	if runTerraformInit {
 		initCommandWithArguments := []string{"init"}
-		if info.SubCommand == "workspace" || c.Config.Components.Terraform.InitRunReconfigure {
+		if info.SubCommand == "workspace" || Config.Components.Terraform.InitRunReconfigure {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
 		err = ExecuteShellCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList, info.DryRun)
@@ -209,7 +215,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 	}
 
 	// Handle Config.Components.Terraform.ApplyAutoApprove flag
-	if info.SubCommand == "apply" && c.Config.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
+	if info.SubCommand == "apply" && Config.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
@@ -236,10 +242,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		fmt.Println("Stack: " + info.StackFromArg)
 	} else {
 		fmt.Println("Stack: " + info.StackFromArg)
-		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
+		fmt.Println("Stack path: " + path.Join(Config.BasePath, Config.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := constructTerraformComponentWorkingDir(info)
+	workingDir := constructTerraformComponentWorkingDir(Config, info)
 	fmt.Printf("Working dir: %s\n", workingDir)
 
 	// Print ENV vars if they are found in the component's stack config
@@ -269,7 +275,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		}
 	case "init":
-		if c.Config.Components.Terraform.InitRunReconfigure {
+		if Config.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
 	case "workspace":
@@ -343,7 +349,7 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 
 	// Clean up
 	if info.SubCommand != "plan" {
-		planFilePath := constructTerraformComponentPlanfilePath(info)
+		planFilePath := constructTerraformComponentPlanfilePath(Config, info)
 		_ = os.Remove(planFilePath)
 	}
 

@@ -14,6 +14,7 @@ import (
 
 // FindAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
 func FindAllStackConfigsInPathsForStack(
+	Config Configuration,
 	stack string,
 	includeStackPaths []string,
 	excludeStackPaths []string,
@@ -94,6 +95,7 @@ func FindAllStackConfigsInPathsForStack(
 
 // FindAllStackConfigsInPaths finds all stack config files in the paths specified by globs
 func FindAllStackConfigsInPaths(
+	Config Configuration,
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {
@@ -148,7 +150,7 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
-func processEnvVars() error {
+func processEnvVars(Config Configuration) error {
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
 		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
@@ -276,7 +278,7 @@ func processEnvVars() error {
 	return nil
 }
 
-func checkConfig() error {
+func checkConfig(Config Configuration) error {
 	if len(Config.Stacks.BasePath) < 1 {
 		return errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
 	}
@@ -288,7 +290,7 @@ func checkConfig() error {
 	return nil
 }
 
-func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
+func processCommandLineArgs(Config Configuration, configAndStacksInfo ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		Config.BasePath = configAndStacksInfo.BasePath
 		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
@@ -353,7 +355,7 @@ func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
 	return nil
 }
 
-func processLogsConfig() error {
+func processLogsConfig(Config Configuration) error {
 	logVerbose := os.Getenv("ATMOS_LOGS_VERBOSE")
 	if len(logVerbose) > 0 {
 		u.PrintInfo(fmt.Sprintf("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerbose))

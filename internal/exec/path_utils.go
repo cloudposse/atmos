@@ -7,10 +7,10 @@ import (
 )
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack
-func constructTerraformComponentWorkingDir(info c.ConfigAndStacksInfo) string {
+func constructTerraformComponentWorkingDir(Config c.Configuration, info c.ConfigAndStacksInfo) string {
 	return path.Join(
-		c.Config.BasePath,
-		c.Config.Components.Terraform.BasePath,
+		Config.BasePath,
+		Config.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 	)
@@ -41,26 +41,26 @@ func constructTerraformComponentVarfileName(info c.ConfigAndStacksInfo) string {
 }
 
 // constructTerraformComponentVarfilePath constructs the varfile path for a terraform component in a stack
-func constructTerraformComponentVarfilePath(info c.ConfigAndStacksInfo) string {
+func constructTerraformComponentVarfilePath(Config c.Configuration, info c.ConfigAndStacksInfo) string {
 	return path.Join(
-		constructTerraformComponentWorkingDir(info),
+		constructTerraformComponentWorkingDir(Config, info),
 		constructTerraformComponentVarfileName(info),
 	)
 }
 
 // constructTerraformComponentPlanfilePath constructs the planfile path for a terraform component in a stack
-func constructTerraformComponentPlanfilePath(info c.ConfigAndStacksInfo) string {
+func constructTerraformComponentPlanfilePath(Config c.Configuration, info c.ConfigAndStacksInfo) string {
 	return path.Join(
-		constructTerraformComponentWorkingDir(info),
+		constructTerraformComponentWorkingDir(Config, info),
 		constructTerraformComponentPlanfileName(info),
 	)
 }
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack
-func constructHelmfileComponentWorkingDir(info c.ConfigAndStacksInfo) string {
+func constructHelmfileComponentWorkingDir(Config c.Configuration, info c.ConfigAndStacksInfo) string {
 	return path.Join(
-		c.Config.BasePath,
-		c.Config.Components.Helmfile.BasePath,
+		Config.BasePath,
+		Config.Components.Helmfile.BasePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 	)
@@ -78,9 +78,9 @@ func constructHelmfileComponentVarfileName(info c.ConfigAndStacksInfo) string {
 }
 
 // constructHelmfileComponentVarfilePath constructs the varfile path for a helmfile component in a stack
-func constructHelmfileComponentVarfilePath(info c.ConfigAndStacksInfo) string {
+func constructHelmfileComponentVarfilePath(Config c.Configuration, info c.ConfigAndStacksInfo) string {
 	return path.Join(
-		constructHelmfileComponentWorkingDir(info),
+		constructHelmfileComponentWorkingDir(Config, info),
 		constructHelmfileComponentVarfileName(info),
 	)
 }

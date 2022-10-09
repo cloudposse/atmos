@@ -16,7 +16,13 @@ import (
 
 // ExecuteHelmfile executes helmfile commands
 func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	info, err := processArgsConfigAndStacks("helmfile", cmd, args)
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
+	info, err := processArgsConfigAndStacks(Config, "helmfile", cmd, args)
 	if err != nil {
 		return err
 	}
@@ -29,19 +35,19 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		return errors.New("stack must be specified")
 	}
 
-	err = checkHelmfileConfig()
+	err = checkHelmfileConfig(Config)
 	if err != nil {
 		return err
 	}
 
 	// Check if the component exists as a helmfile component
-	componentPath := path.Join(c.Config.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath := path.Join(Config.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			path.Join(c.Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
+			path.Join(Config.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
@@ -59,7 +65,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if component 'settings.validation' section is specified and validate the component
-	valid, err := ValidateComponent(info.ComponentFromArg, info.ComponentSection, "", "")
+	valid, err := ValidateComponent(Config, info.ComponentFromArg, info.ComponentSection, "", "")
 	if err != nil {
 		return err
 	}
@@ -69,7 +75,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 
 	// Write variables to a file
 	varFile := constructHelmfileComponentVarfileName(info)
-	varFilePath := constructHelmfileComponentVarfilePath(info)
+	varFilePath := constructHelmfileComponentVarfilePath(Config, info)
 
 	u.PrintInfo("Writing the variables to file:")
 	fmt.Println(varFilePath)
@@ -89,12 +95,12 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	context := c.GetContextFromVars(info.ComponentVarsSection)
 
 	// Prepare AWS profile
-	helmAwsProfile := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.HelmAwsProfilePattern)
+	helmAwsProfile := c.ReplaceContextTokens(context, Config.Components.Helmfile.HelmAwsProfilePattern)
 	u.PrintInfo(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
 	// Download kubeconfig by running `aws eks update-kubeconfig`
-	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", c.Config.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
-	clusterName := c.ReplaceContextTokens(context, c.Config.Components.Helmfile.ClusterNamePattern)
+	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", Config.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
+	clusterName := c.ReplaceContextTokens(context, Config.Components.Helmfile.ClusterNamePattern)
 	u.PrintInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
 	err = ExecuteShellCommand("aws",
@@ -137,10 +143,10 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		fmt.Println("Stack: " + info.StackFromArg)
 	} else {
 		fmt.Println("Stack: " + info.StackFromArg)
-		fmt.Println("Stack path: " + path.Join(c.Config.BasePath, c.Config.Stacks.BasePath, info.Stack))
+		fmt.Println("Stack path: " + path.Join(Config.BasePath, Config.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := constructHelmfileComponentWorkingDir(info)
+	workingDir := constructHelmfileComponentWorkingDir(Config, info)
 	fmt.Printf("Working dir: %s\n\n", workingDir)
 
 	// Prepare arguments and flags
@@ -182,23 +188,23 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func checkHelmfileConfig() error {
-	if len(c.Config.Components.Helmfile.BasePath) < 1 {
+func checkHelmfileConfig(Config c.Configuration) error {
+	if len(Config.Components.Helmfile.BasePath) < 1 {
 		return errors.New("Base path to helmfile components must be provided in 'components.helmfile.base_path' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV variable")
 	}
 
-	if len(c.Config.Components.Helmfile.KubeconfigPath) < 1 {
+	if len(Config.Components.Helmfile.KubeconfigPath) < 1 {
 		return errors.New("Kubeconfig path must be provided in 'components.helmfile.kubeconfig_path' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV variable")
 	}
 
-	if len(c.Config.Components.Helmfile.HelmAwsProfilePattern) < 1 {
+	if len(Config.Components.Helmfile.HelmAwsProfilePattern) < 1 {
 		return errors.New("Helm AWS profile pattern must be provided in 'components.helmfile.helm_aws_profile_pattern' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV variable")
 	}
 
-	if len(c.Config.Components.Helmfile.ClusterNamePattern) < 1 {
+	if len(Config.Components.Helmfile.ClusterNamePattern) < 1 {
 		return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
 	}

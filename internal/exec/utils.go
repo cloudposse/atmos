@@ -128,7 +128,7 @@ func FindComponentConfig(
 }
 
 // processArgsConfigAndStacks processes command-line args, CLI config and stacks
-func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
+func processArgsConfigAndStacks(Config c.Configuration, componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 
 	if len(args) < 1 {
@@ -186,28 +186,22 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 		return configAndStacksInfo, err
 	}
 
-	return ProcessStacks(configAndStacksInfo, true)
+	return ProcessStacks(Config, configAndStacksInfo, true)
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]any, error) {
-	// Process and merge CLI configurations
-	err := c.InitConfig(configAndStacksInfo)
-	if err != nil {
-		return nil, err
-	}
-
-	err = c.ProcessConfig(configAndStacksInfo, checkStack)
+func FindStacksMap(Config c.Configuration, configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]any, error) {
+	err := c.ProcessConfig(Config, configAndStacksInfo, checkStack)
 	if err != nil {
 		return nil, err
 	}
 
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.Config.StacksBaseAbsolutePath,
-		c.Config.TerraformDirAbsolutePath,
-		c.Config.HelmfileDirAbsolutePath,
-		c.Config.StackConfigFilesAbsolutePaths,
+		Config.StacksBaseAbsolutePath,
+		Config.TerraformDirAbsolutePath,
+		Config.HelmfileDirAbsolutePath,
+		Config.StackConfigFilesAbsolutePaths,
 		false,
 		true)
 
@@ -219,7 +213,7 @@ func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 }
 
 // ProcessStacks processes stack config
-func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (c.ConfigAndStacksInfo, error) {
+func ProcessStacks(Config c.Configuration, configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (c.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
@@ -234,7 +228,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	stacksMap, err := FindStacksMap(configAndStacksInfo, checkStack)
+	stacksMap, err := FindStacksMap(Config, configAndStacksInfo, checkStack)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -243,20 +237,20 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 	if g.LogVerbose {
 		fmt.Println()
 		var msg string
-		if c.Config.StackType == "Directory" {
+		if Config.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
 			msg = "Found stack config files:"
 		}
 		u.PrintInfo(msg)
-		err = u.PrintAsYAML(c.Config.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAML(Config.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
 	}
 
 	// Check and process stacks
-	if c.Config.StackType == "Directory" {
+	if Config.StackType == "Directory" {
 		configAndStacksInfo.ComponentSection,
 			configAndStacksInfo.ComponentVarsSection,
 			configAndStacksInfo.ComponentEnvSection,
@@ -280,7 +274,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
 		configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
-			c.Config.Stacks.NamePattern,
+			Config.Stacks.NamePattern,
 			configAndStacksInfo.Stack,
 		)
 		if err != nil {
@@ -318,7 +312,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
 			configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack,
 				configAndStacksInfo.Context,
-				c.Config.Stacks.NamePattern,
+				Config.Stacks.NamePattern,
 				stackName,
 			)
 			if err != nil {
@@ -342,13 +336,16 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		}
 
 		if foundStackCount == 0 {
+			y, _ := u.ConvertToYAML(Config)
+
 			return configAndStacksInfo,
-				fmt.Errorf("\nSearched all stack files, but could not find config for the component '%s' in the stack '%s'.\n"+
+				fmt.Errorf("\nSearched all stack YAML files, but could not find config for the component '%s' in the stack '%s'.\n"+
 					"Check that all variables in the stack name pattern '%s' are correctly defined in the stack config files.\n"+
-					"Are the component and stack names correct? Did you forget an import?",
+					"Are the component and stack names correct? Did you forget an import?\n\n\nCLI config:\n\n%v",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
-					c.Config.Stacks.NamePattern)
+					Config.Stacks.NamePattern,
+					y)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
 				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
@@ -356,7 +353,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
-				c.Config.Stacks.NamePattern)
+				Config.Stacks.NamePattern)
 			u.PrintErrorToStdErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
@@ -403,7 +400,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 	// workspace
 	workspace, err := BuildTerraformWorkspace(
 		configAndStacksInfo.Stack,
-		c.Config.Stacks.NamePattern,
+		Config.Stacks.NamePattern,
 		configAndStacksInfo.ComponentMetadataSection,
 		configAndStacksInfo.Context,
 	)

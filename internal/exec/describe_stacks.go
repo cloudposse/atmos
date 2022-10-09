@@ -12,6 +12,12 @@ import (
 
 // ExecuteDescribeStacks executes `describe stacks` command
 func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
 	flags := cmd.Flags()
 
 	filterByStack, err := flags.GetString("stack")
@@ -64,7 +70,7 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.Stack = filterByStack
-	stacksMap, err := FindStacksMap(configAndStacksInfo, filterByStack != "")
+	stacksMap, err := FindStacksMap(Config, configAndStacksInfo, filterByStack != "")
 	if err != nil {
 		return err
 	}

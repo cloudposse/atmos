@@ -15,12 +15,12 @@ import (
 func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 
-	err := c.InitConfig(configAndStacksInfo)
+	Config, err := c.InitConfig(configAndStacksInfo)
 	if err != nil {
 		return err
 	}
 
-	err = c.ProcessConfig(configAndStacksInfo, false)
+	err = c.ProcessConfig(Config, configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
@@ -29,31 +29,31 @@ func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 	includedPaths := []string{"**/*"}
 	// Don't exclude any YAML files for validation
 	excludedPaths := []string{}
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(c.Config.StacksBaseAbsolutePath, includedPaths)
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(Config.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
 	}
 
-	stackConfigFilesAbsolutePaths, _, err := c.FindAllStackConfigsInPaths(includeStackAbsPaths, excludedPaths)
+	stackConfigFilesAbsolutePaths, _, err := c.FindAllStackConfigsInPaths(Config, includeStackAbsPaths, excludedPaths)
 	if err != nil {
 		return err
 	}
 
 	u.PrintInfo(fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders\n",
-		path.Join(c.Config.BasePath, c.Config.Stacks.BasePath)))
+		path.Join(Config.BasePath, Config.Stacks.BasePath)))
 
 	var errorMessages []string
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, err := s.ProcessYAMLConfigFile(c.Config.StacksBaseAbsolutePath, filePath, map[string]map[any]any{})
+		stackConfig, importsConfig, err := s.ProcessYAMLConfigFile(Config.StacksBaseAbsolutePath, filePath, map[string]map[any]any{})
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}
 
 		componentStackMap := map[string]map[string][]string{}
 		_, err = s.ProcessStackConfig(
-			c.Config.StacksBaseAbsolutePath,
-			c.Config.TerraformDirAbsolutePath,
-			c.Config.HelmfileDirAbsolutePath,
+			Config.StacksBaseAbsolutePath,
+			Config.TerraformDirAbsolutePath,
+			Config.HelmfileDirAbsolutePath,
 			filePath,
 			stackConfig,
 			false,

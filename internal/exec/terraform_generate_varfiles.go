@@ -12,6 +12,12 @@ import (
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
 	flags := cmd.Flags()
 
 	fileTemplate, err := flags.GetString("file-template")
@@ -48,13 +54,13 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		format = "json"
 	}
 
-	return ExecuteTerraformGenerateVarfiles(fileTemplate, format, stacks, components)
+	return ExecuteTerraformGenerateVarfiles(Config, fileTemplate, format, stacks, components)
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
-func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks []string, components []string) error {
+func ExecuteTerraformGenerateVarfiles(Config c.Configuration, fileTemplate string, format string, stacks []string, components []string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(configAndStacksInfo, false)
+	stacksMap, err := FindStacksMap(Config, configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
@@ -111,8 +117,8 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 
 				// Absolute path to the terraform component
 				terraformComponentPath := path.Join(
-					c.Config.BasePath,
-					c.Config.Components.Terraform.BasePath,
+					Config.BasePath,
+					Config.Components.Terraform.BasePath,
 					terraformComponent,
 				)
 
@@ -120,7 +126,7 @@ func ExecuteTerraformGenerateVarfiles(fileTemplate string, format string, stacks
 				context := c.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, c.Config.Stacks.NamePattern, stackConfigFileName)
+				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, Config.Stacks.NamePattern, stackConfigFileName)
 				if err != nil {
 					return err
 				}

@@ -13,6 +13,12 @@ import (
 
 // ExecuteValidateComponentCmd executes `validate component` command
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument 'componentName'")
 	}
@@ -36,7 +42,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, err = ExecuteValidateComponent(componentName, stack, schemaPath, schemaType)
+	_, err = ExecuteValidateComponent(Config, componentName, stack, schemaPath, schemaType)
 	if err != nil {
 		return err
 	}
@@ -45,17 +51,17 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponent(componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
+func ExecuteValidateComponent(Config c.Configuration, componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err := ProcessStacks(configAndStacksInfo, true)
+	configAndStacksInfo, err := ProcessStacks(Config, configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorVerbose(err)
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(configAndStacksInfo, true)
+		configAndStacksInfo, err = ProcessStacks(Config, configAndStacksInfo, true)
 		if err != nil {
 			return false, err
 		}
@@ -63,11 +69,11 @@ func ExecuteValidateComponent(componentName string, stack string, schemaPath str
 
 	componentSection := configAndStacksInfo.ComponentSection
 
-	return ValidateComponent(componentName, componentSection, schemaPath, schemaType)
+	return ValidateComponent(Config, componentName, componentSection, schemaPath, schemaType)
 }
 
 // ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
-func ValidateComponent(componentName string, componentSection any, schemaPath string, schemaType string) (bool, error) {
+func ValidateComponent(Config c.Configuration, componentName string, componentSection any, schemaPath string, schemaType string) (bool, error) {
 	ok := true
 	var err error
 
@@ -75,7 +81,7 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 		fmt.Println()
 		u.PrintInfo(fmt.Sprintf("Validating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
-		ok, err = validateComponentInternal(componentSection, schemaPath, schemaType)
+		ok, err = validateComponentInternal(Config, componentSection, schemaPath, schemaType)
 		if err != nil {
 			return false, err
 		}
@@ -95,7 +101,7 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 				u.PrintMessage(v.Description)
 			}
 
-			ok2, err := validateComponentInternal(componentSection, schemaPath, schemaType)
+			ok2, err := validateComponentInternal(Config, componentSection, schemaPath, schemaType)
 			if err != nil {
 				return false, err
 			}
@@ -110,7 +116,7 @@ func ValidateComponent(componentName string, componentSection any, schemaPath st
 	return ok, nil
 }
 
-func validateComponentInternal(componentSection any, schemaPath string, schemaType string) (bool, error) {
+func validateComponentInternal(Config c.Configuration, componentSection any, schemaPath string, schemaType string) (bool, error) {
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
 		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
 	}
@@ -124,15 +130,15 @@ func validateComponentInternal(componentSection any, schemaPath string, schemaTy
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = path.Join(c.Config.BasePath, c.Config.Schemas.JsonSchema.BasePath, schemaPath)
+				filePath = path.Join(Config.BasePath, Config.Schemas.JsonSchema.BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = path.Join(c.Config.BasePath, c.Config.Schemas.Opa.BasePath, schemaPath)
+				filePath = path.Join(Config.BasePath, Config.Schemas.Opa.BasePath, schemaPath)
 			}
 		case "cue":
 			{
-				filePath = path.Join(c.Config.BasePath, c.Config.Schemas.Cue.BasePath, schemaPath)
+				filePath = path.Join(Config.BasePath, Config.Schemas.Cue.BasePath, schemaPath)
 			}
 		}
 

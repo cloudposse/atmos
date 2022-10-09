@@ -15,15 +15,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var (
-	// Config is the CLI configuration structure
-	Config Configuration
-)
-
 // InitConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
+func InitConfig(configAndStacksInfo ConfigAndStacksInfo) (Configuration, error) {
 	// Config is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
@@ -31,13 +26,11 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// ENV vars
 	// Command-line arguments
 
-	if Config.Initialized {
-		return nil
-	}
+	var Config Configuration
 
-	err := processLogsConfig()
+	err := processLogsConfig(Config)
 	if err != nil {
-		return err
+		return Config, err
 	}
 
 	if g.LogVerbose {
@@ -73,7 +66,7 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		configFile1 := path.Join(configFilePath1, g.ConfigFileName)
 		found, err = processConfigFile(configFile1, v)
 		if err != nil {
-			return err
+			return Config, err
 		}
 		if found {
 			configFound = true
@@ -83,12 +76,12 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// Process config in user's HOME dir
 	configFilePath2, err := homedir.Dir()
 	if err != nil {
-		return err
+		return Config, err
 	}
 	configFile2 := path.Join(configFilePath2, ".atmos", g.ConfigFileName)
 	found, err = processConfigFile(configFile2, v)
 	if err != nil {
-		return err
+		return Config, err
 	}
 	if found {
 		configFound = true
@@ -97,12 +90,12 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	// Process config in the current dir
 	configFilePath3, err := os.Getwd()
 	if err != nil {
-		return err
+		return Config, err
 	}
 	configFile3 := path.Join(configFilePath3, g.ConfigFileName)
 	found, err = processConfigFile(configFile3, v)
 	if err != nil {
-		return err
+		return Config, err
 	}
 	if found {
 		configFound = true
@@ -115,7 +108,7 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 		configFile4 := path.Join(configFilePath4, g.ConfigFileName)
 		found, err = processConfigFile(configFile4, v)
 		if err != nil {
-			return err
+			return Config, err
 		}
 		if found {
 			configFound = true
@@ -129,7 +122,7 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 			configFile5 := path.Join(configFilePath5, g.ConfigFileName)
 			found, err = processConfigFile(configFile5, v)
 			if err != nil {
-				return err
+				return Config, err
 			}
 			if found {
 				configFound = true
@@ -138,16 +131,17 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	}
 
 	if !configFound {
-		return errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
-			"\nYou can download a sample config and adapt it to your requirements from " +
-			"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/complete/atmos.yaml")
+		return Config,
+			errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+				"\nYou can download a sample config and adapt it to your requirements from " +
+				"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/complete/atmos.yaml")
 	}
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&Config)
 	if err != nil {
-		return err
+		return Config, err
 	}
 
 	// Process the base path specified in the Terraform provider (which calls into the atmos code)
@@ -156,25 +150,25 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) error {
 	}
 
 	Config.Initialized = true
-	return nil
+	return Config, nil
 }
 
 // ProcessConfig processes and checks CLI configuration
-func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) error {
+func ProcessConfig(Config Configuration, configAndStacksInfo ConfigAndStacksInfo, checkStack bool) error {
 	// Process ENV vars
-	err := processEnvVars()
+	err := processEnvVars(Config)
 	if err != nil {
 		return err
 	}
 
 	// Process command-line args
-	err = processCommandLineArgs(configAndStacksInfo)
+	err = processCommandLineArgs(Config, configAndStacksInfo)
 	if err != nil {
 		return err
 	}
 
 	// Check config
-	err = checkConfig()
+	err = checkConfig(Config)
 	if err != nil {
 		return err
 	}
@@ -219,6 +213,7 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
 	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
+		Config,
 		configAndStacksInfo.Stack,
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
@@ -265,15 +260,15 @@ func ProcessConfig(configAndStacksInfo ConfigAndStacksInfo, checkStack bool) err
 }
 
 // ProcessConfigForSpacelift processes config for Spacelift
-func ProcessConfigForSpacelift() error {
+func ProcessConfigForSpacelift(Config Configuration) error {
 	// Process ENV vars
-	err := processEnvVars()
+	err := processEnvVars(Config)
 	if err != nil {
 		return err
 	}
 
 	// Check config
-	err = checkConfig()
+	err = checkConfig(Config)
 	if err != nil {
 		return err
 	}
@@ -318,6 +313,7 @@ func ProcessConfigForSpacelift() error {
 
 	// If the specified stack name is a logical name, find all stack config files in the provided paths
 	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, err := FindAllStackConfigsInPaths(
+		Config,
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
 	)

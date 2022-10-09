@@ -28,7 +28,13 @@ func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
 	info.Stack = stack
 	info.ComponentType = "terraform"
 
-	info, err = ProcessStacks(info, true)
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
+	info, err = ProcessStacks(Config, info, true)
 	if err != nil {
 		return err
 	}
@@ -44,7 +50,7 @@ func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = constructTerraformComponentVarfilePath(info)
+		varFilePath = constructTerraformComponentVarfilePath(Config, info)
 	}
 
 	// Print the component variables

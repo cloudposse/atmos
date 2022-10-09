@@ -28,7 +28,7 @@ const (
 func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand string) error {
 	// InitConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 			componentType = "terraform"
 		}
 
-		componentConfig, componentPath, err := ReadAndProcessComponentConfigFile(component, componentType)
+		componentConfig, componentPath, err := ReadAndProcessComponentConfigFile(Config, component, componentType)
 		if err != nil {
 			return err
 		}
@@ -78,19 +78,19 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
-func ReadAndProcessComponentConfigFile(component string, componentType string) (c.VendorComponentConfig, string, error) {
+func ReadAndProcessComponentConfigFile(Config c.Configuration, component string, componentType string) (c.VendorComponentConfig, string, error) {
 	var componentBasePath string
 	var componentConfig c.VendorComponentConfig
 
 	if componentType == "terraform" {
-		componentBasePath = c.Config.Components.Terraform.BasePath
+		componentBasePath = Config.Components.Terraform.BasePath
 	} else if componentType == "helmfile" {
-		componentBasePath = c.Config.Components.Helmfile.BasePath
+		componentBasePath = Config.Components.Helmfile.BasePath
 	} else {
 		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
-	componentPath := path.Join(c.Config.BasePath, componentBasePath, component)
+	componentPath := path.Join(Config.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
 	if err != nil {

@@ -11,6 +11,12 @@ import (
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	if err != nil {
+		u.PrintErrorToStdError(err)
+		return err
+	}
+
 	flags := cmd.Flags()
 
 	format, err := flags.GetString("format")
@@ -24,13 +30,13 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 		format = "hcl"
 	}
 
-	return ExecuteTerraformGenerateBackends(format)
+	return ExecuteTerraformGenerateBackends(Config, format)
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components
-func ExecuteTerraformGenerateBackends(format string) error {
+func ExecuteTerraformGenerateBackends(Config c.Configuration, format string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(configAndStacksInfo, false)
+	stacksMap, err := FindStacksMap(Config, configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
@@ -97,8 +103,8 @@ func ExecuteTerraformGenerateBackends(format string) error {
 
 			// Absolute path to the terraform component
 			backendFilePath := path.Join(
-				c.Config.BasePath,
-				c.Config.Components.Terraform.BasePath,
+				Config.BasePath,
+				Config.Components.Terraform.BasePath,
 				terraformComponent,
 				"backend.tf",
 			)

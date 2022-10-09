@@ -22,7 +22,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 
 	// InitConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	// Even if all workflow steps of type `atmos` process the ENV vars by calling InitConfig/ProcessConfig,
 	// we need to call it from `atmos workflow` command to take into account the `ATMOS_WORKFLOWS_BASE_PATH` ENV var
 	var configAndStacksInfo c.ConfigAndStacksInfo
-	err = c.ProcessConfig(configAndStacksInfo, false)
+	err = c.ProcessConfig(Config, configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
 	} else {
-		workflowPath = path.Join(c.Config.BasePath, c.Config.Workflows.BasePath, workflowFile)
+		workflowPath = path.Join(Config.BasePath, Config.Workflows.BasePath, workflowFile)
 	}
 
 	// If the file is specified without an extension, use the default extension
