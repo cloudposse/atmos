@@ -10,7 +10,7 @@ import (
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
 	componentType := "terraform"

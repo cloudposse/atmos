@@ -18,7 +18,7 @@ const (
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(cmd *cobra.Command, args []string) error {
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

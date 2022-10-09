@@ -9,7 +9,7 @@ import (
 )
 
 func TestValidateComponent(t *testing.T) {
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(Config, "infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
@@ -18,7 +18,7 @@ func TestValidateComponent(t *testing.T) {
 }
 
 func TestValidateComponent2(t *testing.T) {
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(Config, "infra/vpc", "tenant1-ue2-prod", "", "")
@@ -27,7 +27,7 @@ func TestValidateComponent2(t *testing.T) {
 }
 
 func TestValidateComponent3(t *testing.T) {
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(Config, "infra/vpc", "tenant1-ue2-staging", "", "")

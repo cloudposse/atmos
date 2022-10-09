@@ -15,10 +15,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// InitConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
+// InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitConfig(configAndStacksInfo ConfigAndStacksInfo) (Configuration, error) {
+func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (Configuration, error) {
 	// Config is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
@@ -149,49 +149,43 @@ func InitConfig(configAndStacksInfo ConfigAndStacksInfo) (Configuration, error) 
 		Config.BasePath = configAndStacksInfo.AtmosBasePath
 	}
 
-	Config.Initialized = true
-	return Config, nil
-}
-
-// ProcessConfig processes and checks CLI configuration
-func ProcessConfig(Config Configuration, configAndStacksInfo ConfigAndStacksInfo, checkStack bool) error {
 	// Process ENV vars
-	err := processEnvVars(Config)
+	err = processEnvVars(Config)
 	if err != nil {
-		return err
+		return Config, err
 	}
 
 	// Process command-line args
 	err = processCommandLineArgs(Config, configAndStacksInfo)
 	if err != nil {
-		return err
+		return Config, err
 	}
 
 	// Check config
 	err = checkConfig(Config)
 	if err != nil {
-		return err
+		return Config, err
 	}
 
 	// Convert stacks base path to absolute path
 	stacksBasePath := path.Join(Config.BasePath, Config.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
-		return err
+		return Config, err
 	}
 	Config.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
 	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
 	if err != nil {
-		return err
+		return Config, err
 	}
 	Config.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
 	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
 	if err != nil {
-		return err
+		return Config, err
 	}
 	Config.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
@@ -199,7 +193,7 @@ func ProcessConfig(Config Configuration, configAndStacksInfo ConfigAndStacksInfo
 	terraformBasePath := path.Join(Config.BasePath, Config.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
-		return err
+		return Config, err
 	}
 	Config.TerraformDirAbsolutePath = terraformDirAbsPath
 
@@ -207,7 +201,7 @@ func ProcessConfig(Config Configuration, configAndStacksInfo ConfigAndStacksInfo
 	helmfileBasePath := path.Join(Config.BasePath, Config.Components.Helmfile.BasePath)
 	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
-		return err
+		return Config, err
 	}
 	Config.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
@@ -220,18 +214,18 @@ func ProcessConfig(Config Configuration, configAndStacksInfo ConfigAndStacksInfo
 	)
 
 	if err != nil {
-		return err
+		return Config, err
 	}
 
 	if len(stackConfigFilesAbsolutePaths) < 1 {
 		j, err := yaml.Marshal(includeStackAbsPaths)
 		if err != nil {
-			return err
+			return Config, err
 		}
 		errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
 			"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
 			"files or ENV vars.", j)
-		return errors.New(errorMessage)
+		return Config, errors.New(errorMessage)
 	}
 
 	Config.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
@@ -252,91 +246,12 @@ func ProcessConfig(Config Configuration, configAndStacksInfo ConfigAndStacksInfo
 		u.PrintInfo("\nFinal CLI configuration:")
 		err = u.PrintAsYAML(Config)
 		if err != nil {
-			return err
+			return Config, err
 		}
 	}
 
-	return nil
-}
-
-// ProcessConfigForSpacelift processes config for Spacelift
-func ProcessConfigForSpacelift(Config Configuration) error {
-	// Process ENV vars
-	err := processEnvVars(Config)
-	if err != nil {
-		return err
-	}
-
-	// Check config
-	err = checkConfig(Config)
-	if err != nil {
-		return err
-	}
-
-	// Convert stacks base path to absolute path
-	stacksBasePath := path.Join(Config.BasePath, Config.Stacks.BasePath)
-	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
-	if err != nil {
-		return err
-	}
-	Config.StacksBaseAbsolutePath = stacksBaseAbsPath
-
-	// Convert the included stack paths to absolute paths
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.IncludedPaths)
-	if err != nil {
-		return err
-	}
-	Config.IncludeStackAbsolutePaths = includeStackAbsPaths
-
-	// Convert the excluded stack paths to absolute paths
-	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, Config.Stacks.ExcludedPaths)
-	if err != nil {
-		return err
-	}
-	Config.ExcludeStackAbsolutePaths = excludeStackAbsPaths
-
-	// Convert terraform dir to absolute path
-	terraformBasePath := path.Join(Config.BasePath, Config.Components.Terraform.BasePath)
-	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
-	if err != nil {
-		return err
-	}
-	Config.TerraformDirAbsolutePath = terraformDirAbsPath
-
-	// Convert helmfile dir to absolute path
-	helmfileBasePath := path.Join(Config.BasePath, Config.Components.Helmfile.BasePath)
-	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
-	if err != nil {
-		return err
-	}
-	Config.HelmfileDirAbsolutePath = helmfileDirAbsPath
-
-	// If the specified stack name is a logical name, find all stack config files in the provided paths
-	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, err := FindAllStackConfigsInPaths(
-		Config,
-		includeStackAbsPaths,
-		excludeStackAbsPaths,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	if len(stackConfigFilesAbsolutePaths) < 1 {
-		j, err := yaml.Marshal(includeStackAbsPaths)
-		if err != nil {
-			return err
-		}
-		errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
-			"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
-			"files or ENV vars.", j)
-		return errors.New(errorMessage)
-	}
-
-	Config.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
-	Config.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
-
-	return nil
+	Config.Initialized = true
+	return Config, nil
 }
 
 // https://github.com/NCAR/go-figure

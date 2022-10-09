@@ -39,13 +39,7 @@ func CreateSpaceliftStacks(
 
 		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports)
 	} else {
-		Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
-		if err != nil {
-			u.PrintErrorToStdError(err)
-			return nil, err
-		}
-
-		err = c.ProcessConfigForSpacelift(Config)
+		Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err

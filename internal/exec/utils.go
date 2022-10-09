@@ -191,11 +191,6 @@ func processArgsConfigAndStacks(Config c.Configuration, componentType string, cm
 
 // FindStacksMap processes stack config and returns a map of all stacks
 func FindStacksMap(Config c.Configuration, configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]any, error) {
-	err := c.ProcessConfig(Config, configAndStacksInfo, checkStack)
-	if err != nil {
-		return nil, err
-	}
-
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
 		Config.StacksBaseAbsolutePath,

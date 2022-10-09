@@ -13,7 +13,7 @@ import (
 
 // ExecuteAtlantisGenerateRepoConfigCmd executes `atlantis generate repo-config` command
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		return err
 	}

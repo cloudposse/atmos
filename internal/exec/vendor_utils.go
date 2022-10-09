@@ -26,9 +26,9 @@ const (
 
 // ExecuteVendorCommand executes `atmos vendor` commands
 func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand string) error {
-	// InitConfig finds and merges CLI configurations in the following order:
+	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		return err
 	}

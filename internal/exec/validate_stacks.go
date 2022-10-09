@@ -15,12 +15,7 @@ import (
 func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 
-	Config, err := c.InitConfig(configAndStacksInfo)
-	if err != nil {
-		return err
-	}
-
-	err = c.ProcessConfig(Config, configAndStacksInfo, false)
+	Config, err := c.InitCliConfig(configAndStacksInfo)
 	if err != nil {
 		return err
 	}

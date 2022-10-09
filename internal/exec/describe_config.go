@@ -16,7 +16,7 @@ func ExecuteDescribeConfig(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		return err
 	}

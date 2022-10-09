@@ -21,7 +21,7 @@ func ProcessComponentInStack(
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
-	Config, err := c.InitConfig(configAndStacksInfo)
+	Config, err := c.InitCliConfig(configAndStacksInfo)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err
@@ -57,7 +57,7 @@ func ProcessComponentFromContext(
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
-	Config, err := c.InitConfig(configAndStacksInfo)
+	Config, err := c.InitCliConfig(configAndStacksInfo)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err

@@ -28,7 +28,7 @@ func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
 	info.Stack = stack
 	info.ComponentType = "terraform"
 
-	Config, err := c.InitConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
