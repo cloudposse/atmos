@@ -63,7 +63,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
 func ExecuteAtlantisGenerateRepoConfig(
-	Config c.Configuration,
+	cliConfig c.CliConfiguration,
 	outputPath string,
 	configTemplateName string,
 	projectTemplateName string,
@@ -72,7 +72,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	components []string) error {
 
 	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(Config, configAndStacksInfo, false)
+	stacksMap, err := FindStacksMap(cliConfig, configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
@@ -82,15 +82,15 @@ func ExecuteAtlantisGenerateRepoConfig(
 	var workflowTemplate any
 	var ok bool
 
-	if configTemplate, ok = Config.Integrations.Atlantis.ConfigTemplates[configTemplateName]; !ok {
+	if configTemplate, ok = cliConfig.Integrations.Atlantis.ConfigTemplates[configTemplateName]; !ok {
 		return errors.Errorf("atlantis config template '%s' is not defined in 'integrations.atlantis.config_templates' in atmos.yaml", configTemplateName)
 	}
 
-	if projectTemplate, ok = Config.Integrations.Atlantis.ProjectTemplates[projectTemplateName]; !ok {
+	if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[projectTemplateName]; !ok {
 		return errors.Errorf("atlantis project template '%s' is not defined in 'integrations.atlantis.project_templates' in atmos.yaml", projectTemplateName)
 	}
 
-	if workflowTemplate, ok = Config.Integrations.Atlantis.WorkflowTemplates[workflowTemplateName]; !ok {
+	if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[workflowTemplateName]; !ok {
 		return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in atmos.yaml", workflowTemplateName)
 	}
 
@@ -155,8 +155,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				// Absolute path to the terraform component
 				terraformComponentPath := path.Join(
-					Config.BasePath,
-					Config.Components.Terraform.BasePath,
+					cliConfig.BasePath,
+					cliConfig.Components.Terraform.BasePath,
 					terraformComponent,
 				)
 
@@ -164,7 +164,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				context := c.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, Config.Stacks.NamePattern, stackConfigFileName)
+				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, cliConfig.Stacks.NamePattern, stackConfigFileName)
 				if err != nil {
 					return err
 				}
@@ -172,7 +172,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				// Terraform workspace
 				workspace, err := BuildTerraformWorkspace(
 					stackConfigFileName,
-					Config.Stacks.NamePattern,
+					cliConfig.Stacks.NamePattern,
 					metadataSection,
 					context,
 				)
@@ -245,7 +245,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	// Then check the `atlantis.path` setting in `atmos.yaml`
 	fileName := outputPath
 	if fileName == "" {
-		fileName = Config.Integrations.Atlantis.Path
+		fileName = cliConfig.Integrations.Atlantis.Path
 		u.PrintInfo(fmt.Sprintf("Using 'atlantis.path: %s' from atmos.yaml", fileName))
 	} else {
 		u.PrintInfo(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))

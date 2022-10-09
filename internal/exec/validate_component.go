@@ -51,17 +51,17 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponent(Config c.Configuration, componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
+func ExecuteValidateComponent(cliConfig c.CliConfiguration, componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
 	var configAndStacksInfo c.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err := ProcessStacks(Config, configAndStacksInfo, true)
+	configAndStacksInfo, err := ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorVerbose(err)
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(Config, configAndStacksInfo, true)
+		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
 			return false, err
 		}
@@ -69,11 +69,11 @@ func ExecuteValidateComponent(Config c.Configuration, componentName string, stac
 
 	componentSection := configAndStacksInfo.ComponentSection
 
-	return ValidateComponent(Config, componentName, componentSection, schemaPath, schemaType)
+	return ValidateComponent(cliConfig, componentName, componentSection, schemaPath, schemaType)
 }
 
 // ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
-func ValidateComponent(Config c.Configuration, componentName string, componentSection any, schemaPath string, schemaType string) (bool, error) {
+func ValidateComponent(cliConfig c.CliConfiguration, componentName string, componentSection any, schemaPath string, schemaType string) (bool, error) {
 	ok := true
 	var err error
 
@@ -81,7 +81,7 @@ func ValidateComponent(Config c.Configuration, componentName string, componentSe
 		fmt.Println()
 		u.PrintInfo(fmt.Sprintf("Validating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
-		ok, err = validateComponentInternal(Config, componentSection, schemaPath, schemaType)
+		ok, err = validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)
 		if err != nil {
 			return false, err
 		}
@@ -101,7 +101,7 @@ func ValidateComponent(Config c.Configuration, componentName string, componentSe
 				u.PrintMessage(v.Description)
 			}
 
-			ok2, err := validateComponentInternal(Config, componentSection, schemaPath, schemaType)
+			ok2, err := validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)
 			if err != nil {
 				return false, err
 			}
@@ -116,7 +116,7 @@ func ValidateComponent(Config c.Configuration, componentName string, componentSe
 	return ok, nil
 }
 
-func validateComponentInternal(Config c.Configuration, componentSection any, schemaPath string, schemaType string) (bool, error) {
+func validateComponentInternal(cliConfig c.CliConfiguration, componentSection any, schemaPath string, schemaType string) (bool, error) {
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
 		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
 	}
@@ -130,15 +130,15 @@ func validateComponentInternal(Config c.Configuration, componentSection any, sch
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = path.Join(Config.BasePath, Config.Schemas.JsonSchema.BasePath, schemaPath)
+				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.JsonSchema.BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = path.Join(Config.BasePath, Config.Schemas.Opa.BasePath, schemaPath)
+				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.Opa.BasePath, schemaPath)
 			}
 		case "cue":
 			{
-				filePath = path.Join(Config.BasePath, Config.Schemas.Cue.BasePath, schemaPath)
+				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.Cue.BasePath, schemaPath)
 			}
 		}
 

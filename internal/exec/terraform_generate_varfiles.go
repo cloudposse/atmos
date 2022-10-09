@@ -58,9 +58,9 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
-func ExecuteTerraformGenerateVarfiles(Config c.Configuration, fileTemplate string, format string, stacks []string, components []string) error {
+func ExecuteTerraformGenerateVarfiles(cliConfig c.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(Config, configAndStacksInfo, false)
+	stacksMap, err := FindStacksMap(cliConfig, configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
@@ -117,8 +117,8 @@ func ExecuteTerraformGenerateVarfiles(Config c.Configuration, fileTemplate strin
 
 				// Absolute path to the terraform component
 				terraformComponentPath := path.Join(
-					Config.BasePath,
-					Config.Components.Terraform.BasePath,
+					cliConfig.BasePath,
+					cliConfig.Components.Terraform.BasePath,
 					terraformComponent,
 				)
 
@@ -126,7 +126,7 @@ func ExecuteTerraformGenerateVarfiles(Config c.Configuration, fileTemplate strin
 				context := c.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, Config.Stacks.NamePattern, stackConfigFileName)
+				contextPrefix, err := c.GetContextPrefix(stackConfigFileName, context, cliConfig.Stacks.NamePattern, stackConfigFileName)
 				if err != nil {
 					return err
 				}

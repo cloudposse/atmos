@@ -1,7 +1,7 @@
 package config
 
-// Configuration structure represents schema for `atmos.yaml` CLI config
-type Configuration struct {
+// CliConfiguration structure represents schema for `atmos.yaml` CLI config
+type CliConfiguration struct {
 	BasePath                      string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components                    Components   `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`

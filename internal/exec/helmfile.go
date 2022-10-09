@@ -188,23 +188,23 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func checkHelmfileConfig(Config c.Configuration) error {
-	if len(Config.Components.Helmfile.BasePath) < 1 {
+func checkHelmfileConfig(cliConfig c.CliConfiguration) error {
+	if len(cliConfig.Components.Helmfile.BasePath) < 1 {
 		return errors.New("Base path to helmfile components must be provided in 'components.helmfile.base_path' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV variable")
 	}
 
-	if len(Config.Components.Helmfile.KubeconfigPath) < 1 {
+	if len(cliConfig.Components.Helmfile.KubeconfigPath) < 1 {
 		return errors.New("Kubeconfig path must be provided in 'components.helmfile.kubeconfig_path' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV variable")
 	}
 
-	if len(Config.Components.Helmfile.HelmAwsProfilePattern) < 1 {
+	if len(cliConfig.Components.Helmfile.HelmAwsProfilePattern) < 1 {
 		return errors.New("Helm AWS profile pattern must be provided in 'components.helmfile.helm_aws_profile_pattern' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV variable")
 	}
 
-	if len(Config.Components.Helmfile.ClusterNamePattern) < 1 {
+	if len(cliConfig.Components.Helmfile.ClusterNamePattern) < 1 {
 		return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
 	}

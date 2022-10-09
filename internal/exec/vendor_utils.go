@@ -78,19 +78,19 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
-func ReadAndProcessComponentConfigFile(Config c.Configuration, component string, componentType string) (c.VendorComponentConfig, string, error) {
+func ReadAndProcessComponentConfigFile(cliConfig c.CliConfiguration, component string, componentType string) (c.VendorComponentConfig, string, error) {
 	var componentBasePath string
 	var componentConfig c.VendorComponentConfig
 
 	if componentType == "terraform" {
-		componentBasePath = Config.Components.Terraform.BasePath
+		componentBasePath = cliConfig.Components.Terraform.BasePath
 	} else if componentType == "helmfile" {
-		componentBasePath = Config.Components.Helmfile.BasePath
+		componentBasePath = cliConfig.Components.Helmfile.BasePath
 	} else {
 		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
-	componentPath := path.Join(Config.BasePath, componentBasePath, component)
+	componentPath := path.Join(cliConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
 	if err != nil {

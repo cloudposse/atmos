@@ -34,9 +34,9 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components
-func ExecuteTerraformGenerateBackends(Config c.Configuration, format string) error {
+func ExecuteTerraformGenerateBackends(cliConfig c.CliConfiguration, format string) error {
 	var configAndStacksInfo c.ConfigAndStacksInfo
-	stacksMap, err := FindStacksMap(Config, configAndStacksInfo, false)
+	stacksMap, err := FindStacksMap(cliConfig, configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
@@ -103,8 +103,8 @@ func ExecuteTerraformGenerateBackends(Config c.Configuration, format string) err
 
 			// Absolute path to the terraform component
 			backendFilePath := path.Join(
-				Config.BasePath,
-				Config.Components.Terraform.BasePath,
+				cliConfig.BasePath,
+				cliConfig.Components.Terraform.BasePath,
 				terraformComponent,
 				"backend.tf",
 			)
