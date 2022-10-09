@@ -62,7 +62,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	}
 
 	if len(configFilePath1) > 0 {
-		configFile1 := path.Join(configFilePath1, ConfigFileName)
+		configFile1 := path.Join(configFilePath1, CliConfigFileName)
 		found, err = processConfigFile(cliConfig.Logs.Verbose, configFile1, v)
 		if err != nil {
 			return cliConfig, err
@@ -77,7 +77,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	if err != nil {
 		return cliConfig, err
 	}
-	configFile2 := path.Join(configFilePath2, ".atmos", ConfigFileName)
+	configFile2 := path.Join(configFilePath2, ".atmos", CliConfigFileName)
 	found, err = processConfigFile(cliConfig.Logs.Verbose, configFile2, v)
 	if err != nil {
 		return cliConfig, err
@@ -91,7 +91,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	if err != nil {
 		return cliConfig, err
 	}
-	configFile3 := path.Join(configFilePath3, ConfigFileName)
+	configFile3 := path.Join(configFilePath3, CliConfigFileName)
 	found, err = processConfigFile(cliConfig.Logs.Verbose, configFile3, v)
 	if err != nil {
 		return cliConfig, err
@@ -104,7 +104,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
 	if len(configFilePath4) > 0 {
 		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
-		configFile4 := path.Join(configFilePath4, ConfigFileName)
+		configFile4 := path.Join(configFilePath4, CliConfigFileName)
 		found, err = processConfigFile(cliConfig.Logs.Verbose, configFile4, v)
 		if err != nil {
 			return cliConfig, err
@@ -118,7 +118,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo) (CliConfiguration, e
 	if configAndStacksInfo.AtmosCliConfigPath != "" {
 		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
 		if len(configFilePath5) > 0 {
-			configFile5 := path.Join(configFilePath5, ConfigFileName)
+			configFile5 := path.Join(configFilePath5, CliConfigFileName)
 			found, err = processConfigFile(cliConfig.Logs.Verbose, configFile5, v)
 			if err != nil {
 				return cliConfig, err

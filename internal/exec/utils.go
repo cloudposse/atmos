@@ -22,7 +22,7 @@ var (
 		cfg.KubeConfigConfigFlag,
 		cfg.TerraformDirFlag,
 		cfg.HelmfileDirFlag,
-		cfg.ConfigDirFlag,
+		cfg.CliConfigDirFlag,
 		cfg.StackDirFlag,
 		cfg.BasePathFlag,
 		cfg.GlobalOptionsFlag,
@@ -453,12 +453,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 			info.HelmfileDir = helmfileDirFlagParts[1]
 		}
 
-		if arg == cfg.ConfigDirFlag {
+		if arg == cfg.CliConfigDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.ConfigDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.ConfigDirFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.CliConfigDirFlag) {
 			var configDirFlagParts = strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
