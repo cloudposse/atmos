@@ -11,7 +11,7 @@ import (
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
@@ -30,7 +30,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 		format = "hcl"
 	}
 
-	return ExecuteTerraformGenerateBackends(Config, format)
+	return ExecuteTerraformGenerateBackends(cliConfig, format)
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components

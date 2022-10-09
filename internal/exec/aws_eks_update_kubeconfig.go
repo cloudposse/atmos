@@ -127,7 +127,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext c.AwsEksUpdateKubeconfigCon
 	if !requiredParamsProvided {
 		// If stack is not provided, calculate the stack name from the context (tenant, environment, stage)
 		if kubeconfigContext.Stack == "" {
-			cliConfig, err = c.InitCliConfig(configAndStacksInfo)
+			cliConfig, err = c.InitCliConfig(configAndStacksInfo, true)
 			if err != nil {
 				return err
 			}

@@ -28,7 +28,7 @@ const (
 func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand string) error {
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 			componentType = "terraform"
 		}
 
-		componentConfig, componentPath, err := ReadAndProcessComponentConfigFile(Config, component, componentType)
+		componentConfig, componentPath, err := ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
 		if err != nil {
 			return err
 		}

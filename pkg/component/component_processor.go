@@ -21,17 +21,17 @@ func ProcessComponentInStack(
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
-	Config, err := c.InitCliConfig(configAndStacksInfo)
+	cliConfig, err := c.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = e.ProcessStacks(Config, configAndStacksInfo, true)
+	configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = e.ProcessStacks(Config, configAndStacksInfo, true)
+		configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
@@ -57,19 +57,19 @@ func ProcessComponentFromContext(
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
-	Config, err := c.InitCliConfig(configAndStacksInfo)
+	cliConfig, err := c.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err
 	}
 
-	if len(Config.Stacks.NamePattern) < 1 {
+	if len(cliConfig.Stacks.NamePattern) < 1 {
 		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		u.PrintErrorToStdError(er)
 		return nil, er
 	}
 
-	stack, err := c.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, Config.Stacks.NamePattern)
+	stack, err := c.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, cliConfig.Stacks.NamePattern)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return nil, err

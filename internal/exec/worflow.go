@@ -21,7 +21,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	Config, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{})
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
 	} else {
-		workflowPath = path.Join(Config.BasePath, Config.Workflows.BasePath, workflowFile)
+		workflowPath = path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, workflowFile)
 	}
 
 	// If the file is specified without an extension, use the default extension

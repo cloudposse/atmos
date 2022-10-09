@@ -12,7 +12,7 @@ import (
 
 // ExecuteDescribeStacks executes `describe stacks` command
 func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
-	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

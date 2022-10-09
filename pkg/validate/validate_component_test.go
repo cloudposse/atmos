@@ -9,28 +9,28 @@ import (
 )
 
 func TestValidateComponent(t *testing.T) {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	_, err = e.ExecuteValidateComponent(Config, "infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
+	_, err = e.ExecuteValidateComponent(cliConfig, "infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
 	u.PrintError(err)
 	assert.Error(t, err)
 }
 
 func TestValidateComponent2(t *testing.T) {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	_, err = e.ExecuteValidateComponent(Config, "infra/vpc", "tenant1-ue2-prod", "", "")
+	_, err = e.ExecuteValidateComponent(cliConfig, "infra/vpc", "tenant1-ue2-prod", "", "")
 	u.PrintError(err)
 	assert.Error(t, err)
 }
 
 func TestValidateComponent3(t *testing.T) {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	_, err = e.ExecuteValidateComponent(Config, "infra/vpc", "tenant1-ue2-staging", "", "")
+	_, err = e.ExecuteValidateComponent(cliConfig, "infra/vpc", "tenant1-ue2-staging", "", "")
 	u.PrintError(err)
 	assert.Error(t, err)
 }

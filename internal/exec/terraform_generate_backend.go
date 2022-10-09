@@ -30,7 +30,7 @@ func ExecuteTerraformGenerateBackend(cmd *cobra.Command, args []string) error {
 	info.Stack = stack
 	info.ComponentType = "terraform"
 
-	cliConfig, err := c.InitCliConfig(info)
+	cliConfig, err := c.InitCliConfig(info, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

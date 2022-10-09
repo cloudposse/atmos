@@ -13,7 +13,7 @@ import (
 
 // ExecuteValidateComponentCmd executes `validate component` command
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	cliConfig, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
@@ -42,7 +42,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, err = ExecuteValidateComponent(Config, componentName, stack, schemaPath, schemaType)
+	_, err = ExecuteValidateComponent(cliConfig, componentName, stack, schemaPath, schemaType)
 	if err != nil {
 		return err
 	}

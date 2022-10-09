@@ -10,7 +10,7 @@ import (
 
 // ExecuteHelmfileGenerateVarfile executes `helmfile generate varfile` command
 func ExecuteHelmfileGenerateVarfile(cmd *cobra.Command, args []string) error {
-	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{})
+	Config, err := c.InitCliConfig(c.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
