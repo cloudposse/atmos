@@ -352,6 +352,10 @@ func ExecuteTerraform(cmd *cobra.Command, args []string) error {
 		planFilePath := constructTerraformComponentPlanfilePath(cliConfig, info)
 		_ = os.Remove(planFilePath)
 	}
+	if info.SubCommand == "apply" {
+		varFilePath := constructTerraformComponentVarfilePath(cliConfig, info)
+		_ = os.Remove(varFilePath)
+	}
 
 	return nil
 }

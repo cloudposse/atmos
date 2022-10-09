@@ -9,7 +9,6 @@ import (
 
 	c "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -180,10 +179,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cleanup
-	err = os.Remove(varFilePath)
-	if err != nil {
-		color.Yellow("Error deleting the helmfile varfile: %s\n", err)
-	}
+	_ = os.Remove(varFilePath)
 
 	return nil
 }
