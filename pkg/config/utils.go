@@ -39,7 +39,8 @@ func FindAllStackConfigsInPathsForStack(
 			// TODO: review `doublestar` library
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
-				return nil, nil, false, err
+				y, _ := u.ConvertToYAML(cliConfig)
+				return nil, nil, false, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
 			}
 		}
 
@@ -118,7 +119,8 @@ func FindAllStackConfigsInPaths(
 			// TODO: review `doublestar` library
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
-				return nil, nil, err
+				y, _ := u.ConvertToYAML(cliConfig)
+				return nil, nil, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
 			}
 		}
 
@@ -149,7 +151,7 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
-func processEnvVars(cliConfig CliConfiguration) error {
+func processEnvVars(cliConfig *CliConfiguration) error {
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
 		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
@@ -289,7 +291,7 @@ func checkConfig(cliConfig CliConfiguration) error {
 	return nil
 }
 
-func processCommandLineArgs(cliConfig CliConfiguration, configAndStacksInfo ConfigAndStacksInfo) error {
+func processCommandLineArgs(cliConfig *CliConfiguration, configAndStacksInfo ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		cliConfig.BasePath = configAndStacksInfo.BasePath
 		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
@@ -351,19 +353,6 @@ func processCommandLineArgs(cliConfig CliConfiguration, configAndStacksInfo Conf
 		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
 	}
 
-	return nil
-}
-
-func processLogsConfig(cliConfig CliConfiguration) error {
-	logVerbose := os.Getenv("ATMOS_LOGS_VERBOSE")
-	if len(logVerbose) > 0 {
-		u.PrintInfo(fmt.Sprintf("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerbose))
-		logVerboseBool, err := strconv.ParseBool(logVerbose)
-		if err != nil {
-			return err
-		}
-		cliConfig.Logs.Verbose = logVerboseBool
-	}
 	return nil
 }
 
