@@ -74,81 +74,64 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 	}
 
 	finalStacksMap := make(map[string]any)
+	var varsSection map[any]any
+	var stackName string
 
 	for stackFileName, stackSection := range stacksMap {
-		if filterByStack == "" || filterByStack == stackFileName {
-			// Delete the stack-wide imports
-			delete(stackSection.(map[any]any), "imports")
+		// Delete the stack-wide imports
+		delete(stackSection.(map[any]any), "imports")
 
-			if !u.MapKeyExists(finalStacksMap, stackFileName) {
-				finalStacksMap[stackFileName] = make(map[string]any)
-			}
+		if componentsSection, ok := stackSection.(map[any]any)["components"].(map[string]any); ok {
 
-			if componentsSection, ok := stackSection.(map[any]any)["components"].(map[string]any); ok {
-				if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "terraform") {
-					if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
-						for componentName, compSection := range terraformSection {
-							componentSection, ok := compSection.(map[string]any)
-							if !ok {
-								return fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackFileName)
-							}
+			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "terraform") {
+				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+					for componentName, compSection := range terraformSection {
+						componentSection, ok := compSection.(map[string]any)
+						if !ok {
+							return fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackFileName)
+						}
 
-							// Find all derived components of the provided components and include them in the output
-							derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
+						// Find all derived components of the provided components and include them in the output
+						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
+						if err != nil {
+							return err
+						}
+
+						// Component vars
+						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
+							context := cfg.GetContextFromVars(varsSection)
+							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
 							if err != nil {
 								return err
-							}
-
-							if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
-								if !u.MapKeyExists(finalStacksMap[stackFileName].(map[string]any), "components") {
-									finalStacksMap[stackFileName].(map[string]any)["components"] = make(map[string]any)
-								}
-								if !u.MapKeyExists(finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any), "terraform") {
-									finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any)["terraform"] = make(map[string]any)
-								}
-								if !u.MapKeyExists(finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any), componentName) {
-									finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
-								}
-
-								for sectionName, section := range componentSection {
-									if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
-										finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
-									}
-								}
 							}
 						}
-					}
-				}
 
-				if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "helmfile") {
-					if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
-						for componentName, compSection := range helmfileSection {
-							componentSection, ok := compSection.(map[string]any)
-							if !ok {
-								return fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackFileName)
+						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
+							continue
+						}
+
+						if stackName == "" {
+							stackName = stackFileName
+						}
+
+						if !u.MapKeyExists(finalStacksMap, stackName) {
+							finalStacksMap[stackName] = make(map[string]any)
+						}
+
+						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
+								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any), "terraform") {
+								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"] = make(map[string]any)
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any), componentName) {
+								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
-							// Find all derived components of the provided components and include them in the output
-							derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
-							if err != nil {
-								return err
-							}
-
-							if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
-								if !u.MapKeyExists(finalStacksMap[stackFileName].(map[string]any), "components") {
-									finalStacksMap[stackFileName].(map[string]any)["components"] = make(map[string]any)
-								}
-								if !u.MapKeyExists(finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any), "helmfile") {
-									finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any)["helmfile"] = make(map[string]any)
-								}
-								if !u.MapKeyExists(finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any), componentName) {
-									finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName] = make(map[string]any)
-								}
-
-								for sectionName, section := range componentSection {
-									if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
-										finalStacksMap[stackFileName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
-									}
+							for sectionName, section := range componentSection {
+								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
+									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
 								}
 							}
 						}
@@ -156,11 +139,67 @@ func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			// Filter out empty stacks (stacks without any components)
-			if st, ok := finalStacksMap[stackFileName].(map[string]any); ok {
-				if len(st) == 0 {
-					delete(finalStacksMap, stackFileName)
+			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "helmfile") {
+				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
+					for componentName, compSection := range helmfileSection {
+						componentSection, ok := compSection.(map[string]any)
+						if !ok {
+							return fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackFileName)
+						}
+
+						// Find all derived components of the provided components and include them in the output
+						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
+						if err != nil {
+							return err
+						}
+
+						// Component vars
+						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
+							context := cfg.GetContextFromVars(varsSection)
+							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
+							if err != nil {
+								return err
+							}
+						}
+
+						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
+							continue
+						}
+
+						if stackName == "" {
+							stackName = stackFileName
+						}
+
+						if !u.MapKeyExists(finalStacksMap, stackName) {
+							finalStacksMap[stackName] = make(map[string]any)
+						}
+
+						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
+								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any), "helmfile") {
+								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"] = make(map[string]any)
+							}
+							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any), componentName) {
+								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName] = make(map[string]any)
+							}
+
+							for sectionName, section := range componentSection {
+								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
+									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
+								}
+							}
+						}
+					}
 				}
+			}
+		}
+
+		// Filter out empty stacks (stacks without any components)
+		if st, ok := finalStacksMap[stackName].(map[string]any); ok {
+			if len(st) == 0 {
+				delete(finalStacksMap, stackName)
 			}
 		}
 	}
