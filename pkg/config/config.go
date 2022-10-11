@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -26,13 +27,23 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliCo
 	// Command-line arguments
 
 	var cliConfig CliConfiguration
+	var err error
 
-	err := processLogsConfig(&cliConfig)
-	if err != nil {
-		return cliConfig, err
+	// Check `ATMOS_LOGS_VERBOSE` ENV var
+	// If it's set to `true`, log verbose even during the CLI config initialization
+	logVerboseEnvVar := false
+	logVerboseEnvVarFound := false
+	logVerboseEnvVarStr := os.Getenv("ATMOS_LOGS_VERBOSE")
+	if len(logVerboseEnvVarStr) > 0 {
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerboseEnvVarStr))
+		logVerboseEnvVar, err = strconv.ParseBool(logVerboseEnvVarStr)
+		if err != nil {
+			return cliConfig, err
+		}
+		logVerboseEnvVarFound = true
 	}
 
-	var printVerbose = verbose && cliConfig.Logs.Verbose
+	var printVerbose = verbose && logVerboseEnvVarFound && logVerboseEnvVar
 
 	if printVerbose {
 		u.PrintInfo("\nSearching, processing and merging atmos CLI configurations (atmos.yaml) in the following order:")
@@ -145,6 +156,12 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliCo
 		return cliConfig, err
 	}
 
+	// Set log verbose for the command that is being executed after the CLI config gets processed
+	// `logs.verbose` can be set in `atmos.yaml` or overridden by `ATMOS_LOGS_VERBOSE` ENV var
+	if logVerboseEnvVarFound {
+		cliConfig.Logs.Verbose = logVerboseEnvVar
+	}
+
 	// Process ENV vars
 	err = processEnvVars(&cliConfig)
 	if err != nil {
@@ -158,6 +175,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliCo
 	}
 
 	// Process the base path specified in the Terraform provider (which calls into the atmos code)
+	// This overrides all other atmos base path configs (`atmos.yaml`, ENV var `ATMOS_BASE_PATH`)
 	if configAndStacksInfo.AtmosBasePath != "" {
 		cliConfig.BasePath = configAndStacksInfo.AtmosBasePath
 	}

@@ -356,19 +356,6 @@ func processCommandLineArgs(cliConfig *CliConfiguration, configAndStacksInfo Con
 	return nil
 }
 
-func processLogsConfig(cliConfig *CliConfiguration) error {
-	logVerbose := os.Getenv("ATMOS_LOGS_VERBOSE")
-	if len(logVerbose) > 0 {
-		u.PrintInfo(fmt.Sprintf("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerbose))
-		logVerboseBool, err := strconv.ParseBool(logVerbose)
-		if err != nil {
-			return err
-		}
-		cliConfig.Logs.Verbose = logVerboseBool
-	}
-	return nil
-}
-
 // GetContextFromVars creates a context object from the provided variables
 func GetContextFromVars(vars map[any]any) Context {
 	var context Context
