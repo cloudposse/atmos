@@ -27,7 +27,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliCo
 
 	var cliConfig CliConfiguration
 
-	err := processLogsConfig(cliConfig)
+	err := processLogsConfig(&cliConfig)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -146,15 +146,20 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliCo
 	}
 
 	// Process ENV vars
-	err = processEnvVars(cliConfig)
+	err = processEnvVars(&cliConfig)
 	if err != nil {
 		return cliConfig, err
 	}
 
 	// Process command-line args
-	err = processCommandLineArgs(cliConfig, configAndStacksInfo)
+	err = processCommandLineArgs(&cliConfig, configAndStacksInfo)
 	if err != nil {
 		return cliConfig, err
+	}
+
+	// Process the base path specified in the Terraform provider (which calls into the atmos code)
+	if configAndStacksInfo.AtmosBasePath != "" {
+		cliConfig.BasePath = configAndStacksInfo.AtmosBasePath
 	}
 
 	// Check config
@@ -244,11 +249,6 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliCo
 		if err != nil {
 			return cliConfig, err
 		}
-	}
-
-	// Process the base path specified in the Terraform provider (which calls into the atmos code)
-	if configAndStacksInfo.AtmosBasePath != "" {
-		cliConfig.BasePath = configAndStacksInfo.AtmosBasePath
 	}
 
 	cliConfig.Initialized = true
