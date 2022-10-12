@@ -73,7 +73,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 	var componentSection map[string]any
 	var varsSection map[any]any
 
-	for stackConfigFileName, stackSection := range stacksMap {
+	for stackFileName, stackSection := range stacksMap {
 		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
 			continue
 		}
@@ -126,7 +126,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, cliConfig.Stacks.NamePattern, stackConfigFileName)
+				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
 				if err != nil {
 					return err
 				}
@@ -135,7 +135,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 				if len(stacks) == 0 ||
 					// `stacks` filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-					u.SliceContainsString(stacks, stackConfigFileName) ||
+					u.SliceContainsString(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, contextPrefix) {
@@ -178,7 +178,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 					u.PrintMessage(fmt.Sprintf("terraform component: %s", terraformComponent))
 					u.PrintMessage(fmt.Sprintf("atmos component: %s", componentName))
 					u.PrintMessage(fmt.Sprintf("atmos stack: %s", contextPrefix))
-					u.PrintMessage(fmt.Sprintf("stack config file: %s", stackConfigFileName))
+					u.PrintMessage(fmt.Sprintf("stack config file: %s", stackFileName))
 					fmt.Println()
 				}
 			}
