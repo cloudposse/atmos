@@ -18,7 +18,7 @@ import (
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliConfiguration, error) {
+func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) (CliConfiguration, error) {
 	// cliConfig is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
@@ -28,6 +28,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliCo
 
 	var cliConfig CliConfiguration
 	var err error
+	var verbose = processStacks
 
 	// Check `ATMOS_LOGS_VERBOSE` ENV var
 	// If it's set to `true`, log verbose even during the CLI config initialization
@@ -224,41 +225,43 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, verbose bool) (CliCo
 	}
 	cliConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
-	// If the specified stack name is a logical name, find all stack config files in the provided paths
-	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
-		cliConfig,
-		configAndStacksInfo.Stack,
-		includeStackAbsPaths,
-		excludeStackAbsPaths,
-	)
+	if processStacks {
+		// If the specified stack name is a logical name, find all stack config files in the provided paths
+		stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
+			cliConfig,
+			configAndStacksInfo.Stack,
+			includeStackAbsPaths,
+			excludeStackAbsPaths,
+		)
 
-	if err != nil {
-		return cliConfig, err
-	}
-
-	if len(stackConfigFilesAbsolutePaths) < 1 {
-		j, err := yaml.Marshal(includeStackAbsPaths)
 		if err != nil {
 			return cliConfig, err
 		}
-		errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
-			"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
-			"files or ENV vars.", j)
-		return cliConfig, errors.New(errorMessage)
-	}
 
-	cliConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
-	cliConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
+		if len(stackConfigFilesAbsolutePaths) < 1 {
+			j, err := yaml.Marshal(includeStackAbsPaths)
+			if err != nil {
+				return cliConfig, err
+			}
+			errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
+				"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
+				"files or ENV vars.", j)
+			return cliConfig, errors.New(errorMessage)
+		}
 
-	if stackIsPhysicalPath {
-		u.PrintInfoVerbose(printVerbose, fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
-			configAndStacksInfo.Stack,
-			stackConfigFilesRelativePaths[0]),
-		)
-		cliConfig.StackType = "Directory"
-	} else {
-		// The stack is a logical name
-		cliConfig.StackType = "Logical"
+		cliConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+		cliConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
+
+		if stackIsPhysicalPath {
+			u.PrintInfoVerbose(printVerbose, fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
+				configAndStacksInfo.Stack,
+				stackConfigFilesRelativePaths[0]),
+			)
+			cliConfig.StackType = "Directory"
+		} else {
+			// The stack is a logical name
+			cliConfig.StackType = "Logical"
+		}
 	}
 
 	if printVerbose {
