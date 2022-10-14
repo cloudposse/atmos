@@ -24,7 +24,7 @@ import (
 func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand string) error {
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return err
 	}
