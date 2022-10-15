@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	g "github.com/cloudposse/atmos/pkg/globals"
 	"github.com/fatih/color"
 	"os"
 )
@@ -18,8 +17,8 @@ func PrintErrorToStdErrorAndExit(err error) {
 // PrintErrorToStdError prints errors to std.Error
 func PrintErrorToStdError(err error) {
 	if err != nil {
-		c := color.New(color.FgRed)
-		_, err2 := c.Fprintln(color.Error, err.Error()+"\n")
+		red := color.New(color.FgRed)
+		_, err2 := red.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
 			fmt.Println("Error sending the error message to std.Error:")
 			PrintError(err2)
@@ -37,8 +36,8 @@ func PrintError(err error) {
 }
 
 // PrintErrorVerbose checks the log level and prints errors to std.Output
-func PrintErrorVerbose(err error) {
-	if g.LogVerbose {
+func PrintErrorVerbose(verbose bool, err error) {
+	if verbose {
 		PrintError(err)
 	}
 }
@@ -49,8 +48,8 @@ func PrintInfo(message string) {
 }
 
 // PrintInfoVerbose checks the log level and prints the provided info message
-func PrintInfoVerbose(message string) {
-	if g.LogVerbose {
+func PrintInfoVerbose(verbose bool, message string) {
+	if verbose {
 		PrintInfo(message)
 	}
 }
@@ -61,8 +60,8 @@ func PrintMessage(message string) {
 }
 
 // PrintMessageVerbose checks the log level and prints the provided message to the console
-func PrintMessageVerbose(message string) {
-	if g.LogVerbose {
+func PrintMessageVerbose(verbose bool, message string) {
+	if verbose {
 		PrintMessage(message)
 	}
 }

@@ -7,8 +7,7 @@ import (
 	"path"
 	"path/filepath"
 
-	c "github.com/cloudposse/atmos/pkg/config"
-	g "github.com/cloudposse/atmos/pkg/globals"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
@@ -20,18 +19,9 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 		return errors.New("invalid arguments. The command requires one argument `workflow name`")
 	}
 
-	// InitConfig finds and merges CLI configurations in the following order:
+	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	err := c.InitConfig()
-	if err != nil {
-		return err
-	}
-
-	// ProcessConfig processes all the ENV vars and command line arguments
-	// Even if all workflow steps of type `atmos` process the ENV vars by calling InitConfig/ProcessConfig,
-	// we need call it from `atmos workflow` command to take into account the `ATMOS_WORKFLOWS_BASE_PATH` ENV var
-	var configAndStacksInfo c.ConfigAndStacksInfo
-	err = c.ProcessConfig(configAndStacksInfo, false)
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -57,13 +47,13 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
 	} else {
-		workflowPath = path.Join(c.Config.BasePath, c.Config.Workflows.BasePath, workflowFile)
+		workflowPath = path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, workflowFile)
 	}
 
 	// If the file is specified without an extension, use the default extension
 	ext := filepath.Ext(workflowPath)
 	if ext == "" {
-		ext = g.DefaultStackConfigFileExtension
+		ext = cfg.DefaultStackConfigFileExtension
 		workflowPath = workflowPath + ext
 	}
 
@@ -76,9 +66,9 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var yamlContent c.WorkflowFile
-	var workflowConfig c.WorkflowConfig
-	var workflowDefinition c.WorkflowDefinition
+	var yamlContent cfg.WorkflowFile
+	var workflowConfig cfg.WorkflowConfig
+	var workflowDefinition cfg.WorkflowDefinition
 
 	if err = yaml.Unmarshal(fileContent, &yamlContent); err != nil {
 		return err

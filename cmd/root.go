@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	c "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -22,16 +23,16 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// InitConfig finds and merges CLI configurations in the following order:
+	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
-	err := c.InitConfig()
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
 
 	// Add custom commands from the CLI config
-	err = processCustomCommands(c.Config.Commands, RootCmd, true)
+	err = processCustomCommands(cliConfig.Commands, RootCmd, true)
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
 	}

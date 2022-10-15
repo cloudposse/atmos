@@ -62,3 +62,21 @@ func ConvertToJSONFast(data any) (string, error) {
 	}
 	return j, nil
 }
+
+// ConvertFromJSON converts the provided JSON-encoded string to Go data types
+func ConvertFromJSON(jsonString string) (any, error) {
+	var json = jsoniter.Config{
+		EscapeHTML:                    false,
+		MarshalFloatWith6Digits:       true,
+		ObjectFieldMustBeSimpleString: true,
+		SortMapKeys:                   true,
+		ValidateJsonRawMessage:        true,
+	}
+
+	var data any
+	err := json.Froze().Unmarshal([]byte(jsonString), &data)
+	if err != nil {
+		return "", err
+	}
+	return data, nil
+}

@@ -2,13 +2,13 @@ package spacelift
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	c "github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 // CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
@@ -39,23 +39,17 @@ func CreateSpaceliftStacks(
 
 		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports)
 	} else {
-		err := c.InitConfig()
-		if err != nil {
-			u.PrintErrorToStdError(err)
-			return nil, err
-		}
-
-		err = c.ProcessConfigForSpacelift()
+		cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 		if err != nil {
 			u.PrintErrorToStdError(err)
 			return nil, err
 		}
 
 		_, stacks, err := s.ProcessYAMLConfigFiles(
-			c.ProcessedConfig.StacksBaseAbsolutePath,
-			c.ProcessedConfig.TerraformDirAbsolutePath,
-			c.ProcessedConfig.HelmfileDirAbsolutePath,
-			c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+			cliConfig.StacksBaseAbsolutePath,
+			cliConfig.TerraformDirAbsolutePath,
+			cliConfig.HelmfileDirAbsolutePath,
+			cliConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,
 		)
@@ -64,7 +58,7 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
-		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, c.Config.Stacks.NamePattern, processImports)
+		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, cliConfig.Stacks.NamePattern, processImports)
 	}
 }
 
@@ -106,12 +100,12 @@ func TransformStackConfigToSpaceliftStacks(
 						spaceliftSettings = i.(map[any]any)
 					}
 
-					context := c.GetContextFromVars(componentVars)
+					context := cfg.GetContextFromVars(componentVars)
 
 					var contextPrefix string
 
 					if stackNamePattern != "" {
-						contextPrefix, err = c.GetContextPrefix(stackName, context, stackNamePattern, stackName)
+						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
 							u.PrintErrorToStdError(err)
 							return nil, err
@@ -206,31 +200,21 @@ func TransformStackConfigToSpaceliftStacks(
 						componentInheritance = i.([]string)
 					}
 
-					// Process base component
-					// Base component can be specified in two places:
-					// `component` attribute (legacy)
-					// `metadata.component` attribute
-					// `metadata.component` takes precedence over `component`
-					baseComponentName := ""
-					if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
-						baseComponentName = baseComponent.(string)
-					}
-					// First check if component's `metadata` section exists
-					// Then check if `metadata.component` exists
-					if componentMetadata, componentMetadataExists := componentMap["metadata"].(map[any]any); componentMetadataExists {
-						if componentFromMetadata, componentFromMetadataExists := componentMetadata["component"].(string); componentFromMetadataExists {
-							baseComponentName = componentFromMetadata
-						}
+					// Process component metadata and find a base component (if any) and whether the component is real or abstract
+					componentMetadata, baseComponentName, componentIsAbstract := e.ProcessComponentMetadata(component, componentMap)
+
+					if componentIsAbstract {
+						continue
 					}
 
-					context := c.GetContextFromVars(componentVars)
+					context := cfg.GetContextFromVars(componentVars)
 					context.Component = component
 					context.BaseComponent = baseComponentName
 
 					var contextPrefix string
 
 					if stackNamePattern != "" {
-						contextPrefix, err = c.GetContextPrefix(stackName, context, stackNamePattern, stackName)
+						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
 							u.PrintErrorToStdError(err)
 							return nil, err
@@ -249,6 +233,7 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
 					spaceliftConfig["base_component"] = baseComponentName
+					spaceliftConfig["metadata"] = componentMetadata
 
 					// backend
 					backendTypeName := ""
@@ -263,14 +248,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 					spaceliftConfig["backend"] = componentBackend
 
-					// metadata
-					componentMetadata := map[any]any{}
-					if i, ok2 := componentMap["metadata"]; ok2 {
-						componentMetadata = i.(map[any]any)
-					}
-					spaceliftConfig["metadata"] = componentMetadata
-
-					// workspace
+					// Terraform workspace
 					workspace, err := e.BuildTerraformWorkspace(
 						stackName,
 						stackNamePattern,
@@ -379,9 +357,9 @@ func buildSpaceliftDependsOnStackName(
 }
 
 // buildSpaceliftStackName build a Spacelift stack name from the provided context and state name pattern
-func buildSpaceliftStackName(spaceliftSettings map[any]any, context c.Context, contextPrefix string) (string, string) {
+func buildSpaceliftStackName(spaceliftSettings map[any]any, context cfg.Context, contextPrefix string) (string, string) {
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
-		return c.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
+		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
 	} else {
 		defaultSpaceliftStackNamePattern := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
 		return strings.Replace(defaultSpaceliftStackNamePattern, "/", "-", -1), contextPrefix

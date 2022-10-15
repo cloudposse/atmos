@@ -1,5 +1,26 @@
 package config
 
+// CliConfiguration structure represents schema for `atmos.yaml` CLI config
+type CliConfiguration struct {
+	BasePath                      string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Components                    Components   `yaml:"components" json:"components" mapstructure:"components"`
+	Stacks                        Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Workflows                     Workflows    `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
+	Logs                          Logs         `yaml:"logs" json:"logs" mapstructure:"logs"`
+	Commands                      []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
+	Integrations                  Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
+	Schemas                       Schemas      `yaml:"schemas" json:"schemas" mapstructure:"schemas"`
+	Initialized                   bool         `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
+	StacksBaseAbsolutePath        string       `yaml:"stacksBaseAbsolutePath" json:"stacksBaseAbsolutePath"`
+	IncludeStackAbsolutePaths     []string     `yaml:"includeStackAbsolutePaths" json:"includeStackAbsolutePaths"`
+	ExcludeStackAbsolutePaths     []string     `yaml:"excludeStackAbsolutePaths" json:"excludeStackAbsolutePaths"`
+	TerraformDirAbsolutePath      string       `yaml:"terraformDirAbsolutePath" json:"terraformDirAbsolutePath"`
+	HelmfileDirAbsolutePath       string       `yaml:"helmfileDirAbsolutePath" json:"helmfileDirAbsolutePath"`
+	StackConfigFilesRelativePaths []string     `yaml:"stackConfigFilesRelativePaths" json:"stackConfigFilesRelativePaths"`
+	StackConfigFilesAbsolutePaths []string     `yaml:"stackConfigFilesAbsolutePaths" json:"stackConfigFilesAbsolutePaths"`
+	StackType                     string       `yaml:"stackType" json:"StackType"`
+}
+
 type Terraform struct {
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
@@ -36,28 +57,6 @@ type Logs struct {
 	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
 }
 
-type Configuration struct {
-	BasePath     string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	Components   Components   `yaml:"components" json:"components" mapstructure:"components"`
-	Stacks       Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
-	Workflows    Workflows    `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
-	Logs         Logs         `yaml:"logs" json:"logs" mapstructure:"logs"`
-	Commands     []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
-	Integrations Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
-	Initialized  bool
-}
-
-type ProcessedConfiguration struct {
-	StacksBaseAbsolutePath        string   `yaml:"StacksBaseAbsolutePath" json:"StacksBaseAbsolutePath"`
-	IncludeStackAbsolutePaths     []string `yaml:"IncludeStackAbsolutePaths" json:"IncludeStackAbsolutePaths"`
-	ExcludeStackAbsolutePaths     []string `yaml:"ExcludeStackAbsolutePaths" json:"ExcludeStackAbsolutePaths"`
-	TerraformDirAbsolutePath      string   `yaml:"TerraformDirAbsolutePath" json:"TerraformDirAbsolutePath"`
-	HelmfileDirAbsolutePath       string   `yaml:"HelmfileDirAbsolutePath" json:"HelmfileDirAbsolutePath"`
-	StackConfigFilesRelativePaths []string `yaml:"StackConfigFilesRelativePaths" json:"StackConfigFilesRelativePaths"`
-	StackConfigFilesAbsolutePaths []string `yaml:"StackConfigFilesAbsolutePaths" json:"StackConfigFilesAbsolutePaths"`
-	StackType                     string   `yaml:"StackType" json:"StackType"`
-}
-
 type Context struct {
 	Namespace     string
 	Tenant        string
@@ -90,6 +89,9 @@ type ArgsAndFlagsInfo struct {
 	DryRun                  bool
 	SkipInit                bool
 	NeedHelp                bool
+	JsonSchemaDir           string
+	OpaDir                  string
+	CueDir                  string
 }
 
 type ConfigAndStacksInfo struct {
@@ -132,6 +134,11 @@ type ConfigAndStacksInfo struct {
 	ComponentIsAbstract       bool
 	ComponentMetadataSection  map[any]any
 	TerraformWorkspace        string
+	JsonSchemaDir             string
+	OpaDir                    string
+	CueDir                    string
+	AtmosCliConfigPath        string
+	AtmosBasePath             string
 }
 
 type WorkflowStep struct {
@@ -160,6 +167,7 @@ type AwsEksUpdateKubeconfigContext struct {
 	DryRun      bool
 	Verbose     bool
 	Alias       string
+	Namespace   string
 	Tenant      string
 	Environment string
 	Stage       string
@@ -264,12 +272,12 @@ type AtlantisProjectConfig struct {
 	TerraformVersion          string                        `yaml:"terraform_version" json:"terraform_version" mapstructure:"terraform_version"`
 	DeleteSourceBranchOnMerge bool                          `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
 	Autoplan                  AtlantisProjectAutoplanConfig `yaml:"autoplan" json:"autoplan" mapstructure:"autoplan"`
+	ApplyRequirements         []string                      `yaml:"apply_requirements" json:"apply_requirements" mapstructure:"apply_requirements"`
 }
 
 type AtlantisProjectAutoplanConfig struct {
-	Enabled           bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	WhenModified      []string `yaml:"when_modified" json:"when_modified" mapstructure:"when_modified"`
-	ApplyRequirements []string `yaml:"apply_requirements" json:"apply_requirements" mapstructure:"apply_requirements"`
+	Enabled      bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	WhenModified []string `yaml:"when_modified" json:"when_modified" mapstructure:"when_modified"`
 }
 
 type AtlantisConfigOutput struct {
@@ -282,3 +290,31 @@ type AtlantisConfigOutput struct {
 	Projects                  []AtlantisProjectConfig `yaml:"projects" json:"projects" mapstructure:"projects"`
 	Workflows                 map[string]any          `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
 }
+
+// Validation schemas
+
+type JsonSchema struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+
+type Cue struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+
+type Opa struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+
+type Schemas struct {
+	JsonSchema JsonSchema `yaml:"jsonschema" json:"jsonschema" mapstructure:"jsonschema"`
+	Cue        Cue        `yaml:"cue" json:"cue" mapstructure:"cue"`
+	Opa        Opa        `yaml:"opa" json:"opa" mapstructure:"opa"`
+}
+
+type ValidationItem struct {
+	SchemaType  string `yaml:"schema_type" json:"schema_type" mapstructure:"schema_type"`
+	SchemaPath  string `yaml:"schema_path" json:"schema_path" mapstructure:"schema_path"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type Validation map[string]ValidationItem

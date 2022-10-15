@@ -22,11 +22,20 @@ var describeStacksCmd = &cobra.Command{
 
 func init() {
 	describeStacksCmd.DisableFlagParsing = false
+
 	describeStacksCmd.PersistentFlags().String("file", "", "Write the result to file: atmos describe stacks --file=stacks.yaml")
+
 	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify output format: atmos describe stacks --format=yaml/json ('yaml' is default)")
-	describeStacksCmd.PersistentFlags().StringP("stack", "s", "", "Filter by a specific stack: atmos describe stacks -s <stack>")
+
+	describeStacksCmd.PersistentFlags().StringP("stack", "s", "",
+		"Filter by a specific stack: atmos describe stacks -s <stack>\n"+
+			"The filter supports names of the top-level stack config files (including subfolder paths), and 'atmos' stack names (derived from the context vars)",
+	)
+
 	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific components: atmos describe stacks --components=<component1>,<component2>")
+
 	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types: atmos describe stacks --component-types=terraform,helmfile. Supported component types: terraform, helmfile")
+
 	describeStacksCmd.PersistentFlags().String("sections", "", "Output only these component sections: atmos describe stacks --sections=vars,settings. Available component sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
 
 	describeCmd.AddCommand(describeStacksCmd)

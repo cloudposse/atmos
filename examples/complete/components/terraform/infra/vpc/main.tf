@@ -26,9 +26,14 @@ locals {
 
 module "vpc" {
   source  = "cloudposse/vpc/aws"
-  version = "0.25.0"
+  version = "1.1.1"
 
-  cidr_block = var.cidr_block
+  ipv4_primary_cidr_block         = var.cidr_block
+  instance_tenancy                = var.instance_tenancy
+  dns_hostnames_enabled           = var.dns_hostnames_enabled
+  dns_support_enabled             = var.dns_support_enabled
+  classiclink_enabled             = var.classiclink_enabled
+  classiclink_dns_support_enabled = var.classiclink_dns_support_enabled
 
   tags = local.tags
 
@@ -37,11 +42,11 @@ module "vpc" {
 
 module "subnets" {
   source  = "cloudposse/dynamic-subnets/aws"
-  version = "0.39.3"
+  version = "2.0.3"
 
   availability_zones              = local.availability_zones
-  cidr_block                      = module.vpc.vpc_cidr_block
-  igw_id                          = module.vpc.igw_id
+  ipv4_cidr_block                 = [module.vpc.vpc_cidr_block]
+  igw_id                          = [module.vpc.igw_id]
   map_public_ip_on_launch         = var.map_public_ip_on_launch
   max_subnet_count                = local.max_subnet_count
   nat_gateway_enabled             = var.nat_gateway_enabled

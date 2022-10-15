@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"strings"
 
-	g "github.com/cloudposse/atmos/pkg/globals"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
 func FindAllStackConfigsInPathsForStack(
+	cliConfig CliConfiguration,
 	stack string,
 	includeStackPaths []string,
 	excludeStackPaths []string,
@@ -28,27 +28,28 @@ func FindAllStackConfigsInPathsForStack(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			ext = g.DefaultStackConfigFileExtension
+			ext = DefaultStackConfigFileExtension
 			pathWithExt = p + ext
 		}
 
 		// Find all matches in the glob
 		matches, err := u.GetGlobMatches(pathWithExt)
 		if err != nil || len(matches) == 0 {
-			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
+			// Retry (b/c we are using `doublestar` library, and it sometimes has issues reading many files in a Docker container)
 			// TODO: review `doublestar` library
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
-				return nil, nil, false, err
+				y, _ := u.ConvertToYAML(cliConfig)
+				return nil, nil, false, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
 			}
 		}
 
 		// Exclude files that match any of the excludePaths
 		for _, matchedFileAbsolutePath := range matches {
-			matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
+			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
-			stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+g.DefaultStackConfigFileExtension)
+			stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+DefaultStackConfigFileExtension)
 
 			if stackMatch {
 				allExcluded := true
@@ -94,6 +95,7 @@ func FindAllStackConfigsInPathsForStack(
 
 // FindAllStackConfigsInPaths finds all stack config files in the paths specified by globs
 func FindAllStackConfigsInPaths(
+	cliConfig CliConfiguration,
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {
@@ -106,24 +108,25 @@ func FindAllStackConfigsInPaths(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			ext = g.DefaultStackConfigFileExtension
+			ext = DefaultStackConfigFileExtension
 			pathWithExt = p + ext
 		}
 
 		// Find all matches in the glob
 		matches, err := u.GetGlobMatches(pathWithExt)
 		if err != nil || len(matches) == 0 {
-			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
+			// Retry (b/c we are using `doublestar` library, and it sometimes has issues reading many files in a Docker container)
 			// TODO: review `doublestar` library
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
-				return nil, nil, err
+				y, _ := u.ConvertToYAML(cliConfig)
+				return nil, nil, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
 			}
 		}
 
 		// Exclude files that match any of the excludePaths
 		for _, matchedFileAbsolutePath := range matches {
-			matchedFileRelativePath := u.TrimBasePathFromPath(ProcessedConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
+			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 			include := true
 
 			for _, excludePath := range excludeStackPaths {
@@ -148,191 +151,208 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
-func processEnvVars() error {
+func processEnvVars(cliConfig *CliConfiguration) error {
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
-		Config.BasePath = basePath
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
+		cliConfig.BasePath = basePath
 	}
 
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_STACKS_BASE_PATH=%s", stacksBasePath))
-		Config.Stacks.BasePath = stacksBasePath
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_STACKS_BASE_PATH=%s", stacksBasePath))
+		cliConfig.Stacks.BasePath = stacksBasePath
 	}
 
 	stacksIncludedPaths := os.Getenv("ATMOS_STACKS_INCLUDED_PATHS")
 	if len(stacksIncludedPaths) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_STACKS_INCLUDED_PATHS=%s", stacksIncludedPaths))
-		Config.Stacks.IncludedPaths = strings.Split(stacksIncludedPaths, ",")
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_STACKS_INCLUDED_PATHS=%s", stacksIncludedPaths))
+		cliConfig.Stacks.IncludedPaths = strings.Split(stacksIncludedPaths, ",")
 	}
 
 	stacksExcludedPaths := os.Getenv("ATMOS_STACKS_EXCLUDED_PATHS")
 	if len(stacksExcludedPaths) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_STACKS_EXCLUDED_PATHS=%s", stacksExcludedPaths))
-		Config.Stacks.ExcludedPaths = strings.Split(stacksExcludedPaths, ",")
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_STACKS_EXCLUDED_PATHS=%s", stacksExcludedPaths))
+		cliConfig.Stacks.ExcludedPaths = strings.Split(stacksExcludedPaths, ",")
 	}
 
 	stacksNamePattern := os.Getenv("ATMOS_STACKS_NAME_PATTERN")
 	if len(stacksNamePattern) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_PATTERN=%s", stacksNamePattern))
-		Config.Stacks.NamePattern = stacksNamePattern
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_PATTERN=%s", stacksNamePattern))
+		cliConfig.Stacks.NamePattern = stacksNamePattern
 	}
 
 	componentsTerraformBasePath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
 	if len(componentsTerraformBasePath) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=%s", componentsTerraformBasePath))
-		Config.Components.Terraform.BasePath = componentsTerraformBasePath
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=%s", componentsTerraformBasePath))
+		cliConfig.Components.Terraform.BasePath = componentsTerraformBasePath
 	}
 
 	componentsTerraformApplyAutoApprove := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE")
 	if len(componentsTerraformApplyAutoApprove) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=%s", componentsTerraformApplyAutoApprove))
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=%s", componentsTerraformApplyAutoApprove))
 		applyAutoApproveBool, err := strconv.ParseBool(componentsTerraformApplyAutoApprove)
 		if err != nil {
 			return err
 		}
-		Config.Components.Terraform.ApplyAutoApprove = applyAutoApproveBool
+		cliConfig.Components.Terraform.ApplyAutoApprove = applyAutoApproveBool
 	}
 
 	componentsTerraformDeployRunInit := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT")
 	if len(componentsTerraformDeployRunInit) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=%s", componentsTerraformDeployRunInit))
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=%s", componentsTerraformDeployRunInit))
 		deployRunInitBool, err := strconv.ParseBool(componentsTerraformDeployRunInit)
 		if err != nil {
 			return err
 		}
-		Config.Components.Terraform.DeployRunInit = deployRunInitBool
+		cliConfig.Components.Terraform.DeployRunInit = deployRunInitBool
 	}
 
 	componentsInitRunReconfigure := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE")
 	if len(componentsInitRunReconfigure) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure))
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure))
 		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
 		if err != nil {
 			return err
 		}
-		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		cliConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
 	}
 
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile))
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile))
 		componentsTerraformAutoGenerateBackendFileBool, err := strconv.ParseBool(componentsTerraformAutoGenerateBackendFile)
 		if err != nil {
 			return err
 		}
-		Config.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
+		cliConfig.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
 	}
 
 	componentsHelmfileBasePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
 	if len(componentsHelmfileBasePath) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_BASE_PATH=%s", componentsHelmfileBasePath))
-		Config.Components.Helmfile.BasePath = componentsHelmfileBasePath
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_BASE_PATH=%s", componentsHelmfileBasePath))
+		cliConfig.Components.Helmfile.BasePath = componentsHelmfileBasePath
 	}
 
 	componentsHelmfileKubeconfigPath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH")
 	if len(componentsHelmfileKubeconfigPath) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH=%s", componentsHelmfileKubeconfigPath))
-		Config.Components.Helmfile.KubeconfigPath = componentsHelmfileKubeconfigPath
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH=%s", componentsHelmfileKubeconfigPath))
+		cliConfig.Components.Helmfile.KubeconfigPath = componentsHelmfileKubeconfigPath
 	}
 
 	componentsHelmfileHelmAwsProfilePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN")
 	if len(componentsHelmfileHelmAwsProfilePattern) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN=%s", componentsHelmfileHelmAwsProfilePattern))
-		Config.Components.Helmfile.HelmAwsProfilePattern = componentsHelmfileHelmAwsProfilePattern
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN=%s", componentsHelmfileHelmAwsProfilePattern))
+		cliConfig.Components.Helmfile.HelmAwsProfilePattern = componentsHelmfileHelmAwsProfilePattern
 	}
 
 	componentsHelmfileClusterNamePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN")
 	if len(componentsHelmfileClusterNamePattern) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN=%s", componentsHelmfileClusterNamePattern))
-		Config.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN=%s", componentsHelmfileClusterNamePattern))
+		cliConfig.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
 	}
 
 	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
 	if len(workflowsBasePath) > 0 {
-		u.PrintInfoVerbose(fmt.Sprintf("Found ENV var ATMOS_WORKFLOWS_BASE_PATH=%s", workflowsBasePath))
-		Config.Workflows.BasePath = workflowsBasePath
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_WORKFLOWS_BASE_PATH=%s", workflowsBasePath))
+		cliConfig.Workflows.BasePath = workflowsBasePath
+	}
+
+	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
+	if len(jsonschemaBasePath) > 0 {
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH=%s", jsonschemaBasePath))
+		cliConfig.Schemas.JsonSchema.BasePath = jsonschemaBasePath
+	}
+
+	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
+	if len(opaBasePath) > 0 {
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_OPA_BASE_PATH=%s", opaBasePath))
+		cliConfig.Schemas.Opa.BasePath = opaBasePath
+	}
+
+	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
+	if len(cueBasePath) > 0 {
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_CUE_BASE_PATH=%s", cueBasePath))
+		cliConfig.Schemas.Cue.BasePath = cueBasePath
 	}
 
 	return nil
 }
 
-func checkConfig() error {
-	if len(Config.Stacks.BasePath) < 1 {
+func checkConfig(cliConfig CliConfiguration) error {
+	if len(cliConfig.Stacks.BasePath) < 1 {
 		return errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
 	}
 
-	if len(Config.Stacks.IncludedPaths) < 1 {
+	if len(cliConfig.Stacks.IncludedPaths) < 1 {
 		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	}
 
 	return nil
 }
 
-func processCommandLineArgs(configAndStacksInfo ConfigAndStacksInfo) error {
+func processCommandLineArgs(cliConfig *CliConfiguration, configAndStacksInfo ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
-		Config.BasePath = configAndStacksInfo.BasePath
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
+		cliConfig.BasePath = configAndStacksInfo.BasePath
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
 	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
-		Config.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
+		cliConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
-		Config.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
+		cliConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
 	}
 	if len(configAndStacksInfo.ConfigDir) > 0 {
-		Config.Stacks.BasePath = configAndStacksInfo.ConfigDir
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
+		cliConfig.Stacks.BasePath = configAndStacksInfo.ConfigDir
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
 	}
 	if len(configAndStacksInfo.StacksDir) > 0 {
-		Config.Stacks.BasePath = configAndStacksInfo.StacksDir
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
+		cliConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
 	}
 	if len(configAndStacksInfo.DeployRunInit) > 0 {
 		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
 		if err != nil {
 			return err
 		}
-		Config.Components.Terraform.DeployRunInit = deployRunInitBool
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s=%s'", g.DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
+		cliConfig.Components.Terraform.DeployRunInit = deployRunInitBool
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s=%s'", DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
 	}
 	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
 		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
 		if err != nil {
 			return err
 		}
-		Config.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s=%s'", g.AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
+		cliConfig.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s=%s'", AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
 	}
 	if len(configAndStacksInfo.WorkflowsDir) > 0 {
-		Config.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
+		cliConfig.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
 	}
 	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
 		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
 		if err != nil {
 			return err
 		}
-		Config.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
-		u.PrintInfoVerbose(fmt.Sprintf("Using command line argument '%s=%s'", g.InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
+		cliConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s=%s'", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
 	}
-	return nil
-}
+	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
+		cliConfig.Schemas.JsonSchema.BasePath = configAndStacksInfo.JsonSchemaDir
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
+	}
+	if len(configAndStacksInfo.OpaDir) > 0 {
+		cliConfig.Schemas.Opa.BasePath = configAndStacksInfo.OpaDir
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
+	}
+	if len(configAndStacksInfo.CueDir) > 0 {
+		cliConfig.Schemas.Cue.BasePath = configAndStacksInfo.CueDir
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
+	}
 
-func processLogsConfig() error {
-	logVerbose := os.Getenv("ATMOS_LOGS_VERBOSE")
-	if len(logVerbose) > 0 {
-		u.PrintInfo(fmt.Sprintf("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerbose))
-		logVerboseBool, err := strconv.ParseBool(logVerbose)
-		if err != nil {
-			return err
-		}
-		Config.Logs.Verbose = logVerboseBool
-		g.LogVerbose = logVerboseBool
-	}
 	return nil
 }
 
@@ -458,7 +478,14 @@ func ReplaceContextTokens(context Context, pattern string) string {
 }
 
 // GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern
-func GetStackNameFromContextAndStackNamePattern(tenant string, environment string, stage string, stackNamePattern string) (string, error) {
+func GetStackNameFromContextAndStackNamePattern(
+	namespace string,
+	tenant string,
+	environment string,
+	stage string,
+	stackNamePattern string,
+) (string, error) {
+
 	if len(stackNamePattern) == 0 {
 		return "",
 			fmt.Errorf("stack name pattern must be provided")
@@ -468,7 +495,16 @@ func GetStackNameFromContextAndStackNamePattern(tenant string, environment strin
 	stackNamePatternParts := strings.Split(stackNamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
-		if part == "{tenant}" {
+		if part == "{namespace}" {
+			if len(namespace) == 0 {
+				return "", fmt.Errorf("stack name pattern '%s' includes '{namespace}', but namespace is not provided", stackNamePattern)
+			}
+			if len(stack) == 0 {
+				stack = namespace
+			} else {
+				stack = fmt.Sprintf("%s-%s", stack, namespace)
+			}
+		} else if part == "{tenant}" {
 			if len(tenant) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", stackNamePattern)
 			}

@@ -38,3 +38,14 @@ func SliceContainsStringStartsWith(s []string, str string) bool {
 func SliceOfStringsToSpaceSeparatedString(s []string) string {
 	return strings.Join(s, " ")
 }
+
+// SliceOfInterfacesToSliceOdStrings converts a slice of any to a slice os strings
+func SliceOfInterfacesToSliceOdStrings(input []any) []string {
+	res := make([]string, len(input))
+
+	for i, v := range input {
+		res[i] = v.(string)
+	}
+
+	return res
+}

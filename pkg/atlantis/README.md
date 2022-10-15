@@ -86,8 +86,8 @@ integrations:
           when_modified:
             - "**/*.tf"
             - "varfiles/$PROJECT_NAME.tfvars.json"
-          apply_requirements:
-            - "approved"
+        apply_requirements:
+          - "approved"
 
     # Workflow templates
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
@@ -99,7 +99,7 @@ integrations:
           steps:
             - run: terraform init -input=false
             # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
-            - run: terraform workspace select $WORKSPACE
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
             # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
             - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
         apply:
@@ -131,8 +131,8 @@ projects:
       when_modified:
         - '**/*.tf'
         - varfiles/tenant1-ue2-staging-test-test-component-override-3.tfvars.json
-      apply_requirements:
-        - approved
+    apply_requirements:
+      - approved
   - name: tenant1-ue2-staging-infra-vpc
     workspace: tenant1-ue2-staging
     workflow: workflow-1
@@ -144,8 +144,8 @@ projects:
       when_modified:
         - '**/*.tf'
         - varfiles/tenant1-ue2-staging-infra-vpc.tfvars.json
-      apply_requirements:
-        - approved
+    apply_requirements:
+      - approved
 workflows:
   workflow-1:
     apply:
@@ -154,7 +154,7 @@ workflows:
     plan:
       steps:
         - run: terraform init -input=false
-        - run: terraform workspace select $WORKSPACE
+        - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
 ```
 

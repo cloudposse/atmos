@@ -5,34 +5,37 @@ import (
 	"fmt"
 	"strings"
 
-	c "github.com/cloudposse/atmos/pkg/config"
-	g "github.com/cloudposse/atmos/pkg/globals"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
 var (
-	// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.)
+	// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.).
 	// These flags get removed from the arg list after atmos uses them so the underlying tool does not get passed a flag it doesn't accept.
 	commonFlags = []string{
 		"--stack",
 		"-s",
-		g.DryRunFlag,
-		g.SkipInitFlag,
-		g.KubeConfigConfigFlag,
-		g.TerraformDirFlag,
-		g.HelmfileDirFlag,
-		g.ConfigDirFlag,
-		g.StackDirFlag,
-		g.BasePathFlag,
-		g.GlobalOptionsFlag,
-		g.DeployRunInitFlag,
-		g.InitRunReconfigure,
-		g.AutoGenerateBackendFileFlag,
-		g.FromPlanFlag,
-		g.HelpFlag1,
-		g.HelpFlag2,
+		cfg.DryRunFlag,
+		cfg.SkipInitFlag,
+		cfg.KubeConfigConfigFlag,
+		cfg.TerraformDirFlag,
+		cfg.HelmfileDirFlag,
+		cfg.CliConfigDirFlag,
+		cfg.StackDirFlag,
+		cfg.BasePathFlag,
+		cfg.GlobalOptionsFlag,
+		cfg.DeployRunInitFlag,
+		cfg.InitRunReconfigure,
+		cfg.AutoGenerateBackendFileFlag,
+		cfg.FromPlanFlag,
+		cfg.HelpFlag1,
+		cfg.HelpFlag2,
+		cfg.WorkflowDirFlag,
+		cfg.JsonSchemaDirFlag,
+		cfg.OpaDirFlag,
+		cfg.CueDirFlag,
 	}
 )
 
@@ -63,11 +66,8 @@ func FindComponentConfig(
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
 	var componentBackendType string
-	var baseComponentName string
 	var command string
 	var componentInheritanceChain []string
-	var componentIsAbstract bool
-	var componentMetadata map[any]any
 	var ok bool
 
 	if len(stack) == 0 {
@@ -109,24 +109,9 @@ func FindComponentConfig(
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
-	if baseComponentName, ok = componentSection["component"].(string); !ok {
-		baseComponentName = ""
-	}
-	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
-		componentMetadata = componentMetadataSection.(map[any]any)
-		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
-			if componentMetadataType == "abstract" {
-				componentIsAbstract = true
-			}
-		}
-		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
-			baseComponentName = componentMetadataComponent
-		}
-	}
 
-	if component == baseComponentName {
-		baseComponentName = ""
-	}
+	// Process component metadata and find a base component (if any) and whether the component is real or abstract
+	componentMetadata, baseComponentName, componentIsAbstract := ProcessComponentMetadata(component, componentSection)
 
 	return componentSection,
 		componentVarsSection,
@@ -142,8 +127,8 @@ func FindComponentConfig(
 }
 
 // processArgsConfigAndStacks processes command-line args, CLI config and stacks
-func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args []string) (c.ConfigAndStacksInfo, error) {
-	var configAndStacksInfo c.ConfigAndStacksInfo
+func processArgsConfigAndStacks(cliConfig cfg.CliConfiguration, componentType string, cmd *cobra.Command, args []string) (cfg.ConfigAndStacksInfo, error) {
+	var configAndStacksInfo cfg.ConfigAndStacksInfo
 
 	if len(args) < 1 {
 		return configAndStacksInfo, errors.New("invalid number of arguments")
@@ -180,6 +165,9 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 	configAndStacksInfo.DryRun = argsAndFlagsInfo.DryRun
 	configAndStacksInfo.SkipInit = argsAndFlagsInfo.SkipInit
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
+	configAndStacksInfo.JsonSchemaDir = argsAndFlagsInfo.JsonSchemaDir
+	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
+	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
@@ -197,28 +185,17 @@ func processArgsConfigAndStacks(componentType string, cmd *cobra.Command, args [
 		return configAndStacksInfo, err
 	}
 
-	return ProcessStacks(configAndStacksInfo, true)
+	return ProcessStacks(cliConfig, configAndStacksInfo, true)
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (map[string]any, error) {
-	// Process and merge CLI configurations
-	err := c.InitConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	err = c.ProcessConfig(configAndStacksInfo, checkStack)
-	if err != nil {
-		return nil, err
-	}
-
+func FindStacksMap(cliConfig cfg.CliConfiguration) (map[string]any, error) {
 	// Process stack config file(s)
 	_, stacksMap, err := s.ProcessYAMLConfigFiles(
-		c.ProcessedConfig.StacksBaseAbsolutePath,
-		c.ProcessedConfig.TerraformDirAbsolutePath,
-		c.ProcessedConfig.HelmfileDirAbsolutePath,
-		c.ProcessedConfig.StackConfigFilesAbsolutePaths,
+		cliConfig.StacksBaseAbsolutePath,
+		cliConfig.TerraformDirAbsolutePath,
+		cliConfig.HelmfileDirAbsolutePath,
+		cliConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true)
 
@@ -230,7 +207,7 @@ func FindStacksMap(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 }
 
 // ProcessStacks processes stack config
-func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (c.ConfigAndStacksInfo, error) {
+func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.ConfigAndStacksInfo, checkStack bool) (cfg.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
@@ -245,29 +222,29 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	stacksMap, err := FindStacksMap(configAndStacksInfo, checkStack)
+	stacksMap, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
 	// Print the stack config files
-	if g.LogVerbose {
+	if cliConfig.Logs.Verbose {
 		fmt.Println()
 		var msg string
-		if c.ProcessedConfig.StackType == "Directory" {
+		if cliConfig.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"
 		} else {
 			msg = "Found stack config files:"
 		}
 		u.PrintInfo(msg)
-		err = u.PrintAsYAML(c.ProcessedConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
 	}
 
 	// Check and process stacks
-	if c.ProcessedConfig.StackType == "Directory" {
+	if cliConfig.StackType == "Directory" {
 		configAndStacksInfo.ComponentSection,
 			configAndStacksInfo.ComponentVarsSection,
 			configAndStacksInfo.ComponentEnvSection,
@@ -286,22 +263,22 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 		configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 		// Process context
-		configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-		configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack,
+		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
-			c.Config.Stacks.NamePattern,
+			cliConfig.Stacks.NamePattern,
 			configAndStacksInfo.Stack,
 		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
 	} else {
-		u.PrintInfoVerbose(fmt.Sprintf("Searching for stack config where the component '%s' is defined", configAndStacksInfo.ComponentFromArg))
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Searching for stack config where the component '%s' is defined", configAndStacksInfo.ComponentFromArg))
 		foundStackCount := 0
 		var foundStacks []string
-		var foundConfigAndStacksInfo c.ConfigAndStacksInfo
+		var foundConfigAndStacksInfo cfg.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
 			// Check if we've found the component config
@@ -317,25 +294,25 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				configAndStacksInfo.ComponentMetadataSection,
 				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
-				u.PrintErrorVerbose(err)
+				u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
 				continue
 			}
 
 			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			// Process context
-			configAndStacksInfo.Context = c.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+			configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-			configAndStacksInfo.ContextPrefix, err = c.GetContextPrefix(configAndStacksInfo.Stack,
+			configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 				configAndStacksInfo.Context,
-				c.Config.Stacks.NamePattern,
+				cliConfig.Stacks.NamePattern,
 				stackName,
 			)
 			if err != nil {
 				// If any of the stack config files throws error (which also means that we can't find the component in that stack),
 				// print the error to the console and continue searching for the component in the other stack config files.
-				u.PrintErrorVerbose(err)
+				u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
 				continue
 			}
 
@@ -344,22 +321,27 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				foundConfigAndStacksInfo = configAndStacksInfo
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
-				u.PrintInfoVerbose(fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
-					configAndStacksInfo.ComponentFromArg,
-					configAndStacksInfo.Stack,
-					stackName,
-				))
+				u.PrintInfoVerbose(
+					cliConfig.Logs.Verbose,
+					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
+						configAndStacksInfo.ComponentFromArg,
+						configAndStacksInfo.Stack,
+						stackName,
+					))
 			}
 		}
 
 		if foundStackCount == 0 {
+			y, _ := u.ConvertToYAML(cliConfig)
+
 			return configAndStacksInfo,
-				fmt.Errorf("\nSearched all stack files, but could not find config for the component '%s' in the stack '%s'.\n"+
+				fmt.Errorf("\nSearched all stack YAML files, but could not find config for the component '%s' in the stack '%s'.\n"+
 					"Check that all variables in the stack name pattern '%s' are correctly defined in the stack config files.\n"+
-					"Are the component and stack names correct? Did you forget an import?",
+					"Are the component and stack names correct? Did you forget an import?\n\n\nCLI config:\n\n%v",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
-					c.Config.Stacks.NamePattern)
+					cliConfig.Stacks.NamePattern,
+					y)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
 				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
@@ -367,7 +349,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
-				c.Config.Stacks.NamePattern)
+				cliConfig.Stacks.NamePattern)
 			u.PrintErrorToStdErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
@@ -414,7 +396,7 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 	// workspace
 	workspace, err := BuildTerraformWorkspace(
 		configAndStacksInfo.Stack,
-		c.Config.Stacks.NamePattern,
+		cliConfig.Stacks.NamePattern,
 		configAndStacksInfo.ComponentMetadataSection,
 		configAndStacksInfo.Context,
 	)
@@ -428,8 +410,8 @@ func ProcessStacks(configAndStacksInfo c.ConfigAndStacksInfo, checkStack bool) (
 }
 
 // processArgsAndFlags removes common args and flags from the provided list of arguments/flags
-func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.ArgsAndFlagsInfo, error) {
-	var info c.ArgsAndFlagsInfo
+func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.ArgsAndFlagsInfo, error) {
+	var info cfg.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 
@@ -439,18 +421,18 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 	var globalOptionsFlagIndex int
 
 	for i, arg := range inputArgsAndFlags {
-		if arg == g.GlobalOptionsFlag {
+		if arg == cfg.GlobalOptionsFlag {
 			globalOptionsFlagIndex = i + 1
-		} else if strings.HasPrefix(arg+"=", g.GlobalOptionsFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.GlobalOptionsFlag) {
 			globalOptionsFlagIndex = i
 		}
 
-		if arg == g.TerraformDirFlag {
+		if arg == cfg.TerraformDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.TerraformDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.TerraformDirFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.TerraformDirFlag) {
 			var terraformDirFlagParts = strings.Split(arg, "=")
 			if len(terraformDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -458,12 +440,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.TerraformDir = terraformDirFlagParts[1]
 		}
 
-		if arg == g.HelmfileDirFlag {
+		if arg == cfg.HelmfileDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.HelmfileDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.HelmfileDirFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.HelmfileDirFlag) {
 			var helmfileDirFlagParts = strings.Split(arg, "=")
 			if len(helmfileDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -471,12 +453,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.HelmfileDir = helmfileDirFlagParts[1]
 		}
 
-		if arg == g.ConfigDirFlag {
+		if arg == cfg.CliConfigDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.ConfigDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.ConfigDirFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.CliConfigDirFlag) {
 			var configDirFlagParts = strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -484,12 +466,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.ConfigDir = configDirFlagParts[1]
 		}
 
-		if arg == g.StackDirFlag {
+		if arg == cfg.StackDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.StacksDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.StackDirFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.StackDirFlag) {
 			var stacksDirFlagParts = strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -497,12 +479,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.StacksDir = stacksDirFlagParts[1]
 		}
 
-		if arg == g.BasePathFlag {
+		if arg == cfg.BasePathFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.BasePath = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.BasePathFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.BasePathFlag) {
 			var stacksDirFlagParts = strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -510,12 +492,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.BasePath = stacksDirFlagParts[1]
 		}
 
-		if arg == g.DeployRunInitFlag {
+		if arg == cfg.DeployRunInitFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.DeployRunInit = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.DeployRunInitFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.DeployRunInitFlag) {
 			var deployRunInitFlagParts = strings.Split(arg, "=")
 			if len(deployRunInitFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -523,12 +505,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.DeployRunInit = deployRunInitFlagParts[1]
 		}
 
-		if arg == g.AutoGenerateBackendFileFlag {
+		if arg == cfg.AutoGenerateBackendFileFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.AutoGenerateBackendFile = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.AutoGenerateBackendFileFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.AutoGenerateBackendFileFlag) {
 			var autoGenerateBackendFileFlagParts = strings.Split(arg, "=")
 			if len(autoGenerateBackendFileFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -536,12 +518,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
 		}
 
-		if arg == g.WorkflowDirFlag {
+		if arg == cfg.WorkflowDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.WorkflowsDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.WorkflowDirFlag) {
+		} else if strings.HasPrefix(arg+"=", cfg.WorkflowDirFlag) {
 			var workflowDirFlagParts = strings.Split(arg, "=")
 			if len(workflowDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -549,12 +531,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.WorkflowsDir = workflowDirFlagParts[1]
 		}
 
-		if arg == g.InitRunReconfigure {
+		if arg == cfg.InitRunReconfigure {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.InitRunReconfigure = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", g.InitRunReconfigure) {
+		} else if strings.HasPrefix(arg+"=", cfg.InitRunReconfigure) {
 			var initRunReconfigureParts = strings.Split(arg, "=")
 			if len(initRunReconfigureParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -562,19 +544,58 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 			info.InitRunReconfigure = initRunReconfigureParts[1]
 		}
 
-		if arg == g.FromPlanFlag {
+		if arg == cfg.JsonSchemaDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.JsonSchemaDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.JsonSchemaDirFlag) {
+			var jsonschemaDirFlagParts = strings.Split(arg, "=")
+			if len(jsonschemaDirFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.JsonSchemaDir = jsonschemaDirFlagParts[1]
+		}
+
+		if arg == cfg.OpaDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.OpaDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.OpaDirFlag) {
+			var opaDirFlagParts = strings.Split(arg, "=")
+			if len(opaDirFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.OpaDir = opaDirFlagParts[1]
+		}
+
+		if arg == cfg.CueDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.CueDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.CueDirFlag) {
+			var cueDirFlagParts = strings.Split(arg, "=")
+			if len(cueDirFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.CueDir = cueDirFlagParts[1]
+		}
+
+		if arg == cfg.FromPlanFlag {
 			info.UseTerraformPlan = true
 		}
 
-		if arg == g.DryRunFlag {
+		if arg == cfg.DryRunFlag {
 			info.DryRun = true
 		}
 
-		if arg == g.SkipInitFlag {
+		if arg == cfg.SkipInitFlag {
 			info.SkipInit = true
 		}
 
-		if arg == g.HelpFlag1 || arg == g.HelpFlag2 {
+		if arg == cfg.HelpFlag1 || arg == cfg.HelpFlag2 {
 			info.NeedHelp = true
 		}
 
@@ -594,7 +615,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (c.Ar
 		}
 
 		if globalOptionsFlagIndex > 0 && i == globalOptionsFlagIndex {
-			if strings.HasPrefix(arg, g.GlobalOptionsFlag+"=") {
+			if strings.HasPrefix(arg, cfg.GlobalOptionsFlag+"=") {
 				parts := strings.SplitN(arg, "=", 2)
 				globalOptions = strings.Split(parts[1], " ")
 			} else {

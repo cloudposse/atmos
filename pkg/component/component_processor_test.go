@@ -10,12 +10,13 @@ func TestComponentProcessor(t *testing.T) {
 	var err error
 	var component string
 	var stack string
+	namespace := ""
 	var yamlConfig []byte
 
 	var tenant1Ue2DevTestTestComponent map[string]any
 	component = "test/test-component"
 	stack = "tenant1-ue2-dev"
-	tenant1Ue2DevTestTestComponent, err = ProcessComponentInStack(component, stack)
+	tenant1Ue2DevTestTestComponent, err = ProcessComponentInStack(component, stack, "", "")
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentBackend := tenant1Ue2DevTestTestComponent["backend"].(map[any]any)
 	tenant1Ue2DevTestTestComponentRemoteStateBackend := tenant1Ue2DevTestTestComponent["remote_state_backend"].(map[any]any)
@@ -48,7 +49,7 @@ func TestComponentProcessor(t *testing.T) {
 	tenant := "tenant1"
 	environment := "ue2"
 	stage := "dev"
-	tenant1Ue2DevTestTestComponent2, err = ProcessComponentFromContext(component, tenant, environment, stage)
+	tenant1Ue2DevTestTestComponent2, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, "", "")
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentBackend2 := tenant1Ue2DevTestTestComponent2["backend"].(map[any]any)
 	tenant1Ue2DevTestTestComponentRemoteStateBackend2 := tenant1Ue2DevTestTestComponent2["remote_state_backend"].(map[any]any)
@@ -83,7 +84,7 @@ func TestComponentProcessor(t *testing.T) {
 	var tenant1Ue2DevTestTestComponentOverrideComponent map[string]any
 	component = "test/test-component-override"
 	stack = "tenant1-ue2-dev"
-	tenant1Ue2DevTestTestComponentOverrideComponent, err = ProcessComponentInStack(component, stack)
+	tenant1Ue2DevTestTestComponentOverrideComponent, err = ProcessComponentInStack(component, stack, "", "")
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentOverrideComponentBackend := tenant1Ue2DevTestTestComponentOverrideComponent["backend"].(map[any]any)
 	tenant1Ue2DevTestTestComponentOverrideComponentBaseComponent := tenant1Ue2DevTestTestComponentOverrideComponent["component"].(string)
@@ -118,7 +119,7 @@ func TestComponentProcessor(t *testing.T) {
 	tenant = "tenant1"
 	environment = "ue2"
 	stage = "dev"
-	tenant1Ue2DevTestTestComponentOverrideComponent2, err = ProcessComponentFromContext(component, tenant, environment, stage)
+	tenant1Ue2DevTestTestComponentOverrideComponent2, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, "", "")
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentOverrideComponent2Backend := tenant1Ue2DevTestTestComponentOverrideComponent2["backend"].(map[any]any)
 	tenant1Ue2DevTestTestComponentOverrideComponent2Workspace := tenant1Ue2DevTestTestComponentOverrideComponent2["workspace"].(string)
@@ -136,7 +137,7 @@ func TestComponentProcessor(t *testing.T) {
 	tenant = "tenant1"
 	environment = "ue2"
 	stage = "test-1"
-	tenant1Ue2Test1TestTestComponentOverrideComponent2, err = ProcessComponentFromContext(component, tenant, environment, stage)
+	tenant1Ue2Test1TestTestComponentOverrideComponent2, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, "", "")
 	assert.Nil(t, err)
 	tenant1Ue2Test1TestTestComponentOverrideComponent2Backend := tenant1Ue2DevTestTestComponentOverrideComponent2["backend"].(map[any]any)
 	tenant1Ue2Test1TestTestComponentOverrideComponent2Workspace := tenant1Ue2Test1TestTestComponentOverrideComponent2["workspace"].(string)
@@ -147,7 +148,7 @@ func TestComponentProcessor(t *testing.T) {
 	var tenant1Ue2DevTestTestComponentOverrideComponent3 map[string]any
 	component = "test/test-component-override-3"
 	stack = "tenant1-ue2-dev"
-	tenant1Ue2DevTestTestComponentOverrideComponent3, err = ProcessComponentInStack(component, stack)
+	tenant1Ue2DevTestTestComponentOverrideComponent3, err = ProcessComponentInStack(component, stack, "", "")
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentOverrideComponent3Deps := tenant1Ue2DevTestTestComponentOverrideComponent3["deps"].([]string)
 	assert.Equal(t, 20, len(tenant1Ue2DevTestTestComponentOverrideComponent3Deps))

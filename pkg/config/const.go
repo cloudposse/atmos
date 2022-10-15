@@ -1,8 +1,8 @@
-package globals
+package config
 
 const (
 	DefaultStackConfigFileExtension = ".yaml"
-	ConfigFileName                  = "atmos.yaml"
+	CliConfigFileName               = "atmos.yaml"
 	SystemDirConfigFilePath         = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar            = "LOCALAPPDATA"
 
@@ -12,11 +12,14 @@ const (
 
 	TerraformDirFlag     = "--terraform-dir"
 	HelmfileDirFlag      = "--helmfile-dir"
-	ConfigDirFlag        = "--config-dir"
+	CliConfigDirFlag     = "--config-dir"
 	StackDirFlag         = "--stacks-dir"
 	BasePathFlag         = "--base-path"
 	WorkflowDirFlag      = "--workflows-dir"
 	KubeConfigConfigFlag = "--kubeconfig-path"
+	JsonSchemaDirFlag    = "--schemas-jsonschema-dir"
+	OpaDirFlag           = "--schemas-opa-dir"
+	CueDirFlag           = "--schemas-cue-dir"
 
 	DeployRunInitFlag           = "--deploy-run-init"
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
@@ -28,8 +31,6 @@ const (
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
-)
 
-var (
-	LogVerbose = false
+	ComponentConfigFileName = "component.yaml"
 )
