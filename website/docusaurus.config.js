@@ -9,7 +9,7 @@ const BASE_URL = '';
 /** @type {import('@docusaurus/types').Config} */
 const config = {
     title: 'atmos',
-    tagline: 'atmos is a universal tool for DevOps and Cloud Automation (works with terraform, helm, helmfile, aws, etc.)',
+    tagline: 'atmos is a universal tool for DevOps and Cloud Automation',
     url: 'https://atmos.tools',
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
