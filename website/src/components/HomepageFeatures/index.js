@@ -4,29 +4,13 @@ import styles from './styles.module.css';
 
 const FeatureList = [
     // {
-    //     title: 'Easy to Use',
+    //     title: 'atmos',
     //     Svg: require('@site/static/img/atmos-logo.svg').default,
     //     description: (
     //         <>
     //         </>
     //     ),
-    // },
-    // {
-    //     title: 'Focus on What Matters',
-    //     Svg: require('@site/static/img/atmos-logo.svg').default,
-    //     description: (
-    //         <>
-    //         </>
-    //     ),
-    // },
-    // {
-    //     title: 'Extendable',
-    //     Svg: require('@site/static/img/atmos-logo.svg').default,
-    //     description: (
-    //         <>
-    //         </>
-    //     ),
-    // },
+    // }
 ];
 
 function Feature({Svg, title, description}) {
