@@ -75,11 +75,12 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		return false, err
 	}
 
-	ctx, f := context.WithTimeout(context.TODO(), time.Second*4)
-	defer f()
+	// Set timeout for schema validation
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*7)
+	defer cancelFunc()
 
 	// '/bundles/' prefix is required by the OPA SDK
-	bundleSchemaName := "/bundles/" + schemaName
+	bundleSchemaName := "/bundles/validate"
 
 	// Create a bundle server
 	server, err := opaTestServer.NewServer(opaTestServer.MockBundle(bundleSchemaName, map[string]string{schemaName: schemaText}))
@@ -102,7 +103,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 			}
 		},
 		"decision_logs": {
-			"console": true
+			"console": false
 		}
 	}`, server.URL(), bundleSchemaName))
 
@@ -111,6 +112,9 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		Config: bytes.NewReader(config),
 	})
 	if err != nil {
+		if err.Error() == "context deadline exceeded" {
+			err = fmt.Errorf("timeout evaluating the OPA policy. Please check the Rego syntax")
+		}
 		return false, err
 	}
 
@@ -121,6 +125,9 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		Path:  "/atmos/errors",
 		Input: dataFromJson,
 	}); err != nil {
+		if err.Error() == "context deadline exceeded" {
+			err = fmt.Errorf("timeout evaluating the OPA policy. Please check the Rego syntax")
+		}
 		return false, err
 	}
 
