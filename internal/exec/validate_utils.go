@@ -101,9 +101,6 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 			"validate": {
 				"resource": %s
 			}
-		},
-		"decision_logs": {
-			"console": false
 		}
 	}`, server.URL(), bundleSchemaName))
 
