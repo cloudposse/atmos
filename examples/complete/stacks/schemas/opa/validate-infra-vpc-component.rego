@@ -26,3 +26,10 @@ errors[message] {
     count(input.vars.availability_zones) != 2
     message = "In 'dev', only 2 Availability Zones are allowed"
 }
+
+# Check VPC name
+errors[message] {
+    not re_match("^[a-zA-Z0-9]{2,20}$", input.vars.name)
+    #not re_match("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$", input.vars.name)
+    message = "VPC name must be a valid string of alphanumeric chars"
+}

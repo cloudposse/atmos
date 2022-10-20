@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"strings"
+	"time"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/open-policy-agent/opa/sdk"
@@ -74,7 +75,8 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		return false, err
 	}
 
-	ctx := context.Background()
+	ctx, f := context.WithTimeout(context.TODO(), time.Second*4)
+	defer f()
 
 	// '/bundles/' prefix is required by the OPA SDK
 	bundleSchemaName := "/bundles/" + schemaName
@@ -100,7 +102,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 			}
 		},
 		"decision_logs": {
-			"console": false
+			"console": true
 		}
 	}`, server.URL(), bundleSchemaName))
 
