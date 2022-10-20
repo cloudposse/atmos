@@ -35,7 +35,7 @@ errors[message] {
 }
 
 # Note:
-# If a regex pattern in the `re_match` function contains a backslash to escape specail chars (e.g. `\.` or `\-`),
+# If a regex pattern in the `re_match` function contains a backslash to escape special chars (e.g. `\.` or `\-`),
 # it must be escaped with another backslash when represented as a regular Go string (`\\.`, `\\-`).
 # The reason is that backslash is also used to escape special characters in Go strings like newline (\n).
 # If you want to match the backslash character itself, you'll need four slashes.

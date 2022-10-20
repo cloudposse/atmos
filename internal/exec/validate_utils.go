@@ -104,13 +104,17 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		}
 	}`, server.URL(), bundleSchemaName))
 
+	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
+		"1. Rego syntax\n" +
+		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
+
 	// Create an instance of the OPA object
 	opa, err := sdk.New(ctx, sdk.Options{
 		Config: bytes.NewReader(config),
 	})
 	if err != nil {
 		if err.Error() == "context deadline exceeded" {
-			err = fmt.Errorf("timeout evaluating the OPA policy. Please check the Rego syntax")
+			err = errors.New(timeoutErrorMessage)
 		}
 		return false, err
 	}
@@ -123,7 +127,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		Input: dataFromJson,
 	}); err != nil {
 		if err.Error() == "context deadline exceeded" {
-			err = fmt.Errorf("timeout evaluating the OPA policy. Please check the Rego syntax")
+			err = errors.New(timeoutErrorMessage)
 		}
 		return false, err
 	}
