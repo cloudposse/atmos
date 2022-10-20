@@ -20,13 +20,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v2.1.3
+        uses: actions/setup-go@v3
         with:
           go-version: "1.19"
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2.3.3
+        uses: actions/checkout@v3
 
       - name: Get dependencies
         run: |
@@ -48,13 +48,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v2.1.3
+        uses: actions/setup-go@v3
         with:
           go-version: "1.19"
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2.3.3
+        uses: actions/checkout@v3
 
       - name: Get dependencies
         run: |
