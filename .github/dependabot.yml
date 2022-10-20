@@ -1,0 +1,26 @@
+# Please see the documentation for all configuration options:
+# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+- package-ecosystem: gomod
+  open-pull-requests-limit: 3
+  directory: /
+  labels:
+    - dependencies
+    - go
+    - patch
+  schedule:
+    interval: weekly
+    day: sunday
+      
+- package-ecosystem: github-actions
+  open-pull-requests-limit: 3
+  directory: /
+  labels:
+    - dependencies
+    - github-actions
+    - patch
+  schedule:
+    interval: weekly
+    day: sunday
