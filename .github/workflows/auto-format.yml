@@ -15,7 +15,7 @@ jobs:
     # However, using a personal access token will cause events to be triggered.
     # We need that to ensure a status gets posted after the auto-format commit.
     # We also want to trigger tests if the auto-format made no changes.
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       if: github.event.pull_request.state == 'open'
       name: Privileged Checkout
       with:
