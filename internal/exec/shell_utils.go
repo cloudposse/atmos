@@ -11,7 +11,7 @@ import (
 )
 
 // ExecuteShellCommand prints and executes the provided command with args and flags
-func ExecuteShellCommand(command string, args []string, dir string, env []string, dryRun bool) error {
+func ExecuteShellCommand(command string, args []string, dir string, env []string, dryRun bool, verbose bool) error {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
@@ -19,8 +19,10 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	u.PrintInfo("\nExecuting command:")
-	fmt.Println(cmd.String())
+	if verbose {
+		u.PrintInfo("\nExecuting command:")
+		fmt.Println(cmd.String())
+	}
 
 	if dryRun {
 		return nil
@@ -30,15 +32,17 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 }
 
 // ExecuteShellCommandAndReturnOutput prints and executes the provided command with args and flags and returns the command output
-func ExecuteShellCommandAndReturnOutput(command string, args []string, dir string, env []string, dryRun bool) (string, error) {
+func ExecuteShellCommandAndReturnOutput(command string, args []string, dir string, env []string, dryRun bool, verbose bool) (string, error) {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 
-	u.PrintInfo("\nExecuting command:")
-	fmt.Println(cmd.String())
+	if verbose {
+		u.PrintInfo("\nExecuting command:")
+		fmt.Println(cmd.String())
+	}
 
 	if dryRun {
 		return "", nil
@@ -53,11 +57,11 @@ func ExecuteShellCommandAndReturnOutput(command string, args []string, dir strin
 }
 
 // ExecuteShellCommands sequentially executes the provided list of commands
-func ExecuteShellCommands(commands []string, dir string, env []string, dryRun bool) error {
+func ExecuteShellCommands(commands []string, dir string, env []string, dryRun bool, verbose bool) error {
 	for _, command := range commands {
 		args := strings.Fields(command)
 		if len(args) > 0 {
-			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun); err != nil {
+			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun, verbose); err != nil {
 				return err
 			}
 		}

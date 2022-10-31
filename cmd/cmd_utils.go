@@ -117,7 +117,7 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 							// If the command to get the value for the ENV var is provided, execute it
 							if valCommand != "" {
 								valCommandArgs := strings.Fields(valCommand)
-								res, err := e.ExecuteShellCommandAndReturnOutput(valCommandArgs[0], valCommandArgs[1:], ".", nil, false)
+								res, err := e.ExecuteShellCommandAndReturnOutput(valCommandArgs[0], valCommandArgs[1:], ".", nil, false, commandConfig.Verbose)
 								if err != nil {
 									u.PrintErrorToStdErrorAndExit(err)
 								}
@@ -154,7 +154,7 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 
 						// Execute the command step
 						stepArgs := strings.Fields(commandToRun)
-						err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", envVarsList, false)
+						err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", envVarsList, false, commandConfig.Verbose)
 						if err != nil {
 							u.PrintErrorToStdErrorAndExit(err)
 						}
