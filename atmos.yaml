@@ -120,11 +120,13 @@ commands:
     commands:
       - name: hello
         description: This command says Hello world
+        verbose: true
         steps:
           - echo Saying Hello world...
           - echo Hello world
       - name: ping
         description: This command plays ping-pong
+        verbose: true
         steps:
           - echo Playing ping-pong...
           - echo pong
