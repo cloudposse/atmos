@@ -1,2 +1,6 @@
 vars:
   stage: prod
+
+settings:
+  config:
+    is_prod: true

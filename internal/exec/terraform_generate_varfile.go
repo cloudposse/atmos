@@ -9,8 +9,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateVarfile executes `terraform generate varfile` command
-func ExecuteTerraformGenerateVarfile(cmd *cobra.Command, args []string) error {
+// ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command
+func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}

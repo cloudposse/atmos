@@ -8,8 +8,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeConfig executes `describe config` command
-func ExecuteDescribeConfig(cmd *cobra.Command, args []string) error {
+// ExecuteDescribeConfigCmd executes `describe config` command
+func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
 
 	format, err := flags.GetString("format")

@@ -66,7 +66,7 @@ logs:
 # Custom CLI commands
 commands:
   - name: tf
-    description: Execute terraform commands
+    description: Execute 'terraform' commands
     # subcommands
     commands:
       - name: plan
@@ -90,7 +90,7 @@ commands:
         steps:
           - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
   - name: terraform
-    description: Execute terraform commands
+    description: Execute 'terraform' commands
     # subcommands
     commands:
       - name: provision
@@ -126,10 +126,38 @@ commands:
           - echo Hello world
       - name: ping
         description: This command plays ping-pong
-        verbose: true
+        verbose: false
         steps:
           - echo Playing ping-pong...
           - echo pong
+  - name: show
+    description: Execute 'show' commands
+    # subcommands
+    commands:
+      - name: component
+        description: Execute 'show component' commands
+        verbose: false
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        # steps support Go templates
+        steps:
+          - 'echo Atmos component: {{ .Arguments.component }}'
+          - 'echo Atmos stack: {{ .Flags.stack }}'
+          - 'echo Component: {{ .ComponentConfig.component }}'
+          - 'echo Backend bucket: {{ .ComponentConfig.backend.bucket }}'
+          - 'echo Terraform workspace: {{ .ComponentConfig.workspace }}'
+          - 'echo Namespace: {{ .ComponentConfig.vars.namespace }}'
+          - 'echo Tenant: {{ .ComponentConfig.vars.tenant }}'
+          - 'echo Environment: {{ .ComponentConfig.vars.environment }}'
+          - 'echo Stage: {{ .ComponentConfig.vars.stage }}'
+          - 'echo settings.spacelift.workspace_enabled: {{ .ComponentConfig.settings.spacelift.workspace_enabled }}'
+          - 'echo settings.config.is_prod: {{ .ComponentConfig.settings.config.is_prod }}'
 
 # Integrations
 integrations:

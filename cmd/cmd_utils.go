@@ -56,6 +56,8 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 				Run: func(cmd *cobra.Command, args []string) {
 					var err error
 					var t *template.Template
+					var component string
+					var stack string
 
 					if len(args) != len(customCommandArguments) {
 						err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(customCommandArguments))
@@ -68,6 +70,9 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 						argumentsData := map[string]string{}
 						for ix, arg := range customCommandArguments {
 							argumentsData[arg.Name] = args[ix]
+							if arg.Name == "component" {
+								component = args[ix]
+							}
 						}
 
 						// Prepare template data for flags
@@ -80,13 +85,27 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 									u.PrintErrorToStdErrorAndExit(err)
 								}
 								flagsData[fl.Name] = providedFlag
+								if fl.Name == "stack" {
+									stack = providedFlag
+								}
+							}
+						}
+
+						componentConfig := map[string]any{}
+
+						// If component and stacks are provided, get the component stack config
+						if component != "" && stack != "" {
+							componentConfig, err = e.ExecuteDescribeComponent(component, stack)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
 							}
 						}
 
 						// Prepare full template data
-						var data = map[string]map[string]string{
-							"Arguments": argumentsData,
-							"Flags":     flagsData,
+						var data = map[string]any{
+							"Arguments":       argumentsData,
+							"Flags":           flagsData,
+							"ComponentConfig": componentConfig,
 						}
 
 						// Parse and execute Go templates in the command's steps
@@ -162,7 +181,7 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 				},
 			}
 
-			// Add customCommandFlags
+			// Process 'customCommandFlags' and add flags to the command
 			for _, flag := range customCommandFlags {
 				if flag.Type == "bool" {
 					if flag.Shorthand != "" {

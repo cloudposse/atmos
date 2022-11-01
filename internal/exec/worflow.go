@@ -13,8 +13,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// ExecuteWorkflow executes a workflow
-func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
+// ExecuteWorkflowCmd executes a workflow
+func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `workflow name`")
 	}

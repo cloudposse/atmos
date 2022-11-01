@@ -10,8 +10,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeStacks executes `describe stacks` command
-func ExecuteDescribeStacks(cmd *cobra.Command, args []string) error {
+// ExecuteDescribeStacksCmd executes `describe stacks` command
+func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)

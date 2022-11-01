@@ -16,8 +16,8 @@ const (
 	autoApproveFlag = "-auto-approve"
 )
 
-// ExecuteTerraform executes terraform commands
-func ExecuteTerraform(cmd *cobra.Command, args []string) error {
+// ExecuteTerraformCmd executes terraform commands
+func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)

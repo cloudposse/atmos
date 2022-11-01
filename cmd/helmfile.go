@@ -13,7 +13,7 @@ var helmfileCmd = &cobra.Command{
 	Long:               `This command runs helmfile commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteHelmfile(cmd, args)
+		err := e.ExecuteHelmfileCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}
