@@ -120,7 +120,7 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 								}
 								value = res
 							} else {
-								// Parse and execute Go templates in the values of the command's ENV vars
+								// Process Go templates in the values of the command's ENV vars
 								value, err = processTmpl(fmt.Sprintf("env-var-%d", i), value, data)
 								if err != nil {
 									u.PrintErrorToStdErrorAndExit(err)
@@ -141,17 +141,16 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 							}
 						}
 
-						componentConfig := map[string]any{}
 						// If component and stacks are provided, get the component stack config
 						if component != "" && stack != "" {
-							componentConfig, err = e.ExecuteDescribeComponent(component, stack)
+							componentConfig, err := e.ExecuteDescribeComponent(component, stack)
 							if err != nil {
 								u.PrintErrorToStdErrorAndExit(err)
 							}
+							data["ComponentConfig"] = componentConfig
 						}
-						data["ComponentConfig"] = componentConfig
 
-						// Parse and execute Go templates in the command's steps
+						// Process Go templates in the command's steps
 						commandTmpl, err := processTmpl(fmt.Sprintf("step-%d", i), step, data)
 						if err != nil {
 							u.PrintErrorToStdErrorAndExit(err)
