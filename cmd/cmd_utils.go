@@ -80,6 +80,7 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 				}
 			}
 
+			// Add the command to the parent command
 			parentCommand.AddCommand(customCommand)
 			command = customCommand
 		}
