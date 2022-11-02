@@ -135,13 +135,13 @@ commands:
     commands:
       - name: hello
         description: This command says Hello world
-        verbose: true
         steps:
-          - echo Saying Hello world...
           - echo Hello world
       - name: ping
         description: This command plays ping-pong
-        verbose: false
+        # If 'verbose' is set to 'true', atmos will output some info messages to the console before executing the command's steps
+        # If 'verbose' is not defined, it implicitly defaults to 'false'
+        verbose: true
         steps:
           - echo Playing ping-pong...
           - echo pong
@@ -151,7 +151,6 @@ commands:
     commands:
       - name: component
         description: Execute 'show component' command
-        verbose: false
         arguments:
           - name: component
             description: Name of the component
