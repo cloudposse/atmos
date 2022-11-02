@@ -56,8 +56,6 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 				Long:  commandConfig.Description,
 				Run: func(cmd *cobra.Command, args []string) {
 					var err error
-					var component string
-					var stack string
 
 					if len(args) != len(customCommandArguments) {
 						err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(customCommandArguments))
@@ -70,9 +68,6 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 						argumentsData := map[string]string{}
 						for ix, arg := range customCommandArguments {
 							argumentsData[arg.Name] = args[ix]
-							if arg.Name == "component" {
-								component = args[ix]
-							}
 						}
 
 						// Prepare template data for flags
@@ -85,9 +80,6 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 									u.PrintErrorToStdErrorAndExit(err)
 								}
 								flagsData[fl.Name] = providedFlag
-								if fl.Name == "stack" {
-									stack = providedFlag
-								}
 							}
 						}
 
@@ -141,8 +133,30 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 							}
 						}
 
-						// If component and stacks are provided, get the component stack config
-						if component != "" && stack != "" {
+						// If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
+						// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
+						if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
+							// Process Go templates in the command's 'component_config.component'
+							component, err := processTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
+							}
+							if component == "" || component == "<no value>" {
+								u.PrintErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+									commandConfig.ComponentConfig.Component, cfg.CliConfigFileName))
+							}
+
+							// Process Go templates in the command's 'component_config.stack'
+							stack, err := processTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
+							}
+							if stack == "" || stack == "<no value>" {
+								u.PrintErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+									commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName))
+							}
+
+							// Get the config for the component in the stack
 							componentConfig, err := e.ExecuteDescribeComponent(component, stack)
 							if err != nil {
 								u.PrintErrorToStdErrorAndExit(err)
