@@ -30,6 +30,7 @@ var (
 	}
 )
 
+// processCustomCommands processes and executes custom commands
 func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command, topLevel bool) error {
 	var command *cobra.Command
 
@@ -55,7 +56,6 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 				Long:  commandConfig.Description,
 				Run: func(cmd *cobra.Command, args []string) {
 					var err error
-					var t *template.Template
 
 					if len(args) != len(customCommandArguments) {
 						err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(customCommandArguments))
@@ -83,21 +83,10 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 							}
 						}
 
-						// Prepare full template data
-						var data = map[string]map[string]string{
+						// Prepare template data
+						var data = map[string]any{
 							"Arguments": argumentsData,
 							"Flags":     flagsData,
-						}
-
-						// Parse and execute Go templates in the command's steps
-						t, err = template.New(fmt.Sprintf("step-%d", i)).Parse(step)
-						if err != nil {
-							u.PrintErrorToStdErrorAndExit(err)
-						}
-						var tpl bytes.Buffer
-						err = t.Execute(&tpl, data)
-						if err != nil {
-							u.PrintErrorToStdErrorAndExit(err)
 						}
 
 						// Prepare ENV vars
@@ -117,23 +106,17 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 							// If the command to get the value for the ENV var is provided, execute it
 							if valCommand != "" {
 								valCommandArgs := strings.Fields(valCommand)
-								res, err := e.ExecuteShellCommandAndReturnOutput(valCommandArgs[0], valCommandArgs[1:], ".", nil, false)
+								res, err := e.ExecuteShellCommandAndReturnOutput(valCommandArgs[0], valCommandArgs[1:], ".", nil, false, commandConfig.Verbose)
 								if err != nil {
 									u.PrintErrorToStdErrorAndExit(err)
 								}
 								value = res
 							} else {
-								// Parse and execute Go templates in the values of the command's ENV vars
-								t, err = template.New(fmt.Sprintf("env-var-%d", i)).Parse(value)
+								// Process Go templates in the values of the command's ENV vars
+								value, err = processTmpl(fmt.Sprintf("env-var-%d", i), value, data)
 								if err != nil {
 									u.PrintErrorToStdErrorAndExit(err)
 								}
-								var tplEnvVarValue bytes.Buffer
-								err = t.Execute(&tplEnvVarValue, data)
-								if err != nil {
-									u.PrintErrorToStdErrorAndExit(err)
-								}
-								value = tplEnvVarValue.String()
 							}
 
 							envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
@@ -144,17 +127,53 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 						}
 
 						if len(envVarsList) > 0 {
-							u.PrintInfo("\nUsing ENV vars:")
+							u.PrintInfoVerbose(commandConfig.Verbose, "\nUsing ENV vars:")
 							for _, v := range envVarsList {
 								fmt.Println(v)
 							}
 						}
 
-						commandToRun := os.ExpandEnv(tpl.String())
+						// If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
+						// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
+						if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
+							// Process Go templates in the command's 'component_config.component'
+							component, err := processTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
+							}
+							if component == "" || component == "<no value>" {
+								u.PrintErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+									commandConfig.ComponentConfig.Component, cfg.CliConfigFileName))
+							}
+
+							// Process Go templates in the command's 'component_config.stack'
+							stack, err := processTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
+							}
+							if stack == "" || stack == "<no value>" {
+								u.PrintErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+									commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName))
+							}
+
+							// Get the config for the component in the stack
+							componentConfig, err := e.ExecuteDescribeComponent(component, stack)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
+							}
+							data["ComponentConfig"] = componentConfig
+						}
+
+						// Process Go templates in the command's steps
+						commandTmpl, err := processTmpl(fmt.Sprintf("step-%d", i), step, data)
+						if err != nil {
+							u.PrintErrorToStdErrorAndExit(err)
+						}
+						commandToRun := os.ExpandEnv(commandTmpl)
 
 						// Execute the command step
 						stepArgs := strings.Fields(commandToRun)
-						err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", envVarsList, false)
+						err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", envVarsList, false, commandConfig.Verbose)
 						if err != nil {
 							u.PrintErrorToStdErrorAndExit(err)
 						}
@@ -162,7 +181,7 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 				},
 			}
 
-			// Add customCommandFlags
+			// Process 'customCommandFlags' and add flags to the command
 			for _, flag := range customCommandFlags {
 				if flag.Type == "bool" {
 					if flag.Shorthand != "" {
@@ -197,4 +216,18 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 	}
 
 	return nil
+}
+
+// processTmpl parses and executes Go templates
+func processTmpl(tmplName string, tmplValue string, tmplData any) (string, error) {
+	t, err := template.New(tmplName).Parse(tmplValue)
+	if err != nil {
+		return "", err
+	}
+	var res bytes.Buffer
+	err = t.Execute(&res, tmplData)
+	if err != nil {
+		return "", err
+	}
+	return res.String(), nil
 }

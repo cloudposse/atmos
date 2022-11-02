@@ -93,6 +93,10 @@ func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, com
 		}
 
 		for _, v := range validations {
+			if v.Disabled {
+				continue
+			}
+
 			schemaPath = v.SchemaPath
 			schemaType = v.SchemaType
 

@@ -13,7 +13,7 @@ var vendorPullCmd = &cobra.Command{
 	Long:               `This command executes 'atmos vendor pull' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteVendorPull(cmd, args)
+		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}

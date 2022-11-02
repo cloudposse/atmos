@@ -4,12 +4,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ExecuteVendorPull executes `vendor pull` commands
-func ExecuteVendorPull(cmd *cobra.Command, args []string) error {
+// ExecuteVendorPullCmd executes `vendor pull` commands
+func ExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
 	return ExecuteVendorCommand(cmd, args, "pull")
 }
 
-// ExecuteVendorDiff executes `vendor diff` commands
-func ExecuteVendorDiff(cmd *cobra.Command, args []string) error {
+// ExecuteVendorDiffCmd executes `vendor diff` commands
+func ExecuteVendorDiffCmd(cmd *cobra.Command, args []string) error {
 	return ExecuteVendorCommand(cmd, args, "diff")
 }

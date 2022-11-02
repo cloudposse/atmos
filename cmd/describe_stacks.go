@@ -13,7 +13,7 @@ var describeStacksCmd = &cobra.Command{
 	Long:               `This command shows configuration for atmos stacks and components in the stacks: atmos describe stacks <options>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteDescribeStacks(cmd, args)
+		err := e.ExecuteDescribeStacksCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}

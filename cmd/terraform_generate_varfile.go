@@ -13,7 +13,7 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 	Long:               `This command generates a varfile for an atmos terraform component: atmos terraform generate varfile <component> -s <stack> -f <file>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteTerraformGenerateVarfile(cmd, args)
+		err := e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}

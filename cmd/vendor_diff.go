@@ -13,7 +13,7 @@ var vendorDiffCmd = &cobra.Command{
 	Long:               `This command executes 'atmos vendor diff' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteVendorDiff(cmd, args)
+		err := e.ExecuteVendorDiffCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}
