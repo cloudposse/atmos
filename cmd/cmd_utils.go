@@ -167,8 +167,8 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 			}
 		}
 
-		if len(envVarsList) > 0 {
-			u.PrintInfoVerbose(commandConfig.Verbose, "\nUsing ENV vars:")
+		if len(envVarsList) > 0 && commandConfig.Verbose {
+			u.PrintInfo("\nUsing ENV vars:")
 			for _, v := range envVarsList {
 				fmt.Println(v)
 			}
