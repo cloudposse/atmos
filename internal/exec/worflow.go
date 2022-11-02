@@ -3,7 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"path/filepath"
 
@@ -61,7 +61,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("file '%s' does not exist", workflowPath)
 	}
 
-	fileContent, err := ioutil.ReadFile(workflowPath)
+	fileContent, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return err
 	}
