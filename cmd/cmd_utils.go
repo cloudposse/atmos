@@ -91,21 +91,10 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 							}
 						}
 
-						componentConfig := map[string]any{}
-
-						// If component and stacks are provided, get the component stack config
-						if component != "" && stack != "" {
-							componentConfig, err = e.ExecuteDescribeComponent(component, stack)
-							if err != nil {
-								u.PrintErrorToStdErrorAndExit(err)
-							}
-						}
-
 						// Prepare template data
 						var data = map[string]any{
-							"Arguments":       argumentsData,
-							"Flags":           flagsData,
-							"ComponentConfig": componentConfig,
+							"Arguments": argumentsData,
+							"Flags":     flagsData,
 						}
 
 						// Prepare ENV vars
@@ -151,6 +140,16 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 								fmt.Println(v)
 							}
 						}
+
+						componentConfig := map[string]any{}
+						// If component and stacks are provided, get the component stack config
+						if component != "" && stack != "" {
+							componentConfig, err = e.ExecuteDescribeComponent(component, stack)
+							if err != nil {
+								u.PrintErrorToStdErrorAndExit(err)
+							}
+						}
+						data["ComponentConfig"] = componentConfig
 
 						// Parse and execute Go templates in the command's steps
 						commandTmpl, err := processTmpl(fmt.Sprintf("step-%d", i), step, data)
