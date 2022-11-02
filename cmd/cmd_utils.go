@@ -30,6 +30,7 @@ var (
 	}
 )
 
+// processCustomCommands processes and executes custom commands
 func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command, topLevel bool) error {
 	var command *cobra.Command
 
@@ -55,7 +56,6 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 				Long:  commandConfig.Description,
 				Run: func(cmd *cobra.Command, args []string) {
 					var err error
-					var t *template.Template
 					var component string
 					var stack string
 
@@ -101,22 +101,11 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 							}
 						}
 
-						// Prepare full template data
+						// Prepare template data
 						var data = map[string]any{
 							"Arguments":       argumentsData,
 							"Flags":           flagsData,
 							"ComponentConfig": componentConfig,
-						}
-
-						// Parse and execute Go templates in the command's steps
-						t, err = template.New(fmt.Sprintf("step-%d", i)).Parse(step)
-						if err != nil {
-							u.PrintErrorToStdErrorAndExit(err)
-						}
-						var tpl bytes.Buffer
-						err = t.Execute(&tpl, data)
-						if err != nil {
-							u.PrintErrorToStdErrorAndExit(err)
 						}
 
 						// Prepare ENV vars
@@ -143,16 +132,10 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 								value = res
 							} else {
 								// Parse and execute Go templates in the values of the command's ENV vars
-								t, err = template.New(fmt.Sprintf("env-var-%d", i)).Parse(value)
+								value, err = processTmpl(fmt.Sprintf("env-var-%d", i), value, data)
 								if err != nil {
 									u.PrintErrorToStdErrorAndExit(err)
 								}
-								var tplEnvVarValue bytes.Buffer
-								err = t.Execute(&tplEnvVarValue, data)
-								if err != nil {
-									u.PrintErrorToStdErrorAndExit(err)
-								}
-								value = tplEnvVarValue.String()
 							}
 
 							envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
@@ -163,13 +146,18 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 						}
 
 						if len(envVarsList) > 0 {
-							u.PrintInfo("\nUsing ENV vars:")
+							u.PrintInfoVerbose(commandConfig.Verbose, "\nUsing ENV vars:")
 							for _, v := range envVarsList {
 								fmt.Println(v)
 							}
 						}
 
-						commandToRun := os.ExpandEnv(tpl.String())
+						// Parse and execute Go templates in the command's steps
+						commandTmpl, err := processTmpl(fmt.Sprintf("step-%d", i), step, data)
+						if err != nil {
+							u.PrintErrorToStdErrorAndExit(err)
+						}
+						commandToRun := os.ExpandEnv(commandTmpl)
 
 						// Execute the command step
 						stepArgs := strings.Fields(commandToRun)
@@ -216,4 +204,18 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 	}
 
 	return nil
+}
+
+// processTmpl parses and executes Go templates
+func processTmpl(tmplName string, tmplValue string, tmplData any) (string, error) {
+	t, err := template.New(tmplName).Parse(tmplValue)
+	if err != nil {
+		return "", err
+	}
+	var res bytes.Buffer
+	err = t.Execute(&res, tmplData)
+	if err != nil {
+		return "", err
+	}
+	return res.String(), nil
 }
