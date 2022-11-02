@@ -36,10 +36,10 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 	var command *cobra.Command
 
 	for _, commandCfg := range commands {
-		// Clone the 'commandCfg' struct because of the automatic closure in the `Run` function of the Cobra command.
-		// It will make a closure over the local variable 'commandConfig' which is different in each iteration.
+		// Clone the 'commandCfg' struct into a local variable because of the automatic closure in the `Run` function of the Cobra command.
+		// Cloning will make a closure over the local variable 'commandConfig' which is different in each iteration.
 		// https://www.calhoun.io/gotchas-and-common-mistakes-with-closures-in-go/
-		commandConfig, err := cloneCommandConfig(&commandCfg)
+		commandConfig, err := cloneCommand(&commandCfg)
 		if err != nil {
 			return err
 		}
@@ -220,8 +220,8 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 	}
 }
 
-// cloneCommandConfig clones a custom command config into a new struct
-func cloneCommandConfig(orig *cfg.Command) (*cfg.Command, error) {
+// cloneCommand clones a custom command config into a new struct
+func cloneCommand(orig *cfg.Command) (*cfg.Command, error) {
 	origJSON, err := json.Marshal(orig)
 	if err != nil {
 		return nil, err
