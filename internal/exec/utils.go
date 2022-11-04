@@ -176,9 +176,9 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 
 	flags := cmd.Flags()
 
-	configAndStacksInfo.Stack, err = flags.GetString("stack")
-	if err != nil {
-		return configAndStacksInfo, err
+	stack, err := flags.GetString("stack")
+	if err == nil {
+		configAndStacksInfo.Stack = stack
 	}
 
 	return configAndStacksInfo, nil
