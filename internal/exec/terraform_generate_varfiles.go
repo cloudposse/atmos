@@ -13,7 +13,7 @@ import (
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("helmfile", cmd, args)
+	info, err := processCommandLineArgs("terraform", cmd, args)
 	if err != nil {
 		return err
 	}

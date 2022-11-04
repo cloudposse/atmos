@@ -12,7 +12,7 @@ import (
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("helmfile", cmd, args)
+	info, err := processCommandLineArgs("terraform", cmd, args)
 	if err != nil {
 		return err
 	}

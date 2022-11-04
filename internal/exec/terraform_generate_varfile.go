@@ -24,7 +24,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 
 	component := args[0]
 
-	info, err := processCommandLineArgs("helmfile", cmd, args)
+	info, err := processCommandLineArgs("terraform", cmd, args)
 	if err != nil {
 		return err
 	}

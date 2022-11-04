@@ -14,7 +14,7 @@ import (
 
 // ExecuteAtlantisGenerateRepoConfigCmd executes `atlantis generate repo-config` command
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("helmfile", cmd, args)
+	info, err := processCommandLineArgs("", cmd, args)
 	if err != nil {
 		return err
 	}
