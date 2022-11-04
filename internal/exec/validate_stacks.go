@@ -14,10 +14,7 @@ import (
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args)
-	if err != nil {
-		return err
-	}
+	info := cfg.ConfigAndStacksInfo{}
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
