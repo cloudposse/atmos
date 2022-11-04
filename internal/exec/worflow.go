@@ -19,9 +19,14 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("invalid arguments. The command requires one argument `workflow name`")
 	}
 
+	info, err := processCommandLineArgs("terraform", cmd, args)
+	if err != nil {
+		return err
+	}
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}

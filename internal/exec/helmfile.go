@@ -15,14 +15,14 @@ import (
 
 // ExecuteHelmfileCmd executes helmfile commands
 func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	info, err := processCommandLineArgs("helmfile", cmd, args)
 	if err != nil {
-		u.PrintErrorToStdError(err)
 		return err
 	}
 
-	info, err := processCommandLineArgs("helmfile", cmd, args)
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
+		u.PrintErrorToStdError(err)
 		return err
 	}
 
