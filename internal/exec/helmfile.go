@@ -21,7 +21,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	info, err := processCommandLineArgs(cliConfig, "helmfile", cmd, args)
+	info, err := processCommandLineArgs("helmfile", cmd, args)
 	if err != nil {
 		return err
 	}

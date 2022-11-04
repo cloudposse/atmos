@@ -127,7 +127,7 @@ func FindComponentConfig(
 }
 
 // processCommandLineArgs processes command-line args
-func processCommandLineArgs(cliConfig cfg.CliConfiguration, componentType string, cmd *cobra.Command, args []string) (cfg.ConfigAndStacksInfo, error) {
+func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (cfg.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo cfg.ConfigAndStacksInfo
 
 	if len(args) < 1 {
