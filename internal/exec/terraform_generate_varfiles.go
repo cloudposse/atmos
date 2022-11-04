@@ -13,7 +13,12 @@ import (
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	info, err := processCommandLineArgs("terraform", cmd, args)
+	if err != nil {
+		return err
+	}
+
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err

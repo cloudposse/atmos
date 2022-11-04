@@ -25,7 +25,11 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 
 	component := args[0]
 
-	var info cfg.ConfigAndStacksInfo
+	info, err := processCommandLineArgs("terraform", cmd, args)
+	if err != nil {
+		return err
+	}
+
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
