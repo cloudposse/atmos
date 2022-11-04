@@ -144,13 +144,27 @@ commands:
             shorthand: s
             description: Name of the stack
             required: true
+        # ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_TENANT
+            value: "{{ .ComponentConfig.vars.tenant }}"
+          - key: ATMOS_STAGE
+            value: "{{ .ComponentConfig.vars.stage }}"
+          - key: ATMOS_ENVIRONMENT
+            value: "{{ .ComponentConfig.vars.environment }}"
+          - key: ATMOS_IS_PROD
+            value: "{{ .ComponentConfig.settings.config.is_prod }}"
         # If a custom command defines 'component_config' section with 'component' and 'stack', 'atmos' generates the config for the component in the stack
         # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
         # exposing all the component sections (which are also shown by 'atmos describe component' command)
         component_config:
           component: "{{ .Arguments.component }}"
           stack: "{{ .Flags.stack }}"
-        # steps support Go templates
+        # steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
         steps:
           - 'echo Atmos component: {{ .Arguments.component }}'
           - 'echo Atmos stack: {{ .Flags.stack }}'
