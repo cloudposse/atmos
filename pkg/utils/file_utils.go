@@ -16,13 +16,22 @@ func IsDirectory(path string) (bool, error) {
 	return fileInfo.IsDir(), err
 }
 
-// FileExists checks if a file exists and is not a directory
+// FileExists checks if the file exists and is not a directory
 func FileExists(filename string) bool {
 	fileInfo, err := os.Stat(filename)
-	if err != nil || os.IsNotExist(err) {
+	if os.IsNotExist(err) || err != nil {
 		return false
 	}
 	return !fileInfo.IsDir()
+}
+
+// FileOrDirExists checks if the file or directory exists
+func FileOrDirExists(filename string) bool {
+	_, err := os.Stat(filename)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 // IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file)
@@ -90,10 +99,8 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 	}
 
 	// Check if the final absolute path exists in the file system
-	// Check for the errors returned from os.Stat (it will be of type PathError)
-	// and then from os.IsNotExist (it will be of type ErrNotExist as well as some syscall errors)
 	_, err = os.Stat(absPath)
-	if err != nil || os.IsNotExist(err) {
+	if err != nil {
 		return "", err
 	}
 
