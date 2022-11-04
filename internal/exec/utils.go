@@ -126,8 +126,8 @@ func FindComponentConfig(
 		nil
 }
 
-// processArgsConfigAndStacks processes command-line args, CLI config and stacks
-func processArgsConfigAndStacks(cliConfig cfg.CliConfiguration, componentType string, cmd *cobra.Command, args []string) (cfg.ConfigAndStacksInfo, error) {
+// processCommandLineArgs processes command-line args
+func processCommandLineArgs(cliConfig cfg.CliConfiguration, componentType string, cmd *cobra.Command, args []string) (cfg.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo cfg.ConfigAndStacksInfo
 
 	if len(args) < 1 {
@@ -185,7 +185,7 @@ func processArgsConfigAndStacks(cliConfig cfg.CliConfiguration, componentType st
 		return configAndStacksInfo, err
 	}
 
-	return ProcessStacks(cliConfig, configAndStacksInfo, true)
+	return configAndStacksInfo, nil
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
@@ -409,7 +409,7 @@ func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.Confi
 	return configAndStacksInfo, nil
 }
 
-// processArgsAndFlags removes common args and flags from the provided list of arguments/flags
+// processArgsAndFlags processes args and flags from the provided CLI arguments/flags
 func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.ArgsAndFlagsInfo, error) {
 	var info cfg.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string

@@ -21,7 +21,12 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	info, err := processArgsConfigAndStacks(cliConfig, "helmfile", cmd, args)
+	info, err := processCommandLineArgs(cliConfig, "helmfile", cmd, args)
+	if err != nil {
+		return err
+	}
+
+	info, err = ProcessStacks(cliConfig, info, true)
 	if err != nil {
 		return err
 	}
