@@ -26,13 +26,13 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if info.NeedHelp {
+		return nil
+	}
+
 	info, err = ProcessStacks(cliConfig, info, true)
 	if err != nil {
 		return err
-	}
-
-	if info.NeedHelp {
-		return nil
 	}
 
 	if len(info.Stack) < 1 {
