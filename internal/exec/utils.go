@@ -130,10 +130,6 @@ func FindComponentConfig(
 func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (cfg.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo cfg.ConfigAndStacksInfo
 
-	if len(args) < 1 {
-		return configAndStacksInfo, errors.New("invalid number of arguments")
-	}
-
 	cmd.DisableFlagParsing = false
 
 	err := cmd.ParseFlags(args)
