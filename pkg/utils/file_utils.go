@@ -19,7 +19,7 @@ func IsDirectory(path string) (bool, error) {
 // FileExists checks if a file exists and is not a directory
 func FileExists(filename string) bool {
 	fileInfo, err := os.Stat(filename)
-	if os.IsNotExist(err) || err != nil {
+	if err != nil || os.IsNotExist(err) {
 		return false
 	}
 	return !fileInfo.IsDir()
@@ -90,8 +90,10 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 	}
 
 	// Check if the final absolute path exists in the file system
+	// Check for the errors returned from os.Stat (it will be of type PathError)
+	// and then from os.IsNotExist (it will be of type ErrNotExist as well as some syscall errors)
 	_, err = os.Stat(absPath)
-	if os.IsNotExist(err) {
+	if err != nil || os.IsNotExist(err) {
 		return "", err
 	}
 
