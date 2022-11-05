@@ -1,2 +1,6 @@
 vars:
   stage: dev
+
+settings:
+  config:
+    is_prod: false

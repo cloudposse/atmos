@@ -12,9 +12,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteValidateStacks executes `validate stacks` command
-func ExecuteValidateStacks(cmd *cobra.Command, args []string) error {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+// ExecuteValidateStacksCmd executes `validate stacks` command
+func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+	info := cfg.ConfigAndStacksInfo{}
+
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}

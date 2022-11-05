@@ -6,6 +6,7 @@
 # https://github.com/open-policy-agent/opa/issues/2104
 # https://www.fugue.co/blog/5-tips-for-using-the-rego-language-for-open-policy-agent-opa
 # https://medium.com/@agarwalshubhi17/rego-cheat-sheet-5e25faa6eee8
+# https://code.tutsplus.com/tutorials/regular-expressions-with-go-part-1--cms-30403
 
 # 'atmos' looks for the 'errors' (array of strings) output from all OPA policies
 # If the 'errors' output contains one or more error messages, 'atmos' considers the policy failed
@@ -26,3 +27,15 @@ errors[message] {
     count(input.vars.availability_zones) != 2
     message = "In 'dev', only 2 Availability Zones are allowed"
 }
+
+# Check VPC name
+errors[message] {
+    not re_match("^[a-zA-Z0-9]{2,20}$", input.vars.name)
+    message = "VPC name must be a valid string from 2 to 20 alphanumeric chars"
+}
+
+# Note:
+# If a regex pattern in the `re_match` function contains a backslash to escape special chars (e.g. `\.` or `\-`),
+# it must be escaped with another backslash when represented as a regular Go string (`\\.`, `\\-`).
+# The reason is that backslash is also used to escape special characters in Go strings like newline (\n).
+# If you want to match the backslash character itself, you'll need four slashes.

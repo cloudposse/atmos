@@ -14,7 +14,12 @@ import (
 
 // ExecuteValidateComponentCmd executes `validate component` command
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	info, err := processCommandLineArgs("", cmd, args)
+	if err != nil {
+		return err
+	}
+
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
@@ -43,7 +48,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, err = ExecuteValidateComponent(cliConfig, componentName, stack, schemaPath, schemaType)
+	_, err = ExecuteValidateComponent(cliConfig, info, componentName, stack, schemaPath, schemaType)
 	if err != nil {
 		return err
 	}
@@ -52,8 +57,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponent(cliConfig cfg.CliConfiguration, componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
+func ExecuteValidateComponent(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.ConfigAndStacksInfo, componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
 	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
 
@@ -93,6 +97,10 @@ func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, com
 		}
 
 		for _, v := range validations {
+			if v.Disabled {
+				continue
+			}
+
 			schemaPath = v.SchemaPath
 			schemaType = v.SchemaType
 

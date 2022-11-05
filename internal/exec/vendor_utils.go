@@ -22,9 +22,14 @@ import (
 
 // ExecuteVendorCommand executes `atmos vendor` commands
 func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand string) error {
+	info, err := processCommandLineArgs("terraform", cmd, args)
+	if err != nil {
+		return err
+	}
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, false)
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}

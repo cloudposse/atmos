@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"github.com/pkg/errors"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -18,17 +16,22 @@ func IsDirectory(path string) (bool, error) {
 	return fileInfo.IsDir(), err
 }
 
-// FileExists checks if a file exists and is not a directory
+// FileExists checks if the file exists and is not a directory
 func FileExists(filename string) bool {
 	fileInfo, err := os.Stat(filename)
-	// os.isNotExist returns a boolean indicating whether the error is known to report that a file or directory does not exist.
-	// It is satisfied by ErrNotExist as well as some syscall errors.
-	// This function predates errors.Is.
-	// It only supports errors returned by the os package. New code should use errors.Is(err, fs.ErrNotExist).
-	if errors.Is(err, fs.ErrNotExist) || err != nil {
+	if os.IsNotExist(err) || err != nil {
 		return false
 	}
 	return !fileInfo.IsDir()
+}
+
+// FileOrDirExists checks if the file or directory exists
+func FileOrDirExists(filename string) bool {
+	_, err := os.Stat(filename)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 // IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file)
@@ -84,12 +87,15 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 	// Join the base path with the provided path
 	joinedPath := path.Join(basePath, providedPath)
 
-	// If the joined path is an absolute path, return it
+	// If the joined path is an absolute path and exists in the file system, return it
 	if filepath.IsAbs(joinedPath) {
-		return joinedPath, nil
+		_, err := os.Stat(joinedPath)
+		if err == nil {
+			return joinedPath, nil
+		}
 	}
 
-	// Convert the joined path to the absolute path
+	// Convert the joined path to an absolute path
 	absPath, err := filepath.Abs(joinedPath)
 	if err != nil {
 		return "", err
@@ -97,12 +103,7 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 
 	// Check if the final absolute path exists in the file system
 	_, err = os.Stat(absPath)
-
-	// os.isNotExist returns a boolean indicating whether the error is known to report that a file or directory does not exist.
-	// It is satisfied by ErrNotExist as well as some syscall errors.
-	// This function predates errors.Is.
-	// It only supports errors returned by the os package. New code should use errors.Is(err, fs.ErrNotExist).
-	if errors.Is(err, fs.ErrNotExist) {
+	if err != nil {
 		return "", err
 	}
 

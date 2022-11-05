@@ -47,7 +47,7 @@ func processHelp(componentType string, command string) error {
 				"and use it to authenticate with the cluster")
 		}
 
-		err := ExecuteShellCommand(componentType, []string{"--help"}, "", nil, false)
+		err := ExecuteShellCommand(componentType, []string{"--help"}, "", nil, false, true)
 		if err != nil {
 			return err
 		}
@@ -57,7 +57,7 @@ func processHelp(componentType string, command string) error {
 		u.PrintInfo(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
 		u.PrintInfo(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
 
-		err := ExecuteShellCommand(componentType, []string{command, "--help"}, "", nil, false)
+		err := ExecuteShellCommand(componentType, []string{command, "--help"}, "", nil, false, true)
 		if err != nil {
 			return err
 		}

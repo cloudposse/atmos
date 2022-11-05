@@ -3,7 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"path/filepath"
 
@@ -13,15 +13,20 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// ExecuteWorkflow executes a workflow
-func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
+// ExecuteWorkflowCmd executes a workflow
+func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `workflow name`")
 	}
 
+	info, err := processCommandLineArgs("terraform", cmd, args)
+	if err != nil {
+		return err
+	}
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
@@ -61,7 +66,7 @@ func ExecuteWorkflow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("file '%s' does not exist", workflowPath)
 	}
 
-	fileContent, err := ioutil.ReadFile(workflowPath)
+	fileContent, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return err
 	}

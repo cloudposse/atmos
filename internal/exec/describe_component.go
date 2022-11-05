@@ -9,8 +9,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeComponent executes `describe component` command
-func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
+// ExecuteDescribeComponentCmd executes `describe component` command
+func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
@@ -24,14 +24,29 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
+	componentSection, err := ExecuteDescribeComponent(component, stack)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	err = u.PrintAsYAML(componentSection)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ExecuteDescribeComponent describes component config
+func ExecuteDescribeComponent(component string, stack string) (map[string]any, error) {
 	var configAndStacksInfo cfg.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.PrintErrorToStdError(err)
-		return err
+		return nil, err
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
@@ -41,15 +56,9 @@ func ExecuteDescribeComponent(cmd *cobra.Command, args []string) error {
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	fmt.Println()
-	err = u.PrintAsYAML(configAndStacksInfo.ComponentSection)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return configAndStacksInfo.ComponentSection, nil
 }

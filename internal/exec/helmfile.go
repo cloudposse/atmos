@@ -13,21 +13,26 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteHelmfile executes helmfile commands
-func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+// ExecuteHelmfileCmd executes helmfile commands
+func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
+	info, err := processCommandLineArgs("helmfile", cmd, args)
+	if err != nil {
+		return err
+	}
+
+	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		u.PrintErrorToStdError(err)
 		return err
 	}
 
-	info, err := processArgsConfigAndStacks(cliConfig, "helmfile", cmd, args)
-	if err != nil {
-		return err
-	}
-
 	if info.NeedHelp {
 		return nil
+	}
+
+	info, err = ProcessStacks(cliConfig, info, true)
+	if err != nil {
+		return err
 	}
 
 	if len(info.Stack) < 1 {
@@ -115,6 +120,7 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 		componentPath,
 		nil,
 		info.DryRun,
+		true,
 	)
 	if err != nil {
 		return err
@@ -160,20 +166,37 @@ func ExecuteHelmfile(cmd *cobra.Command, args []string) error {
 	envVars := append(info.ComponentEnvList, []string{
 		fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
 		fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
-		fmt.Sprintf("NAMESPACE=%s", context.Namespace),
-		fmt.Sprintf("TENANT=%s", context.Tenant),
-		fmt.Sprintf("ENVIRONMENT=%s", context.Environment),
-		fmt.Sprintf("STAGE=%s", context.Stage),
-		fmt.Sprintf("REGION=%s", context.Region),
 		fmt.Sprintf("STACK=%s", info.Stack),
 	}...)
+
+	// Append the context ENV vars (first check if they are not set by the caller)
+	env := os.Getenv("NAMESPACE")
+	if env == "" {
+		envVars = append(envVars, fmt.Sprintf("NAMESPACE=%s", context.Namespace))
+	}
+	env = os.Getenv("TENANT")
+	if env == "" {
+		envVars = append(envVars, fmt.Sprintf("TENANT=%s", context.Tenant))
+	}
+	env = os.Getenv("ENVIRONMENT")
+	if env == "" {
+		envVars = append(envVars, fmt.Sprintf("ENVIRONMENT=%s", context.Environment))
+	}
+	env = os.Getenv("STAGE")
+	if env == "" {
+		envVars = append(envVars, fmt.Sprintf("STAGE=%s", context.Stage))
+	}
+	env = os.Getenv("REGION")
+	if env == "" {
+		envVars = append(envVars, fmt.Sprintf("REGION=%s", context.Region))
+	}
 
 	u.PrintInfo("Using ENV vars:")
 	for _, v := range envVars {
 		fmt.Println(v)
 	}
 
-	err = ExecuteShellCommand(info.Command, allArgsAndFlags, componentPath, envVars, info.DryRun)
+	err = ExecuteShellCommand(info.Command, allArgsAndFlags, componentPath, envVars, info.DryRun, true)
 	if err != nil {
 		return err
 	}

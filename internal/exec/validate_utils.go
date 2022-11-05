@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"strings"
+	"time"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/open-policy-agent/opa/sdk"
@@ -74,10 +75,12 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		return false, err
 	}
 
-	ctx := context.Background()
+	// Set timeout for schema validation
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*7)
+	defer cancelFunc()
 
 	// '/bundles/' prefix is required by the OPA SDK
-	bundleSchemaName := "/bundles/" + schemaName
+	bundleSchemaName := "/bundles/validate"
 
 	// Create a bundle server
 	server, err := opaTestServer.NewServer(opaTestServer.MockBundle(bundleSchemaName, map[string]string{schemaName: schemaText}))
@@ -98,17 +101,21 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 			"validate": {
 				"resource": %s
 			}
-		},
-		"decision_logs": {
-			"console": false
 		}
 	}`, server.URL(), bundleSchemaName))
+
+	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
+		"1. Rego syntax\n" +
+		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
 
 	// Create an instance of the OPA object
 	opa, err := sdk.New(ctx, sdk.Options{
 		Config: bytes.NewReader(config),
 	})
 	if err != nil {
+		if err.Error() == "context deadline exceeded" {
+			err = errors.New(timeoutErrorMessage)
+		}
 		return false, err
 	}
 
@@ -119,6 +126,9 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		Path:  "/atmos/errors",
 		Input: dataFromJson,
 	}); err != nil {
+		if err.Error() == "context deadline exceeded" {
+			err = errors.New(timeoutErrorMessage)
+		}
 		return false, err
 	}
 
