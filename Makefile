@@ -32,3 +32,4 @@ testacc: get
 	go test $(TEST) -v $(TESTARGS) -timeout 2m
 
 .PHONY: lint get build deps version testacc
+
