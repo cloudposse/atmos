@@ -89,7 +89,10 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 
 	// If the joined path is an absolute path, return it
 	if filepath.IsAbs(joinedPath) {
-		return joinedPath, nil
+		_, err := os.Stat(joinedPath)
+		if err == nil {
+			return joinedPath, nil
+		}
 	}
 
 	// Convert the joined path to an absolute path
