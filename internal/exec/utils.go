@@ -177,7 +177,7 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
-	if err == nil {
+	if err == nil && stack != "" {
 		configAndStacksInfo.Stack = stack
 	}
 
