@@ -146,7 +146,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 					u.SliceContainsString(stacks, contextPrefix) {
 
 					// Replace the tokens in the file template
-					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {component}, {component-path}
+					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
 					fileAbsolutePath, err := filepath.Abs(fileName)
 					if err != nil {
