@@ -3,7 +3,7 @@ module github.com/cloudposse/atmos
 go 1.19
 
 require (
-	github.com/bmatcuk/doublestar/v4 v4.3.0
+	github.com/bmatcuk/doublestar/v4 v4.3.1
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/go-getter v1.6.2
 	github.com/hashicorp/hcl v1.0.0

@@ -26,7 +26,7 @@ func init() {
 	terraformGenerateVarfilesCmd.PersistentFlags().String("file-template", "",
 		"Varfile template (the file path, file name, and file extension).\n"+
 			"Supports absolute and relative paths.\n"+
-			"Supports context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {component}, {component-path}.\n"+
+			"Supports context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}.\n"+
 			"atmos terraform generate varfiles --file-template {component-path}/{environment}-{stage}.tfvars.json\n"+
 			"atmos terraform generate varfiles --file-template /configs/{tenant}/{environment}/{stage}/{component}.json\n"+
 			"atmos terraform generate varfiles --file-template /{tenant}/{stage}/{region}/{component}.yaml\n"+
@@ -49,7 +49,7 @@ func init() {
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "json", "Output format.\n"+
 		"Supported formats: json, yaml, hcl ('json' is default).\n"+
-		"atmos terraform generate varfiles --file-template <file_template> --format=json/yaml/hcl")
+		"atmos terraform generate varfiles --file-template <file_template> --format=json|yaml|hcl")
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {

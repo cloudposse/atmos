@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 	"path"
 	"path/filepath"
+	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -25,38 +26,61 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 
 	flags := cmd.Flags()
 
+	fileTemplate, err := flags.GetString("file-template")
+	if err != nil {
+		return err
+	}
+
+	stacksCsv, err := flags.GetString("stacks")
+	if err != nil {
+		return err
+	}
+	var stacks []string
+	if stacksCsv != "" {
+		stacks = strings.Split(stacksCsv, ",")
+	}
+
+	componentsCsv, err := flags.GetString("components")
+	if err != nil {
+		return err
+	}
+	var components []string
+	if componentsCsv != "" {
+		components = strings.Split(componentsCsv, ",")
+	}
+
 	format, err := flags.GetString("format")
 	if err != nil {
 		return err
 	}
 	if format != "" && format != "json" && format != "hcl" {
-		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' and 'hcl", format)
+		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl' and 'json", format)
 	}
 	if format == "" {
 		format = "hcl"
 	}
 
-	return ExecuteTerraformGenerateBackends(cliConfig, format)
+	return ExecuteTerraformGenerateBackends(cliConfig, fileTemplate, format, stacks, components)
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components
-func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, format string) error {
+func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
 	stacksMap, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println()
-
 	var ok bool
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
+	var varsSection map[any]any
 	var backendSection map[any]any
 	var backendType string
 	processedTerraformComponents := map[string]any{}
+	fileTemplateProvided := fileTemplate != ""
 
-	for _, stackSection := range stacksMap {
+	for stackFileName, stackSection := range stacksMap {
 		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
 			continue
 		}
@@ -70,80 +94,130 @@ func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, format str
 				continue
 			}
 
-			// Find terraform component.
-			// If `component` attribute is present, it's the terraform component.
-			// Otherwise, the YAML component name is the terraform component.
-			terraformComponent := componentName
-			if componentAttribute, ok := componentSection["component"].(string); ok {
-				terraformComponent = componentAttribute
-			}
+			// Check if `components` filter is provided
+			if len(components) == 0 ||
+				u.SliceContainsString(components, componentName) {
 
-			// If the terraform component has been already processed, continue
-			if u.MapKeyExists(processedTerraformComponents, terraformComponent) {
-				continue
-			}
+				// Component metadata
+				metadataSection := map[any]any{}
+				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+					if componentType, ok := metadataSection["type"].(string); ok {
+						// Don't include abstract components
+						if componentType == "abstract" {
+							continue
+						}
+					}
+				}
 
-			processedTerraformComponents[terraformComponent] = terraformComponent
+				// Component backend
+				if backendSection, ok = componentSection["backend"].(map[any]any); !ok {
+					continue
+				}
 
-			// Component backend
-			if backendSection, ok = componentSection["backend"].(map[any]any); !ok {
-				continue
-			}
+				// Backend type
+				if backendType, ok = componentSection["backend_type"].(string); !ok {
+					continue
+				}
 
-			// Backend type
-			if backendType, ok = componentSection["backend_type"].(string); !ok {
-				continue
-			}
+				// Find terraform component.
+				// If `component` attribute is present, it's the terraform component.
+				// Otherwise, the YAML component name is the terraform component.
+				terraformComponent := componentName
+				if componentAttribute, ok := componentSection["component"].(string); ok {
+					terraformComponent = componentAttribute
+				}
 
-			// Component metadata
-			metadataSection := map[any]any{}
-			if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
-				if componentType, ok := metadataSection["type"].(string); ok {
-					// Don't process abstract components
-					if componentType == "abstract" {
-						continue
+				// Path to the terraform component
+				terraformComponentPath := path.Join(
+					cliConfig.BasePath,
+					cliConfig.Components.Terraform.BasePath,
+					terraformComponent,
+				)
+
+				// Context
+				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
+					varsSection = map[any]any{}
+				}
+				context := cfg.GetContextFromVars(varsSection)
+				context.Component = strings.Replace(componentName, "/", "-", -1)
+				context.ComponentPath = terraformComponentPath
+				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
+				if err != nil {
+					return err
+				}
+
+				var backendFilePath string
+				var backendFileAbsolutePath string
+
+				// Check if `stacks` filter is provided
+				if len(stacks) == 0 ||
+					// `stacks` filter can contain the names of the top-level stack config files:
+					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
+					u.SliceContainsString(stacks, stackFileName) ||
+					// `stacks` filter can also contain the logical stack names (derived from the context vars):
+					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
+					u.SliceContainsString(stacks, contextPrefix) {
+
+					// If '--file-template' is not specified, don't check if we've already processed the terraform component,
+					// and write the backends to the terraform components folders
+					if !fileTemplateProvided {
+						// If the terraform component has been already processed, continue
+						if u.MapKeyExists(processedTerraformComponents, terraformComponent) {
+							continue
+						}
+
+						processedTerraformComponents[terraformComponent] = terraformComponent
+
+						backendFilePath = path.Join(
+							terraformComponentPath,
+							"backend.tf",
+						)
+
+						if format == "json" {
+							backendFilePath = backendFilePath + ".json"
+						}
+
+						backendFileAbsolutePath, err = filepath.Abs(backendFilePath)
+						if err != nil {
+							return err
+						}
+					} else {
+						// Replace the tokens in the file template
+						// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
+						backendFilePath = cfg.ReplaceContextTokens(context, fileTemplate)
+						backendFileAbsolutePath, err = filepath.Abs(backendFilePath)
+						if err != nil {
+							return err
+						}
+
+						// Create all the intermediate subdirectories
+						err = u.EnsureDir(backendFileAbsolutePath)
+						if err != nil {
+							return err
+						}
+					}
+
+					// Write the backend config to the file
+					u.PrintMessage(fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
+
+					if format == "json" {
+						componentBackendConfig := generateComponentBackendConfig(backendType, backendSection)
+						err = u.WriteToFileAsJSON(backendFileAbsolutePath, componentBackendConfig, 0644)
+						if err != nil {
+							return err
+						}
+					} else if format == "hcl" {
+						err = u.WriteTerraformBackendConfigToFileAsHcl(backendFileAbsolutePath, backendType, backendSection)
+						if err != nil {
+							return err
+						}
+					} else {
+						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl' (default) and 'json", format)
 					}
 				}
 			}
-
-			// Absolute path to the terraform component
-			backendFilePath := path.Join(
-				cliConfig.BasePath,
-				cliConfig.Components.Terraform.BasePath,
-				terraformComponent,
-				"backend.tf",
-			)
-
-			if format == "json" {
-				backendFilePath = backendFilePath + ".json"
-			}
-
-			backendFileAbsolutePath, err := filepath.Abs(backendFilePath)
-			if err != nil {
-				return err
-			}
-
-			// Write the backend config to the file
-			u.PrintMessage(fmt.Sprintf("Writing backend config for the terraform component '%s' to file '%s'", terraformComponent, backendFilePath))
-
-			if format == "json" {
-				componentBackendConfig := generateComponentBackendConfig(backendType, backendSection)
-				err = u.WriteToFileAsJSON(backendFileAbsolutePath, componentBackendConfig, 0644)
-				if err != nil {
-					return err
-				}
-			} else if format == "hcl" {
-				err = u.WriteTerraformBackendConfigToFileAsHcl(backendFileAbsolutePath, backendType, backendSection)
-				if err != nil {
-					return err
-				}
-			} else {
-				return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl' (default) and 'json", format)
-			}
 		}
 	}
-
-	fmt.Println()
 
 	return nil
 }
