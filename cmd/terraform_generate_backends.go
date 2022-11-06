@@ -27,11 +27,12 @@ func init() {
 		"Backend template (the file path, file name, and file extension).\n"+
 			"Supports absolute and relative paths.\n"+
 			"Supports context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}.\n"+
-			"atmos terraform generate backends --file-template {component-path}/{tenant}/{environment}-{stage}.tf.json\n"+
-			"atmos terraform generate backends --file-template {component-path}/backends/{tenant}-{environment}-{stage}.tf.json\n"+
-			"atmos terraform generate backends --file-template backends/{tenant}/{environment}/{region}/{component}.tf\n"+
+			"atmos terraform generate backends --file-template {component-path}/{tenant}/{environment}-{stage}.tf.json --format json\n"+
+			"atmos terraform generate backends --file-template {component-path}/backends/{tenant}-{environment}-{stage}.tf.json --format json\n"+
+			"atmos terraform generate backends --file-template backends/{tenant}/{environment}/{region}/{component}.tf --format hcl\n"+
 			"atmos terraform generate backends --file-template backends/{tenant}-{environment}-{stage}-{component}.tf\n"+
 			"atmos terraform generate backends --file-template /{tenant}/{stage}/{region}/{component}.tf\n"+
+			"atmos terraform generate backends --file-template backends/{tenant}-{environment}-{stage}-{component}.tfbackend --format backend-config\n"+
 			"All subdirectories in the path will be created automatically\n"+
 			"If '--file-template' flag is not specified, all backend config files will be written to the corresponding terraform component folders.",
 	)
@@ -51,8 +52,8 @@ func init() {
 	)
 
 	terraformGenerateBackendsCmd.PersistentFlags().String("format", "hcl", "Output format.\n"+
-		"Supported formats: hcl, json ('hcl' is default).\n"+
-		"atmos terraform generate backends --format=hcl|json")
+		"Supported formats: 'hcl', 'json', 'backend-config' ('hcl' is default).\n"+
+		"atmos terraform generate backends --format=hcl|json|backend-config")
 
 	terraformGenerateCmd.AddCommand(terraformGenerateBackendsCmd)
 }

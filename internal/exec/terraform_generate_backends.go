@@ -53,8 +53,8 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
-	if format != "" && format != "json" && format != "hcl" {
-		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl' and 'json", format)
+	if format != "" && format != "json" && format != "hcl" && format != "backend-config" {
+		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl', 'json', and 'backend-config'", format)
 	}
 	if format == "" {
 		format = "hcl"
@@ -211,8 +211,13 @@ func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, fileTempla
 						if err != nil {
 							return err
 						}
+					} else if format == "backend-config" {
+						err = u.WriteToFileAsHcl(backendFileAbsolutePath, backendSection, 0644)
+						if err != nil {
+							return err
+						}
 					} else {
-						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl' (default) and 'json", format)
+						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl' (default), 'json' and 'backend-config'", format)
 					}
 				}
 			}
