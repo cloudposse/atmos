@@ -174,7 +174,11 @@ func ExecuteAtlantisGenerateRepoConfig(
 					return err
 				}
 
-				// Terraform workspace
+				// Calculate terraform workspace
+				// Base component is required to calculate terraform workspace for derived components
+				if terraformComponent != componentName {
+					context.BaseComponent = terraformComponent
+				}
 				workspace, err := BuildTerraformWorkspace(
 					stackConfigFileName,
 					cliConfig.Stacks.NamePattern,
