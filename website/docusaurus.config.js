@@ -76,6 +76,11 @@ const config = {
                         label: 'Docs',
                     },
                     {
+                        to: '/docs/cli/configuration',
+                        position: 'left',
+                        label: 'CLI'
+                    },
+                    {
                         to: '/blog',
                         label: 'Blog',
                         position: 'left'
