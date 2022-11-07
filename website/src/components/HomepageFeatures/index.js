@@ -8,7 +8,12 @@ import "react-image-gallery/styles/css/image-gallery.css"
 const images = Array.from({length: 27}, (_, i) => {
         return {
             original: "/img/slides/atmos-intro-" + (i + 1) + ".svg",
-            thumbnail: "/img/slides/atmos-intro-" + (i + 1) + ".svg"
+            thumbnail: "/img/slides/atmos-intro-" + (i + 1) + ".svg",
+            originalAlt: "atmos introduction slide " + (i + 1),
+            originalTitle: "atmos introduction slide " + (i + 1),
+            thumbnailAlt: "atmos introduction slide " + (i + 1),
+            thumbnailTitle: "atmos introduction slide " + (i + 1),
+            loading: "lazy"
         }
     }
 );
@@ -17,7 +22,13 @@ export default function HomepageFeatures() {
     return (
         <section className={styles.features}>
             <div className="container">
-                <ImageGallery items={images} thumbnailPosition={"left"} showBullets={false} showIndex={true} slideInterval={4000}/>
+                <ImageGallery items={images}
+                              thumbnailPosition={"left"}
+                              showBullets={false}
+                              showIndex={true}
+                              slideInterval={4000}
+                              lazyLoad={true}
+                />
             </div>
         </section>
     );
