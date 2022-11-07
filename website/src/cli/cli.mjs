@@ -198,5 +198,6 @@ function getHeadTag({title: metaTitle, description: metaDescription} = {}) {
     return `<head>
   ${metaTitle ? `<title>${metaTitle}</title>` : ''}
   ${metaDescription ? `<meta name="description" content="${metaDescription}" />` : ''}
+<title></title>
 </head>`;
 }
