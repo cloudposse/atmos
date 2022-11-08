@@ -1,12 +1,13 @@
 ---
 title: Configuration
+sidebar_position: 1
 ---
 
 <head>
   <title>CLI Configuration</title>
   <meta
     name="description"
-    content="CLI Configuration."
+    content="CLI Configuration"
   />
 </head>
 
