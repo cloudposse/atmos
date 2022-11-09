@@ -61,17 +61,24 @@ It's 100% Open Source and licensed under the [APACHE2](LICENSE).
 ## Introduction
 
 
-`atmos` is both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains.
-We use it extensively for automating cloud infrastructure and [Kubernetes](https://kubernetes.io/) clusters.
+Atmos (`atmos` CLI) is a workflow automation tool. Atmos is lets you take a complex workflow and turn it into a parameterized CLI. 
+You can then run the CLI anywhere, such as locally or in CI/CD.
+
+The project consists of both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains. You can 
+even access the configurations natively from within terraform using our [`terraform-provider-utils`](https://github.com/cloudposse/terraform-provider-utils/).
+
+Cloud Posse uses this tool extensively for automating cloud infrastructure with [Terraform](https://hashicorp.com/) and [Kubernetes](https://kubernetes.io/), but it can be used to automate any complex workflow.
 
 `atmos` includes workflows for dealing with:
 
-   - Provisioning [Terraform](https://www.terraform.io/) components
-   - Deploying [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters using [helmfile](https://github.com/roboll/helmfile)
-   - Executing [helm](https://helm.sh/) commands on Kubernetes clusters
-   - Provisioning [istio](https://istio.io/) on Kubernetes clusters using [istio operator](https://istio.io/latest/blog/2019/introducing-istio-operator/) and helmfile
+## Common Use-cases
+
+   - Provision large, multi-account[Terraform](https://www.terraform.io/) environments
+   - Deploy [helm](https://helm.sh/) [charts](https://helm.sh/docs/topics/charts/) to Kubernetes clusters with [helmfile](https://github.com/roboll/helmfile)
+   - Execute [helm](https://helm.sh/) commands on Kubernetes clusters
    - Executing [kubectl](https://kubernetes.io/docs/reference/kubectl/overview/) commands on Kubernetes clusters
-   - Executing [AWS SDK](https://aws.amazon.com/tools/) commands to orchestrate cloud infrastructure
+
+   Here aer some other ways you can extend atmos:
    - Running [AWS CDK](https://aws.amazon.com/cdk/) constructs to define cloud resources
    - Executing commands for the [serverless](https://www.serverless.com/) framework
    - Executing shell commands
@@ -84,8 +91,8 @@ and is intended to be used to tie everything together, so you can provide a simp
 
 Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
 
-- Enforces Terraform and helmfile project structure (so everybody knows where things are)
-- Provides separation of configuration and code (so the same code could be easily deployed to different regions, environments and stages)
+- Enforces a project structure convention, so everybody knows where to find things.
+- Provides clear separation of configuration from code, so the same code is easily deployed to different regions, environments and stages)
 - It can be extended to include new features, commands, and workflows
 - The commands have a clean, consistent and easy to understand syntax
 - The CLI code is modular and self-documenting
@@ -739,7 +746,7 @@ Check out [our other projects][github], [follow us on twitter][twitter], [apply 
 
 [![README Footer][readme_footer_img]][readme_footer_link]
 [![Beacon][beacon]][website]
-<!-- markdownlint-disable -->
+
   [logo]: https://cloudposse.com/logo-300x69.svg
   [docs]: https://cpco.io/docs?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=docs
   [website]: https://cpco.io/homepage?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=website
@@ -770,4 +777,3 @@ Check out [our other projects][github], [follow us on twitter][twitter], [apply 
   [share_googleplus]: https://plus.google.com/share?url=https://github.com/cloudposse/atmos
   [share_email]: mailto:?subject=atmos&body=https://github.com/cloudposse/atmos
   [beacon]: https://ga-beacon.cloudposse.com/UA-76589703-4/cloudposse/atmos?pixel&cs=github&cm=readme&an=atmos
-<!-- markdownlint-restore -->
