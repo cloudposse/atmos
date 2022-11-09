@@ -4,6 +4,7 @@ import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Layout from "@theme/Layout";
 import HomepageFeatures from "@site/src/components/HomepageFeatures";
 import styles from "./index.module.css";
+import Content from "./index_content.mdx";
 
 function HomepageHeader() {
     const {siteConfig} = useDocusaurusContext();
@@ -25,6 +26,7 @@ export default function Home() {
             description="Universal tool for DevOps and Cloud Automation">
             <HomepageHeader/>
             <main>
+                <Content></Content>
                 <HomepageFeatures/>
             </main>
         </Layout>

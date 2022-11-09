@@ -21,3 +21,10 @@
     align-items: center;
     justify-content: center;
 }
+
+.homePageContent {
+    padding: 1rem 0;
+    text-align: center;
+    position: relative;
+    font-size: 20px;
+}
