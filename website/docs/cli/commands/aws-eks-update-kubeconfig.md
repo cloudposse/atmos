@@ -1,6 +1,6 @@
 ---
 title: "atmos aws eks update-kubeconfig"
-sidebar_label: "`aws eks update-kubeconfig`"
+sidebar_label: "aws eks update-kubeconfig"
 ---
 
 Execute `aws eks update-kubeconfig` command
