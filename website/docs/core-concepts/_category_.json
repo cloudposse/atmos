@@ -1,8 +1,8 @@
 {
-  "label": "Core concepts",
+  "label": "Core Concepts",
   "position": 3,
   "link": {
     "type": "generated-index",
-    "description": "Atmos core concepts"
+    "description": "Atmos Core Concepts"
   }
 }

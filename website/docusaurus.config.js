@@ -81,8 +81,13 @@ const config = {
                         label: 'CLI'
                     },
                     {
-                        to: '/blog',
-                        label: 'Blog',
+                        to: 'https://github.com/cloudposse/community/discussions',
+                        label: 'Discussions',
+                        position: 'left'
+                    },
+                    {
+                        to: 'https://slack.cloudposse.com/',
+                        label: 'Slack',
                         position: 'left'
                     },
                     {
