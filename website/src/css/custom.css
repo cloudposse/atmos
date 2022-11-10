@@ -4,9 +4,14 @@
  * work well for content-centric websites.
  */
 
+
+ .menu__list-item-collapsible {
+  font-weight: bold;
+ }
+
  body {
     background-image: url("/static/img/cloudposse-light.svg");
-    background-position: right bottom;
+    background-position: 98% 98%;
     background-repeat: no-repeat;
     background-size: 15em;
     font-family: "Lato",sans-serif;
@@ -19,9 +24,25 @@
  }
  */
 
+ .menu__link {
+  order: 1;
+ }
+
+ .menu__caret:before {
+  background: var(--ifm-menu-link-sublist-icon) 50% / 2rem 1.5rem;
+ }
+
+li > ul.menu__list {
+  margin-left: 1.5em;
+}
+
+
 /* You can override the default Infima variables here. */
 :root {
     --ifm-code-font-size: 95%;
+    --ifm-menu-color: var(--c-gray-100);
+    --ifm-menu-link-padding-horizontal: 0.25rem;
+
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
 
     --ifm-color-primary: #3578e5;

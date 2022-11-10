@@ -4,7 +4,8 @@ sidebar_position: 1
 
 # Atmos Components
 
-Components are opinionated, self-contained units of infrastructure as code that solve one, specific problem or use-case.
+Components are opinionated, self-contained units of infrastructure as code that solve one, specific problem or use-case. Atmos was written to support any number of tools, but also supports a couple of native integations with tools like `terraform` and `helmfile`. A common use-case for atmos is implementing workflows for `terraform` "root modules". 
+
 
 ## Component Schema
 
@@ -20,7 +21,8 @@ components:
 
       # configuration specific to atmos
       metadata:
-
+        # Components can be of type "real" (default) or "abstract"
+        type: real
         # This is the directory path of the component. 
         # In this example, we're referencing a component in the `componentns/terraform/stable/example` folder.
         component: stable/example
@@ -41,9 +43,16 @@ components:
         nodes: 10
 ```
 
-
-
 ## Types of Components
+
+The type of a component is expressed in the `metadata.type` parameter of a given component configuration.
+
+There are two types of components:
+- `real` - is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance 
+- `abstract` - a component configuration, which cannot be instantiated directly. The concept is borrowed from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object Oriented Programming. 
+
+
+## Flavors of Components
 Atmos natively supports two types of components, but the convention can be extended to anything (e.g. `docker`, `packer`, `ansible`, etc.)
 
 1.  **Terraform:** These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find the [full library of SweetOps Terraform components on GitHub](https://github.com/cloudposse/terraform-aws-components "https://github.com/cloudposse/terraform-aws-components"). By convention, we store components in the `components/terraform/` directory within the infrastructure repository.
