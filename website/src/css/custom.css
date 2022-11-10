@@ -5,6 +5,10 @@
  */
 
 
+ .navbar__title {
+  font-size: 2em;
+}
+
  .menu__list-item-collapsible {
   font-weight: bold;
  }
@@ -14,6 +18,7 @@
     background-position: 98% 98%;
     background-repeat: no-repeat;
     background-size: 15em;
+    background-attachment: fixed;
     font-family: "Lato",sans-serif;
  }
 
