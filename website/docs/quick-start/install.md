@@ -4,7 +4,7 @@ title: Install Atmos
 ---
 # Install Atmos
 
-There are many ways into install `atmos`. The latest version of `atmos` might not be available with third party package managers. 
+There are many ways to install `atmos`. The latest version of `atmos` might not be available with third party package managers. 
 
 To check what version of atmos you have installed, just run `atmos version`.
 
@@ -23,13 +23,13 @@ To find the latest available version of `atmos`, visit the the [Releases Page](h
 
 ## OSX
 
-From Homebrew directly:
+From Homebrew, install directly by running:
 
 ```console
 brew install atmos
 ```
 
-## Linux
+## Debian Linux
 
 On Debian, use the Cloud Posse package repository:
 
@@ -41,6 +41,8 @@ curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.d
 # Install atmos
 apt-get install atmos@="<ATMOS_VERSION>-*"
 ```
+
+## Alpine Linux 
 
 On Alpine, use the Cloud Posse package repository:
 
@@ -62,8 +64,7 @@ go install github.com/cloudposse/atmos
 
 Get a specific version
 
-__NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, 
-the CLI will return `0.0.1` when running `atmos version`.
+__NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1` when running `atmos version`.
 
 ```console
 go install github.com/cloudposse/atmos@v1.3.9

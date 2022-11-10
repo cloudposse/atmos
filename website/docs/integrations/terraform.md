@@ -78,3 +78,30 @@ module "vars" {
   }
 ```
 
+
+ ## Example: Provision Terraform Component
+
+To provision a Terraform component using the `atmos` CLI, run the following commands in the container shell:
+
+```console
+atmos terraform plan eks --stack=ue2-dev
+atmos terraform apply eks --stack=ue2-dev
+```
+
+where:
+
+- `eks` is the Terraform component to provision (from the `components/terraform` folder)
+- `--stack=ue2-dev` is the stack to provision the component into
+
+Short versions of the command-line arguments can be used:
+
+```console
+atmos terraform plan eks -s ue2-dev
+atmos terraform apply eks -s ue2-dev
+```
+
+To execute `plan` and `apply` in one step, use `terraform deploy` command:
+
+```console
+atmos terraform deploy eks -s ue2-dev
+```
