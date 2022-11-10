@@ -6,8 +6,6 @@ sidebar_position: 3
 
 Validation is critical to maintaining hygenic configurations in distributed team environments. 
 
-
-
 `atmos` component validation allows:
 
 * Validate component config (vars, settings, backend, and other sections) using JSON Schema
@@ -196,10 +194,10 @@ Since the OPA validation policies don't pass, `atmos` does not allow provisionin
 
 <br>
 
-![atmos-validate-infra-vpc-in-tenant1-ue2-prod](docs/img/atmos-validate-infra-vpc-in-tenant1-ue2-prod.png)
+![atmos-validate-infra-vpc-in-tenant1-ue2-prod](/img/atmos-validate-infra-vpc-in-tenant1-ue2-prod.png)
 
 <br>
 
-![atmos-validate-infra-vpc-in-tenant1-ue2-dev](docs/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
+![atmos-validate-infra-vpc-in-tenant1-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
 
 <br>
