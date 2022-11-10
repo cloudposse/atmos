@@ -85,35 +85,32 @@ AWS organizes infrastructure like this:
 2. An "Organization" can have any number of "Organizational Units" (OUs)
 3. Each "OU" can have "Member Accounts"
 4. Each "Member Account" has "Regions"
-5. Each "Region" has "Resources"
+5. Each "Region" has "Resources" (the top-level stack)
 
-So sticking with this theme, a good filesystem layout for infrastructure is like this:
+In sticking with this theme, a good filesystem layout for infrastructure looks like this:
 
 ```
-└── stacks
-    └── orgs
-        └── acme
-            ├── ou1
-            │   ├── account1
+└── stacks/
+    └── orgs/
+        └── acme/
+            ├── ou1/
+            │   ├── account1/
             │   │   ├── global-region.yaml
             │   │   └── us-east-2.yaml
-            │   ├── account2
+            │   ├── account2/
             │   │   ├── global-region.yaml
             │   │   └── us-east-2.yaml
-            │   └── account3
+            │   └── account3/
             │       ├── global-region.yaml
             │       └── us-east-2.yaml
-            └── ou2
-                ├── dev
-                │   ├── _defaults.yaml
+            └── ou2/
+                ├── dev/
                 │   ├── global-region.yaml
                 │   └── us-east-2.yaml
-                ├── prod
-                │   ├── _defaults.yaml
+                ├── prod/
                 │   ├── global-region.yaml
                 │   └── us-east-2.yaml
-                └── staging
-                    ├── _defaults.yaml
+                └── staging/
                     ├── global-region.yaml
                     └── us-east-2.yaml
 ```

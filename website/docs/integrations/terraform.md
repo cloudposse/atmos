@@ -1,5 +1,6 @@
 ---
 sidebar_position: 8
+title: Terraform Integration
 ---
 
 # Terraform Integration
@@ -52,3 +53,28 @@ components:
     vpc:
       command: "/usr/local/bin/terraform-0.13"
 ```
+
+## Terraform Provider
+
+There is a Terraform provider ([`cloudposse/terraform-provider-utils`](https://github.com/cloudposse/terraform-provider-utils)) that implements a `data` source thjat can read the YAML Stack configurations natively from within terraform.
+
+## Terraform Module
+
+There is a Terraform module ([`cloudposse/terraform-yaml-stack-config`](https://github.com/cloudposse/terraform-yaml-stack-config)) that wraps the data source.
+
+Here's an example of how the variables for a component could be accessed from within a Terraform module.
+
+```
+module "vars" {
+    source = "cloudposse/stack-config/yaml//modules/vars"
+    # version     = "x.x.x"
+
+    stack_config_local_path = "./stacks"
+    stack                   = "my-stack"
+    component_type          = "terraform"
+    component               = "my-vpc"
+
+    context = module.this.context
+  }
+```
+

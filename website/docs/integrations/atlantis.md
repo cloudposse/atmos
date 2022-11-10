@@ -1,5 +1,6 @@
 ---
 sidebar_position: 11
+title: Atlantis Integration
 ---
 
 # Atlantis Integration
@@ -149,9 +150,15 @@ workflows:
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
 ```
 
-Then using pre-commit hooks and/or GitHub Actions (or similar), you would want to generate the `.tfvars` files and backends, which are derived from the atmos configuration.
+## Next Steps
+
+Generating the Atlantis repo-config is only part of what's needed to use `atmos` with `atlantis`. The rest will depend on your organization's preferences for generating the Terraform `.tfvars` files and backends.
+
+We suggest using pre-commit hooks and/or GitHub Actions (or similar), to generate the `.tfvars` files and state backend configurations, which are necessarily derived from the atmos stack configuration.
+
+The following commands will generate those files.
 
 1. `atmos terraform generate backends --format=hcl`
 2. `atmos terraform generate varfiles`
    
-Make sure that the resulting files are commited back to VCS (e.g. `git add -A`) and push upstream. That way atlantis will able to trigger on the "affected files".
+Make sure that the resulting files are commited back to VCS (e.g. `git add -A`) and push'd upstream. That way Atlantis will trigger on the "affected files" and propose a plan.
