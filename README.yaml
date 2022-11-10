@@ -69,9 +69,9 @@ introduction: |-
   - The commands have a clean, consistent and easy to understand syntax
   - The CLI code is modular and self-documenting
 
-## Documentation
+  ## Documentation
 
-Find all documentation at: [atmos.tools](https://atmos.tools)
+  Find all documentation at: [atmos.tools](https://atmos.tools)
 
 contributors:
   - name: Erik Osterman
