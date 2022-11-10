@@ -192,12 +192,10 @@ atmos terraform apply infra/vpc -s tenant1-ue2-dev
 
 Since the OPA validation policies don't pass, `atmos` does not allow provisioning the component in the stacks:
 
-<br>
 
-![atmos-validate-infra-vpc-in-tenant1-ue2-prod](/img/atmos-validate-infra-vpc-in-tenant1-ue2-prod.png)
-
-<br>
-
+![atmos-validate-infra-vpc-in-tenant1-ue2-prod](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
 ![atmos-validate-infra-vpc-in-tenant1-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
 
-<br>
+
+
+
