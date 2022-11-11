@@ -121,10 +121,10 @@ It has the following main sections:
 The `components` section consists of the following:
 
 - `terraform` - defines variables, the binary to execute, and the backend for each Terraform component.
-  Terraform component names correspond to the Terraform components in the [components](example/components) folder
+  Terraform component names correspond to the Terraform components in the [components](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform) folder
 
 - `helmfile` - defines variables and the binary to execute for each helmfile component.
-  Helmfile component names correspond to the helmfile components in the [helmfile](example/components/helmfile) folder
+  Helmfile component names correspond to the helmfile components in the [helmfile](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/helmfile) folder
 
 
 ## Run the Example
