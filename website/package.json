@@ -25,7 +25,8 @@
     "remark-html": "^15.0.1",
     "remark-parse": "^10.0.1",
     "unified": "^10.1.2",
-    "react-image-gallery": "^1.2.11"
+    "react-image-gallery": "^1.2.11",
+    "react-player": "^2.11.0"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^2.1.0"
