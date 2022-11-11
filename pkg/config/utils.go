@@ -234,6 +234,16 @@ func processEnvVars(cliConfig *CliConfiguration) error {
 		cliConfig.Components.Helmfile.BasePath = componentsHelmfileBasePath
 	}
 
+	componentsHelmfileUseEKS := os.Getenv("ATMOS_COMPONENTS_HELMFILE_USE_EKS")
+	if len(componentsHelmfileUseEKS) > 0 {
+		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_USE_EKS=%s", componentsHelmfileUseEKS))
+		useEKSBool, err := strconv.ParseBool(componentsHelmfileUseEKS)
+		if err != nil {
+			return err
+		}
+		cliConfig.Components.Helmfile.UseEKS = useEKSBool
+	}
+
 	componentsHelmfileKubeconfigPath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH")
 	if len(componentsHelmfileKubeconfigPath) > 0 {
 		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH=%s", componentsHelmfileKubeconfigPath))

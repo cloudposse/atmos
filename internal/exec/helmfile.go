@@ -98,32 +98,39 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 
 	context := cfg.GetContextFromVars(info.ComponentVarsSection)
 
-	// Prepare AWS profile
-	helmAwsProfile := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.HelmAwsProfilePattern)
-	u.PrintInfo(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
+	envVarsEKS := []string{}
+	if cliConfig.Components.Helmfile.UseEKS {
+		// Prepare AWS profile
+		helmAwsProfile := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.HelmAwsProfilePattern)
+		u.PrintInfo(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
-	// Download kubeconfig by running `aws eks update-kubeconfig`
-	kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", cliConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
-	clusterName := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
-	u.PrintInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
+		// Download kubeconfig by running `aws eks update-kubeconfig`
+		kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", cliConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
+		clusterName := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
+		u.PrintInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
-	err = ExecuteShellCommand("aws",
-		[]string{
-			"--profile",
-			helmAwsProfile,
-			"eks",
-			"update-kubeconfig",
-			fmt.Sprintf("--name=%s", clusterName),
-			fmt.Sprintf("--region=%s", context.Region),
-			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
-		},
-		componentPath,
-		nil,
-		info.DryRun,
-		true,
-	)
-	if err != nil {
-		return err
+		err = ExecuteShellCommand("aws",
+			[]string{
+				"--profile",
+				helmAwsProfile,
+				"eks",
+				"update-kubeconfig",
+				fmt.Sprintf("--name=%s", clusterName),
+				fmt.Sprintf("--region=%s", context.Region),
+				fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
+			},
+			componentPath,
+			nil,
+			info.DryRun,
+			true,
+		)
+		if err != nil {
+			return err
+		}
+		envVarsEKS = append(envVarsEKS, []string{
+			fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
+			fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
+		}...)
 	}
 
 	// Print command info
@@ -164,8 +171,6 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 
 	// Prepare ENV vars
 	envVars := append(info.ComponentEnvList, []string{
-		fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
-		fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
 		fmt.Sprintf("STACK=%s", info.Stack),
 	}...)
 
@@ -191,6 +196,10 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 		envVars = append(envVars, fmt.Sprintf("REGION=%s", context.Region))
 	}
 
+	if cliConfig.Components.Helmfile.UseEKS {
+		envVars = append(envVars, envVarsEKS...)
+	}
+
 	u.PrintInfo("Using ENV vars:")
 	for _, v := range envVars {
 		fmt.Println(v)
@@ -213,19 +222,21 @@ func checkHelmfileConfig(cliConfig cfg.CliConfiguration) error {
 			"'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV variable")
 	}
 
-	if len(cliConfig.Components.Helmfile.KubeconfigPath) < 1 {
-		return errors.New("Kubeconfig path must be provided in 'components.helmfile.kubeconfig_path' config or " +
-			"'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV variable")
-	}
+	if cliConfig.Components.Helmfile.UseEKS {
+		if len(cliConfig.Components.Helmfile.KubeconfigPath) < 1 {
+			return errors.New("Kubeconfig path must be provided in 'components.helmfile.kubeconfig_path' config or " +
+				"'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV variable")
+		}
 
-	if len(cliConfig.Components.Helmfile.HelmAwsProfilePattern) < 1 {
-		return errors.New("Helm AWS profile pattern must be provided in 'components.helmfile.helm_aws_profile_pattern' config or " +
-			"'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV variable")
-	}
+		if len(cliConfig.Components.Helmfile.HelmAwsProfilePattern) < 1 {
+			return errors.New("Helm AWS profile pattern must be provided in 'components.helmfile.helm_aws_profile_pattern' config or " +
+				"'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV variable")
+		}
 
-	if len(cliConfig.Components.Helmfile.ClusterNamePattern) < 1 {
-		return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " +
-			"'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
+		if len(cliConfig.Components.Helmfile.ClusterNamePattern) < 1 {
+			return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " +
+				"'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
+		}
 	}
 
 	return nil
