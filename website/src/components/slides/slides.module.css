@@ -3,7 +3,7 @@
  * and scoped locally.
  */
 
-.slides-container {
+.slidesContainer {
     display: flex;
     align-items: center;
     padding: 0;

@@ -27,6 +27,7 @@ export default function Slides() {
                     <ImageGallery items={images}
                                   thumbnailPosition={"bottom"}
                                   showBullets={false}
+                                  showNav={false}
                                   showIndex={true}
                                   slideInterval={4000}
                                   lazyLoad={true}
