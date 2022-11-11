@@ -1,5 +1,7 @@
 ---
+title: Atmos Components
 sidebar_position: 1
+sidevar_title: Components
 ---
 
 # Atmos Components

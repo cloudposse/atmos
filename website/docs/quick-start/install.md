@@ -1,8 +1,7 @@
 ---
-sidebar_position: 1
 title: Install Atmos
+sidebar_position: 1
 ---
-# Install Atmos
 
 There are many ways to install `atmos`. The latest version of `atmos` might not be available with third party package managers. 
 

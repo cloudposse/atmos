@@ -67,9 +67,9 @@ workflows:
 You can also define a workflow in a separate file without specifying the stack in the workflow's job config.
 In this case, the stack needs to be provided on the command line.
 
-For example, to run the `terraform-plan-all-tenant1-ue2-dev` workflow from the [workflows](example/stacks/workflows/workflow1.yaml) file for the `tenant1-ue2-dev` stack,
+For example, to run the `plan-all` workflow from the [workflows](example/stacks/workflows/workflow1.yaml) file for the `tenant1-ue2-dev` stack,
 execute the following command:
 
 ```console
-atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1 -s tenant1-ue2-dev
+atmos workflow plan-all -f workflow1 -s tenant1-ue2-dev
 ```

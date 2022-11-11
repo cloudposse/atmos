@@ -1,8 +1,8 @@
 ---
+title: Component Validation
 sidebar_position: 3
+sidebar_label: Validation
 ---
-
-# Component Validation
 
 Validation is critical to maintaining hygenic configurations in distributed team environments. 
 

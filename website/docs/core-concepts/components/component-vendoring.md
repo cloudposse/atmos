@@ -1,6 +1,7 @@
 ---
-sidebar_position: 5
 title: Component Vendoring
+sidebar_position: 5
+sidebar_label: Vendoring
 ---
 
 # Component Vendoring

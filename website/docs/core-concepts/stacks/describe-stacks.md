@@ -1,6 +1,5 @@
 ---
-sidebar_position: 7
 title: Describe Stacks
+sidebar_position: 7
+sidebar_label: Describing
 ---
-
-# Describe Stacks

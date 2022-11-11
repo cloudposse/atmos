@@ -1,10 +1,14 @@
-  ## Example
+---
+title: "Example #1"
+sidebar_position: 3
+sidebar_label: Simple Example
+---
 
-  The [example](https://github.com/cloudposse/atmos/tree/master/examples/complete) folder contains a complete solution that shows how to:
+The [example](https://github.com/cloudposse/atmos/tree/master/examples/complete) folder contains a complete solution that shows how to:
 
-    - Structure the Terraform and helmfile components
-    - Configure the CLI
-    - Add [stack configurations](examples/complete/stacks) for the Terraform and helmfile components (to provision them to different environments and stages)
+  - Structure the Terraform and helmfile components
+  - Configure the CLI
+  - Add [stack configurations](examples/complete/stacks) for the Terraform and helmfile components (to provision them to different environments and stages)
 
 
 ## Example Filesystem Layout

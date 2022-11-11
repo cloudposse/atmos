@@ -6,7 +6,7 @@ sidebar_position: 1
 Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file.
 
 
-## atmos.yaml
+# Configuration File (`atmos.yaml`)
 
 The CLI config is loaded from the following locations (from lowest to highest priority):
 - System directory (e.g. `/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
@@ -17,6 +17,7 @@ The CLI config is loaded from the following locations (from lowest to highest pr
 
 **Pro-tip:** Atmos supports POSIX-style greedy Globs for all file names/paths ([double-star `**` is supported](https://en.wikipedia.org/wiki/Glob_(programming)))
 
+What follows are all the sections of the `atmos.yaml` configuration file.
 
 ## Base Path
 

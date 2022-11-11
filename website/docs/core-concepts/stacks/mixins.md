@@ -1,6 +1,7 @@
 ---
+title: Stack Mixins
 sidebar_position: 7
-title: Mixins
+sidebar_label: Mixins
 ---
 
 # Mixins

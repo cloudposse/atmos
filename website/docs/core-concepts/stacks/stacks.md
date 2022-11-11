@@ -1,5 +1,7 @@
 ---
-sidebar_position: 2
+title: Atmos Stacks
+sidebar_position: 1
+sidebar_label: Stacks
 ---
 
 # Atmos Stacks

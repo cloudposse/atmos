@@ -1,6 +1,5 @@
 ---
-sidebar_position: 4
 title: Stack Validation
+sidebar_position: 4
+sidebar_label: Validation
 ---
-
-# Stack Validation

@@ -1,6 +1,7 @@
 ---
-sidebar_position: 7
 title: Component Inheritance
+sidebar_position: 7
+sidebar_label: Inheritance
 ---
 
 # Component Inheritance
