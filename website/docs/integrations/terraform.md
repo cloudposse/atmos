@@ -11,7 +11,7 @@ Atmos provides many settings that are specific to Terraform.
 
 All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration), but can be overriden at any level of the [Stack](/core-concepts/stacks/#schema) configuration.
 
-```
+```yaml
 # The executable to be called by `atmos` when running terraform commands.
 command: "/usr/bin/terraform-1"
 # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
@@ -33,7 +33,7 @@ The settings for terraform can be defined in multiple places and support inherit
 
 The defaults everything are defined in the `atmos.yaml`.
 
-```
+```yaml
 components:
   terraform:
     ...
@@ -47,7 +47,7 @@ The same settings, can be overridden by Stack configurations at any level:
 
 For example, we can change the terraform command used by a component (useful for legacy components)
 
-```
+```yaml
 components:
   terraform:
     vpc:
@@ -64,7 +64,7 @@ A Terraform module (`cloudposse/terraform-yaml-stack-config`) wraps the data sou
 
 Here's an example of accessing the variables for a given component from within a Terraform module.
 
-```
+```hcl
 module "vars" {
     source = "cloudposse/stack-config/yaml//modules/vars"
     # version     = "x.x.x"
