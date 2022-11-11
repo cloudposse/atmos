@@ -4,8 +4,6 @@ sidebar_position: 11
 sidebar_label: "Atlantis"
 ---
 
-# Atlantis Integration
-
 Atmos natively supports [Atlantis](https://runatlantis.io) for Terraform Pull Request Automation.
 
 ## How it Works

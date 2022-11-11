@@ -1,11 +1,8 @@
 ---
-sidebar_position: 12
 title: Workflows
+sidebar_position: 12
+sidebar_label: Workflows
 ---
-
-# Workflows
-
-
 Workflows are a way of combining multiple commands into one executable unit of work.
 
 ## Simple Example

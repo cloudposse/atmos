@@ -4,8 +4,6 @@ sidebar_position: 1
 sidevar_title: Components
 ---
 
-# Atmos Components
-
 Components are opinionated, self-contained units of infrastructure as code that solve one, specific problem or use-case. Atmos was written to support any number of tools, but also supports a couple of native integations with tools like `terraform` and `helmfile`. A common use-case for atmos is implementing workflows for `terraform` "root modules". 
 
 

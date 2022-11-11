@@ -4,8 +4,6 @@ sidebar_position: 1
 sidebar_label: Stacks
 ---
 
-# Atmos Stacks
-
 Stacks are a way to express the complete infrastructure needed for an that is environment. A Stack is composed of Components and defined using a standardized YAML configuration.
 
 Stacks are a central SweetOps abstraction layer that is used to instantiate Components. They’re a set of YAML files that follow a standard schema to enable a fully declarative description of your various environments. This empowers you with the ability to separate your infrastructure’s environment configuration settings from the business logic behind it (provided via components).

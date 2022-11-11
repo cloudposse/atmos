@@ -1,10 +1,8 @@
 ---
-sidebar_position: 1
 title: Glossary
+sidebar_position: 1
 sidebar_label: Glossary
 ---
-
-# Glossary
 
 :::note
 TODO

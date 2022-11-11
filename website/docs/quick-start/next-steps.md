@@ -1,9 +1,8 @@
 ---
-sidebar_position: 10
 title: Next Steps
+sidebar_label: Next Steps
+sidebar_position: 10
 ---
-
-# Next Steps
 
 You have just learned the **basics of atmos**.
 

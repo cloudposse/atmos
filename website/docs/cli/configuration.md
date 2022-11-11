@@ -3,8 +3,7 @@ title: CLI Configuration
 sidebar_position: 1
 ---
 
-Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file.
-
+Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
 # Configuration File (`atmos.yaml`)
 

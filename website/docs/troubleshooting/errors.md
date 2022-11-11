@@ -1,6 +1,6 @@
 ---
-sidebar_position: 1
 title: Errors
+sidebar_position: 1
 sidebar_label: Errors
 ---
 
