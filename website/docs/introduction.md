@@ -148,3 +148,8 @@ There's also an ecosystem of tools that it works with, and Terraform modules dow
 
 We invite you to join us in the larger movement and impact the the industry at large. We offer a greater, more impactful.
 
+## Next Steps
+
+* Do you need to present a compelling case for Atmos at your company? [Check out our slides](/reference/slides).
+* [Check out our Quick Start](/category/quick-start)
+* [Review the Core Concepts](/category/core-concepts)

@@ -13,7 +13,7 @@ Atmos natively supports opinionated workflows for Helmfile.
 
 To provision a helmfile component using the `atmos` CLI, run the following commands in the container shell:
 
-```console
+```shell
 atmos helmfile diff nginx-ingress --stack=ue2-dev
 atmos helmfile apply nginx-ingress --stack=ue2-dev
 ```
@@ -25,7 +25,7 @@ where:
 
 Short versions of the command-line arguments can be used:
 
-```console
+```shell
 atmos helmfile diff nginx-ingress -s ue2-dev
 atmos helmfile apply nginx-ingress -s ue2-dev
 ```
@@ -34,7 +34,7 @@ atmos helmfile apply nginx-ingress -s ue2-dev
 
 To execute `diff` and `apply` in one step, use `helmfile deploy` command:
 
-```console
+```shell
 atmos helmfile deploy nginx-ingress -s ue2-dev
 ```
 

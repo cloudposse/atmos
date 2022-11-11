@@ -5,11 +5,13 @@ title: Terraform Integration
 
 # Terraform Integration
 
-Atmos natively supports opinionated workflows for terraform.
+Atmos natively supports opinionated workflows for terraform. It's compatible with every version of terraform and designed to work with multiple different versions of terraform concurrently.
 
-There are a few settings exposed that specific to terraform.
+Atmos provides many settings that are specific to Terraform.
 
 ## Settings
+
+All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration), but can be overriden at any level of the [Stack](/core-concepts/stacks/#schema) configuration.
 
 ```
 # The executable to be called by `atmos` when running terraform commands.
@@ -56,13 +58,13 @@ components:
 
 ## Terraform Provider
 
-There is a Terraform provider ([`cloudposse/terraform-provider-utils`](https://github.com/cloudposse/terraform-provider-utils)) that implements a `data` source thjat can read the YAML Stack configurations natively from within terraform.
+A Terraform provider (`cloudposse/terraform-provider-utils`) implements a `data` source that can read the YAML Stack configurations natively from within terraform.
 
 ## Terraform Module
 
-There is a Terraform module ([`cloudposse/terraform-yaml-stack-config`](https://github.com/cloudposse/terraform-yaml-stack-config)) that wraps the data source.
+A Terraform module (`cloudposse/terraform-yaml-stack-config`) wraps the data source.
 
-Here's an example of how the variables for a component could be accessed from within a Terraform module.
+Here's an example of accessing the variables for a given component from within a Terraform module.
 
 ```
 module "vars" {
@@ -93,7 +95,7 @@ where:
 - `eks` is the Terraform component to provision (from the `components/terraform` folder)
 - `--stack=ue2-dev` is the stack to provision the component into
 
-Short versions of the command-line arguments can be used:
+Short versions of all command-line arguments can be used:
 
 ```console
 atmos terraform plan eks -s ue2-dev
