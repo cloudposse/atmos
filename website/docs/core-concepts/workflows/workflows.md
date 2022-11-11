@@ -32,7 +32,7 @@ atmos workflow eks-up --stack tenant1-ue2-dev
 Workflows can be defined using two different methods:
 
 - **Stack configurations:** Add the `workflows` section to any Stack configuration.
-- **Standalone files:**  Add reusable `workflows` in a separate file (see [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/workflows/workflow1.yaml)
+- **Standalone files:**  Add reusable `workflows` in a separate file (see [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml)
 
 In the first case, we define workflows in the Stack configuration file (which we specify on the command line).
 To execute the workflows for some stack (e.g. `tenant1-ue2-dev`), run the following commands:

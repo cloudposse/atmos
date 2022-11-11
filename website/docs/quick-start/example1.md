@@ -6,10 +6,10 @@ sidebar_label: Simple Example
 
 The [example](https://github.com/cloudposse/atmos/tree/master/examples/complete) folder contains a complete solution that shows how to:
 
-  - Structure the Terraform and helmfile components
-  - Configure the CLI
-  - Add [stack configurations](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks) for the Terraform and helmfile components (to provision them to different environments and stages)
-
+- Structure the Terraform and helmfile components
+- Configure the CLI
+- Add [stack configurations](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks) for the Terraform and helmfile components (to
+  provision them to different environments and stages)
 
 ## Example Filesystem Layout
 
@@ -51,9 +51,11 @@ This example provides a simple filesystem layout that looks like this:
 
 `atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
-In our example, all the code (Terraform and helmfiles) is in the [components](https://github.com/cloudposse/atmos/tree/master/examples/complete/components) folder.
+In our example, all the code (Terraform and helmfiles) is in
+the [components](https://github.com/cloudposse/atmos/tree/master/examples/complete/components) folder.
 
-The centralized stack configurations (variables for the Terraform and helmfile components) are in the [stacks](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks) folder.
+The centralized stack configurations (variables for the Terraform and helmfile components) are in
+the [stacks](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks) folder.
 
 In the example, all stack configuration files are broken down by environments and stages and use the predefined format `$environment-$stage.yaml`.
 
@@ -64,14 +66,20 @@ The global values get merged with the `$environment-$stage.yaml` configuration f
 
 In the example, we defined a few config files:
 
-  - [stacks/orgs/cp/tenant1/dev/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `dev`
-  - [stacks/orgs/cp/tenant1/staging/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/orgs/cp/tenant1/staging/us-east-2.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `staging`
-  - [stacks/orgs/cp/tenant1/prod/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/orgs/cp/tenant1/prod/us-east-2.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
-  - [stacks/orgs/cp/tenant1/dev/global-region.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/ue2-globals.yaml) - global settings for the environment `ue2` (e.g. `region`, `environment`)
-  - [stacks/orgs/cp/_defaults.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/stacks/orgs/cp/_defaults.yaml) - global settings for the entire solution
+- [stacks/orgs/cp/tenant1/dev/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml)
+  - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `dev`
+- [stacks/orgs/cp/tenant1/staging/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/orgs/cp/tenant1/staging/us-east-2.yaml)
+  - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `staging`
+- [stacks/orgs/cp/tenant1/prod/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/orgs/cp/tenant1/prod/us-east-2.yaml)
+  - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
+- [stacks/orgs/cp/tenant1/dev/global-region.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/ue2-globals.yaml) - global
+  settings for the environment `ue2` (e.g. `region`, `environment`)
+- [stacks/orgs/cp/_defaults.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/stacks/orgs/cp/_defaults.yaml) - global settings
+  for the entire solution
 
 __NOTE:__ The stack configuration structure and the file names described above are just an example of how to name and structure the config files.
-You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire solution)
+You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire
+solution)
 into a stack config using the `import` directive.
 
 Stack configuration files have a predefined format:
@@ -84,10 +92,10 @@ vars:
   stage: dev
 
 terraform:
-  vars: {}
+  vars: { }
 
 helmfile:
-  vars: {}
+  vars: { }
 
 components:
   terraform:
@@ -102,7 +110,7 @@ components:
       backend:
         s3:
           workspace_key_prefix: "eks"
-      vars: {}
+      vars: { }
 
   helmfile:
     nginx-ingress:
@@ -121,11 +129,12 @@ It has the following main sections:
 The `components` section consists of the following:
 
 - `terraform` - defines variables, the binary to execute, and the backend for each Terraform component.
-  Terraform component names correspond to the Terraform components in the [components](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform) folder
+  Terraform component names correspond to the Terraform components in
+  the [terraform](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform) folder
 
 - `helmfile` - defines variables and the binary to execute for each helmfile component.
-  Helmfile component names correspond to the helmfile components in the [helmfile](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/helmfile) folder
-
+  Helmfile component names correspond to the helmfile components in
+  the [helmfile](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/helmfile) folder
 
 ## Run the Example
 
