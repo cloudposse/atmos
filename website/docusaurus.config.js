@@ -97,6 +97,11 @@ const config = {
                         label: 'Slack',
                         position: 'right'
                     },
+                    // {
+                    //     to: '/blog',
+                    //     label: 'Blog',
+                    //     position: 'left'
+                    // },
                     {
                         href: 'https://github.com/cloudposse/atmos',
                         position: 'right',
