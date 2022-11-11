@@ -1,74 +1,96 @@
 ---
-title: Configuration
+title: CLI Configuration
+sidebar_position: 1
 ---
 
-<head>
-  <title>CLI Configuration</title>
-  <meta
-    name="description"
-    content="CLI Configuration."
-  />
-</head>
+Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
-## atmos.yaml
+# Configuration File (`atmos.yaml`)
+
+The CLI config is loaded from the following locations (from lowest to highest priority):
+- System directory (e.g. `/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
+- Home directory (e.g. `~/.atmos`)
+- Current directory (e.g. `./atmos.yaml`)
+- Environment variables (e.g. `ATMOS_CLI_CONFIG_PATH`)
+- Command-line arguments
+
+**Pro-tip:** Atmos supports POSIX-style greedy Globs for all file names/paths ([double-star `**` is supported](https://en.wikipedia.org/wiki/Glob_(programming)))
+
+What follows are all the sections of the `atmos.yaml` configuration file.
+
+## Base Path
+
+The base path for components, stacks and workflows configurations.
+It can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
+It supports both absolute and relative paths.
+
+If not provided or is an empty string, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path` are independent settings (supporting both absolute and relative paths).
+
+If `base_path` is provided, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path` are considered paths relative to `base_path`.
 
 ```yaml
-# CLI config is loaded from the following locations (from lowest to highest priority):
-# system dir ('/usr/local/etc/atmos' on Linux, '%LOCALAPPDATA%/atmos' on Windows)
-# home dir (~/.atmos)
-# current directory
-# ENV vars
-# Command-line arguments
-#
-# It supports POSIX-style Globs for file names/paths (double-star '**' is supported)
-# https://en.wikipedia.org/wiki/Glob_(programming)
-
-# Base path for components, stacks and workflows configurations.
-# Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
-# Supports both absolute and relative paths.
-# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
-# are independent settings (supporting both absolute and relative paths).
-# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
-# are considered paths relative to 'base_path'.
 base_path: "."
+```
 
+## Components
+
+```yaml
 components:
   terraform:
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "components/terraform"
+
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
     apply_auto_approve: false
+
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
     deploy_run_init: true
+
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
     init_run_reconfigure: true
+
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
     auto_generate_backend_file: false
+
   helmfile:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "components/helmfile"
+
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV var
     kubeconfig_path: "/dev/shm"
+
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV var
     helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
     cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+```
 
+## Stacks
+
+```yaml
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
   # Supports both absolute and relative paths
   base_path: "stacks"
+
   # Can also be set using 'ATMOS_STACKS_INCLUDED_PATHS' ENV var (comma-separated values string)
   included_paths:
     - "orgs/**/*"
+
   # Can also be set using 'ATMOS_STACKS_EXCLUDED_PATHS' ENV var (comma-separated values string)
   excluded_paths:
     - "**/_defaults.yaml"
+
   # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
   name_pattern: "{tenant}-{environment}-{stage}"
+```
 
+## Workflows
+
+```yaml
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
   # Supports both absolute and relative paths
@@ -78,10 +100,21 @@ logs:
   verbose: false
   colors: true
 
+```
+## Custom CLI Sub-commands
+
+You can extend the Atmos CLI and add as many subcommands as you want. This is a great way to increase DX by exposing a consistent CLI interface to developers.
+
+For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and discover all available commands.
+
+Here are some examples to play around with to get started.
+
+```yaml
 # Custom CLI commands
 commands:
   - name: tf
     description: Execute 'terraform' commands
+
     # subcommands
     commands:
       - name: plan
@@ -104,8 +137,10 @@ commands:
         # steps support Go templates
         steps:
           - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+
   - name: terraform
     description: Execute 'terraform' commands
+
     # subcommands
     commands:
       - name: provision
@@ -113,11 +148,13 @@ commands:
         arguments:
           - name: component
             description: Name of the component
+
         flags:
           - name: stack
             shorthand: s
             description: Name of the stack
             required: true
+
         # ENV var values support Go templates
         env:
           - key: ATMOS_COMPONENT
@@ -127,26 +164,32 @@ commands:
         steps:
           - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
           - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+
   - name: play
     description: This command plays games
     steps:
       - echo Playing...
+
     # subcommands
     commands:
       - name: hello
         description: This command says Hello world
         steps:
           - echo Hello world
+
       - name: ping
         description: This command plays ping-pong
+
         # If 'verbose' is set to 'true', atmos will output some info messages to the console before executing the command's steps
         # If 'verbose' is not defined, it implicitly defaults to 'false'
         verbose: true
         steps:
           - echo Playing ping-pong...
           - echo pong
+
   - name: show
     description: Execute 'show' commands
+
     # subcommands
     commands:
       - name: component
@@ -159,6 +202,7 @@ commands:
             shorthand: s
             description: Name of the stack
             required: true
+
         # ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
         env:
           - key: ATMOS_COMPONENT
@@ -173,6 +217,7 @@ commands:
             value: "{{ .ComponentConfig.vars.environment }}"
           - key: ATMOS_IS_PROD
             value: "{{ .ComponentConfig.settings.config.is_prod }}"
+
         # If a custom command defines 'component_config' section with 'component' and 'stack', 'atmos' generates the config for the component in the stack
         # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
         # exposing all the component sections (which are also shown by 'atmos describe component' command)
@@ -193,7 +238,11 @@ commands:
           - 'echo settings.spacelift.workspace_enabled: {{ .ComponentConfig.settings.spacelift.workspace_enabled }}'
           - 'echo Dependencies: {{ .ComponentConfig.deps }}'
           - 'echo settings.config.is_prod: {{ .ComponentConfig.settings.config.is_prod }}'
+```
 
+## Integrations
+
+```yaml
 # Integrations
 integrations:
 
@@ -256,22 +305,51 @@ integrations:
         apply:
           steps:
             - run: terraform apply $PLANFILE
+```
 
+## Schemas
+
+```yaml
 # Validation schemas (for validating atmos stacks and components)
 schemas:
+
   # https://json-schema.org
   jsonschema:
+
     # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/jsonschema"
+
   # https://www.openpolicyagent.org
   opa:
     # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
+
   # https://cuelang.org
   cue:
     # Can also be set using 'ATMOS_SCHEMAS_CUE_BASE_PATH' ENV var, or '--schemas-cue-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/cue"
 ```
+
+## Environment Variables
+
+Most YAML settings can also be defined by environment variables. This is helpful while doing local development. For example, setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local development folder, will enable you to rapidly iterate.
+
+| Variable                                           | YAML Path                                    | Description                |
+| :------------------------------------------------- | :------------------------------------------- | :------------------------- |
+| ATMOS_CLI_CONFIG_PATH                              | N/A                                          | Where to find `atmos.yaml` |
+| ATMOS_COMPONENTS_TERRAFORM_BASE_PATH               | components.terraform.base_path               |                            |
+| ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE      | components.terraform.apply_auto_approve      |                            |
+| ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT         | components.terraform.deploy_run_init         |                            |
+| ATMOS_COMPONENTS_HELMFILE_BASE_PATH                | components.helmfile.base_path                |                            |
+| ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH          | components.helmfile.aws_profile_pattern      |                            |
+| ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN | components.helmfile.helm_aws_profile_pattern |                            |
+| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN     | components.helmfile.cluster_name_pattern     |                            |
+| ATMOS_STACKS_BASE_PATH                             | stacks.base_path                             |                            |
+| ATMOS_STACKS_INCLUDED_PATHS                        | stacks.included_paths                        |                            |
+| ATMOS_STACKS_EXCLUDED_PATHS                        | stacks.excluded_paths                        |                            |
+| ATMOS_STACKS_NAME_PATTERN                          | stacks.name_pattern                          |                            |
+| ATMOS_LOGS_VERBOSE                                 | logs.verbose                                 | Increase log verbosity.    |
+

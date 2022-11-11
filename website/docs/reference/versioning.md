@@ -1,6 +1,7 @@
-# Versioning
-
-<!-- TOC goes here -->
+---
+title: Atmos Versioning
+sidebar_label: Versioning
+---
 
 `atmos` follows the <a href="https://semver.org/" target="_blank">Semantic Versioning (SemVer)</a> convention: <code>major.minor.patch.</code>
 

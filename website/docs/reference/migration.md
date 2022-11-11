@@ -1,12 +1,11 @@
 ---
 title: Migration Guide
+sidebar_position: 3
 sidebar_label: Migration
 ---
 
-<head>
-  <title>Migration Guide: How to Migrate to new versions of atmos</title>
-  <meta
-    name="description"
-    content="Migration Guide: How to Migrate to new versions of atmos."
-  />
-</head>
+How to Migrate to new versions of Atmos...
+
+:::note
+TODO
+:::

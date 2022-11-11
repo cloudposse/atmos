@@ -1,7 +1,0 @@
-src/theme/DocItem
-src/theme/DocPage
-node_modules
-docs/cli/commands
-
-.docusaurus
-.github
