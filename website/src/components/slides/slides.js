@@ -1,5 +1,5 @@
 import React from "react";
-import styles from "./slides.module.css";
+import styles from "@site/src/components/slides/slides.module.css";
 import ImageGallery from "react-image-gallery";
 import "react-image-gallery/styles/css/image-gallery.css"
 
