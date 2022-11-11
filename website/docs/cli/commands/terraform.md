@@ -6,19 +6,19 @@ sidebar_label: "terraform"
 Execute `terraform` commands
 
 ```shell
-$ atmos terraform [options]
+atmos terraform [options]
 ```
 
 This command executes `terraform` commands. Supports the commands and options described in https://www.terraform.io/cli/commands
 ## Examples
 
 ```shell
-$ atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev
-$ atmos terraform apply test/test-component-override-3 -s tenant1-ue2-dev
-$ atmos terraform destroy test/test-component-override-3 -s tenant1-ue2-dev
-$ atmos terraform init test/test-component-override-3 -s tenant1-ue2-dev
-$ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
-$ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
+atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev
+atmos terraform apply test/test-component-override-3 -s tenant1-ue2-dev
+atmos terraform destroy test/test-component-override-3 -s tenant1-ue2-dev
+atmos terraform init test/test-component-override-3 -s tenant1-ue2-dev
+atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
+atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 ```
 
 ## Inputs

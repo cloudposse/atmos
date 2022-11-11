@@ -6,16 +6,16 @@ sidebar_label: "describe config"
 Execute `describe config` command
 
 ```shell
-$ atmos describe config [options]
+atmos describe config [options]
 ```
 
 This command shows the final (deep-merged) CLI configuration.
 ## Examples
 
 ```shell
-$ atmos describe config
-$ atmos describe config -f json
-$ atmos describe config --format yaml
+atmos describe config
+atmos describe config -f json
+atmos describe config --format yaml
 ```
 
 ## Options

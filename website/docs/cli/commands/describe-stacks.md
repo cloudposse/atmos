@@ -6,26 +6,26 @@ sidebar_label: "describe stacks"
 Execute `describe stacks` command
 
 ```shell
-$ atmos describe stacks [options]
+atmos describe stacks [options]
 ```
 
 This command shows configuration for stacks and components in the stacks.
 ## Examples
 
 ```shell
-$ atmos describe stacks
-$ atmos describe stacks -s tenant1-ue2-dev
-$ atmos describe stacks --file=stacks.yaml
-$ atmos describe stacks --file=stacks.json --format=json
-$ atmos describe stacks --components=infra/vpc
-$ atmos describe stacks --components=echo-server,infra/vpc
-$ atmos describe stacks --components=echo-server,infra/vpc --sections=none
-$ atmos describe stacks --components=echo-server,infra/vpc --sections=none
-$ atmos describe stacks --components=none --sections=metadata
-$ atmos describe stacks --components=echo-server,infra/vpc --sections=vars,settings,metadata
-$ atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings,component,deps,inheritance --file=stacks.yaml
-$ atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings --format=json --file=stacks.json
-$ atmos describe stacks --components=test/test-component-override-3 --sections=deps,vars -s=tenant2-ue2-staging
+atmos describe stacks
+atmos describe stacks -s tenant1-ue2-dev
+atmos describe stacks --file=stacks.yaml
+atmos describe stacks --file=stacks.json --format=json
+atmos describe stacks --components=infra/vpc
+atmos describe stacks --components=echo-server,infra/vpc
+atmos describe stacks --components=echo-server,infra/vpc --sections=none
+atmos describe stacks --components=echo-server,infra/vpc --sections=none
+atmos describe stacks --components=none --sections=metadata
+atmos describe stacks --components=echo-server,infra/vpc --sections=vars,settings,metadata
+atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings,component,deps,inheritance --file=stacks.yaml
+atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings --format=json --file=stacks.json
+atmos describe stacks --components=test/test-component-override-3 --sections=deps,vars -s=tenant2-ue2-staging
 ```
 
 ## Options

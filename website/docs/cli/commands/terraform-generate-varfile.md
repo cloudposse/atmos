@@ -6,18 +6,18 @@ sidebar_label: "terraform generate varfile"
 Execute `terraform generate varfile` command
 
 ```shell
-$ atmos terraform generate varfile [options]
+atmos terraform generate varfile [options]
 ```
 
 This command generates a varfile for a `terraform` component.
 ## Examples
 
 ```shell
-$ atmos terraform generate varfile top-level-component1 -s tenant1-ue2-dev
-$ atmos terraform generate varfile infra/vpc -s tenant1-ue2-staging
-$ atmos terraform generate varfile test/test-component -s tenant1-ue2-dev
-$ atmos terraform generate varfile test/test-component-override-2 -s tenant2-ue2-prod
-$ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-dev -f vars.json
+atmos terraform generate varfile top-level-component1 -s tenant1-ue2-dev
+atmos terraform generate varfile infra/vpc -s tenant1-ue2-staging
+atmos terraform generate varfile test/test-component -s tenant1-ue2-dev
+atmos terraform generate varfile test/test-component-override-2 -s tenant2-ue2-prod
+atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-dev -f vars.json
 ```
 
 ## Inputs

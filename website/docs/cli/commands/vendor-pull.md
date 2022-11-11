@@ -6,7 +6,7 @@ sidebar_label: "vendor pull"
 Execute `vendor pull` command
 
 ```shell
-$ atmos vendor pull [options]
+atmos vendor pull [options]
 ```
 
 This command pulls sources and mixins from remote repositories for a `terraform` or `helmfile` component.
@@ -19,10 +19,10 @@ This command pulls sources and mixins from remote repositories for a `terraform`
 ## Examples
 
 ```shell
-$ atmos vendor pull -c infra/account-map
-$ atmos vendor pull -c infra/vpc-flow-logs-bucket
-$ atmos vendor pull -c echo-server -t helmfile
-$ atmos vendor pull -c infra/account-map --dry-run
+atmos vendor pull -c infra/account-map
+atmos vendor pull -c infra/vpc-flow-logs-bucket
+atmos vendor pull -c echo-server -t helmfile
+atmos vendor pull -c infra/account-map --dry-run
 ```
 
 ## Options

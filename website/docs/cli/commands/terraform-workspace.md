@@ -6,18 +6,18 @@ sidebar_label: "terraform workspace"
 Execute `terraform workspace` command
 
 ```shell
-$ atmos terraform workspace [options]
+atmos terraform workspace [options]
 ```
 
 This command selects a Terraform workspace for a component. If the workspace does not exist, the command creates it
 ## Examples
 
 ```shell
-$ atmos terraform workspace top-level-component1 -s tenant1-ue2-dev
-$ atmos terraform workspace infra/vpc -s tenant1-ue2-staging
-$ atmos terraform workspace test/test-component -s tenant1-ue2-dev
-$ atmos terraform workspace test/test-component-override-2 -s tenant2-ue2-prod
-$ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
+atmos terraform workspace top-level-component1 -s tenant1-ue2-dev
+atmos terraform workspace infra/vpc -s tenant1-ue2-staging
+atmos terraform workspace test/test-component -s tenant1-ue2-dev
+atmos terraform workspace test/test-component-override-2 -s tenant2-ue2-prod
+atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 ```
 
 ## Inputs

@@ -6,17 +6,17 @@ sidebar_label: "workflow"
 Execute `workflow` command
 
 ```shell
-$ atmos workflow [options]
+atmos workflow [options]
 ```
 
 Allows sequential execution of `atmos` and `shell` commands defined as workflow steps.
 ## Examples
 
 ```shell
-$ atmos workflow test-1 -f workflow1
-$ atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev
-$ atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1 --dry-run
-$ atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
+atmos workflow test-1 -f workflow1
+atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev
+atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1 --dry-run
+atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
 ```
 
 ## Options

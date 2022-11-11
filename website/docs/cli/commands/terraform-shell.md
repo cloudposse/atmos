@@ -6,7 +6,7 @@ sidebar_label: "terraform shell"
 Execute `terraform shell` command
 
 ```shell
-$ atmos terraform shell [options]
+atmos terraform shell [options]
 ```
 
 The command allows using native Terraform commands without atmos-specific arguments and flags. The command does the following:
@@ -23,9 +23,9 @@ The command allows using native Terraform commands without atmos-specific argume
 ## Examples
 
 ```shell
-$ atmos terraform shell top-level-component1 -s tenant1-ue2-dev
-$ atmos terraform shell infra/vpc -s tenant1-ue2-staging
-$ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
+atmos terraform shell top-level-component1 -s tenant1-ue2-dev
+atmos terraform shell infra/vpc -s tenant1-ue2-staging
+atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
 ```
 
 ## Inputs

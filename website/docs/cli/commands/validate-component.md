@@ -6,16 +6,16 @@ sidebar_label: "validate component"
 Execute `validate component` command
 
 ```shell
-$ atmos validate component [options]
+atmos validate component [options]
 ```
 
 This command validates an atmos component in a stack using Json Schema and OPA policies
 ## Examples
 
 ```shell
-$ atmos validate component infra/vpc -s tenant1-ue2-dev
-$ atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-infra-vpc-component.json --schema-type jsonschema
-$ atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-infra-vpc-component.rego --schema-type opa
+atmos validate component infra/vpc -s tenant1-ue2-dev
+atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-infra-vpc-component.json --schema-type jsonschema
+atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-infra-vpc-component.rego --schema-type opa
 ```
 
 ## Inputs
