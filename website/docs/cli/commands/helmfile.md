@@ -6,17 +6,17 @@ sidebar_label: "helmfile"
 Execute `helmfile` commands
 
 ```shell
-$ atmos helmfile [options]
+atmos helmfile [options]
 ```
 
 This command executes `helmfile` commands. Supports the commands and options described in https://github.com/helmfile/helmfile#cli-reference
 ## Examples
 
 ```shell
-$ atmos helmfile diff echo-server -s tenant1-ue2-dev
-$ atmos helmfile apply echo-server -s tenant1-ue2-dev
-$ atmos helmfile sync echo-server --stack tenant1-ue2-dev
-$ atmos helmfile destroy echo-server --stack=tenant1-ue2-dev
+atmos helmfile diff echo-server -s tenant1-ue2-dev
+atmos helmfile apply echo-server -s tenant1-ue2-dev
+atmos helmfile sync echo-server --stack tenant1-ue2-dev
+atmos helmfile destroy echo-server --stack=tenant1-ue2-dev
 ```
 
 ## Inputs

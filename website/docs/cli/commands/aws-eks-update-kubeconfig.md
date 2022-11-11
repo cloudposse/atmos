@@ -6,7 +6,7 @@ sidebar_label: "aws eks update-kubeconfig"
 Execute `aws eks update-kubeconfig` command
 
 ```shell
-$ atmos aws eks update-kubeconfig [options]
+atmos aws eks update-kubeconfig [options]
 ```
 
 This command executes `aws eks update-kubeconfig` command to download `kubeconfig` from an EKS cluster and save it to a file.
@@ -34,13 +34,13 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 ## Examples
 
 ```shell
-$ atmos aws eks update-kubeconfig <component> -s <stack>
-$ atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>
-$ atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>
-$ atmos aws eks update-kubeconfig --role-arn <ARN>
-$ atmos aws eks update-kubeconfig --alias <cluster context name alias>
-$ atmos aws eks update-kubeconfig --dry-run=true
-$ atmos aws eks update-kubeconfig --verbose=true
+atmos aws eks update-kubeconfig <component> -s <stack>
+atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>
+atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>
+atmos aws eks update-kubeconfig --role-arn <ARN>
+atmos aws eks update-kubeconfig --alias <cluster context name alias>
+atmos aws eks update-kubeconfig --dry-run=true
+atmos aws eks update-kubeconfig --verbose=true
 ```
 
 ## Inputs

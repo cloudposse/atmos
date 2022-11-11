@@ -6,17 +6,17 @@ sidebar_label: "helmfile generate varfile"
 Execute `helmfile generate varfile` command
 
 ```shell
-$ atmos helmfile generate varfile [options]
+atmos helmfile generate varfile [options]
 ```
 
 This command generates a varfile for a `helmfile` component.
 ## Examples
 
 ```shell
-$ atmos helmfile generate varfile echo-server -s tenant1-ue2-dev
-$ atmos helmfile generate varfile echo-server -s tenant1-ue2-dev
-$ atmos helmfile generate varfile echo-server -s tenant1-ue2-dev -f vars.yaml
-$ atmos helmfile generate varfile echo-server --stack tenant1-ue2-dev --file=vars.yaml
+atmos helmfile generate varfile echo-server -s tenant1-ue2-dev
+atmos helmfile generate varfile echo-server -s tenant1-ue2-dev
+atmos helmfile generate varfile echo-server -s tenant1-ue2-dev -f vars.yaml
+atmos helmfile generate varfile echo-server --stack tenant1-ue2-dev --file=vars.yaml
 ```
 
 ## Inputs

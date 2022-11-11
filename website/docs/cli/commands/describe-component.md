@@ -6,16 +6,16 @@ sidebar_label: "describe component"
 Execute `describe component` command
 
 ```shell
-$ atmos describe component [options]
+atmos describe component [options]
 ```
 
 This command shows configuration for a component in a stack.
 ## Examples
 
 ```shell
-$ atmos describe component infra/vpc -s tenant1-ue2-dev
-$ atmos describe component echo-server -s tenant1-ue2-staging
-$ atmos describe component test/test-component-override -s tenant2-ue2-prod
+atmos describe component infra/vpc -s tenant1-ue2-dev
+atmos describe component echo-server -s tenant1-ue2-staging
+atmos describe component test/test-component-override -s tenant2-ue2-prod
 ```
 
 ## Inputs

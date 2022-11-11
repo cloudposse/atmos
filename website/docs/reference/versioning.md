@@ -1,3 +1,9 @@
+---
+sidebar_position: 2
+title: Versioning
+sidebar_label: Versioning
+---
+
 # Versioning
 
 <!-- TOC goes here -->

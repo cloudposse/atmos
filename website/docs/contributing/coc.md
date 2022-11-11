@@ -1,3 +1,9 @@
+---
+sidebar_position: 1
+title: Code of Conduct
+sidebar_label: Code of Conduct
+---
+
 # Code of Conduct
 
 As contributors and maintainers of the Atmos project by [Cloud Posse](https://cloudposse.com), we pledge to respect everyone who contributes by posting issues, updating documentation, submitting pull requests, providing feedback in comments, and any other activities.

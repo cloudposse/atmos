@@ -1,6 +1,11 @@
 ---
 title: Migration Guide
+sidebar_position: 3
 sidebar_label: Migration
 ---
 
-# Migration Guide: How to Migrate to new versions of Atmos
+How to Migrate to new versions of Atmos...
+
+:::note
+TODO
+:::

@@ -6,7 +6,7 @@ sidebar_label: "validate stacks"
 Execute `validate stacks` command
 
 ```shell
-$ atmos validate stacks [options]
+atmos validate stacks [options]
 ```
 
 This command validates stacks configuration. The command checks and validates the following:
@@ -19,7 +19,7 @@ This command validates stacks configuration. The command checks and validates th
 ## Examples
 
 ```shell
-$ atmos validate stacks
+atmos validate stacks
 ```
 
 ## Options
