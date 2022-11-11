@@ -1,10 +1,12 @@
 ---
-sidebar_label: How to Contribute
+sidebar_position: 2
+title: How to Contribute
+sidebar_label: Contributing
 ---
 
-# Contributing to atmos
+# Contributing to Atmos
 
-Thanks for the interest in contributing to atmos!
+Thanks for the interest in contributing to `atmos`!
 
 ## Contributing Etiquette
 

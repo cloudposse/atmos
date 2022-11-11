@@ -1,11 +1,11 @@
 ---
+sidebar_position: 1
 title: Glossary
+sidebar_label: Glossary
 ---
 
-<head>
-  <title>Glossary: Terminology and Definitions</title>
-  <meta
-    name="description"
-    content="Glossary: Terminology and Definitions."
-  />
-</head>
+# Glossary
+
+:::note
+TODO
+:::

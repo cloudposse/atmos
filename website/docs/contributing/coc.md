@@ -1,3 +1,9 @@
+---
+sidebar_position: 1
+title: Code of Conduct
+sidebar_label: Code of Conduct
+---
+
 # Code of Conduct
 
 As contributors and maintainers of the Ionic project, we pledge to respect everyone who contributes by posting issues,
