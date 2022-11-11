@@ -22,7 +22,7 @@ To configure Atmos to generate the Altantis repo configurations, update the `atm
 
 Here's an example to get you started. As with *everything* in atmos, it supports deep-merging. Anything under the `integrations.atlantis` section can be overridden in the `components.terraform._name_.settings.atlantis` section at any level of the inheritance chain.
 
-```
+```yaml
 # atmos.yaml CLI config
 
 # Integrations
@@ -100,7 +100,7 @@ atmos atlantis generate repo-config
 
 The following Atlantis repo-config would be generated.
 
-```
+```yaml
 version: 3
 automerge: true
 delete_source_branch_on_merge: true
