@@ -8,7 +8,7 @@ The [example](https://github.com/cloudposse/atmos/tree/master/examples/complete)
 
   - Structure the Terraform and helmfile components
   - Configure the CLI
-  - Add [stack configurations](examples/complete/stacks) for the Terraform and helmfile components (to provision them to different environments and stages)
+  - Add [stack configurations](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks) for the Terraform and helmfile components (to provision them to different environments and stages)
 
 
 ## Example Filesystem Layout

@@ -7,6 +7,9 @@ Workflows are a way of combining multiple commands into one executable unit of w
 
 ## Simple Example
 
+Here's an example workflow called `eks-up` which runs a few commands that will bring up the cluster.
+The workflow name can be anything you want, and the workflows can also be parameterized.
+
 ```yaml
 workflows:
   eks-up:
@@ -14,21 +17,27 @@ workflows:
       Bring up the EKS cluster.
     steps:
       - command: terraform apply vpc
-      - command: terraform eks/cluster
-      - command: terraform eks/alb-controller
+      - command: terraform apply eks/cluster
+      - command: terraform apply eks/alb-controller
+```
+
+Then run this workflow like this:
+
+```shell
+atmos workflow eks-up --stack tenant1-ue2-dev
 ```
 
 ## Configuration 
 
 Workflows can be defined using two different methods:
 
-- **Stack configurations:** In the configuration file for a stack (see [workflows in ue2-dev.yaml](example/stacks/ue2-dev.yaml) for an example)
-- **Standalone files:**  In a separate file (see [workflow1.yaml](example/stacks/workflows/workflow1.yaml)
+- **Stack configurations:** Add the `workflows` section to any Stack configuration.
+- **Standalone files:**  Add reusable `workflows` in a separate file (see [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/workflows/workflow1.yaml)
 
-In the first case, we define workflows in the configuration file for the stack (which we specify on the command line).
-To execute the workflows from [workflows in ue2-dev.yaml](example/stacks/ue2-dev.yaml), run the following commands:
+In the first case, we define workflows in the Stack configuration file (which we specify on the command line).
+To execute the workflows for some stack (e.g. `tenant1-ue2-dev`), run the following commands:
 
-```console
+```shell
 atmos workflow eks-up -s tenant1-ue2-dev
 ```
 
@@ -44,7 +53,7 @@ For example, to run `terraform plan` and `helmfile diff` on all terraform and he
 atmos workflow plan-all -f workflows
 ```
 
-where the command-line option `-f` (`--file` for long version) instructs the `atmos` CLI to look for the `plan-all` workflow in the file [workflows](example/stacks/workflows.yaml).
+where the command-line option `-f` (`--file` for long version) instructs the `atmos` CLI to look for the `plan-all` workflow in the file [workflows](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml).
 
 As we can see, in multi-environment workflows, each workflow job specifies the stack it's operating on:
 
@@ -64,7 +73,7 @@ workflows:
 You can also define a workflow in a separate file without specifying the stack in the workflow's job config.
 In this case, the stack needs to be provided on the command line.
 
-For example, to run the `plan-all` workflow from the [workflows](example/stacks/workflows/workflow1.yaml) file for the `tenant1-ue2-dev` stack,
+For example, to run the `plan-all` workflow from the [workflows](https://github.com/cloudposse/atmos/tree/master/example/stacks/workflows/workflow1.yaml) file for the `tenant1-ue2-dev` stack,
 execute the following command:
 
 ```console
