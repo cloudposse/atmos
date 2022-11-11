@@ -1,16 +1,8 @@
 ---
 title: Debugging
+sidebar_position: 2
+sidebar_label: Debugging
 ---
-
-<head>
-  <title>Debugging Guide</title>
-  <meta
-    name="description"
-    content="Debugging Guide."
-  />
-</head>
-
-## Debugging
 
 :::note
 TODO

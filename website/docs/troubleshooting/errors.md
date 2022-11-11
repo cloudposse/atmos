@@ -1,15 +1,17 @@
 ---
 title: Errors
+sidebar_position: 1
+sidebar_label: Errors
 ---
-
-<head>
-  <title>Errors and Common Mistakes</title>
-  <meta
-    name="description"
-    content="Learn to Solve Common Mistakes and Fix Errors."
-  />
-</head>
 
 ## Common mistakes
 
+:::note
+TODO
+:::
+
 ## Common Errors
+
+:::note
+TODO
+:::
