@@ -64,11 +64,11 @@ The global values get merged with the `$environment-$stage.yaml` configuration f
 
 In the example, we defined a few config files:
 
-  - [ue2-dev.yaml](example/stacks/ue2-dev.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `dev`
-  - [ue2-staging.yaml](example/stacks/ue2-staging.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `staging`
-  - [ue2-prod.yaml](example/stacks/ue2-prod.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
-  - [ue2-globals.yaml](example/stacks/ue2-globals.yaml) - global settings for the environment `ue2` (e.g. `region`, `environment`)
-  - [globals.yaml](example/stacks/globals.yaml) - global settings for the entire solution
+  - [stacks/orgs/cp/tenant1/dev/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `dev`
+  - [stacks/orgs/cp/tenant1/staging/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/orgs/cp/tenant1/staging/us-east-2.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `staging`
+  - [stacks/orgs/cp/tenant1/prod/us-east-2.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/orgs/cp/tenant1/prod/us-east-2.yaml) - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
+  - [stacks/orgs/cp/tenant1/dev/global-region.yaml](https://github.com/cloudposse/atmos/tree/master/example/complete/stacks/ue2-globals.yaml) - global settings for the environment `ue2` (e.g. `region`, `environment`)
+  - [stacks/orgs/cp/_defaults.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/stacks/orgs/cp/_defaults.yaml) - global settings for the entire solution
 
 __NOTE:__ The stack configuration structure and the file names described above are just an example of how to name and structure the config files.
 You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire solution)
@@ -78,7 +78,7 @@ Stack configuration files have a predefined format:
 
 ```yaml
 import:
-  - ue2-globals
+  - orgs/cp/tenant1/staging/_defaults
 
 vars:
   stage: dev

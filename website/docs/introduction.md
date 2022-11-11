@@ -40,7 +40,7 @@ Atmos solves this by introducing powerful capabilities most tools lack.
 - Team collaboration with reusable service catalogs
 - Reusable workflows that run anywhere
 - Consistent command line interface that can combine multiple tools into one command (`atmos`)
-- A [single binary, cross-compiled for every architecture](https://github.com/cloudposse/atmos/releases) (golang) and [easily installed](/docs/quick-start/install).
+- A [single binary, cross-compiled for every architecture](https://github.com/cloudposse/atmos/releases) (golang) and [easily installed](/quick-start/install).
 
 ## YAML Configuration
 
@@ -56,8 +56,8 @@ YAML is also "tool agnostic" (unlike HCL); it's not tied to Terraform or explici
   
 There are other cool things we get "for free" by adopting YAML. 
 - [YAML anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases) can help DRY up configurations
-- Easy [OPA validation](/docs/core-concepts/components/component-validation#open-policy-agent-opa)
-- [JSON Schema validation](/docs/core-concepts/components/component-validation#json-schema)
+- Easy [OPA validation](/core-concepts/components/component-validation#open-policy-agent-opa)
+- [JSON Schema validation](/core-concepts/components/component-validation#json-schema)
 
 The possibilities are endless. 
 
