@@ -87,11 +87,11 @@ const config = {
                         position: 'left',
                         label: 'CLI'
                     },
-                    {
-                        to: '/blog',
-                        label: 'Blog',
-                        position: 'left'
-                    },
+                    // {
+                    //     to: '/blog',
+                    //     label: 'Blog',
+                    //     position: 'left'
+                    // },
                     {
                         href: 'https://github.com/cloudposse/atmos',
                         label: 'GitHub',
