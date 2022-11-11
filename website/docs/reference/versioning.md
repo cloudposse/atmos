@@ -1,12 +1,7 @@
 ---
-sidebar_position: 2
-title: Versioning
+title: Atmos Versioning
 sidebar_label: Versioning
 ---
-
-# Versioning
-
-<!-- TOC goes here -->
 
 `atmos` follows the <a href="https://semver.org/" target="_blank">Semantic Versioning (SemVer)</a> convention: <code>major.minor.patch.</code>
 

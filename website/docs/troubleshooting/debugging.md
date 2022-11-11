@@ -1,6 +1,6 @@
 ---
-sidebar_position: 2
 title: Debugging
+sidebar_position: 2
 sidebar_label: Debugging
 ---
 

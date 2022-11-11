@@ -3,14 +3,17 @@ title: "atmos workflow"
 sidebar_label: "workflow"
 ---
 
-Execute `workflow` command
+An Atmos Workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is easily executed from the command line by calling `atmos workflow`. Use workflows to orchestrate a any number of commands. Workflows can call any `atmos` subcommand, shell commands, and has access to the stack configurations.
+
+
+## Execute `workflow` command
 
 ```shell
 atmos workflow [options]
 ```
 
 Allows sequential execution of `atmos` and `shell` commands defined as workflow steps.
-## Examples
+### Examples
 
 ```shell
 atmos workflow test-1 -f workflow1
@@ -19,7 +22,7 @@ atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1 
 atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
 ```
 
-## Options
+### Options
 
 
 <table className="reference-table">

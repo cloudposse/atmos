@@ -19,7 +19,7 @@ const config = {
 
     // GitHub pages deployment config.
     // If you aren't using GitHub pages, you don't need these.
-    organizationName: 'CloudPosse',
+    organizationName: 'cloudposse',
     projectName: 'atmos',
 
     // Even if you don't use internalization, you can use this field to set useful
@@ -68,7 +68,7 @@ const config = {
             navbar: {
                 title: 'atmos',
                 logo: {
-                    alt: 'atmos logo',
+                    alt: 'Atmos Logo',
                     src: '/img/atmos-logo.svg',
                     srcDark: '/img/atmos-logo.svg',
                     href: '/',
@@ -87,6 +87,16 @@ const config = {
                         position: 'left',
                         label: 'CLI'
                     },
+                    {
+                        to: 'https://github.com/cloudposse/community/discussions',
+                        label: 'Discussions',
+                        position: 'right'
+                    },
+                    {
+                        to: 'https://slack.cloudposse.com/',
+                        label: 'Slack',
+                        position: 'right'
+                    },
                     // {
                     //     to: '/blog',
                     //     label: 'Blog',
@@ -94,9 +104,11 @@ const config = {
                     // },
                     {
                         href: 'https://github.com/cloudposse/atmos',
-                        label: 'GitHub',
                         position: 'right',
+                        className: 'header-github-link',
+                        'aria-label': 'GitHub repository',
                     },
+                 
                 ],
             },
             prism: {

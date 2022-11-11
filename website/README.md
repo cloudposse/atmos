@@ -8,4 +8,4 @@ This folder contains the website powering official [atmos](https://atmos.tools) 
 2. Start the NPM dependencies by running `npm install`
 3. Start the local web server by running `npm run start`
 
-The shortcut for running all these commands is to just run `make all`
+The shortcut for running all these commands is just to run `make all``

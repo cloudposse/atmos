@@ -1,12 +1,10 @@
 ---
-sidebar_position: 2
 title: How to Contribute
+sidebar_position: 2
 sidebar_label: Contributing
 ---
 
-# Contributing to Atmos
-
-Thanks for the interest in contributing to `atmos`!
+Thanks for the interest in contributing to the Atmos project!
 
 ## Contributing Etiquette
 
@@ -34,28 +32,21 @@ Please see the [Contributor Code of Conduct](coc.md) for information on the rule
 
 ### What is a Code Reproduction?
 
-A code reproduction is a small application that is built to demonstrate a particular issue. The code reproduction should contain the minimum amount of
-code needed to recreate the issue and should focus on a single issue.
+A code reproduction is a small application that demonstrates a particular issue. The code reproduction should contain the minimum amount of code needed to reproduce the issue and should focus on a single issue.
 
 ### Why Should You Create a Reproduction?
 
-A code reproduction of the issue you are experiencing helps us better isolate the cause of the problem. This is an important first step to getting any
-bug fixed!
+A code reproduction of the issue you are experiencing helps us better isolate the cause of the problem. This is an important first step to getting any bug fixed!
 
-Without a reliable code reproduction, it is unlikely we will be able to resolve the issue, leading to it being closed. In other words, creating a code
-reproduction of the issue helps us help you.
+Without a reliable code reproduction, it is unlikely we will be able to resolve the issue, leading to it being closed. In other words, creating a code reproduction of the issue helps us help you.
 
 ## Creating a Pull Request
 
-- We appreciate you taking the time to contribute! Before submitting a pull request, we ask that you please [create an issue](#creating-an-issue) that
-  explains the bug or feature request and let us know that you plan on creating a pull request for it. If an issue already exists, please comment on
-  that issue letting us know you would like to submit a pull request for it. This helps us to keep track of the pull request and make sure there isn't
-  duplicated effort.
+- We appreciate you taking the time to contribute! Before submitting a pull request, we ask that you please [create an issue](#creating-an-issue) explaining the bug or feature request and let us know that you plan on making a pull request. If an issue already exists, please comment on that issue letting us know you would like to submit a pull request for it. This helps us to keep track of the pull request and make sure there isn't duplicated effort.
 
-- Looking for an issue to fix? Make sure to look through our issues with
-  the [help wanted](https://github.com/cloudposse/atmos/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) label!
+- Looking for an issue to fix? Make sure to look through our issues with the [help wanted](https://github.com/cloudposse/atmos/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) label!
 
 ## License
 
-By contributing your code to the cloudposse/atmos GitHub Repository, you agree to license your contribution under
+By contributing your code to the `cloudposse/atmos` GitHub Repository, you agree to license your contribution under
 the [Apache license](http://www.apache.org/licenses).
