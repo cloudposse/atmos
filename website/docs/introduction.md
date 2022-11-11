@@ -63,7 +63,7 @@ The possibilities are endless.
 
 ## We Need Guardrails
 
-Configuration "at scale" requires policies and validation. Making mistakes is only to be human. We need to clarify what's expected and "shift left" so that errors are raised early.
+Configuration "at scale" requires policies and validation. To err is human. No one reads all the docs. We must clarify expectations using "policies as code" and "shift left" to raise errors early.
 
 Atmos supports OPA to lay down the law and enforce it.
 
