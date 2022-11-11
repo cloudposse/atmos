@@ -1,6 +1,7 @@
 ---
-sidebar_position: 3
 title: Spacelift Integration
+sidebar_position: 3
+sidebar_label: "Spacelift"
 ---
 
 Atmos natively supports [Spacelift](https://spacelift.io). This is accomplished using the [`cloudposse/terraform-spacelift-cloud-infrastructure-automation`](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) terraform module that reads the YAML Stack configurations and produces the Spacelift resources.

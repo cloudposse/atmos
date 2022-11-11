@@ -1,6 +1,7 @@
 ---
-sidebar_position: 8
 title: Terraform Integration
+sidebar_position: 8
+sidebar_label: "Terraform"
 ---
 
 # Terraform Integration

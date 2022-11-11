@@ -44,17 +44,17 @@ Atmos solves this by introducing powerful capabilities most tools lack.
 
 ## YAML Configuration
 
-So, Why YAML? That's simple: everyone knows YAML.
+So, why did we choose YAML? That's simple: **everyone knows YAML.**
 
 YAML is an extensible markup language. It's ideal for defining a declarative DSL.
 
 Using YAML, `atmos` is easily able to support features like imports, inheritance, deep merging, and policies.
 
 YAML is also "tool agnostic" (unlike HCL); it's not tied to Terraform or explicitly associated with HashiCorp products.
-- Every language can read it (e.g. from python or node. Even read it remotely, e.g. via http)
-- Every language can write it (e.g. generate it from a web UI)
+- **Every language can read it** (e.g. from python or node. Even read it remotely, e.g. via http)
+- **Every language can write it** (e.g. generate it from a web UI)
   
-There are other cool things about YAML. 
+There are other cool things we get "for free" by adopting YAML. 
 - [YAML anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases) can help DRY up configurations
 - Easy [OPA validation](/docs/core-concepts/components/component-validation#open-policy-agent-opa)
 - [JSON Schema validation](/docs/core-concepts/components/component-validation#json-schema)

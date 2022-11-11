@@ -1,12 +1,11 @@
 ---
+title: Amazon Web Services (AWS) Integration
 sidebar_position: 10
-title: AWS Integration
+sidebar_label: Amazon Web Services (AWS)
 ---
 
-# AWS Integration
-
-Atmos supports a few native commands to make working with AWS easier.
+Atmos supports a few native commands to make working with AWS easier. Just to be exceedingly clear, *nothing* about `atmos` relies on AWS; the tool is designed to be cloud agnostic.
 
 :::note
-TODO
+TODO: Explain usage.
 :::

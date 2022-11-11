@@ -1,6 +1,7 @@
 ---
-sidebar_position: 11
 title: Atlantis Integration
+sidebar_position: 11
+sidebar_label: "Atlantis"
 ---
 
 # Atlantis Integration
