@@ -1,5 +1,6 @@
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
+// https://ricard.dev/how-to-set-docs-as-homepage-for-docusaurus/
 
 const lightCodeTheme = require('prism-react-renderer/themes/github');
 const darkCodeTheme = require('prism-react-renderer/themes/dracula');
@@ -35,6 +36,7 @@ const config = {
             /** @type {import('@docusaurus/preset-classic').Options} */
             ({
                 docs: {
+                    routeBasePath: '/',
                     sidebarPath: require.resolve('./sidebars.js'),
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/master/website/${versionDocsDirPath}/${docPath}`;
@@ -76,7 +78,7 @@ const config = {
                         label: 'Docs',
                     },
                     {
-                        to: '/docs/cli/configuration',
+                        to: '/cli/configuration',
                         position: 'left',
                         label: 'CLI'
                     },

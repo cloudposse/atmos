@@ -1,4 +1,6 @@
 ---
+id: introduction
+slug: /
 sidebar_position: 1
 ---
 
