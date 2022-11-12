@@ -1,7 +1,7 @@
 ---
 title: Helmfile Integration
 sidebar_position: 9
-sidebar_lablel: Helmfile
+sidebar_label: Helmfile
 ---
 
 Atmos natively supports opinionated workflows for Helmfile.
