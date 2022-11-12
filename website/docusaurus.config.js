@@ -1,8 +1,11 @@
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
-// https://ricard.dev/how-to-set-docs-as-homepage-for-docusaurus/
+// https://ricard.dev/how-to-set-docs-as-homepage-for-docusaurus
+// https://docusaurus.io/docs/api/themes/configuration#theme
+// https://docusaurus.io/docs/markdown-features/code-blocks#line-highlighting
+// https://github.com/FormidableLabs/prism-react-renderer/tree/master/src/themes
 
-const lightCodeTheme = require('prism-react-renderer/themes/github');
+const lightCodeTheme = require('prism-react-renderer/themes/vsDark');
 const darkCodeTheme = require('prism-react-renderer/themes/dracula');
 
 const BASE_URL = '';

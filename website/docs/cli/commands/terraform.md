@@ -10,11 +10,11 @@ atmos terraform <command> <component> -s <stack> [options]
 atmos terraform <command> <component> --stack <stack> [options]
 ```
 
-`atmos` supports all native 'terraform' commands described in https://www.terraform.io/cli/commands.
+`atmos` supports all native `terraform` commands described in https://www.terraform.io/cli/commands.
 
-In addition, `component` and `stack` are required in order to generate variables for the component in the stack.
+In addition, the `component` argument and `stack` flag are required to generate the variables and backend config for the component in the stack.
 
-Additions and differences from native terraform:
+Additions and differences from native `terraform`:
 
 - before executing other `terraform` commands, `atmos` calls `terraform init`
 - you can skip over atmos calling `terraform init` if you know your project is already in a good working state by using the `--skip-init` flag like
@@ -55,3 +55,7 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 ## Arguments
 
 ## Flags
+
+| Name                                                  | Description                                      | Aliases                                                                                                                                |
+|:------------------------------------------------------|:-------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------|
+| ATMOS_CLI_CONFIG_PATH                                 | N/A                                              | Where to find `atmos.yaml`                                                                                                                 |
