@@ -3,17 +3,17 @@ title: "atmos help"
 sidebar_label: "help"
 ---
 
-Show help for all `atmos` commands
+`atmos help` shows help for all `atmos` CLI commands.
 
 ```shell
 atmos help
 ```
 
-`atmos help` shows help for all `atmos` CLI commands.
 ## Examples
 
 ```shell
 atmos help
+atmos atlantis --help    # Execute 'atlantis' commands
 atmos aws --help         # Execute 'aws' commands
 atmos describe --help    # Execute 'describe' commands
 atmos helmfile --help    # Execute 'helmfile' commands

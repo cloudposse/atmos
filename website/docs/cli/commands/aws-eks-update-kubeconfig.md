@@ -31,6 +31,7 @@ The command can execute `aws eks update-kubeconfig` in three different ways:
   For example: `atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>`
 
 See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information.
+
 ## Examples
 
 ```shell
@@ -43,7 +44,7 @@ atmos aws eks update-kubeconfig --dry-run=true
 atmos aws eks update-kubeconfig --verbose=true
 ```
 
-## Inputs
+## Arguments
 
 
 <table className="reference-table">
@@ -68,7 +69,7 @@ atmos aws eks update-kubeconfig --verbose=true
 
 
 
-## Options
+## Flags
 
 
 <table className="reference-table">
@@ -250,4 +251,3 @@ atmos aws eks update-kubeconfig --verbose=true
               
       </tbody>
 </table>
-
