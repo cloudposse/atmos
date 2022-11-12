@@ -61,7 +61,7 @@ It's 100% Open Source and licensed under the [APACHE2](LICENSE).
 ## Introduction
 
 
-Atmos (`atmos` CLI) is a workflow automation tool. Atmos is lets you take a complex workflow and turn it into a parameterized CLI. 
+[Atmos](https://atmos.tools) is a workflow automation tool. Atmos is lets you take a complex workflow and turn it into a parameterized CLI. 
 You can then run the CLI anywhere, such as locally or in CI/CD.
 
 The project consists of both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains. You can 

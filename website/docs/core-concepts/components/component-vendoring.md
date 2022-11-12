@@ -4,21 +4,23 @@ sidebar_position: 5
 sidebar_label: Vendoring
 ---
 
-Atmos natively supports the concept of "vendoring", which is making a copy of the 3rd party components in your own repo. Our implementation is primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir). While `atmos` does not call `vendir`, it functions and supports a configuration that is very similar.
+Atmos natively supports the concept of "vendoring", which is making a copy of the 3rd party components in your own repo. Our implementation is
+primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir). While `atmos` does not
+call `vendir`, it functions and supports a configuration that is very similar.
 
 After defining the `component.yaml` configuration, the remote component can be downloaded by running the following command:
 
-```
+```bash
 atmos vendor pull -c components/terraform/vpc
 ```
 
 ## Schema: `component.yaml`
 
-To vendor a component, create a `component.yaml` file stored inside of the `components/_type_/_name_/` folder (e.g. `components/terraform/vpc/`). 
+To vendor a component, create a `component.yaml` file stored inside of the `components/_type_/_name_/` folder (e.g. `components/terraform/vpc/`).
 
 The schema of a `component.yaml` file is as follows:
 
-```
+```yaml
 apiVersion: atmos/v1
 kind: ComponentVendorConfig
 metadata:

@@ -3,18 +3,20 @@ title: CLI Configuration
 sidebar_position: 1
 ---
 
-Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
+Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
+be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
 # Configuration File (`atmos.yaml`)
 
 The CLI config is loaded from the following locations (from lowest to highest priority):
-- System directory (e.g. `/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
-- Home directory (e.g. `~/.atmos`)
-- Current directory (e.g. `./atmos.yaml`)
-- Environment variables (e.g. `ATMOS_CLI_CONFIG_PATH`)
-- Command-line arguments
 
-**Pro-tip:** Atmos supports POSIX-style greedy Globs for all file names/paths ([double-star `**` is supported](https://en.wikipedia.org/wiki/Glob_(programming)))
+- System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- Home directory (`~/.atmos/atmos.yaml`)
+- Current directory (`./atmos.yaml`)
+- Environment variable `ATMOS_CLI_CONFIG_PATH`
+
+**Pro-tip:** Atmos supports POSIX-style greedy Globs for all file
+names/paths ([double-star `**` is supported](https://en.wikipedia.org/wiki/Glob_(programming)))
 
 What follows are all the sections of the `atmos.yaml` configuration file.
 
@@ -24,9 +26,11 @@ The base path for components, stacks and workflows configurations.
 It can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
 It supports both absolute and relative paths.
 
-If not provided or is an empty string, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path` are independent settings (supporting both absolute and relative paths).
+If not provided or is an empty string, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path`
+are independent settings (supporting both absolute and relative paths).
 
-If `base_path` is provided, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path` are considered paths relative to `base_path`.
+If `base_path` is provided, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path` are
+considered paths relative to `base_path`.
 
 ```yaml
 base_path: "."
@@ -57,6 +61,10 @@ components:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "components/helmfile"
+
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_USE_EKS' ENV var
+    # If not specified, defaults to 'true'
+    use_eks: true
 
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV var
     kubeconfig_path: "/dev/shm"
@@ -101,11 +109,15 @@ logs:
   colors: true
 
 ```
+
 ## Custom CLI Sub-commands
 
-You can extend the Atmos CLI and add as many subcommands as you want. This is a great way to increase DX by exposing a consistent CLI interface to developers.
+You can extend the Atmos CLI and add as many subcommands as you want. This is a great way to increase DX by exposing a consistent CLI interface to
+developers.
 
-For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and discover all available commands.
+For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly,
+inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and
+discover all available commands.
 
 Here are some examples to play around with to get started.
 
@@ -335,21 +347,28 @@ schemas:
 
 ## Environment Variables
 
-Most YAML settings can also be defined by environment variables. This is helpful while doing local development. For example, setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local development folder, will enable you to rapidly iterate.
+Most YAML settings can also be defined by environment variables. This is helpful while doing local development. For example,
+setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local development folder, will enable you to rapidly iterate.
 
-| Variable                                           | YAML Path                                    | Description                |
-| :------------------------------------------------- | :------------------------------------------- | :------------------------- |
-| ATMOS_CLI_CONFIG_PATH                              | N/A                                          | Where to find `atmos.yaml` |
-| ATMOS_COMPONENTS_TERRAFORM_BASE_PATH               | components.terraform.base_path               |                            |
-| ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE      | components.terraform.apply_auto_approve      |                            |
-| ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT         | components.terraform.deploy_run_init         |                            |
-| ATMOS_COMPONENTS_HELMFILE_BASE_PATH                | components.helmfile.base_path                |                            |
-| ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH          | components.helmfile.aws_profile_pattern      |                            |
-| ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN | components.helmfile.helm_aws_profile_pattern |                            |
-| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN     | components.helmfile.cluster_name_pattern     |                            |
-| ATMOS_STACKS_BASE_PATH                             | stacks.base_path                             |                            |
-| ATMOS_STACKS_INCLUDED_PATHS                        | stacks.included_paths                        |                            |
-| ATMOS_STACKS_EXCLUDED_PATHS                        | stacks.excluded_paths                        |                            |
-| ATMOS_STACKS_NAME_PATTERN                          | stacks.name_pattern                          |                            |
-| ATMOS_LOGS_VERBOSE                                 | logs.verbose                                 | Increase log verbosity.    |
-
+| Variable                                              | YAML Path                                       | Description                                                                                                                              |
+|:------------------------------------------------------|:------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------|
+| ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`                                                                                                               |
+| ATMOS_BASE_PATH                                       | base_path                                       | Where to find `components` and `stacks`                                                                                                  |
+| ATMOS_LOGS_VERBOSE                                    | logs.verbose                                    | Increase log verbosity                                                                                                                   |
+| ATMOS_COMPONENTS_TERRAFORM_BASE_PATH                  | components.terraform.base_path                  | Where to find Terraform components                                                                                                       |
+| ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE         | components.terraform.apply_auto_approve         | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                 |
+| ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT            | components.terraform.deploy_run_init            | Run `terraform init` when executing `atmos terraform deploy` command                                                                     |
+| ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE       | components.terraform.init_run_reconfigure       | Run `terraform init -reconfigure` when executing `atmos terraform` commands                                                              |
+| ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE | components.terraform.auto_generate_backend_file | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                 |
+| ATMOS_COMPONENTS_HELMFILE_BASE_PATH                   | components.helmfile.base_path                   | Where to find helmfile components                                                                                                        |
+| ATMOS_COMPONENTS_HELMFILE_USE_EKS                     | components.helmfile.use_eks                     | If set to `true`, download kubeconfig from EKS by running `aws eks update-kubeconfig` command before executing `atmos helmfile` commands |
+| ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH             | components.helmfile.aws_profile_pattern         |                                                                                                                                          |
+| ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN    | components.helmfile.helm_aws_profile_pattern    |                                                                                                                                          |
+| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_pattern        |                                                                                                                                          |
+| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                |                                                                                                                                          |
+| ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           |                                                                                                                                          |
+| ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           |                                                                                                                                          |
+| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             |                                                                                                                                          |
+| ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             |                                                                                                                                          |
+| ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    |                                                                                                                                          |
+| ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           |                                                                                                                                          |

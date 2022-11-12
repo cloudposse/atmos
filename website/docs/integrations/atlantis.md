@@ -1,14 +1,14 @@
 ---
 title: Atlantis Integration
 sidebar_position: 11
-sidebar_label: "Atlantis"
+sidebar_label: Atlantis
 ---
 
 Atmos natively supports [Atlantis](https://runatlantis.io) for Terraform Pull Request Automation.
 
 ## How it Works
 
-With `atmos`, all of your configuration is neatly defined in YAML. This makes transformations of that data very easy. 
+With `atmos`, all of your configuration is neatly defined in YAML. This makes transformations of that data very easy.
 
 The `atmos` tool supports (3) commands that when combined, make it easy to use `atlantis`.
 
@@ -20,7 +20,8 @@ The `atmos` tool supports (3) commands that when combined, make it easy to use `
 
 To configure Atmos to generate the Altantis repo configurations, update the `atmos.yaml` configuration.
 
-Here's an example to get you started. As with *everything* in atmos, it supports deep-merging. Anything under the `integrations.atlantis` section can be overridden in the `components.terraform._name_.settings.atlantis` section at any level of the inheritance chain.
+Here's an example to get you started. As with *everything* in atmos, it supports deep-merging. Anything under the `integrations.atlantis` section can
+be overridden in the `components.terraform._name_.settings.atlantis` section at any level of the inheritance chain.
 
 ```yaml
 # atmos.yaml CLI config
@@ -89,11 +90,10 @@ integrations:
             - run: terraform apply $PLANFILE
 ```
 
-
-
 Using the config, project and workflow templates, atmos generates a separate atlantis project for each atmos component in every stack:
 
 By running:
+
 ```
 atmos atlantis generate repo-config 
 ```
@@ -151,13 +151,16 @@ workflows:
 
 ## Next Steps
 
-Generating the Atlantis repo-config is only part of what's needed to use `atmos` with `atlantis`. The rest will depend on your organization's preferences for generating the Terraform `.tfvars` files and backends.
+Generating the Atlantis repo-config is only part of what's needed to use `atmos` with `atlantis`. The rest will depend on your organization's
+preferences for generating the Terraform `.tfvars` files and backends.
 
-We suggest using pre-commit hooks and/or GitHub Actions (or similar), to generate the `.tfvars` files and state backend configurations, which are necessarily derived from the atmos stack configuration.
+We suggest using pre-commit hooks and/or GitHub Actions (or similar), to generate the `.tfvars` files and state backend configurations, which are
+necessarily derived from the atmos stack configuration.
 
 The following commands will generate those files.
 
 1. `atmos terraform generate backends --format=hcl`
 2. `atmos terraform generate varfiles`
-   
-Make sure that the resulting files are commited back to VCS (e.g. `git add -A`) and push'd upstream. That way Atlantis will trigger on the "affected files" and propose a plan.
+
+Make sure that the resulting files are commited back to VCS (e.g. `git add -A`) and push'd upstream. That way Atlantis will trigger on the "affected
+files" and propose a plan.

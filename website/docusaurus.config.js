@@ -107,8 +107,7 @@ const config = {
                         position: 'right',
                         className: 'header-github-link',
                         'aria-label': 'GitHub repository',
-                    },
-                 
+                    }
                 ],
             },
             prism: {
