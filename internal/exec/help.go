@@ -37,7 +37,7 @@ func processHelp(componentType string, command string) error {
 			fmt.Println(" - 'atmos terraform generate varfile' command generates a varfile for an 'atmos' component in a stack")
 			fmt.Println(" - 'atmos terraform generate varfiles' command generates varfiles for all 'atmos' components in all stacks")
 			fmt.Println(" - 'atmos terraform shell' command configures an environment for an 'atmos' component in a stack and starts a new shell " +
-				"allowing executing all native terraform commands inside the shell")
+				"allowing executing all native terraform commands inside the shell without using atmos-specific arguments and flags")
 		}
 
 		if componentType == "helmfile" {
