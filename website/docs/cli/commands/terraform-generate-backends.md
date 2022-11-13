@@ -9,7 +9,7 @@ Executes `terraform generate backends` command.
 atmos terraform generate backends [options]
 ```
 
-This command generates backend config files for all `terraform` components in all stacks.
+This command generates backend config files for all `atmos` terraform components in all stacks.
 
 :::tip
 Run `atmos terraform generate backends --help` to see all the available options

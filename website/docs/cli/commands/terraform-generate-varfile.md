@@ -9,7 +9,7 @@ Executes `terraform generate varfile` command.
 atmos terraform generate varfile <command> <component> -s <stack>
 ```
 
-This command generates a varfile for a `terraform` component in a stack.
+This command generates a varfile for an `atmos` terraform component in a stack.
 
 :::tip
 Run `atmos terraform generate varfile --help` to see all the available options

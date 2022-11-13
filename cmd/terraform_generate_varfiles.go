@@ -43,7 +43,7 @@ func init() {
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("components", "",
-		"Only process the specified components (comma-separated values).\n"+
+		"Generate varfiles only for the specified 'atmos' components (comma-separated values).\n"+
 			"atmos terraform generate varfiles --file-template <file_template> --components <component1>,<component2>",
 	)
 
