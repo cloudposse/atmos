@@ -13,14 +13,14 @@ atmos terraform <command> <component> --stack <stack> [options]
 <br/>
 
 :::info
-`atmos` supports all `terraform` commands and flags described in https://www.terraform.io/cli/commands.
+`atmos` supports all `terraform` commands and options described in [Terraform CLI reference](https://www.terraform.io/cli/commands).
 
-In addition, the `component` argument and `stack` flag are required to generate the variables and backend config for the component in the stack.
+In addition, the `component` argument and `stack` flag are required to generate variables and backend config for the component in the stack.
 :::
 
 <br/>
 
-Additions and differences from native `terraform`:
+**Additions and differences from native `terraform`:**
 
 - before executing other `terraform` commands, `atmos` runs `terraform init`
 - you can skip over atmos calling `terraform init` if you know your project is already in a good working state by using the `--skip-init` flag like
