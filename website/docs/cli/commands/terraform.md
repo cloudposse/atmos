@@ -37,10 +37,11 @@ In addition, the `component` argument and `stack` flag are required to generate 
   created before, it then runs `terraform workspace new`
 - `atmos terraform import` command searches for `region` in the variables for the specified component and stack, and if it finds it,
   sets `AWS_REGION=<region>` ENV var before executing the command
-- `atmos terraform generate backend` command generates the backend config file for the component in the stack
-- `atmos terraform generate backends` command generates the backend config files for all components in all stacks
-- `atmos terraform generate varfile` command generates a varfile for the component in the stack
-- `atmos terraform shell` command configures an environment for the component in the stack and starts a new shell allowing executing all native
+- `atmos terraform generate backend` command generates a backend config file for an `atmos` component in a stack
+- `atmos terraform generate backends` command generates backend config files for all `atmos` components in all stacks
+- `atmos terraform generate varfile` command generates a varfile for an `atmos` component in a stack
+- `atmos terraform generate varfiles` command generates varfiles for all `atmos` components in all stacks
+- `atmos terraform shell` command configures an environment for an `atmos` component in a stack and starts a new shell allowing executing all native
   terraform commands inside the shell
 
 :::tip

@@ -32,11 +32,11 @@ func processHelp(componentType string, command string) error {
 				"and if the workspace was not created before, it then runs 'terraform workspace new'")
 			fmt.Println(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, " +
 				"and if it finds it, sets 'AWS_REGION=<region>' ENV var before executing the command")
-			fmt.Println(" - 'atmos terraform generate backend' command generates the backend config file for the component in the stack")
-			fmt.Println(" - 'atmos terraform generate backends' command generates the backend config files for all components in all stacks")
-			fmt.Println(" - 'atmos terraform generate varfile' command generates a varfile for the component in the stack")
-			fmt.Println(" - 'atmos terraform generate varfiles' command generates varfiles for all components in all stacks")
-			fmt.Println(" - 'atmos terraform shell' command configures an environment for the component in the stack and starts a new shell " +
+			fmt.Println(" - 'atmos terraform generate backend' command generates a backend config file for an 'atmos' component in a stack")
+			fmt.Println(" - 'atmos terraform generate backends' command generates backend config files for all 'atmos' components in all stacks")
+			fmt.Println(" - 'atmos terraform generate varfile' command generates a varfile for an 'atmos' component in a stack")
+			fmt.Println(" - 'atmos terraform generate varfiles' command generates varfiles for all 'atmos' components in all stacks")
+			fmt.Println(" - 'atmos terraform shell' command configures an environment for an 'atmos' component in a stack and starts a new shell " +
 				"allowing executing all native terraform commands inside the shell")
 		}
 
