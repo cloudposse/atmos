@@ -3,7 +3,7 @@ title: atmos describe stacks
 sidebar_label: describe stacks
 ---
 
-Execute `describe stacks` command.
+Executes `describe stacks` command.
 
 ```shell
 atmos describe stacks [options]

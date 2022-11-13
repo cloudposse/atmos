@@ -1,9 +1,9 @@
 ---
-title: "atmos vendor pull"
-sidebar_label: "vendor pull"
+title: atmos vendor pull
+sidebar_label: vendor pull
 ---
 
-Execute `vendor pull` command
+Executes `vendor pull` command
 
 ```shell
 atmos vendor pull [options]

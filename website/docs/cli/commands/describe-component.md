@@ -3,7 +3,7 @@ title: atmos describe component
 sidebar_label: describe component
 ---
 
-Execute `describe component` command.
+Executes `describe component` command.
 
 ```shell
 atmos describe component <component> -s <stack>

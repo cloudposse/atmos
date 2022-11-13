@@ -1,9 +1,9 @@
 ---
-title: "atmos terraform workspace"
-sidebar_label: "terraform workspace"
+title: atmos terraform workspace
+sidebar_label: terraform workspace
 ---
 
-Execute `terraform workspace` command
+Executes `terraform workspace` command
 
 ```shell
 atmos terraform workspace [options]

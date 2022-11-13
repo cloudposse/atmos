@@ -1,6 +1,6 @@
 ---
-title: "atmos help"
-sidebar_label: "help"
+title: atmos help
+sidebar_label: help
 ---
 
 `atmos help` shows help for all `atmos` CLI commands.
@@ -13,12 +13,12 @@ atmos help
 
 ```shell
 atmos help
-atmos atlantis --help    # Execute 'atlantis' commands
-atmos aws --help         # Execute 'aws' commands
-atmos describe --help    # Execute 'describe' commands
-atmos helmfile --help    # Execute 'helmfile' commands
-atmos terraform --help   # Execute 'terraform' commands
-atmos validate --help    # Execute 'validate' commands
-atmos vendor --help      # Execute 'vendor' commands
-atmos workflow --help    # Execute 'workflow' commands
+atmos atlantis --help    # Executes 'atlantis' commands
+atmos aws --help         # Executes 'aws' commands
+atmos describe --help    # Executes 'describe' commands
+atmos helmfile --help    # Executes 'helmfile' commands
+atmos terraform --help   # Executes 'terraform' commands
+atmos validate --help    # Executes 'validate' commands
+atmos vendor --help      # Executes 'vendor' commands
+atmos workflow --help    # Executes 'workflow' commands
 ```

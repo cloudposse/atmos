@@ -1,9 +1,9 @@
 ---
-title: "atmos terraform clean"
-sidebar_label: "terraform clean"
+title: atmos terraform clean
+sidebar_label: terraform clean
 ---
 
-Execute `terraform clean` command
+Executes `terraform clean` command
 
 ```shell
 atmos terraform clean [options]

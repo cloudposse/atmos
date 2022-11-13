@@ -1,15 +1,16 @@
 ---
-title: "atmos helmfile"
-sidebar_label: "helmfile"
+title: atmos helmfile
+sidebar_label: helmfile
 ---
 
-Execute `helmfile` commands
+Executes `helmfile` commands
 
 ```shell
 atmos helmfile [options]
 ```
 
 This command executes `helmfile` commands. Supports the commands and options described in https://github.com/helmfile/helmfile#cli-reference
+
 ## Examples
 
 ```shell

@@ -1,9 +1,9 @@
 ---
-title: "atmos validate component"
-sidebar_label: "validate component"
+title: atmos validate component
+sidebar_label: validate component
 ---
 
-Execute `validate component` command
+Executes `validate component` command
 
 ```shell
 atmos validate component [options]

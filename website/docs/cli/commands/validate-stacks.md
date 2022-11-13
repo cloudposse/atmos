@@ -1,9 +1,9 @@
 ---
-title: "atmos validate stacks"
-sidebar_label: "validate stacks"
+title: atmos validate stacks
+sidebar_label: validate stacks
 ---
 
-Execute `validate stacks` command
+Executes `validate stacks` command
 
 ```shell
 atmos validate stacks [options]

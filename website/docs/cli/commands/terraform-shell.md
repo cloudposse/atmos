@@ -1,9 +1,9 @@
 ---
-title: "atmos terraform shell"
-sidebar_label: "terraform shell"
+title: atmos terraform shell
+sidebar_label: terraform shell
 ---
 
-Execute `terraform shell` command
+Executes `terraform shell` command
 
 ```shell
 atmos terraform shell [options]

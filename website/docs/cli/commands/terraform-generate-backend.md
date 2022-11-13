@@ -1,9 +1,9 @@
 ---
-title: "atmos terraform generate backend"
-sidebar_label: "terraform generate backend"
+title: atmos terraform generate backend
+sidebar_label: terraform generate backend
 ---
 
-Execute `terraform generate backend` command
+Executes `terraform generate backend` command
 
 ```shell
 atmos terraform generate backend [options]

@@ -1,9 +1,9 @@
 ---
-title: "atmos helmfile generate varfile"
-sidebar_label: "helmfile generate varfile"
+title: atmos helmfile generate varfile
+sidebar_label: helmfile generate varfile
 ---
 
-Execute `helmfile generate varfile` command
+Executes `helmfile generate varfile` command
 
 ```shell
 atmos helmfile generate varfile [options]

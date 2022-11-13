@@ -3,7 +3,7 @@ title: atmos describe config
 sidebar_label: describe config
 ---
 
-Execute `describe config` command.
+Executes `describe config` command.
 
 ```shell
 atmos describe config [options]

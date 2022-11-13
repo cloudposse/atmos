@@ -1,9 +1,9 @@
 ---
-title: "atmos terraform generate varfile"
-sidebar_label: "terraform generate varfile"
+title: atmos terraform generate varfile
+sidebar_label: terraform generate varfile
 ---
 
-Execute `terraform generate varfile` command
+Executes `terraform generate varfile` command
 
 ```shell
 atmos terraform generate varfile [options]

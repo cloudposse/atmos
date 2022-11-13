@@ -3,16 +3,22 @@ title: atmos terraform
 sidebar_label: terraform
 ---
 
-Execute `terraform` commands.
+Executes `terraform` commands.
 
 ```shell
 atmos terraform <command> <component> -s <stack> [options]
 atmos terraform <command> <component> --stack <stack> [options]
 ```
 
-`atmos` supports all native `terraform` commands and flags described in https://www.terraform.io/cli/commands.
+<br/>
+
+:::info
+`atmos` supports all `terraform` commands and flags described in https://www.terraform.io/cli/commands.
 
 In addition, the `component` argument and `stack` flag are required to generate the variables and backend config for the component in the stack.
+:::
+
+<br/>
 
 Additions and differences from native `terraform`:
 
@@ -64,3 +70,9 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 |:------------|:--------------|:------|:---------|
 | `--stack`   | `atmos` stack | `-s`  | yes      |
 | `--dry-run` | Dry-run       |       | no       |
+
+<br/>
+
+:::note
+All native `terraform` flags are supported
+:::
