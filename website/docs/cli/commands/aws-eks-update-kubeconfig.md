@@ -30,11 +30,11 @@ The command can execute `aws eks update-kubeconfig` in three different ways:
 
   For example: `atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=<region>`
 
-:::note
+:::info
 Refer to [Update kubeconfig](https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html) for more information
 :::
 
-:::note
+:::tip
 Run `atmos aws eks update-kubeconfig --help` to see all the available options
 :::
 

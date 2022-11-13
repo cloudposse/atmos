@@ -37,7 +37,7 @@ Additions and differences from native `terraform`:
 - `atmos terraform shell` command configures an environment for the component in the stack and starts a new shell allowing executing all native
   terraform commands inside the shell
 
-:::note
+:::tip
 Run `atmos terraform --help` to see all the available options
 :::
 
@@ -62,5 +62,5 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 
 | Flag        | Description   | Alias | Requred |
 |:------------|:--------------|:------|:--------|
-| `--stack`   | `atmos` stack | `-s`  | Yes     |
-| `--dry-run` | Dry-run       |       | No      |
+| `--stack`   | `atmos` stack | `-s`  | yes     |
+| `--dry-run` | Dry-run       |       | no      |
