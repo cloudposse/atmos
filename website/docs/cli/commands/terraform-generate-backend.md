@@ -36,3 +36,10 @@ atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-p
 |:------------|:--------------|:------|:---------|
 | `--stack`   | `atmos` stack | `-s`  | yes      |
 | `--dry-run` | Dry-run       |       | no       |
+
+<br/>
+
+:::info
+Refer to [Terraform backend configuration](https://developer.hashicorp.com/terraform/language/settings/backends/configuration) for more details
+on `terraform` backends and supported formats
+:::
