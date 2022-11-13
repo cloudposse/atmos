@@ -13,7 +13,7 @@ The CLI config is loaded from the following locations (from lowest to highest pr
 - System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
 - Home directory (`~/.atmos/atmos.yaml`)
 - Current directory (`./atmos.yaml`)
-- Environment variable `ATMOS_CLI_CONFIG_PATH`
+- Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name)
 
 **Pro-tip:** Atmos supports POSIX-style greedy Globs for all file
 names/paths ([double-star `**` is supported](https://en.wikipedia.org/wiki/Glob_(programming)))
