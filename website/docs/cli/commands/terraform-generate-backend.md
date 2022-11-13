@@ -11,6 +11,10 @@ atmos terraform generate backend <command> <component> -s <stack>
 
 This command generates a backend config file for a `terraform` component in a stack.
 
+:::tip
+Run `atmos terraform generate backend --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell

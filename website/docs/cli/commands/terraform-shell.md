@@ -20,6 +20,11 @@ The command allows using native Terraform commands without atmos-specific argume
 - Drops the user into a separate shell (process) with all the required paths and ENV vars set
 
 - Inside the shell, the user can execute all Terraform commands using the native syntax
+
+:::tip
+Run `atmos terraform shell --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell

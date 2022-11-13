@@ -3,7 +3,7 @@ title: atmos validate stacks
 sidebar_label: validate stacks
 ---
 
-Executes `validate stacks` command
+Executes `validate stacks` command.
 
 ```shell
 atmos validate stacks [options]
@@ -16,6 +16,11 @@ This command validates stacks configuration. The command checks and validates th
 - All imports - if they are configured correctly, have valid data types, and point to existing files
 
 - Schema - if all sections in all YAML files are correctly configured and have valid data types
+
+:::tip
+Run `atmos validate stacks --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell

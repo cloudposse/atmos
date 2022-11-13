@@ -15,6 +15,10 @@ atmos workflow [options]
 
 Allows sequential execution of `atmos` and `shell` commands defined as workflow steps.
 
+:::tip
+Run `atmos workflow --help` to see all the available options
+:::
+
 ### Examples
 
 ```shell

@@ -16,6 +16,11 @@ This command pulls sources and mixins from remote repositories for a `terraform`
 - The URIs (`uri`) in `component.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and archive formats as described in https://github.com/hashicorp/go-getter
 
 - `included_paths` and `excluded_paths` in `component.yaml` support POSIX-style Globs for file names/paths (double-star ** is supported as well)
+
+:::tip
+Run `atmos vendor pull --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell

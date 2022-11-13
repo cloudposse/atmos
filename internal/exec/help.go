@@ -24,18 +24,20 @@ func processHelp(componentType string, command string) error {
 			fmt.Println(" - 'atmos terraform deploy' command supports '--deploy-run-init=true/false' flag to enable/disable running 'terraform init' " +
 				"before executing the command")
 			fmt.Println(" - 'atmos terraform deploy' command sets '-auto-approve' flag before running 'terraform apply'")
-			fmt.Println(" - 'atmos terraform apply' and 'atmos terraform deploy' commands support '--from-plan' flag. If the flag is specified, the commands " +
-				"will use the previously generated 'planfile' instead of generating a new 'varfile'")
+			fmt.Println(" - 'atmos terraform apply' and 'atmos terraform deploy' commands support '--from-plan' flag. If the flag is specified, " +
+				"the commands will use the previously generated 'planfile' instead of generating a new 'varfile'")
 			fmt.Println(" - 'atmos terraform clean' command deletes the '.terraform' folder, '.terraform.lock.hcl' lock file, " +
 				"and the previously generated 'planfile' and 'varfile' for the specified component and stack")
 			fmt.Println(" - 'atmos terraform workspace' command first runs 'terraform init -reconfigure', then 'terraform workspace select', " +
 				"and if the workspace was not created before, it then runs 'terraform workspace new'")
-			fmt.Println(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, and if it finds it, " +
-				"sets 'AWS_REGION=<region>' ENV var before executing the command")
+			fmt.Println(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, " +
+				"and if it finds it, sets 'AWS_REGION=<region>' ENV var before executing the command")
 			fmt.Println(" - 'atmos terraform generate backend' command generates the backend config file for the component in the stack")
 			fmt.Println(" - 'atmos terraform generate backends' command generates the backend config files for all components in all stacks")
 			fmt.Println(" - 'atmos terraform generate varfile' command generates a varfile for the component in the stack")
-			fmt.Println(" - 'atmos terraform shell' command configures an environment for the component in the stack and starts a new shell allowing executing all native terraform commands inside the shell")
+			fmt.Println(" - 'atmos terraform generate varfiles' command generates varfiles for all components in all stacks")
+			fmt.Println(" - 'atmos terraform shell' command configures an environment for the component in the stack and starts a new shell " +
+				"allowing executing all native terraform commands inside the shell")
 		}
 
 		if componentType == "helmfile" {
@@ -44,8 +46,9 @@ func processHelp(componentType string, command string) error {
 			fmt.Println(" - 'atmos helmfile generate varfile' command generates a varfile for the component in the stack")
 			fmt.Println(" - 'atmos helmfile' commands support '[global options]' using the command-line flag '--global-options'. " +
 				"Usage: atmos helmfile <command> <component> -s <stack> [command options] [arguments] --global-options=\"--no-color --namespace=test\"")
-			fmt.Println(" - before executing the 'helmfile' commands, 'atmos' runs 'aws eks update-kubeconfig' to read kubeconfig from the EKS cluster " +
-				"and use it to authenticate with the cluster. This can be disabled in 'atmos.yaml' CLI config by setting 'components.helmfile.use_eks' to 'false'")
+			fmt.Println(" - before executing the 'helmfile' commands, 'atmos' runs 'aws eks update-kubeconfig' to read kubeconfig from " +
+				"the EKS cluster and use it to authenticate with the cluster. This can be disabled in 'atmos.yaml' CLI config " +
+				"by setting 'components.helmfile.use_eks' to 'false'")
 		}
 
 		err := ExecuteShellCommand(componentType, []string{"--help"}, "", nil, false, true)

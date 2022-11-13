@@ -11,6 +11,10 @@ atmos helmfile generate varfile <component> -s <stack> [options]
 
 This command generates a varfile for a `helmfile` component in a stack.
 
+:::tip
+Run `atmos helmfile generate varfile --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell

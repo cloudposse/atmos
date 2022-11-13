@@ -10,6 +10,11 @@ atmos validate component [options]
 ```
 
 This command validates an atmos component in a stack using Json Schema and OPA policies
+
+:::tip
+Run `atmos validate component --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell

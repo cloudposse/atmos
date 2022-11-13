@@ -10,6 +10,11 @@ atmos terraform workspace [options]
 ```
 
 This command selects a Terraform workspace for a component. If the workspace does not exist, the command creates it
+
+:::tip
+Run `atmos terraform workspace --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell

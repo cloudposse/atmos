@@ -12,6 +12,10 @@ atmos terraform clean <component> -s <stack>
 This command deletes `.terraform` folder, the folder that `TF_DATA_DIR` ENV var points to, `.terraform.lock.hcl` file, `varfile` and `planfile` for a
 component in a stack.
 
+:::tip
+Run `atmos terraform clean --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell

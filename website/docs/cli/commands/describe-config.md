@@ -11,6 +11,10 @@ atmos describe config [options]
 
 This command shows the final (deep-merged) CLI configuration (from `atmos.yaml` file(s)).
 
+:::tip
+Run `atmos describe config --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell
