@@ -22,6 +22,6 @@ atmos describe config -f json
 
 ## Flags
 
-| Flag        | Description                                | Alias | Required |
-|:------------|:-------------------------------------------|:------|:---------|
-| `--format`  | Output format: `json` (default) or `yaml`) | `-f`  | no       |
+| Flag        | Description                                         | Alias | Required |
+|:------------|:----------------------------------------------------|:------|:---------|
+| `--format`  | Output format: `json` or `yaml` (`json` is default) | `-f`  | no       |
