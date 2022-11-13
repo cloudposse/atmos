@@ -60,9 +60,9 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 
 ## Arguments
 
-| Argument     | Description        | Required |
-|:-------------|:-------------------|:---------|
-| `component`  | `atmos` component  | yes      |
+| Argument     | Description                 | Required |
+|:-------------|:----------------------------|:---------|
+| `component`  | `atmos` terraform component | yes      |
 
 ## Flags
 
