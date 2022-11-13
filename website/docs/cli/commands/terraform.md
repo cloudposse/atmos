@@ -1,9 +1,9 @@
 ---
-title: "atmos terraform"
-sidebar_label: "terraform"
+title: atmos terraform
+sidebar_label: terraform
 ---
 
-Execute `terraform` commands
+Execute `terraform` commands.
 
 ```shell
 atmos terraform <command> <component> -s <stack> [options]
