@@ -6,6 +6,9 @@ sidebar_label: Helmfile
 
 Atmos natively supports opinionated workflows for [Helmfile](https://github.com/helmfile/helmfile).
 
+<<<<<<<<< Temporary merge branch 1
+## Example: Provision Helmfile Component
+=========
 Helmfile provides a declarative specification for deploying helm charts.
 
 For a complete list of supported commands, please see the Atmos [helmfile](/cli/commands/helmfile) documentation.
