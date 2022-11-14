@@ -90,7 +90,7 @@ Astro is a tool built in Golang that provides a YAML DSL for defining all your t
 
 https://github.com/run-x/opta
 
-Opta is tool built in Python that makes Terraform easier by providing high-level constructs getting stuck with low-level cloud configurations.
+Opta is tool built in Python that makes Terraform easier by providing high-level constructs and not getting stuck with low-level cloud configurations.
 
 ## pterradactyl by Nike
 
