@@ -48,17 +48,26 @@ components:
 
 ### Component Attributes
 
-#### namespace
+#### vars
+
+The `vars` section is a free-form map. Use [component validation](/core-concepts/components/component-validation) to enforce policies.
+
+#### vars.namespace
+
+This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention. 
 
 The namespace of all stacks. Typically, there will be one namespace for the organization.
 
 Example:
 
 ```yaml
-namespace: acme
+vars:
+  namespace: acme
 ```
 
-#### tenant
+#### vars.tenant
+
+This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention. 
 
 In a multi-tenant configuration, the tenant represents a single `tenant`. By convention, we typically
 recommend that every tenant have it's own Organizational Unit (OU).
@@ -66,49 +75,45 @@ recommend that every tenant have it's own Organizational Unit (OU).
 Example:
 
 ```yaml
-tenant: platform
+vars:
+  tenant: platform
 ```
 
 
-#### stage
+#### vars.stage
+
+This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention. 
 
 The `stage` is where workloads run. See our [glossary](/reference/glossary) for disamgiguation.
 
 Example:
 ```yaml
-# Production stage
-stage: prod
+vars:
+  # Production stage
+  stage: prod
 ```
 
-#### environment
+#### vars.environment
+
+This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention. 
 
 The `environment` is used for location where things run. See our [glossary](/reference/glossary) for disamgiguation.
 
 Example:
 ```yaml
-# us-east-1
-environment: ue1
+
+vars:
+  # us-east-1
+  environment: ue1
 ```
 
-#### components
+#### metadata
 
-The `components` is the list of all the building blocks.
-
-Example:
-
-```yaml
-components:
-  terraform:
-    foobar:
-      vars: # etc...
-```
+The `metadata` section extends functionality of the component.
 
 #### settings
+
 The `settings` block is a free-form map used to pass configuration information to [integrations](/category/integrations).
-
-#### vars
-
-The `vars` section is a free-form map. Use [component validation](/core-concepts/components/component-validation) to enforce policies.
 
 ## Types of Components
 

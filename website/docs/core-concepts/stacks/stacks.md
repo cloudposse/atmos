@@ -7,19 +7,14 @@ sidebar_label: Stacks
 Stacks are a way to express the complete infrastructure needed for an that is environment. Think of a Stack as an architectural "Blueprint" composed of one or more [Components](/core-concepts/components) and defined using a
 [standardized YAML configuration](#schema).
 
-Stacks are an abstraction layer that is used to instantiate Components. They’re a set of YAML files that follow a standard schema to
-enable a fully declarative description of your various environments. This empowers you with the ability to separate your infrastructure’s environment
-configuration settings from the business logic behind it (provided via components).
+Stacks are an abstraction layer that is used to instantiate Components. They’re a set of YAML files that follow a standard schema to enable a fully declarative description of your various environments. This empowers you with the ability to separate your infrastructure’s environment configuration settings from the business logic behind it (provided via components).
 
-Atmos utilizes a custom YAML configuration format for stacks because it’s an easy-to-work-with format that is nicely portable across multiple
-tools. The stack YAML format is natively supported today via Atmos, the [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-stack-config) module, and Spacelift via the
+Atmos utilizes a custom YAML configuration format for stacks because it’s an easy-to-work-with format that is nicely portable across multiple tools. The stack YAML format is natively supported today via Atmos, the [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-stack-config) module, and Spacelift via the
 [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module.
 
-## Supported 
 ## Schema
 
-A Stack file is defined in YAML and follows a simple, extensible schema. Every Stack file follows the same schema; however, every setting in
-the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/component-inheritance).
+A Stack file is defined in YAML and follows a simple, extensible schema. Every Stack file follows the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/component-inheritance).
 
 ```yaml
 # Configurations that should get deep-merged into this one
@@ -63,6 +58,30 @@ components:
     nginx-ingress:
       vars:
         installed: true
+```
+
+### Stack Attributes
+
+#### components
+
+The `components` is the list of all the building blocks.
+
+Example:
+
+```yaml
+components:
+  sometool:          # "sometool" can be any tool
+    somecomponent:   # "somecomponent" can be the name of any "sometool" component
+      vars: # etc...
+```
+
+So for `terraform`, it might look something like this:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars: # etc...
 ```
 
 ## Stack Files
