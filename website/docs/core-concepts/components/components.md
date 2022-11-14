@@ -1,7 +1,7 @@
 ---
 title: Atmos Components
 sidebar_position: 1
-sidevar_title: Components
+sidebar_label: Components
 ---
 
 Components are opinionated, self-contained units of infrastructure as code that solve one, specific problem or use-case. Atmos was written to support
