@@ -9,8 +9,8 @@ Executes `terraform workspace` command.
 atmos terraform workspace <component> -s <stack>
 ```
 
-This command calculates the `terraform` workspace for an `atmos` component (from the context variables) and then selects it by
-executing the `terraform workspace select` command.
+This command calculates the `terraform` workspace for an `atmos` component (from the context variables and stack config), then
+runs `terraform init -reconfigure`, then selects the workspace by executing the `terraform workspace select` command.
 
 If the workspace does not exist, the command creates it by executing the `terraform workspace new` command.
 
