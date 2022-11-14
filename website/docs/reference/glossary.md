@@ -45,4 +45,4 @@ Let's face it. These terms are frequently overloaded across tools and products.
 | Environment | Atmos      | Parent Stack                                                                                                                                                    |
 | Environment | Atmos      | Frequently refers to a region (we want to move away from this, but it's an artifact of how we use `terraform-null-label`                                        |
 | Stage       | Atmos      | E.g. Dev, Production, Staging, QA, etc. By convention, we recommend a minimum of one account per stage. Some companys use "Environment" the way we use "Stage". |
-| Namespace   | Kubernetes | Frequently it will be represented by a variable named `kubernetes_namespace`; should not be confused with what atmos calls `namespace`                          |
+| Namespace   | Kubernetes | Frequently it will be represented by a variable named `kubernetes_namespace`; it should not be confused with what atmos calls `namespace`                       |
