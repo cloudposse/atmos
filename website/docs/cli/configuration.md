@@ -29,7 +29,7 @@ What follows are all the sections of the `atmos.yaml` configuration file.
 ## Base Path
 
 The base path for components, stacks and workflows configurations.
-It can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
+It can also be set using `ATMOS_BASE_PATH` environment variable, or bu passing the `--base-path` command-line argument.
 It supports both absolute and relative paths.
 
 If not provided or is an empty string, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path`
@@ -121,9 +121,7 @@ logs:
 You can extend the Atmos CLI and add as many subcommands as you want. This is a great way to increase DX by exposing a consistent CLI interface to
 developers.
 
-For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly,
-inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and
-discover all available commands.
+For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and discover all available commands.
 
 Here are some examples to play around with to get started.
 
