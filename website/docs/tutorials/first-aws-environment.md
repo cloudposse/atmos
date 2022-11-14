@@ -1,5 +1,6 @@
 ---
-title: "Your first environment on AWS"
+title: Your first environment on AWS
+sidebar_label: Your first environment on AWS
 description: "Get your first AWS environment deployed using Atmos, Stacks, and Vendoring"
 ---
 
