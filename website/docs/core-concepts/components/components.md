@@ -105,7 +105,7 @@ components:
 
 #### settings
 
-The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations).
+The `settings` block is a free-form map used to pass configuration information to [integrations](/category/integrations).
 
 #### vars
 

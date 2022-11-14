@@ -51,7 +51,7 @@ There are many tools explicitly designed around how to deploy with Terraform.
 The following is a list of tools that only support Terraform.
 
 :::info
-Atmos not only supports Terraform, but can be used to manage any CLI. For example, by combinging custom [subcommands](/category/core-concepts/subcommands) and [workflows](/category/core-concepts/workflows) it's possible support any CLI tool (even the ones listed below) or even reimplement core functionality of atmos. That's how extensible it is.
+Atmos not only supports Terraform, but can be used to manage any CLI. For example, by combinging custom [subcommands](/core-concepts/subcommands) and [workflows](/core-concepts/workflows) it's possible support any CLI tool (even the ones listed below) or even reimplement core functionality of atmos. That's how extensible it is.
 :::
 
 ## Terragrunt by Gruntwork
