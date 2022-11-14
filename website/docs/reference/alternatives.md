@@ -18,7 +18,7 @@ Many companies (including Cloud Posse) started by leveraging `make` with `Makefi
 
 https://magefile.org/
 
-Mage is a make/rake-like build tool using native Golang and plain-old go functions. Mage then automatically provides a CLI to cll them as Makefile-like runnable targets.
+Mage is a make/rake-like build tool using native Golang and plain-old `Go` functions. Mage then automatically provides a CLI to call them as Makefile-like runnable targets.
 
 ## Gotask / Taskfile
 
