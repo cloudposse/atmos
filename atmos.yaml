@@ -167,9 +167,11 @@ commands:
         component_config:
           component: "{{ .Arguments.component }}"
           stack: "{{ .Flags.stack }}"
-        # steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
+        # Steps support using Go templates and can access all configuration settings (e.g. {{ .ComponentConfig.xxx.yyy.zzz }})
+        # Steps also have access to the ENV vars defined in the 'env' section of the 'command'
         steps:
-          - 'echo Atmos component: {{ .Arguments.component }}'
+          - 'echo Atmos component from argument: {{ .Arguments.component }}'
+          - 'echo ATMOS_COMPONENT: $ATMOS_COMPONENT'
           - 'echo Atmos stack: {{ .Flags.stack }}'
           - 'echo Terraform component: {{ .ComponentConfig.component }}'
           - 'echo Backend S3 bucket: {{ .ComponentConfig.backend.bucket }}'
@@ -181,6 +183,7 @@ commands:
           - 'echo settings.spacelift.workspace_enabled: {{ .ComponentConfig.settings.spacelift.workspace_enabled }}'
           - 'echo Dependencies: {{ .ComponentConfig.deps }}'
           - 'echo settings.config.is_prod: {{ .ComponentConfig.settings.config.is_prod }}'
+          - 'echo ATMOS_IS_PROD: $ATMOS_IS_PROD'
 
 # Integrations
 integrations:
