@@ -1,18 +1,26 @@
 ---
-title: "atmos workflow"
-sidebar_label: "workflow"
+title: atmos workflow
+sidebar_label: workflow
 ---
 
-An Atmos Workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is easily executed from the command line by calling `atmos workflow`. Use workflows to orchestrate a any number of commands. Workflows can call any `atmos` subcommand, shell commands, and has access to the stack configurations.
-
-
-## Execute `workflow` command
+Executes `terraform workflow` command.
 
 ```shell
-atmos workflow [options]
+atmos workflow <workflow_name> --file <workflow_file> [options]
 ```
 
-Allows sequential execution of `atmos` and `shell` commands defined as workflow steps.
+This command allows sequential execution of `atmos` and `shell` commands defined as workflow steps.
+
+An `atmos` workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is easily executed from the
+command line by calling `atmos workflow`. Use workflows to orchestrate any number of commands. Workflows can call any `atmos` subcommand, shell
+commands, and has access to the stack configurations.
+
+<br/>
+
+:::tip
+Run `atmos workflow --help` to see all the available options
+:::
+
 ### Examples
 
 ```shell
@@ -22,77 +30,16 @@ atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1 
 atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
 ```
 
-### Options
+## Arguments
 
+| Argument         | Description   | Required |
+|:-----------------|:--------------|:---------|
+| `workflow_name ` | Workflow name | yes      |
 
-<table className="reference-table">
-  
-      <thead>
-        <tr>
-          <th colSpan="2">
-            <h3><a href="#option-file" id="option-file">
-  --file
-  <span class="option-spec"> =&lt;file&gt;</span>
-</a></h3>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        
-              <tr>
-                <th>Description</th>
-                <td><p>File name where the workflow is defined</p>
-</td>
-              </tr>
-             
-              <tr>
-                <th>Aliases</th>
-                <td><code>-f</code></td>
-              </tr>
-             
-      </tbody>
-      <thead>
-        <tr>
-          <th colSpan="2">
-            <h3><a href="#option-stack" id="option-stack">
-  --stack
-  <span class="option-spec"> =&lt;stack&gt;</span>
-</a></h3>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        
-              <tr>
-                <th>Description</th>
-                <td><p>Allows specifying the stack for the workflow on the command line. The stack defined on the command line (atmos workflow  -f  -s ) has the highest priority, it overrides all other stack attributes in the workflow definition</p>
-</td>
-              </tr>
-             
-              <tr>
-                <th>Aliases</th>
-                <td><code>-s</code></td>
-              </tr>
-             
-      </tbody>
-      <thead>
-        <tr>
-          <th colSpan="2">
-            <h3><a href="#option-dry-run" id="option-dry-run">
-  --dry-run
-  
-</a></h3>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        
-              <tr>
-                <th>Description</th>
-                <td><p>Dry-run</p>
-</td>
-              </tr>
-              
-      </tbody>
-</table>
+## Flags
 
+| Flag         | Description                                                                                     | Alias | Required |
+|:-------------|:------------------------------------------------------------------------------------------------|:------|:---------|
+| `--file`     | File name where the workflow is defined                                                         | `-f`  | yes      |
+| `--stack`    | `atmos` stack<br/>(if provided, will override stacks defined in the workflow or workflow steps) | `-s`  | no       |
+| `--dry-run`  | Dry-run                                                                                         |       | no       |

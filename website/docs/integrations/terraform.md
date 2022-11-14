@@ -1,15 +1,18 @@
 ---
 title: Terraform Integration
 sidebar_position: 8
-sidebar_label: "Terraform"
+sidebar_label: Terraform
 ---
-Atmos natively supports opinionated workflows for terraform. It's compatible with every version of terraform and designed to work with multiple different versions of terraform concurrently.
+
+Atmos natively supports opinionated workflows for terraform. It's compatible with every version of terraform and designed to work with multiple
+different versions of terraform concurrently.
 
 Atmos provides many settings that are specific to Terraform.
 
 ## Settings
 
-All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration), but can be overriden at any level of the [Stack](/core-concepts/stacks/#schema) configuration.
+All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration), but can be overriden at any level of
+the [Stack](/core-concepts/stacks/#schema) configuration.
 
 ```yaml
 # The executable to be called by `atmos` when running terraform commands.
@@ -56,7 +59,8 @@ components:
 
 ## Terraform Provider
 
-A Terraform provider (`cloudposse/terraform-provider-utils`) implements a `data` source that can read the YAML Stack configurations natively from within terraform.
+A Terraform provider (`cloudposse/terraform-provider-utils`) implements a `data` source that can read the YAML Stack configurations natively from
+within terraform.
 
 ## Terraform Module
 
@@ -66,20 +70,19 @@ Here's an example of accessing the variables for a given component from within a
 
 ```hcl
 module "vars" {
-    source = "cloudposse/stack-config/yaml//modules/vars"
-    # version     = "x.x.x"
+  source = "cloudposse/stack-config/yaml//modules/vars"
+  # version     = "x.x.x"
 
-    stack_config_local_path = "./stacks"
-    stack                   = "my-stack"
-    component_type          = "terraform"
-    component               = "my-vpc"
+  stack_config_local_path = "./stacks"
+  stack                   = "my-stack"
+  component_type          = "terraform"
+  component               = "my-vpc"
 
-    context = module.this.context
-  }
+  context = module.this.context
+}
 ```
 
-
- ## Example: Provision Terraform Component
+## Example: Provision Terraform Component
 
 To provision a Terraform component using the `atmos` CLI, run the following commands in the container shell:
 
