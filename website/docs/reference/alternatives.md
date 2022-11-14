@@ -33,7 +33,7 @@ https://github.com/mumoshu/variant2 (second generation)
 Variant lets you wrap all your scripts and CLIs into a modern CLI and a single-executable that can run anywhere.
 
 :::info
-The earliest versions of atmos were built on top of [`variant2`](https://github.com/mumoshu/variant2) until we decided to rewrite it from the ground up in pure Go.
+The earliest versions of `atmos` were built on top of [`variant2`](https://github.com/mumoshu/variant2) until we decided to rewrite it from the ground up in pure Go.
 :::
 
 ## appbuilder by Choria
