@@ -6,7 +6,6 @@ sidevar_title: Components
 
 Components are opinionated, self-contained units of infrastructure as code that solve one, specific problem or use-case. Atmos was written to support any number of tools, but also supports a couple of native integations with tools like `terraform` and `helmfile`. A common use-case for atmos is implementing workflows for `terraform` "root modules". 
 
-
 ## Component Schema
 
 A Component consists of the infrastructure as code business logic (e.g. a terraform "root" module) as well as the configuration of that component. The configuration of a component is stored in a Stack configuration.
@@ -42,6 +41,26 @@ components:
         name: superduper
         nodes: 10
 ```
+
+
+### Component Attributes
+
+#### namespace
+
+#### tenant
+
+#### stage
+
+#### environment
+
+#### components
+
+#### settings
+
+
+#### vars
+
+The `vars` section is a free-form map. Use [component validation](/core-concepts/components/component-validation) to enforce policies.
 
 ## Types of Components
 
