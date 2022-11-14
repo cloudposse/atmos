@@ -70,6 +70,11 @@ li > ul.menu__list {
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
 
+.button--lg {
+    margin-top: 1em;
+    margin-bottom: 1em;
+}
+
 .header-github-link:hover {
     opacity: 0.6;
 }
