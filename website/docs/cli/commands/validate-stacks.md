@@ -1,50 +1,26 @@
 ---
-title: "atmos validate stacks"
-sidebar_label: "validate stacks"
+title: atmos validate stacks
+sidebar_label: validate stacks
 ---
 
-Execute `validate stacks` command
+Executes `validate stacks` command.
 
 ```shell
-atmos validate stacks [options]
+atmos validate stacks
 ```
 
-This command validates stacks configuration. The command checks and validates the following:
+<br/>
+
+This command validates stacks configurations. The command checks and validates the following:
 
 - All YAML config files for any YAML errors and inconsistencies
 
 - All imports - if they are configured correctly, have valid data types, and point to existing files
 
 - Schema - if all sections in all YAML files are correctly configured and have valid data types
-## Examples
 
-```shell
-atmos validate stacks
-```
+<br/>
 
-## Options
-
-
-<table className="reference-table">
-  
-      <thead>
-        <tr>
-          <th colSpan="2">
-            <h3><a href="#option-dry-run" id="option-dry-run">
-  --dry-run
-  
-</a></h3>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        
-              <tr>
-                <th>Description</th>
-                <td><p>Dry-run</p>
-</td>
-              </tr>
-              
-      </tbody>
-</table>
-
+:::tip
+Run `atmos validate stacks --help` to see all the available options
+:::

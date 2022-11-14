@@ -10,12 +10,15 @@ Stacks are an abstraction layer that is used to instantiate Components. They’r
 
 Atmos utilizes a custom YAML configuration format for stacks because it’s an easy-to-work-with format that is nicely portable across multiple tools. The stack YAML format is natively supported today via Atmos, the [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-stack-config) module, and Spacelift via the [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module.
 
+
 ## Supported 
 ## Schema
 
-A Stack file is defined in YAML and follows a simple, extensible schema. Every Stack file follows the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/component-inheritance). 
 
-```
+A Stack file is defined in YAML and follows a simple, extensible schema. Every single Stack file follows the same schema, however, every setting in
+the configuration is optional. By enforcing a consistent schema, it ensures we can easily deep-merge configurations.
+
+```yaml
 # Configurations that should get deep-merged into this one
 import:
   # each import is a "Stack" file. The `.yaml` extension is optional, and we do not recommend using it.
@@ -30,11 +33,11 @@ vars:
 # There can then be global variables for each type of component. 
 # Here we set global variables for any "terraform" component.
 terraform:
-  vars: {}
+  vars: { }
 
 # Here we set global variables for any "helmfile" component.
 helmfile:
-  vars: {}
+  vars: { }
 
 # Components are the building blocks of reusable infrastructure.
 # They can be anything. Atmos natively supports "terraform" and "helmfile".
@@ -51,7 +54,7 @@ components:
       backend:
         s3:
           workspace_key_prefix: "eks"
-      vars: {}
+      vars: { }
 
   helmfile:
     nginx-ingress:
@@ -61,27 +64,33 @@ components:
 
 ## Stack Files
 
-Stack files can be very numerous in large cloud environments (think many dozens to hundreds of stack files). To enable the proper organization of stack files, SweetOps has established some conventions that are good to follow. However, these are just conventions, and there are no limits enforced by the tool.
+Stack files can be very numerous in large cloud environments (think many dozens to hundreds of stack files). To enable the proper organization of
+stack files, SweetOps has established some conventions that are good to follow. However, these are just conventions, and there are no limits enforced
+by the tool.
 
-By convention, we recommend to store all Stacks in a `stacks/` folder at the root of your infrastructure repository. This way it's clear where they live and helps keep the configuration separate from your code (e.g. HCL).
+By convention, we recommend to store all Stacks in a `stacks/` folder at the root of your infrastructure repository. This way it's clear where they
+live and helps keep the configuration separate from your code (e.g. HCL).
 
-The filename of individual environment stacks can follow any convention, and the best one will depend on how you model environments at your organization. 
-
+The filename of individual environment stacks can follow any convention, and the best one will depend on how you model environments at your
+organization.
 
 ### Basic Layout
 
-A basic form of organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have so many environments and stages. 
+A basic form of organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have so
+many environments and stages.
 
 For example, `$environment` might be `ue2` (for `us-east-2`) and `$stage` might be `prod` which would result in `stacks/ue2-prod.yaml`
 
-Some resources, however, are global in scope. For example, Route53 and IAM might not make sense to tie to a region. These are what we call "global resources". You might want to put these into a file like `stacks/global-region.yaml` to connote that they are not tied to any particular region. 
-
+Some resources, however, are global in scope. For example, Route53 and IAM might not make sense to tie to a region. These are what we call "global
+resources". You might want to put these into a file like `stacks/global-region.yaml` to connote that they are not tied to any particular region.
 
 ### Hierarchical Layout
 
-We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens-hundreds of accounts and regions that you operate in.
+We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens-hundreds
+of accounts and regions that you operate in.
 
 AWS organizes infrastructure like this:
+
 1. The top-level account is the "Organization"
 2. An "Organization" can have any number of "Organizational Units" (OUs)
 3. Each "OU" can have "Member Accounts"
@@ -90,7 +99,7 @@ AWS organizes infrastructure like this:
 
 In sticking with this theme, a good filesystem layout for infrastructure looks like this:
 
-```
+```text
 └── stacks/
     └── orgs/
         └── acme/

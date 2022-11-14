@@ -99,6 +99,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 	context := cfg.GetContextFromVars(info.ComponentVarsSection)
 
 	envVarsEKS := []string{}
+
 	if cliConfig.Components.Helmfile.UseEKS {
 		// Prepare AWS profile
 		helmAwsProfile := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.HelmAwsProfilePattern)
@@ -127,6 +128,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+
 		envVarsEKS = append(envVarsEKS, []string{
 			fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
 			fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
@@ -147,6 +149,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Arguments and flags: %v\n", info.AdditionalArgsAndFlags)
 	fmt.Println("Component: " + info.ComponentFromArg)
+
 	if len(info.BaseComponent) > 0 {
 		fmt.Println("Helmfile component: " + info.BaseComponent)
 	}
