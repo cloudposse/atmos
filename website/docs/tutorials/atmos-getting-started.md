@@ -5,7 +5,7 @@ description: "Learn what Atmos is and how you can start using it with stacks to 
 
 ## Introduction
 
-`atmos` is part of the SweetOps toolchain and was built to make DevOps and Cloud automation easier across multiple tools. It has direct support for automating Terraform, Helm, Helmfile, and Istio. By natively utilizing [stacks]({{< relref "fundamentals/concepts.md#stacks" >}}), `atmos` enables you to effortlessly manage your Terraform and Helmfile [components]({{< relref "fundamentals/concepts.md#components" >}}) from your local machine or in your CI/CD pipelines.
+`atmos` is part of the SweetOps toolchain and was built to make DevOps and Cloud automation easier across multiple tools. It has direct support for automating Terraform, Helm, Helmfile, and Istio. By natively utilizing [stacks](/core-concepts/stacks), `atmos` enables you to effortlessly manage your Terraform and Helmfile [components](/core-concepts/components) from your local machine or in your CI/CD pipelines.
 
 In this tutorial we'll be looking at a simple (albeit contrived) example of automating multiple Terraform components together into a workflow. This will give you some understanding of what `atmos` can do while also giving you some experience with using it at the command line.
 
@@ -19,7 +19,7 @@ To accomplish this tutorial, you'll need to have [Git](https://git-scm.com/book/
 
 ### Understanding
 
-Prior to starting this tutorial, you should be sure you understand [our various concepts and terminology](/core-concepts/)) and have gone through our [Getting started with Geodesic](https://docs.cloudposse.com/tutorials/geodesic-getting-started/) tutorial because we'll be using Geodesic as our means to run `atmos`.
+Prior to starting this tutorial, you should be sure you understand [our various concepts and terminology](/category/core-concepts)) and have gone through our [Getting started with Geodesic](https://docs.cloudposse.com/tutorials/geodesic-getting-started/) tutorial because we'll be using Geodesic as our means to run `atmos`.
 
 ## Tutorial
 
@@ -156,7 +156,7 @@ Let's move on to updating our code and getting a feel for working a bit more han
 
 ### 6. Update our Stack
 
-One of the critical philosophies that SweetOps embodies is a focus on [improving Day 2+ operations]({{< relref "fundamentals/philosophy.md#optimize-for-day-2-operations" >}}) and with that in mind, it's important to know how you would update this stack and utilize `atmos` to make those changes. Luckily, that's as simple as you might think. Let's try it out and update the `stacks/example.yaml` file on our local machines to the following:
+One of the critical philosophies that SweetOps embodies is a focus on [improving Day 2+ operations](https://docs.cloudposse.com/fundamentals/philosophy.md#optimize-for-day-2-operations) and with that in mind, it's important to know how you would update this stack and utilize `atmos` to make those changes. Luckily, that's as simple as you might think. Let's try it out and update the `stacks/example.yaml` file on our local machines to the following:
 
 ```yaml
 import: []
