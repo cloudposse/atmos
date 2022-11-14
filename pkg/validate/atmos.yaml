@@ -167,8 +167,8 @@ commands:
         component_config:
           component: "{{ .Arguments.component }}"
           stack: "{{ .Flags.stack }}"
-        # steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-        # steps support ENV vars set in the 'env' section of the command
+        # Steps support using Go templates and can access all configuration settings (e.g. {{ .ComponentConfig.xxx.yyy.zzz }})
+        # Steps also have access to the ENV vars defined in the 'env' section of the 'command'
         steps:
           - 'echo Atmos component from argument: {{ .Arguments.component }}'
           - 'echo ATMOS_COMPONENT: $ATMOS_COMPONENT'
