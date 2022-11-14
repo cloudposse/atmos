@@ -4,7 +4,11 @@ sidebar_position: 9
 sidebar_label: Helmfile
 ---
 
-Atmos natively supports opinionated workflows for Helmfile.
+Atmos natively supports opinionated workflows for [Helmfile](https://github.com/helmfile/helmfile).
+
+Helmfile provides a declarative specification for deploying helm charts.
+
+For a complete list of supported commands, please see the Atmos [helmfile](/cli/commands/helmfile) documentation.
 
 ## Example: Provision Helmfile Component
 
