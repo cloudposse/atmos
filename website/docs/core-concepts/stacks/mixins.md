@@ -4,7 +4,7 @@ sidebar_position: 7
 sidebar_label: Mixins
 ---
 
-Mixins are a special kind of "import". It's simply a convention we recommend to distribute reusable snippets of configuration that alter the behavior in some deliberate way. Mixins are not handled in any special way. They are technically identical to all other imports. 
+Mixins are a special kind of "[import](/core-concepts/stacks/imports)". It's simply a convention we recommend to distribute reusable snippets of configuration that alter the behavior in some deliberate way. Mixins are not handled in any special way. They are technically identical to all other imports. 
 
 ## Conventions
 
