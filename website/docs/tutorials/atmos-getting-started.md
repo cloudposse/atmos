@@ -1,5 +1,6 @@
 ---
-title: "Getting Started with Atmos"
+title: Getting Started with Atmos
+sidebar_label: Getting Started with Atmos
 description: "Learn what Atmos is and how you can start using it with stacks to simplify your DevOps Automation tasks."
 ---
 
