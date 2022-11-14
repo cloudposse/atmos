@@ -38,7 +38,7 @@ Now, anytime we want to provision a parent stack in production, we'll want to ad
 
 ```yaml
 imports:
-- mixins/stacks/prod
+- mixins/stage/prod
 ```
 
 While this is a fleetingly simple example, it helps an organization impart consistency. There are many ways developers will define "production".
