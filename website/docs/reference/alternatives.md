@@ -72,7 +72,7 @@ Terramate is a tool built in Golang for managing multiple Terraform stacks with 
 
 https://github.com/boltops-tools/terraspace
 
-Terrapsace is a tool built in ruby that provides an opinionated framework for working with Terraform.
+Terrapsace is a tool built in Ruby that provides an opinionated framework for working with Terraform.
 
 ## Terraplate by Verifa
 
