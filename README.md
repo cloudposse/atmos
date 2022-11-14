@@ -64,7 +64,7 @@ It's 100% Open Source and licensed under the [APACHE2](LICENSE).
 [Atmos](https://atmos.tools) is a workflow automation tool. Atmos is lets you take a complex workflow and turn it into a parameterized CLI. 
 You can then run the CLI anywhere, such as locally or in CI/CD.
 
-The project consists of both a library and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains. You can 
+The project consists of both a go library, terraform provider and a command-line tool for provisioning, managing and orchestrating workflows across various toolchains. You can 
 even access the configurations natively from within terraform using our [`terraform-provider-utils`](https://github.com/cloudposse/terraform-provider-utils/).
 
 Cloud Posse uses this tool extensively for automating cloud infrastructure with [Terraform](https://hashicorp.com/) and [Kubernetes](https://kubernetes.io/), but it can be used to automate any complex workflow.
