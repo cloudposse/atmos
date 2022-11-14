@@ -15,8 +15,14 @@ The CLI config is loaded from the following locations (from lowest to highest pr
 - Current directory (`./atmos.yaml`)
 - Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name)
 
-**Pro-tip:** Atmos supports POSIX-style greedy Globs for all file
-names/paths ([double-star `**` is supported](https://en.wikipedia.org/wiki/Glob_(programming)))
+<br/>
+
+:::tip
+**Pro-tip:** `atmos` supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
+names/paths (double-star/globstar `**` is supported as well)
+:::
+
+<br/>
 
 What follows are all the sections of the `atmos.yaml` configuration file.
 

@@ -39,7 +39,7 @@ spec:
     # Only include the files that match the 'included_paths' patterns
     # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
 
-    # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
+    # 'included_paths' support POSIX-style Globs for file names/paths (double-star/globstar `**` is supported)
     # https://en.wikipedia.org/wiki/Glob_(programming)
     # https://github.com/bmatcuk/doublestar#patterns
     included_paths:
@@ -49,7 +49,7 @@ spec:
 
     # Exclude the files that match any of the 'excluded_paths' patterns
     # Note that we are excluding 'context.tf' since a newer version of it will be downloaded using 'mixins'
-    # 'excluded_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
+    # 'excluded_paths' support POSIX-style Globs for file names/paths (double-star/globstar `**` is supported)
     excluded_paths:
       - "**/context.tf"
 
