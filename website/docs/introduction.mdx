@@ -22,9 +22,17 @@ The best workflows enable anyone, anywhere, to run them. They are easily underst
 
 # Atmos is a workflow automation tool
 
-With so many of these tools today, why does the world need another "workflow" automation tool?
+Atmos is a workflow automation tool that makes it more managable to operate very large environments with DRY configuration.
 
-It helps to understand some background. Atmos is a tool created by [Cloud Posse](https://cloudposse.com). We are [DevOps Accelerator for Startups](https://cloudposse.com/services/) (typically venture-backed, later-stage series A-D companies) and enterprises. We help our customers own their infrastructure using our [reference architecture blueprints](https://cloudposse.com/reference-architecture/) and implement it with their teams while showing them the ropes. We needed to scratch our own itch. After trying everything (`make`, `variant`, `mage`, `gotask`, `terragrunt`, etc), we realized it would not be possible to achieve the outcome we wanted for our customers using a mashup of existing off-the-shelf tools. 
+With [so many of these tools today](/reference/alternatives/), why does the world need another "workflow" automation tool?
+
+That's simple. **None of them pull off what you can do with atmos.** 
+
+To fully understand why, it may be helpful to understand some background. 
+Atmos is a tool created by [Cloud Posse](https://cloudposse.com). 
+We are [DevOps Accelerator for Startups](https://cloudposse.com/services/) (typically venture-backed, later-stage series A-D companies) and enterprises. 
+We help our customers own their infrastructure using our [reference architecture blueprints](https://cloudposse.com/reference-architecture/) and implement it with their teams while showing them the ropes. 
+We needed to scratch our own itch. After trying everything (`make`, `variant`, `mage`, `gotask`, `terragrunt`, etc), we realized it would not be possible to achieve the outcome we wanted for our customers using a mashup of existing off-the-shelf tools. 
 
 ## We Built Atmos to Solve Our Problems
 
@@ -154,6 +162,12 @@ Let's get some terminology in place so we can talk about some specifics of `atmo
 - Duplicate entire stacks by just copying a single YAML file
 - Generate YAML configurations e.g. Cookie Cutter, Service Now
 
+## What Atmos is Not
+
+It might help to also understand what Atmos is not attempting to replace:
+
+- Atmos is not an alternative to tools like `terraform`, `kubectl`, `chef`, `puppet`, or `ansible`. Instead, atmos is the type of tool that would orchestrate these tools.
+- Atmos is not an alternative to CI/CD systems. If anything, those systems will still call Atmos.
 
 ## Live Demo
 

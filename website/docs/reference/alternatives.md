@@ -6,7 +6,7 @@ sidebar_label: Alternatives
 
 # General Alternatives
 
-There are many tools in the general category of "task runners" or "workflow automation". Here are some of the alternatives to Atmos.
+There are many tools in the general category of "task runners" or "workflow automation". Here are some of the alternatives to Atmos, many of which inspired core functionality in Atmos.
 
 ## Make / Magefile by Free Software Foundation
 
@@ -19,7 +19,6 @@ Many companies (including Cloud Posse) started by leveraging `make` with `Makefi
 https://magefile.org/
 
 Mage is a make/rake-like build tool using native Golang and plain-old go functions. Mage then automatically provides a CLI to cll them as Makefile-like runnable targets.
-
 
 ## Gotask / Taskfile
 
@@ -36,6 +35,14 @@ Variant lets you wrap all your scripts and CLIs into a modern CLI and a single-e
 :::info
 The earliest versions of atmos were built on top of [`variant2`](https://github.com/mumoshu/variant2) until we decided to rewrite it from the ground up in pure Go.
 :::
+
+## appbuilder by Choria
+
+https://github.com/choria-io/appbuilder
+
+
+AppBuilder is a tool built in Golang to create a friendly CLI command that wraps your operational tools.
+
 
 # Terraform Alternatives
 
