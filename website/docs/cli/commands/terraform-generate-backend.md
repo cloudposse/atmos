@@ -1,15 +1,20 @@
 ---
-title: "atmos terraform generate backend"
-sidebar_label: "terraform generate backend"
+title: atmos terraform generate backend
+sidebar_label: terraform generate backend
 ---
 
-Execute `terraform generate backend` command
+Executes `terraform generate backend` command.
 
 ```shell
-atmos terraform generate backend [options]
+atmos terraform generate backend <command> <component> -s <stack>
 ```
 
-This command generates a backend config for a `terraform` component.
+This command generates a backend config file for an `atmos` terraform component in a stack.
+
+:::tip
+Run `atmos terraform generate backend --help` to see all the available options
+:::
+
 ## Examples
 
 ```shell
@@ -19,78 +24,22 @@ atmos terraform generate backend test/test-component -s tenant1-ue2-dev
 atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-prod
 ```
 
-## Inputs
+## Arguments
 
+| Argument     | Description                 | Required |
+|:-------------|:----------------------------|:---------|
+| `component`  | `atmos` terraform component | yes      |
 
-<table className="reference-table">
-  
-      <thead>
-        <tr>
-          <th colSpan="2">
-            <h3>component</h3>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        
-              <tr>
-                <th>Description</th>
-                <td><p><code>terraform</code> component</p>
-</td>
-              </tr>
-            
-      </tbody>
-</table>
+## Flags
 
+| Flag        | Description   | Alias | Required |
+|:------------|:--------------|:------|:---------|
+| `--stack`   | `atmos` stack | `-s`  | yes      |
+| `--dry-run` | Dry-run       |       | no       |
 
+<br/>
 
-## Options
-
-
-<table className="reference-table">
-  
-      <thead>
-        <tr>
-          <th colSpan="2">
-            <h3><a href="#option-stack" id="option-stack">
-  --stack
-  <span class="option-spec"> =&lt;stack&gt;</span>
-</a></h3>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        
-              <tr>
-                <th>Description</th>
-                <td><p>Stack</p>
-</td>
-              </tr>
-             
-              <tr>
-                <th>Aliases</th>
-                <td><code>-s</code></td>
-              </tr>
-             
-      </tbody>
-      <thead>
-        <tr>
-          <th colSpan="2">
-            <h3><a href="#option-dry-run" id="option-dry-run">
-  --dry-run
-  
-</a></h3>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        
-              <tr>
-                <th>Description</th>
-                <td><p>Dry-run</p>
-</td>
-              </tr>
-              
-      </tbody>
-</table>
-
+:::info
+Refer to [Terraform backend configuration](https://developer.hashicorp.com/terraform/language/settings/backends/configuration) for more details
+on `terraform` backends and supported formats
+:::
