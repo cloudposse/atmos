@@ -8,19 +8,19 @@ sidebar_label: Alternatives
 
 There are many tools in the general category of "task runners" or "workflow automation". Here are some of the alternatives to Atmos, many of which inspired core functionality in Atmos.
 
-## Make / Magefile by Free Software Foundation
+## Make (Makefile) by Free Software Foundation
 
 https://www.gnu.org/software/make/
 
 Many companies (including Cloud Posse) started by leveraging `make` with `Makefile` and targets to call terraform. Using `make` is tried and true method of orchestrating tools, but it has trouble scaling up to support large projects. We know this because we tried it for ~3 years. Make targets do not support parameterization, which leads to a proliferation of environment variables that are difficult to validate. Makefiles are unintuitive for newcomers because they are first evaluated as a template, and then executed as a script where each line of a target runs in a separate process space.
 
-## Mage / Magefile
+## Mage (Magefile)
 
 https://magefile.org/
 
 Mage is a make/rake-like build tool using native Golang and plain-old `Go` functions. Mage then automatically provides a CLI to call them as Makefile-like runnable targets.
 
-## Gotask / Taskfile
+## Gotask (Taskfile)
 
 https://github.com/go-task/task
 
