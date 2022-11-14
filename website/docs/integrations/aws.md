@@ -4,8 +4,13 @@ sidebar_position: 10
 sidebar_label: Amazon Web Services (AWS)
 ---
 
-Atmos supports a few native commands to make working with AWS easier. Just to be exceedingly clear, *nothing* about `atmos` relies on AWS; the tool is designed to be cloud agnostic.
+Atmos supports one native command to make working with EKS on AWS easier. 
 
-:::note
-TODO: Explain usage.
+:::info
+Just to be exceedingly clear, *nothing* about `atmos` relies on AWS; the tool is designed to be cloud agnostic.
 :::
+
+See:
+* [`atmos aws eks update-kubeconfig`](/cli/commands/aws-eks-update-kubeconfig) which downloads the `kubeconfig` from an EKS cluster and saves it to a file.
+
+

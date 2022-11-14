@@ -31,10 +31,24 @@ It helps to understand some background. Atmos is a tool created by [Cloud Posse]
 Cloud Posse works with many customers who have a diverse set of requirements. We couldn't consistently deliver the outcomes we wanted using the existing tools on the market. Since everything we build at Cloud Posse is designed to be reusable across organizations, we needed something that allowed us to replicate configurations without repetitive steps and editing.
 
 Here are some of the problems we needed to solve...
-- how to **support many teams** concurrently across multiple organizations.
-- how to **automate our deliverables** so that teams could *own* them.
-- how to engineer an **extensible tool** that could handle unknown-unknown requirements.
-- how to design an **easy to use tool** that was stable and consistent (aka testable)
+- How to **support many teams** concurrently across multiple organizations.
+- How to **automate our deliverables** so that teams could *own* them.
+- How to engineer an **extensible tool** that could handle unknown-unknown requirements.
+- How to design an **easy to use tool** that was stable and consistent (aka testable)
+
+# Zero Vendor Lock-in for Terraform
+
+When you use **Atmos there is zero vendor lock-in**. This is because Atmos does not require changing (harming) any Terraform code in order to run. 
+Every [terraform component](/core-concepts/components) is just a vanilla HCL terraform "root" module. Atmos is simply handling the complexity
+associated with managing hierarchical configurations. 
+
+:::info
+By running a [single command](/cli/commands/terraform-generate-varfile.md), you can eject from Atmos and never touch it again.
+:::
+
+<br/>
+
+[Why not give Atmos a try?](/quick-start/)
 
 ## Atmos CLI: Handle Configuration @ Scale
 
@@ -84,21 +98,21 @@ The possibilities are endless.
 
 ## Inheritance is Powerful
 
-Make configuration hierarchical with imports and deep merging.
-Organize it anyway that make sense for your organization. 
-Define logical groups of configuration
-Define something once and reuse it. 
-Know exactly where configuration differs. 
+- Make configuration hierarchical with imports and deep merging.
+- Organize it anyway that make sense for your organization. 
+- Define logical groups of configuration
+- Define something once and reuse it. 
+- Know exactly where configuration differs. 
 
 
 ## Generalized Tools Always Suffer
 
-However, a general tool will always suffer for a specialized use case, even atmos and it’s custom workflows
-So that’s why we wrote it in Golang
-And implemented opinionated workflows for the tools we use like terraform and helmfile 
-We also acknowledged that not everyone knows go, so we created a porcelain style plugin interface 
-Write your commands in any language. Run them via atmos using a standard CLI UX
-Or better yet, combine them
+A generalized tool will always suffer for a specialized use case, even Atmos and it’s custom workflows.
+That’s why we wrote it all in Golang, and implemented opinionated workflows for the tools we use like `terraform` and `helmfile`.
+We also acknowledged that not everyone knows Golang, so we created a porcelain-style plugin interface (inspired by Helm, which itself is partially modeled on Git's plugin model). 
+This enables you to write your commands in any language, but expose them through the Atmos CLI interface for a standard CLI UX.
+Or better yet, it's possible to combine both the built-in workflows for terraform and helmfile with the custom workflows.
+
 We like to think this tool gives us superpowers. It’s definitely attributable to our meteoric success of the past couple years and we want that to be yours too. 
 
 ## Terraform by itself does not scale
@@ -115,20 +129,21 @@ There are many problems encountered by teams working with Terraform at scale.
 
 
 ## Terraform + Atmos is the answer
-Opinionated workflows for terraform
-Established conventions and patterns to manage terraform @ scale
-Break terraliths into smaller pieces (“components”)
-Enable team collaboration with catalogs and libraries
-Enforce guardrails with OPA and JSON Schema
-Zero Vendor Lock-in
+
+- Opinionated workflows for terraform
+- Established conventions and patterns to manage terraform @ scale
+- Break terraliths into smaller pieces (“components”)
+- Enable team collaboration with catalogs and libraries
+- Enforce guardrails with OPA and JSON Schema
+- Zero Vendor Lock-in
 
 ## Terminology
 
 Let's get some terminology in place so we can talk about some specifics of `atmos`.
 
-**Components**: these are the fundamental building blocks. For terraform, these are opinionated terraform “root modules”.
-**Stacks**: these are the combination of components into an architecture.
-**Catalogs**: these are collections of reusable stack configurations.
+- **Components**: these are the fundamental building blocks. For terraform, these are opinionated terraform “root modules”.
+- **Stacks**: these are the combination of components into an architecture.
+- **Catalogs**: these are collections of reusable stack configurations.
 
 ## Atmos Gives Terraform Super Powers
 
