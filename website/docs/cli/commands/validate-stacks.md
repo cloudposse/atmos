@@ -6,10 +6,12 @@ sidebar_label: validate stacks
 Executes `validate stacks` command.
 
 ```shell
-atmos validate stacks [options]
+atmos validate stacks
 ```
 
-This command validates stacks configuration. The command checks and validates the following:
+<br/>
+
+This command validates stacks configurations. The command checks and validates the following:
 
 - All YAML config files for any YAML errors and inconsistencies
 
@@ -17,39 +19,8 @@ This command validates stacks configuration. The command checks and validates th
 
 - Schema - if all sections in all YAML files are correctly configured and have valid data types
 
+<br/>
+
 :::tip
 Run `atmos validate stacks --help` to see all the available options
 :::
-
-## Examples
-
-```shell
-atmos validate stacks
-```
-
-## Options
-
-
-<table className="reference-table">
-  
-      <thead>
-        <tr>
-          <th colSpan="2">
-            <h3><a href="#option-dry-run" id="option-dry-run">
-  --dry-run
-  
-</a></h3>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        
-              <tr>
-                <th>Description</th>
-                <td><p>Dry-run</p>
-</td>
-              </tr>
-              
-      </tbody>
-</table>
-
