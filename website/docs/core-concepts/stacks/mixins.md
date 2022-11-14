@@ -26,7 +26,7 @@ imports:
 
 ### Mixins by Stage
 
-Provide a the default settings for operating in a particular stage (e.g. Dev, Staging, Prod) to enforce consistency.
+Provide the default settings for operating in a particular stage (e.g. Dev, Staging, Prod) to enforce consistency.
 
 For example, let's define the stage name for production in the mixin file named `mixins/stage/prod.yaml`
 
