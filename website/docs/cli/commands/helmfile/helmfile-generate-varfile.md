@@ -2,6 +2,7 @@
 title: atmos helmfile generate varfile
 sidebar_label: generate varfile
 sidebar_class_name: command
+id: genereate-varfile
 ---
 
 Executes `helmfile generate varfile` command.

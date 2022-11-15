@@ -2,6 +2,7 @@
 title: atmos validate stacks
 sidebar_label: stacks
 sidebar_class_name: command
+id: validate-stacks
 ---
 
 Executes `validate stacks` command.

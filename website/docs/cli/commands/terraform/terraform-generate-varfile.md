@@ -2,6 +2,7 @@
 title: atmos terraform generate varfile
 sidebar_label: generate varfile
 sidebar_class_name: command
+id: generate-varfile
 ---
 
 Executes `terraform generate varfile` command.

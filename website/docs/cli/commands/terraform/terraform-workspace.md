@@ -2,6 +2,7 @@
 title: atmos terraform workspace
 sidebar_label: workspace
 sidebar_class_name: command
+id: workspace
 ---
 
 Executes `terraform workspace` command.

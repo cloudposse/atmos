@@ -2,6 +2,7 @@
 title: atmos validate component
 sidebar_label: component
 sidebar_class_name: command
+id: validate-component
 ---
 
 Executes `validate component` command.

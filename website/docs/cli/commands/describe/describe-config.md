@@ -2,6 +2,7 @@
 title: atmos describe config
 sidebar_label: config
 sidebar_class_name: command
+id: describe-config
 ---
 
 Executes `describe config` command.
