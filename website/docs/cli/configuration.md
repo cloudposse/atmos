@@ -29,7 +29,7 @@ What follows are all the sections of the `atmos.yaml` configuration file.
 ## Base Path
 
 The base path for components, stacks and workflows configurations.
-It can also be set using `ATMOS_BASE_PATH` environment variable, or bu passing the `--base-path` command-line argument.
+It can also be set using `ATMOS_BASE_PATH` environment variable, or by passing the `--base-path` command-line argument.
 It supports both absolute and relative paths.
 
 If not provided or is an empty string, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path`

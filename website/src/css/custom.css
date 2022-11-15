@@ -108,3 +108,9 @@ html[data-theme='dark'] {
 table tr td {
     white-space: nowrap;
 }
+
+.react-player {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 16/9 !important;
+}
