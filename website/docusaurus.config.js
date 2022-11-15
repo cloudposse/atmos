@@ -92,12 +92,17 @@ const config = {
                     },
                     {
                         to: 'https://github.com/cloudposse/community/discussions',
-                        label: 'Discussions',
+                        label: 'GitHub Discussions',
                         position: 'right'
                     },
                     {
                         to: 'https://slack.cloudposse.com/',
-                        label: 'Slack',
+                        label: 'Slack Community',
+                        position: 'right'
+                    },
+                    {
+                        to: 'https://cloudposse.com/services/',
+                        label: 'Get Help',
                         position: 'right'
                     },
                     // {
