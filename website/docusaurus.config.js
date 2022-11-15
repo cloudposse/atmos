@@ -81,9 +81,9 @@ const config = {
                 items: [
                     {
                         type: 'doc',
-                        docId: 'introduction',
+                        docId: 'quick-start/install',
                         position: 'left',
-                        label: 'Docs',
+                        label: 'Installation',
                     },
                     {
                         to: '/cli/configuration',
