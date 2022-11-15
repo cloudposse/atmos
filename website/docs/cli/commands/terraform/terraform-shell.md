@@ -1,6 +1,8 @@
 ---
 title: atmos terraform shell
-sidebar_label: terraform shell
+sidebar_label: shell
+sidebar_class_name: command
+id: shell
 ---
 
 Executes `terraform shell` command.
