@@ -108,3 +108,20 @@ html[data-theme='dark'] {
 table tr td {
     white-space: nowrap;
 }
+
+
+div > ul > li > a.table-of-contents__link.toc-highlight {
+    font-weight: 600;
+}
+
+.pagination-nav__link {
+    background-color: #fffc;
+}
+
+[data-theme='dark'] .pagination-nav__link {
+    background-color: rgb(16 36 69 / 23%);
+}
+
+pre code { 
+    box-shadow: var(--ifm-alert-shadow);
+}

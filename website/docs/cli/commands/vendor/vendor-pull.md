@@ -1,6 +1,6 @@
 ---
 title: atmos vendor pull
-sidebar_label: vendor pull
+sidebar_label: pull
 ---
 
 Executes `vendor pull` command.

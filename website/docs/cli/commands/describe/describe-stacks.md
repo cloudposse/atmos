@@ -1,6 +1,6 @@
 ---
 title: atmos describe stacks
-sidebar_label: describe stacks
+sidebar_label: stacks
 ---
 
 Executes `describe stacks` command.

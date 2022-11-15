@@ -1,6 +1,6 @@
 ---
 title: atmos validate component
-sidebar_label: validate component
+sidebar_label: component
 ---
 
 Executes `validate component` command.

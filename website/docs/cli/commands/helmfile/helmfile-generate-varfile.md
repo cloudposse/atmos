@@ -1,6 +1,6 @@
 ---
 title: atmos helmfile generate varfile
-sidebar_label: helmfile generate varfile
+sidebar_label: generate varfile
 ---
 
 Executes `helmfile generate varfile` command.

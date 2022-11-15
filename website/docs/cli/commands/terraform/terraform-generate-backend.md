@@ -1,6 +1,6 @@
 ---
 title: atmos terraform generate backend
-sidebar_label: terraform generate backend
+sidebar_label: generate backend
 ---
 
 Executes `terraform generate backend` command.

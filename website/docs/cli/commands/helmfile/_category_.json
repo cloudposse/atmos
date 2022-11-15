@@ -1,0 +1,8 @@
+{
+  "label": "helmfile",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Atmos Helmfile Commands"
+  }
+}

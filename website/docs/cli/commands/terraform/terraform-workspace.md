@@ -1,6 +1,6 @@
 ---
 title: atmos terraform workspace
-sidebar_label: terraform workspace
+sidebar_label: workspace
 ---
 
 Executes `terraform workspace` command.

@@ -1,0 +1,8 @@
+{
+  "label": "validate",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Atmos Validate Commands"
+  }
+}

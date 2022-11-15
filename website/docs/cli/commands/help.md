@@ -1,6 +1,7 @@
 ---
 title: atmos help
 sidebar_label: help
+order: 10
 ---
 
 `atmos help` shows help for all `atmos` CLI commands.
