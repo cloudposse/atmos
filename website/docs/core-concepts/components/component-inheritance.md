@@ -38,11 +38,43 @@ In Atmos, we call it **Component-Oriented Programming (COP)**.
 
 <br/>
 
-With all the definitions out of the way, here's how all these concepts and principles are implemented and used in Atmos.
+These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
+and `metadata` component's configuration section.
 
-Inheritance (and multiple inheritance) is accomplished by combining two features of Atmos: [`import`](/core-concepts/stacks/imports)
-and `metadata.inherits` component section.
+## Single Inheritance
 
-## Example
+Let's say we want to provision two different VPCs into an AWS account.
 
+In `stacks/catalog/vpc.yaml` add the following config for the VPC component:
+
+```yaml title="stacks/catalog/vpc.yaml"
+components:
+  terraform:
+    vpc-defaults:
+      metadata:
+        # Setting `metadata.type: abstract` makes the component `abstract` 
+        # (similar to OOP abstract classes), explicitly prohibiting the component from being deployed.
+        # `terraform apply` and `terraform deploy` will fail with an error.
+        # If `metadata.type` attribute is not specified, it defaults to `real`.
+        # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis).
+        type: abstract
+      # Default variables, which will be inherited and can be overriden in the derived components
+      vars:
+        public_subnets_enabled: false
+        nat_gateway_enabled: false
+        nat_instance_enabled: false
+        max_subnet_count: 3
+        vpc_flow_logs_enabled: true
+```
+
+<br/>
+
+In the configuration above, the following concepts are implemented:
+
+- **Abstract components**: Terraform component `vpc-defaults` is marked as abstract in `metadata.type`. This makes the component non-deployable, and it
+  can be used only as a base for other components that inherit from it
+- **Dynamic polymorphism**: All the variables in the `vars` section become the default values for the derived components. This provides the ability to
+  override and use the base component properties in the derived components to provision the same Terraform configuration but with different settings
+
+## Multiple Inheritance
 
