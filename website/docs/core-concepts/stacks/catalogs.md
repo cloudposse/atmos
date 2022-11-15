@@ -79,9 +79,50 @@ In this example, there's a `frontend` team that owns an `ecom-store` application
 
 The organizational layout of Stacks is useful for modeling how infrastructure gets "physically" deployed with a given Infrastructure as a Service (IaaS) platform like AWS.
 
+AWS infrastructure is hierarchical and can be thought of like this:
+
+1. The top-level account is the "Organization"
+2. An "Organization" can have any number of "Organizational Units" (OUs)
+3. Each "OU" can have "Member Accounts"
+4. Each "Member Account" has "Regions"
+5. Each "Region" has "Resources" (the top-level stack)
+
+In sticking with this theme, a good filesystem layout for infrastructure looks like this:
+
+```text
+└── stacks/
+    └── orgs/
+        └── acme/
+            ├── ou1/
+            │   ├── account1/
+            │   │   ├── global-region.yaml
+            │   │   └── us-east-2.yaml
+            │   ├── account2/
+            │   │   ├── global-region.yaml
+            │   │   └── us-east-2.yaml
+            │   └── account3/
+            │       ├── global-region.yaml
+            │       └── us-east-2.yaml
+            └── ou2/
+                ├── dev/
+                │   ├── global-region.yaml
+                │   └── us-east-2.yaml
+                ├── prod/
+                │   ├── global-region.yaml
+                │   └── us-east-2.yaml
+                └── staging/
+                    ├── global-region.yaml
+                    └── us-east-2.yaml
+```
+
+:::info
+Cloud Posse uses the "Organizations" layout for all the "parent stacks". Parent stacks are the top-level stacks which are responsible for importing the other stacks (E.g. teams, mixins, etc)
+:::
+
 What's important to point out is that all these conventions are not mutually exclusive. In fact, we like to combine them.
 
 Here's what that might look like:
+
 ```console
 └── orgs/
     └── acme/
@@ -112,6 +153,8 @@ Here's what that might look like:
 ```
 
 In this example, there's a single organization called `acme` with an example of one organizational unit (OU) called `platform`. The OU has 3 stages: `dev`, `staging`, and `prod`. Each stage then operates in a number of regions. Each region then has a `networking` layer, a `backing-services` layer, and a `teams` layer. The `staging` and `prod` accounts have both have a `compliance` layer, which isn't needed in the `dev` stages.
+
+The files like `networking.yaml` and `compliance.yaml` can be named anything you want. It's helpful to think about organizing Components based on their lifecycles or according to a concept of layers that stack on top of each other. 
 
 ### Everything Else
 

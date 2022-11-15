@@ -13,6 +13,16 @@ Stacks are an abstraction layer that is used to instantiate Components. They’r
 Atmos utilizes a custom YAML configuration format for stacks because it’s an easy-to-work-with format that is nicely portable across multiple tools. The stack YAML format is natively supported today via Atmos, the [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-stack-config) module, and Spacelift via the
 [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module.
 
+## Conventions
+
+### Parent Stacks
+
+*Parent Stacks* are the top-level Stacks that are responsible for importing Child Stacks.
+
+### Child Stacks
+
+*Child Stacks* are any stacks that cannot be instantiated by themselves without getting imported by a Parent Stack.
+
 ## Schema
 
 A Stack file is defined in YAML and follows a simple, extensible schema. Every Stack file follows the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/component-inheritance).
@@ -87,15 +97,11 @@ components:
 
 ## Stack Files
 
-Stack files can be very numerous in large cloud environments (think many dozens to hundreds of stack files). To enable the proper organization of
-stack files, SweetOps has established some conventions that are good to follow. However, these are just conventions, and there are no limits enforced
-by the tool.
+Stack files can be very numerous in large cloud environments (think many dozens to hundreds of stack files). To enable the proper organization of stack files, SweetOps has established some conventions that are good to follow. However, these are just conventions, and there are no limits enforced by the tool.
 
-By convention, we recommend to store all Stacks in a `stacks/` folder at the root of your infrastructure repository. This way it's clear where they
-live and helps keep the configuration separate from your code (e.g. HCL).
+By convention, we recommend to store all Stacks in a `stacks/` folder at the root of your infrastructure repository. This way it's clear where they live and helps keep the configuration separate from your code (e.g. HCL).
 
-The filename of individual environment stacks can follow any convention, and the best one will depend on how you model environments at your
-organization.
+The filename of individual environment stacks can follow any convention, and the best one will depend on how you model environments at your organization.
 
 ### Basic Layout
 
@@ -109,41 +115,5 @@ resources". You might want to put these into a file like `stacks/global-region.y
 
 ### Hierarchical Layout
 
-We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens-hundreds
-of accounts and regions that you operate in.
+We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens-hundreds of accounts and regions that you operate in. Use [Catalogs](/core-concepts/stacks/catalogs) to organize your Stack configurations.
 
-AWS organizes infrastructure like this:
-
-1. The top-level account is the "Organization"
-2. An "Organization" can have any number of "Organizational Units" (OUs)
-3. Each "OU" can have "Member Accounts"
-4. Each "Member Account" has "Regions"
-5. Each "Region" has "Resources" (the top-level stack)
-
-In sticking with this theme, a good filesystem layout for infrastructure looks like this:
-
-```text
-└── stacks/
-    └── orgs/
-        └── acme/
-            ├── ou1/
-            │   ├── account1/
-            │   │   ├── global-region.yaml
-            │   │   └── us-east-2.yaml
-            │   ├── account2/
-            │   │   ├── global-region.yaml
-            │   │   └── us-east-2.yaml
-            │   └── account3/
-            │       ├── global-region.yaml
-            │       └── us-east-2.yaml
-            └── ou2/
-                ├── dev/
-                │   ├── global-region.yaml
-                │   └── us-east-2.yaml
-                ├── prod/
-                │   ├── global-region.yaml
-                │   └── us-east-2.yaml
-                └── staging/
-                    ├── global-region.yaml
-                    └── us-east-2.yaml
-```
