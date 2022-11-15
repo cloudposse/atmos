@@ -2,7 +2,7 @@
   "label": "Commands",
   "position": 2,
   "collapsible": true,
-  "collapsed": true,
+  "collapsed": false,
   "link": {
     "type": "generated-index",
     "description": "Atmos CLI commands"
