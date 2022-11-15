@@ -51,6 +51,10 @@ We needed to scratch our own itch. After trying everything (`make`, `variant`, `
 - Terraform by itself is not enough to be successful
 - Atmos makes managing those configurations easier
 
+### Use Cases
+
+- Large (even massive) Multi-Account Environments
+
 ### Atmos Gives Terraform Super Powers
 
 - Write components (root modules) once, reuse any number of times
@@ -79,7 +83,7 @@ Every [terraform component](/core-concepts/components) is just a vanilla HCL ter
 associated with managing hierarchical configurations. 
 
 :::info
-By running a [single command](/cli/commands/terraform-generate-varfile.md), you can eject from Atmos and never touch it again.
+By running a [single command](/cli/commands/terraform/generate-varfiles.md), you can eject from Atmos and never touch it again.
 :::
 
 <br/>
@@ -105,7 +109,7 @@ So, why did we choose YAML? That's simple: **everyone knows YAML.**
 
 YAML is an extensible markup language. It's ideal for defining a declarative DSL.
 
-Using YAML, `atmos` is easily able to support features like imports, inheritance, deep merging, and policies.
+Using YAML, `atmos` is easily able to support features like [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/components/component-inheritance), deep merging, and [policies](/core-concepts/components/component-validation).
 
 YAML is also "tool agnostic" (unlike HCL); it's not tied to Terraform or explicitly associated with HashiCorp products.
 - **Every language can read it** (e.g. from python or node. Even read it remotely, e.g. via http)

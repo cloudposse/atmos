@@ -11,6 +11,6 @@ Just to be exceedingly clear, *nothing* about `atmos` relies on AWS; the tool is
 :::
 
 See also:
-* [`atmos aws eks update-kubeconfig`](/cli/commands/aws-eks-update-kubeconfig) which downloads the `kubeconfig` from an EKS cluster and saves it to a file.
+* [`atmos aws eks update-kubeconfig`](/cli/commands/aws/eks-update-kubeconfig) which downloads the `kubeconfig` from an EKS cluster and saves it to a file.
 
 
