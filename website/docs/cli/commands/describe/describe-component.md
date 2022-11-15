@@ -1,6 +1,7 @@
 ---
 title: atmos describe component
 sidebar_label: component
+sidebar_class_name: command
 ---
 
 Executes `describe component` command.

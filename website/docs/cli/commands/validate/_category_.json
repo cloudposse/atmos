@@ -1,6 +1,9 @@
 {
   "label": "validate",
   "position": 5,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
   "link": {
     "type": "generated-index",
     "description": "Atmos Validate Commands"

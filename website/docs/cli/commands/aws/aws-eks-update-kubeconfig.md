@@ -1,6 +1,7 @@
 ---
 title: atmos aws eks update-kubeconfig
 sidebar_label: eks update-kubeconfig
+sidebar_class_name: command
 ---
 
 Executes `aws eks update-kubeconfig` command.

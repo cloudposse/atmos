@@ -1,6 +1,7 @@
 ---
 title: atmos describe config
 sidebar_label: config
+sidebar_class_name: command
 ---
 
 Executes `describe config` command.

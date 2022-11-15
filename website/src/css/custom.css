@@ -125,3 +125,7 @@ div > ul > li > a.table-of-contents__link.toc-highlight {
 pre code { 
     box-shadow: var(--ifm-alert-shadow);
 }
+
+li.menu__list-item.command {
+ font-family: var(--ifm-font-family-monospace);
+}

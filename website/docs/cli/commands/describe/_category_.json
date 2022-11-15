@@ -1,6 +1,9 @@
 {
   "label": "describe",
   "position": 2,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
   "link": {
     "type": "generated-index",
     "description": "Atmos Describe Commands"

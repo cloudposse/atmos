@@ -1,6 +1,7 @@
 ---
 title: atmos help
 sidebar_label: help
+sidebar_class_name: command
 order: 10
 ---
 

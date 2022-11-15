@@ -1,6 +1,9 @@
 {
   "label": "terraform",
   "position": 4,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": false,
   "link": {
     "type": "generated-index",
     "description": "Terraform Commands"

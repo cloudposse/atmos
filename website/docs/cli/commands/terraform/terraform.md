@@ -1,6 +1,7 @@
 ---
 title: atmos terraform
 sidebar_label: terraform
+sidebar_class_name: command
 ---
 
 Executes `terraform` commands.

@@ -1,6 +1,7 @@
 ---
 title: atmos helmfile
 sidebar_label: helmfile
+sidebar_class_name: command
 ---
 
 Executes `helmfile` commands.

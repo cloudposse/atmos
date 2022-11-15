@@ -1,6 +1,9 @@
 {
   "label": "vendor",
   "position": 6,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
   "link": {
     "type": "generated-index",
     "description": "Atmos Vendor Commands"

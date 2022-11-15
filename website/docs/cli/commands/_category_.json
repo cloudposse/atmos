@@ -1,6 +1,8 @@
 {
   "label": "Commands",
   "position": 2,
+  "collapsible": true,
+  "collapsed": true,
   "link": {
     "type": "generated-index",
     "description": "Atmos CLI commands"

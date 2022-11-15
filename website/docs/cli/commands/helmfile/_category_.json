@@ -1,6 +1,9 @@
 {
   "label": "helmfile",
   "position": 3,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
   "link": {
     "type": "generated-index",
     "description": "Atmos Helmfile Commands"
