@@ -28,11 +28,11 @@ In Atmos, we call it **Component-Oriented Programming (COP)**.
 - single inheritance
 - multiple inheritance
 - dynamic polymorphism (ability to override base component properties)
-- abstraction, which itself is accomplished by these Atmos features:
-  - principle of abstraction: "hide" all but the relevant information about a component configuration in a given stack in order to reduce complexity
+- abstraction, which is accomplished by these Atmos features:
+  - principle of abstraction: in a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity
     and increase efficiency
-  - abstract components: if a component is marked as an abstract, it can be used only as a base for other components and can't be provisioned
-    using `atmos` or CI/CD systems like Spacelift, Atlantis, or GitHub Actions
+  - abstract components: if a component is marked as `abstract`, it can be used only as a base for other components and can't be provisioned
+    using `atmos` or CI/CD systems like [Spacelift](https://spacelift.io) or [Atlantis](https://www.runatlantis.io)
 
 :::
 
