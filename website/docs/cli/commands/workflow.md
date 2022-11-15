@@ -1,6 +1,7 @@
 ---
 title: atmos workflow
 sidebar_label: workflow
+sidebar_class_name: command
 ---
 
 Executes `terraform workflow` command.

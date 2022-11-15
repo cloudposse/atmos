@@ -1,6 +1,8 @@
 ---
 title: atmos terraform clean
-sidebar_label: terraform clean
+sidebar_label: clean
+sidebar_class_name: command
+id: clean
 ---
 
 Executes `terraform clean` command.

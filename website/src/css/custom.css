@@ -114,3 +114,24 @@ table tr td {
     height: auto !important;
     aspect-ratio: 16/9 !important;
 }
+
+
+div > ul > li > a.table-of-contents__link.toc-highlight {
+    font-weight: 600;
+}
+
+.pagination-nav__link {
+    background-color: #fffc;
+}
+
+[data-theme='dark'] .pagination-nav__link {
+    background-color: rgb(16 36 69 / 23%);
+}
+
+pre code {
+    box-shadow: var(--ifm-alert-shadow);
+}
+
+li.menu__list-item.command {
+ font-family: var(--ifm-font-family-monospace);
+}

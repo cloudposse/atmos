@@ -2,6 +2,7 @@
 title: Stack Imports
 sidebar_position: 7
 sidebar_label: Imports
+id: imports
 ---
 
 Imports are how we reduce duplication of configurations by creating reusable baselines. The imports should be thought of almost like blueprints. Once a reusable catalog of Stacks is exists, robust architectures can be easily created simply by importing those blueprints.

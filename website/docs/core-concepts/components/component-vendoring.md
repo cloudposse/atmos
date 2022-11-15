@@ -2,11 +2,10 @@
 title: Component Vendoring
 sidebar_position: 5
 sidebar_label: Vendoring
+description: Use Component Vendoring to make a copy of 3rd-party components in your own repo.
 ---
 
-Atmos natively supports the concept of "vendoring", which is making a copy of the 3rd party components in your own repo. Our implementation is
-primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir). While `atmos` does not
-call `vendir`, it functions and supports a configuration that is very similar.
+Atmos natively supports the concept of "vendoring", which is making a copy of the 3rd party components in your own repo. Our implementation is primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir). While `atmos` does not call `vendir`, it functions and supports a configuration that is very similar.
 
 After defining the `component.yaml` configuration, the remote component can be downloaded by running the following command:
 

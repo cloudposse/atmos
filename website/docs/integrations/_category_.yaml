@@ -1,0 +1,6 @@
+label: Integrations
+position: 4
+link:
+  type: generated-index
+  description: >-
+    Atmos supports many native Atmos integrations. These extend the core functionalit of atmos.
