@@ -7,7 +7,7 @@ description: This command starts a new `SHELL` configured with the environment f
 ---
 
 :::note Purpose
-This command starts a new `SHELL` configured with the environment for an `atmos` Component in a Stack so allow executing all native terraform commands
+This command starts a new `SHELL` configured with the environment for an `atmos` Component in a Stack to allow executing all native terraform commands
 inside of the shell without using any atmos-specific arguments and flags.
 :::
 
