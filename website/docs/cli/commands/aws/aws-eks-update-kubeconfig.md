@@ -7,7 +7,7 @@ description: Use this command to download `kubeconfig` from an EKS cluster and s
 ---
 
 :::info Purpose
-Use this command to download `kubeconfig` from an EKS cluster and saves it to a file.
+Use this command to download `kubeconfig` from an EKS cluster and save it to a file.
 :::
 
 Executes `aws eks update-kubeconfig` command.
