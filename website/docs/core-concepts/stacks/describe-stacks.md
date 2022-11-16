@@ -8,7 +8,7 @@ description: Describe stacks to view the fully deep-merged configuration
 
 Describing stacks is helpful to understand what the final, fully computed and deep-merged configuration of a stack will look like. Use this to slice and dice the Stack configuration to show different information about stacks and component.
 
-For example, if we wanted to understand what the final configuration looks like for the "production" stack, we could do that by calling the [`atmos describe stack`](/cli/commands/describe/stacks) command to view the YAML output.
+For example, if we wanted to understand what the final configuration looks like for the "production" stack, we could do that by calling the [`atmos describe stacks`](/cli/commands/describe/stacks) command to view the YAML output.
 
 The output can be written to a file by passing the `--file` command-line flag to `atmos` or even formatted as YAML or JSON by using `--format` command-line flag.
 
