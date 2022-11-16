@@ -5,6 +5,9 @@ sidebar_class_name: command
 order: 10
 ---
 
+
+## Usage
+
 `atmos help` shows help for all `atmos` CLI commands.
 
 ```shell

@@ -5,7 +5,7 @@
   "collapsible": true,
   "collapsed": true,
   "link": {
-    "type": "generated-index",
-    "description": "Atmos Helmfile Commands"
+    "type": "doc",
+    "id": "usage"
   }
 }

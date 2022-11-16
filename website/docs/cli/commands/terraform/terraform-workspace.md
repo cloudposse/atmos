@@ -3,9 +3,16 @@ title: atmos terraform workspace
 sidebar_label: workspace
 sidebar_class_name: command
 id: workspace
+description: This command calculates the `terraform` workspace for an `atmos` component (from the context variables and stack config), then runs `terraform init -reconfigure`, then selects the workspace by executing the `terraform workspace select` command.
 ---
 
-Executes `terraform workspace` command.
+:::note Purpose
+Use this command to calculate the `terraform` workspace for an `atmos` component (from the context variables and stack config), then run `terraform init -reconfigure`, then select the workspace by executing the `terraform workspace select` command.
+:::
+
+## Usage
+
+Execute the `terraform workspace` command like this:
 
 ```shell
 atmos terraform workspace <component> -s <stack>

@@ -3,6 +3,7 @@ title: Atmos Stacks
 sidebar_position: 1
 sidebar_label: Stacks
 description: Use JSON Schema and OPA policies to validate Stacks.
+id: stacks
 ---
 
 Stacks are a way to express the complete infrastructure needed for an that is environment. Think of a Stack as an architectural "Blueprint" composed of one or more [Components](/core-concepts/components) and defined using a
@@ -25,7 +26,7 @@ Atmos utilizes a custom YAML configuration format for stacks because it’s an e
 
 ## Schema
 
-A Stack file is defined in YAML and follows a simple, extensible schema. Every Stack file follows the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/component-inheritance).
+A Stack file is defined in YAML and follows a simple, extensible schema. Every Stack file follows the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/inheritance).
 
 ```yaml
 # Configurations that should get deep-merged into this one

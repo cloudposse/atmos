@@ -5,7 +5,7 @@
   "collapsible": true,
   "collapsed": false,
   "link": {
-    "type": "generated-index",
-    "description": "Terraform Commands"
+    "type": "doc",
+    "id": "usage"
   }
 }

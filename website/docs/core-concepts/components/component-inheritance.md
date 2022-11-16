@@ -2,6 +2,7 @@
 title: Component Inheritance
 sidebar_position: 7
 sidebar_label: Inheritance
+id: inheritance
 ---
 
 Component inheritance is the ability to combine multiple configurations through ordered deep-merging of configurations. The concept is borrowed from

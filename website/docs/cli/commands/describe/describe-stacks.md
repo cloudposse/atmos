@@ -2,10 +2,16 @@
 title: atmos describe stacks
 sidebar_label: stacks
 sidebar_class_name: command
-id: describe-stacks
+id: stacks
+description: Use this command to show the fully deep-merged configuration for all stacks and their components in the stacks.
 ---
 
-Executes `describe stacks` command.
+:::note Purpose
+Use this command to show the fully deep-merged configuration for all stacks and their components in the stacks.
+:::
+
+## Usage
+Execute the `describe stacks` command like this:
 
 ```shell
 atmos describe stacks [options]
@@ -34,6 +40,10 @@ atmos describe stacks --components=test/test-component-override-3 --sections=var
 atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings --format=json --file=stacks.json
 atmos describe stacks --components=test/test-component-override-3 --sections=deps,vars -s=tenant2-ue2-staging
 ```
+
+:::tip
+Use `jq` to filter the output.
+:::
 
 ## Flags
 

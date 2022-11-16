@@ -2,6 +2,7 @@
 title: Component Library
 sidebar_label: Library
 description: "A component library is a collection of reusable building blocks."
+id: library
 ---
 
 A component library is a collection of reusable building blocks (aka "components") that can be instantiated any number of times from [Stacks](/core-concepts/stacks).

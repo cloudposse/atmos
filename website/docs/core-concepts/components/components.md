@@ -48,7 +48,7 @@ components:
 
 #### vars
 
-The `vars` section is a free-form map. Use [component validation](/core-concepts/components/component-validation) to enforce policies.
+The `vars` section is a free-form map. Use [component validation](/core-concepts/components/validation) to enforce policies.
 
 #### vars.namespace
 

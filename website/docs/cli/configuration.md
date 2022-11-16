@@ -1,7 +1,12 @@
 ---
 title: CLI Configuration
 sidebar_position: 1
+description: Use the `atmos.yaml` configuration to control the behavior of the `atmos` CLI.
 ---
+
+:::note Purpose
+Use the `atmos.yaml` configuration to control the behavior of the `atmos` CLI.
+:::
 
 Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
@@ -14,11 +19,13 @@ The CLI config is loaded from the following locations (from lowest to highest pr
 - Current directory (`./atmos.yaml`)
 - Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name)
 
+Each configuration file discovered is deep-merged with the preceeding configurations.
+
 <br/>
 
-:::tip
-**Pro-tip:** `atmos` supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
-names/paths (double-star/globstar `**` is supported as well)
+:::tip Pro-Tip
+`atmos` supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
+names/paths (double-star/globstar `**`)
 :::
 
 <br/>
@@ -42,6 +49,9 @@ base_path: "."
 ```
 
 ## Components
+
+Specify the default behaviors for components.
+
 
 ```yaml
 components:
@@ -83,6 +93,8 @@ components:
 
 ## Stacks
 
+Specify where to find stacks. 
+
 ```yaml
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
@@ -103,6 +115,7 @@ stacks:
 
 ## Workflows
 
+
 ```yaml
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
@@ -114,6 +127,7 @@ logs:
   colors: true
 
 ```
+
 
 ## Custom CLI Sub-commands
 
@@ -326,6 +340,8 @@ integrations:
 ```
 
 ## Schemas
+
+Configure the paths where to find OPA, JSON Schema, and CUE files.
 
 ```yaml
 # Validation schemas (for validating atmos stacks and components)
