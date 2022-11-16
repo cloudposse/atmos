@@ -2,7 +2,7 @@
 title: Describe Stacks
 sidebar_position: 7
 sidebar_label: Describing
-id: describe
+id: describing
 description: Describe stacks to view the fully deep-merged configuration
 ---
 
