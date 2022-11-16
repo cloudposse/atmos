@@ -192,8 +192,8 @@ inheritance chain overriding the values from `componentA` inheritance chain.
 <br/>
 
 :::caution
-All of the base components referenced by `metadata.inherits` must be already defined in the Stack configuration, either by using an `import` statement
-or by explicitly defining them in the Stack configuration. The `metadata.inhertis` statement does not imply that we are importing anything.
+All the base components/mixins referenced by `metadata.inherits` must be already defined in the Stack configuration, either by using an `import`
+statement or by explicitly defining them in the Stack configuration. The `metadata.inhertis` statement does not imply that we are importing anything.
 :::
 
 <br/>
