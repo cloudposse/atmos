@@ -32,7 +32,7 @@ In Atmos, we call it **Component-Oriented Programming (COP)**.
   - Principle of abstraction: in a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity
     and increase efficiency
   - Abstract components: if a component is marked as `abstract`, it can be used only as a base for other components and can't be provisioned
-    using `atmos` or CI/CD systems like [Spacelift](https://spacelift.io) or [Atlantis](https://www.runatlantis.io)
+    using `atmos` or CI/CD systems like [Spacelift](https://spacelift.io) or [Atlantis](https://www.runatlantis.io) (see our [integrations](/category/integrations) for details)
 
 :::
 
