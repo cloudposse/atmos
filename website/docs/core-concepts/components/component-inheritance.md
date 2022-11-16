@@ -95,7 +95,7 @@ components:
 
     vpc-1:
       metadata:
-        component: ingra/vpc # Point to the Terraform component in `components/terraform` folder
+        component: ingfa/vpc # Point to the Terraform component in `components/terraform` folder
         inherits:
           - vpc-defaults # Inherit all settings and variables from the `vpc-defaults` base component
       vars:
@@ -109,7 +109,7 @@ components:
 
     vpc-2:
       metadata:
-        component: ingra/vpc # Point to the same Terraform component in `components/terraform` folder
+        component: ingfa/vpc # Point to the same Terraform component in `components/terraform` folder
         inherits:
           - vpc-defaults # Inherit all settings and variables from the `vpc-defaults` base component
       vars:
