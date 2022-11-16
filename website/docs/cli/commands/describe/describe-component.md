@@ -2,7 +2,7 @@
 title: atmos describe component
 sidebar_label: component
 sidebar_class_name: command
-id: describe-component
+id: component
 description: Use this command to describe the complete configuration for a component in a stack.
 ---
 

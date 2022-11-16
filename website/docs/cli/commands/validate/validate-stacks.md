@@ -2,7 +2,7 @@
 title: atmos validate stacks
 sidebar_label: stacks
 sidebar_class_name: command
-id: validate-stacks
+id: stacks
 description: Use this command to validate Stack configurations.
 ---
 

@@ -2,7 +2,7 @@
 title: atmos validate component
 sidebar_label: component
 sidebar_class_name: command
-id: validate-component
+id: component
 description: Use this command to validate an `atmos` component in a Stack using JSON Schema and OPA policies.
 ---
 

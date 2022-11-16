@@ -2,7 +2,7 @@
 title: atmos describe config
 sidebar_label: config
 sidebar_class_name: command
-id: describe-config
+id: config
 description: Use this command to show the final (deep-merged) CLI configuration of all `atmos.yaml` file(s).
 ---
 

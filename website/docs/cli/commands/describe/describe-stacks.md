@@ -2,7 +2,7 @@
 title: atmos describe stacks
 sidebar_label: stacks
 sidebar_class_name: command
-id: describe-stacks
+id: stacks
 description: Use this command to show the fully deep-merged configuration for all stacks and their components in the stacks.
 ---
 
