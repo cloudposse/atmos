@@ -125,7 +125,7 @@ components:
 
 In the configuration above, the following **Component-Oriented Programming** concepts are implemented:
 
-- **Component inheritance**: In the `ue2-dev` stack (`stacks/ue2-dev.yaml` stack config file), the Atmos components `vpc-1` and `vpc-2` inherit from
+- **Component Inheritance**: In the `ue2-dev` stack (`stacks/ue2-dev.yaml` stack config file), the Atmos components `vpc-1` and `vpc-2` inherit from
   the base component `vpc-defaults`. This makes `vpc-1` and `vpc-2` derived components
 - **Principle of Abstraction**: In the `ue2-dev` stack, only the relevant information about the derived components in the stack is shown. All the base
   component settings are "hidden" (in the imported `catalog`), which reduces the configuration size and complexity
