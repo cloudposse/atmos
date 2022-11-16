@@ -75,7 +75,7 @@ In the configuration above, the following **Component-Oriented Programming** con
 
 - **Abstract components**: `atmos` component `vpc-defaults` is marked as abstract in `metadata.type`. This makes the component non-deployable, and it
   can be used only as a base for other components that inherit from it
-- **Dynamic polymorphism**: All the variables in the `vars` section become the default values for the derived components. This provides the ability to
+- **Dynamic Polymorphism**: All the variables in the `vars` section become the default values for the derived components. This provides the ability to
   override and use the base component properties in the derived components to provision the same Terraform configuration many times but with different
   settings
 
