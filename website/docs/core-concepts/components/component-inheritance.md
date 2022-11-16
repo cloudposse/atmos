@@ -186,7 +186,9 @@ metadata:
 Atmos will recursively deep-merge all the base components of `componentA` (each component overriding its base),
 then all the base components of `componentB` (each component overriding its base), then the two results are deep-merged together with `componentB`
 inheritance chain overriding the values from `componentA` inheritance chain.
-
+:::important
+All of the base components referenced by `metadata.inherits` must be already defined in the Stack configuration, either by using an `import` statement or by explicitly defining them in the Stack configuration. The `metadata.inhertis` statement does not imply that we are importing anything.
+:::
 Here is a concrete example:
 
 <br/>
