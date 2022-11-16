@@ -52,3 +52,4 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
 | Flag        | Description   | Alias | Required |
 |:------------|:--------------|:------|:---------|
 | `--stack`   | `atmos` stack | `-s`  | yes      |
+| `--dry-run` | Dry-run       |       | no       |
