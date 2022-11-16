@@ -129,7 +129,7 @@ In the configuration above, the following **Component-Oriented Programming** con
   the base component `vpc-defaults`. This makes `vpc-1` and `vpc-2` derived components
 - **Principle of abstraction**: In the `ue2-dev` stack, only the relevant information about the derived components in the stack is shown. All the base
   component settings are "hidden" (in the imported `catalog`), which reduces the configuration size and complexity
-- **Dynamic polymorphism**: The derived `vpc-1` and `vpc-2` components override and use the base component properties to be able to provision the same
+- **Dynamic Polymorphism**: The derived `vpc-1` and `vpc-2` components override and use the base component properties to be able to provision the same
   Terraform configuration many times but with different settings
 
 <br/>
