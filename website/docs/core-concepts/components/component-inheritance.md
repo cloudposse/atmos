@@ -127,7 +127,7 @@ In the configuration above, the following **Component-Oriented Programming** con
 
 - **Component inheritance**: In the `ue2-dev` stack (`stacks/ue2-dev.yaml` stack config file), the Atmos components `vpc-1` and `vpc-2` inherit from
   the base component `vpc-defaults`. This makes `vpc-1` and `vpc-2` derived components
-- **Principle of abstraction**: In the `ue2-dev` stack, only the relevant information about the derived components in the stack is shown. All the base
+- **Principle of Abstraction**: In the `ue2-dev` stack, only the relevant information about the derived components in the stack is shown. All the base
   component settings are "hidden" (in the imported `catalog`), which reduces the configuration size and complexity
 - **Dynamic Polymorphism**: The derived `vpc-1` and `vpc-2` components override and use the base component properties to be able to provision the same
   Terraform configuration many times but with different settings
