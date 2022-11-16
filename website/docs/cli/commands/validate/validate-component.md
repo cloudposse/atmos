@@ -3,9 +3,16 @@ title: atmos validate component
 sidebar_label: component
 sidebar_class_name: command
 id: validate-component
+description: Use this command to validate an `atmos` component in a Stack using JSON Schema and OPA policies.
 ---
 
-Executes `validate component` command.
+:::note purpose
+Use this command to validate an `atmos` component in a Stack using JSON Schema and OPA policies.
+:::
+
+## Usage
+
+Execute the `validate component` command like this:
 
 ```shell
 atmos validate component <component> -s <stack> [options]

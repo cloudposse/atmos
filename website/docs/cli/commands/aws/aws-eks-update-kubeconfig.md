@@ -3,7 +3,12 @@ title: atmos aws eks update-kubeconfig
 sidebar_label: eks update-kubeconfig
 sidebar_class_name: command
 id: eks-update-kubeconfig
+description: Use this command to download `kubeconfig` from an EKS cluster and saves it to a file.
 ---
+
+:::info Purpose
+Use this command to download `kubeconfig` from an EKS cluster and saves it to a file.
+:::
 
 Executes `aws eks update-kubeconfig` command.
 

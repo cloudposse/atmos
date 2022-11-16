@@ -3,9 +3,16 @@ title: atmos helmfile generate varfile
 sidebar_label: generate varfile
 sidebar_class_name: command
 id: genereate-varfile
+description: Use this command to generate a varfile for a `helmfile` component in a stack.
 ---
 
-Executes `helmfile generate varfile` command.
+:::note Purpose
+Use this command to generate a varfile for a `helmfile` component in a stack.
+:::
+
+## Usage
+
+Execute the `helmfile generate varfile` command like this:
 
 ```shell
 atmos helmfile generate varfile <component> -s <stack> [options]

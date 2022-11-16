@@ -3,9 +3,16 @@ title: atmos vendor pull
 sidebar_label: pull
 sidebar_class_name: command
 id: pull
+description: Use this command to pull sources and mixins from remote repositories for a `terraform` or `helmfile` component.
 ---
 
-Executes `vendor pull` command.
+:::note Purpose
+Use this command to pull sources and mixins from remote repositories for a `terraform` or `helmfile` component.
+:::
+
+## Usage
+
+Execute the `vendor pull` command like this:
 
 ```shell
 atmos vendor pull --component <component> [options]

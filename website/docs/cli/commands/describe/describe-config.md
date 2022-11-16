@@ -3,9 +3,16 @@ title: atmos describe config
 sidebar_label: config
 sidebar_class_name: command
 id: describe-config
+description: Use this command to show the final (deep-merged) CLI configuration of all `atmos.yaml` file(s).
 ---
 
-Executes `describe config` command.
+:::note Purpose
+Use this command to show the final (deep-merged) CLI configuration of all `atmos.yaml` file(s).
+:::
+
+## Usage 
+
+Execute the `describe config` command like this:
 
 ```shell
 atmos describe config [options]

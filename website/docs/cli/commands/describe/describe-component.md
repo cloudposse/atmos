@@ -3,9 +3,16 @@ title: atmos describe component
 sidebar_label: component
 sidebar_class_name: command
 id: describe-component
+description: Use this command to describe the complete configuration for a component in a stack.
 ---
 
-Executes `describe component` command.
+:::note Purpose
+Use this command to describe the complete configuration for a component in a stack.
+:::
+
+## Usage
+
+Execute the `describe component` command like this:
 
 ```shell
 atmos describe component <component> -s <stack>

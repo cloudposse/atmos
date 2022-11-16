@@ -3,9 +3,16 @@ title: atmos terraform generate backends
 sidebar_label: generate backends
 sidebar_class_name: command
 id: generate-backends
+description: Use this command to generate the Terraform "backend config" files for all `atmos` Terraform Components in all Stacks.
 ---
 
-Executes `terraform generate backends` command.
+:::note purpose
+Use this command to generate the Terraform "backend config" files for all `atmos` Terraform [Components](/core-concepts/components) in all [Stacks](/core-concepts/stacks).
+:::
+
+## Usage
+
+Execute the `terraform generate backends` command like this:
 
 ```shell
 atmos terraform generate backends [options]

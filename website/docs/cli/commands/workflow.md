@@ -2,9 +2,16 @@
 title: atmos workflow
 sidebar_label: workflow
 sidebar_class_name: command
+description: Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
 ---
 
-Executes `terraform workflow` command.
+:::note Purpose
+Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
+:::
+
+## Usage
+
+Execute the `terraform workflow` command like this:
 
 ```shell
 atmos workflow <workflow_name> --file <workflow_file> [options]
