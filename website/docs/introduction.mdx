@@ -125,7 +125,7 @@ So, why did we choose YAML? That's simple: **everyone knows YAML.**
 
 YAML is an extensible markup language. It's ideal for defining a declarative DSL.
 
-Using YAML, `atmos` is easily able to support features like [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/components/component-inheritance), deep merging, and [policies](/core-concepts/components/component-validation).
+Using YAML, `atmos` is easily able to support features like [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/components/inheritance), deep merging, and [policies](/core-concepts/components/validation).
 
 YAML is also "tool agnostic" (unlike HCL); it's not tied to Terraform or explicitly associated with HashiCorp products.
 - **Every language can read it** (e.g. from python or node. Even read it remotely, e.g. via http)
@@ -133,8 +133,8 @@ YAML is also "tool agnostic" (unlike HCL); it's not tied to Terraform or explici
   
 There are other cool things we get "for free" by adopting YAML. 
 - [YAML anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases) can help DRY up configurations
-- Easy [OPA validation](/core-concepts/components/component-validation#open-policy-agent-opa)
-- [JSON Schema validation](/core-concepts/components/component-validation#json-schema)
+- Easy [OPA validation](/core-concepts/components/validation#open-policy-agent-opa)
+- [JSON Schema validation](/core-concepts/components/validation#json-schema)
 
 The possibilities are endless. 
 

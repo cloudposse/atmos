@@ -11,4 +11,4 @@ Describing components is helpful to understand what the final, fully computed an
 
 For example, if we wanted to understand what the final configuration looks like for a "vpc" running in the "production" stack, we could do that by calling the [`atmos describe components`](/cli/commands/describe/components) command to view the YAML output.
 
-For more powerful filtering options, consider [describing stacks](/core-concepts/stacks/describe-stacks) instead.
+For more powerful filtering options, consider [describing stacks](/core-concepts/stacks/describing) instead.

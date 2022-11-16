@@ -12,9 +12,9 @@ Atmos is a powerful enterprise-grade workflow automation tool with so **much mor
 
 Here are some of the major differentiators of Atmos:
 * [Third-party Integrations](/category/integrations)
-* [Component Vendoring](/core-concepts/components/component-vendoring)
+* [Component Vendoring](/core-concepts/components/vendoring)
 * [Imports](/core-concepts/stacks/imports) (mixins, catalogs)
 * [Workflow automation](/core-concepts/workflows)
 * [Custom commands](/core-concepts/subcommands)
-* [Multiple Inheritance](/core-concepts/components/component-inheritance)
-* [JSON Schema & OPA Policy Enforcement](/core-concepts/components/component-validation)
+* [Multiple Inheritance](/core-concepts/components/inheritance)
+* [JSON Schema & OPA Policy Enforcement](/core-concepts/components/validation)
