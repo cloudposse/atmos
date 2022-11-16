@@ -164,9 +164,9 @@ the [C3 linearization](https://en.wikipedia.org/wiki/C3_linearization) algorithm
 In **Object-Oriented Programming (OOP)**, a mixin is a class that contains methods for use by other classes without having to be the parent class of
 those other classes.
 
-In **Component-Oriented Programming (COP)** implemented in Atmos, a [mixin](/core-concepts/mixins) is an abstract base component that is never meant
-to be provisioned and does
-not have any physical implementation - it just contains default settings/variables/properties for use by other Atmos components.
+In **Component-Oriented Programming (COP)** implemented in Atmos, a [mixin](/core-concepts/stacks/mixins) is an abstract base component that is never
+meant to be provisioned and does not have any physical implementation - it just contains default settings/variables/properties for use by other Atmos
+components.
 
 :::
 
