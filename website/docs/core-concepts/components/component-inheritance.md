@@ -25,14 +25,15 @@ In Atmos, we call it **Component-Oriented Programming (COP)**.
 
 **Component-Oriented Programming** supports:
 
-- Single inheritance
-- Multiple inheritance
-- Dynamic polymorphism (ability to override base component properties)
+- Single Inheritance
+- Multiple Inheritance
+- Dynamic Polymorphism (ability to override base component properties)
 - Abstraction, which is accomplished by these Atmos features:
-  - Principle of abstraction: in a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity
+  - Principle of Abstraction: in a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity
     and increase efficiency
-  - Abstract components: if a component is marked as `abstract`, it can be used only as a base for other components and can't be provisioned
-    using `atmos` or CI/CD systems like [Spacelift](https://spacelift.io) or [Atlantis](https://www.runatlantis.io) (see our [integrations](/category/integrations) for details)
+  - Abstract Components: if a component is marked as `abstract`, it can be used only as a base for other components and can't be provisioned
+    using `atmos` or CI/CD systems like [Spacelift](https://spacelift.io) or [Atlantis](https://www.runatlantis.io) (see
+    our [integrations](/category/integrations) for details)
 
 :::
 
@@ -163,7 +164,8 @@ the [C3 linearization](https://en.wikipedia.org/wiki/C3_linearization) algorithm
 In **Object-Oriented Programming (OOP)**, a mixin is a class that contains methods for use by other classes without having to be the parent class of
 those other classes.
 
-In **Component-Oriented Programming (COP)** implemented by Atmos, a [mixin](/core-concepts/mixins) is an abstract base component that is never meant to be provisioned and does
+In **Component-Oriented Programming (COP)** implemented in Atmos, a [mixin](/core-concepts/mixins) is an abstract base component that is never meant
+to be provisioned and does
 not have any physical implementation - it just contains default settings/variables/properties for use by other Atmos components.
 
 :::
@@ -186,9 +188,16 @@ metadata:
 Atmos will recursively deep-merge all the base components of `componentA` (each component overriding its base),
 then all the base components of `componentB` (each component overriding its base), then the two results are deep-merged together with `componentB`
 inheritance chain overriding the values from `componentA` inheritance chain.
-:::important
-All of the base components referenced by `metadata.inherits` must be already defined in the Stack configuration, either by using an `import` statement or by explicitly defining them in the Stack configuration. The `metadata.inhertis` statement does not imply that we are importing anything.
+
+<br/>
+
+:::caution
+All of the base components referenced by `metadata.inherits` must be already defined in the Stack configuration, either by using an `import` statement
+or by explicitly defining them in the Stack configuration. The `metadata.inhertis` statement does not imply that we are importing anything.
 :::
+
+<br/>
+
 Here is a concrete example:
 
 <br/>
