@@ -76,7 +76,7 @@ li > ul.menu__list {
 
 .button--lg {
     margin-top: 1em;
-    margin-bottom: 1em;
+    margin-bottom: 2em;
 }
 
 .header-github-link:hover {
@@ -109,6 +109,12 @@ table tr td {
     white-space: nowrap;
 }
 
+.react-player {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 16/9 !important;
+}
+
 
 div > ul > li > a.table-of-contents__link.toc-highlight {
     font-weight: 600;
@@ -122,7 +128,7 @@ div > ul > li > a.table-of-contents__link.toc-highlight {
     background-color: rgb(16 36 69 / 23%);
 }
 
-pre code { 
+pre code {
     box-shadow: var(--ifm-alert-shadow);
 }
 
