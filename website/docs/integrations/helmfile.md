@@ -8,7 +8,7 @@ Atmos natively supports opinionated workflows for [Helmfile](https://github.com/
 
 Helmfile provides a declarative specification for deploying helm charts.
 
-For a complete list of supported commands, please see the Atmos [helmfile](/cli/commands/helmfile) documentation.
+For a complete list of supported commands, please see the Atmos [helmfile](/cli/commands/helmfile/usage) documentation.
 
 ## Example: Provision Helmfile Component
 
