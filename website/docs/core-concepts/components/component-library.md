@@ -1,5 +1,6 @@
 ---
 title: Component Library
+sidebar_position: 4
 sidebar_label: Library
 description: "A component library is a collection of reusable building blocks."
 id: library
