@@ -124,7 +124,7 @@ func ProcessYAMLConfigFiles(
 
 // ProcessYAMLConfigFile takes a path to a YAML stack config file,
 // recursively processes and deep-merges all imports,
-// and returns stack config as map[any]any
+// and returns the final stack config
 func ProcessYAMLConfigFile(
 	basePath string,
 	filePath string,
@@ -640,6 +640,9 @@ func ProcessStackConfig(
 						componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 					}
 				}
+
+				baseComponents = u.UniqueStrings(baseComponents)
+				sort.Strings(baseComponents)
 
 				finalComponentVars, err := m.Merge([]map[any]any{globalAndTerraformVars, baseComponentVars, componentVars})
 				if err != nil {
