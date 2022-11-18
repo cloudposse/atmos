@@ -12,8 +12,8 @@ terraform:
     s3:
       encrypt: true
       key: terraform.tfstate
-      bucket:         cp-ue2-root-tfstate
+      bucket: cp-ue2-root-tfstate
       dynamodb_table: cp-ue2-root-tfstate-lock
-      profile:        cp-gbl-root-tfstate
+      profile: cp-gbl-root-tfstate
       acl: bucket-owner-full-control
       region: us-east-2
