@@ -49,13 +49,13 @@ func FindComponentStacks(
 
 // FindComponentDependencies finds all imports where the component or the base component(s) are defined
 // Component depends on the imported config file if any of the following conditions is true:
-//  1. The imported file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
-//     `settings` or `vars` sections which are not empty
-//  2. The imported file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
-//     `remote_state_backend_type`, `settings` or `vars` sections which are not empty
-//  3. The imported config file has the "components" section, which has the component type section, which has the component section
+//  1. The imported config file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
+//     `settings` or `vars` sections which are not empty.
+//  2. The imported config file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
+//     `remote_state_backend_type`, `settings` or `vars` sections which are not empty.
+//  3. The imported config file has the "components" section, which has the component type section, which has the component section.
 //  4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section,
-//     and the base component section is defined inline (not imported)
+//     and the base component section is defined inline (not imported).
 func FindComponentDependencies(
 	stack string,
 	componentType string,
@@ -107,6 +107,11 @@ func FindComponentDependencies(
 		}
 
 		// Process base component(s)
+		// Only include the imported config file into "deps" if all the following conditions are `true`:
+		// 1. The imported config file has the base component(s) section(s)
+		// 2. The imported config file does not import other config files (which means it defined the base component sections inline)
+		// 3. If the imported config file does import other config files, check that the base component sections in them are different by using
+		// `reflect.DeepEqual`. If they are the same, don't include the imported config file since it does not specify anything for the base component
 		for _, baseComponent := range baseComponents {
 			baseComponentSection, ok := stackImportMapComponentTypeSection[baseComponent].(map[any]any)
 
