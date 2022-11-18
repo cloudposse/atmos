@@ -13,8 +13,8 @@ With `atmos`, all of your configuration is neatly defined in YAML. This makes tr
 The `atmos` tool supports (3) commands that when combined, make it easy to use `atlantis`.
 
 1. Generate the `atlantis.yaml` repo configuration: `atmos atlantis generate repo-config`
-2. Generate the backend configuration for all components: `atmos terraform generate backends --format=hcl`
-3. Generate the full deep-merged configurations of all stacks for each components: `atmos terraform generate varfiles`
+2. Generate the backend configuration for all components: `atmos terraform generate backends --format=backend-config|hcl`
+3. Generate the full deep-merged configurations of all stacks for each component: `atmos terraform generate varfiles`
 
 ## Configuration
 
@@ -90,7 +90,7 @@ integrations:
             - run: terraform apply $PLANFILE
 ```
 
-Using the config, project and workflow templates, atmos generates a separate atlantis project for each atmos component in every stack:
+Using the config, project and workflow templates, atmos generates a separate atlantis project for each atmos component in every stack.
 
 By running:
 
@@ -98,7 +98,7 @@ By running:
 atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
 ```
 
-The following Atlantis repo-config would be generated.
+The following Atlantis repo-config would be generated:
 
 ```yaml
 version: 3
