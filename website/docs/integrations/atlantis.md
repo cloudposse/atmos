@@ -194,7 +194,7 @@ env:
   ATMOS_CLI_CONFIG_PATH: ./
 
 jobs:
-  generate_atlantis-yaml:
+  generate-atlantis-yaml:
     name: Generate varfiles, backend config and atlantis.yaml
     runs-on: ubuntu-latest
 
