@@ -1,6 +1,6 @@
 ---
 title: Component Vendoring
-sidebar_position: 2
+sidebar_position: 3
 sidebar_label: Vendoring
 description: Use Component Vendoring to make a copy of 3rd-party components in your own repo.
 id: vendoring

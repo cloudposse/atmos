@@ -1,6 +1,6 @@
 ---
 title: Describe Components
-sidebar_position: 3
+sidebar_position: 4
 sidebar_label: Describing
 description: Describe components to view the fully deep-merged configuration
 id: describing
