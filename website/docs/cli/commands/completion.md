@@ -56,3 +56,9 @@ source <(atmos completion bash)
 | Argument      | Description                                                         | Required |
 |:--------------|:--------------------------------------------------------------------|:---------|
 | `shell_name ` | Shell name. Valid values are `bash`, `zsh`, `fish` and `powershell` | yes      |
+
+<br/>
+
+:::info
+Refer to [Command-line completion](https://en.wikipedia.org/wiki/Command-line_completion) for more details
+:::
