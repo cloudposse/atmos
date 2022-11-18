@@ -169,6 +169,10 @@ files" and propose a plan.
 
 Here's an example GitHub Action to use Atlantis with Atmos.
 
+The action executes the `atmos generate varfiles/backends` commands to generate Terraform varfiles and backend config files for all Atmos stacks,
+then executes the `atmos atlantis generate repo-config` command to generate the Atlantis repo config file (`atlantis.yaml`) for all Atlantis projects,
+then commits all the generated files and calls Atlantis via a webhook.
+
 You can adopt and modify it to your own needs.
 
 ```yaml
@@ -254,7 +258,7 @@ jobs:
           fi
 
   call-atlantis:
-    needs: generate_atlantis-yaml
+    needs: generate-atlantis-yaml
     name: Sending data to Atlantis
     runs-on: ubuntu-latest
     steps:
