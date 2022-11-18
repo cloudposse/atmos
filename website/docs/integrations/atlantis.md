@@ -165,7 +165,7 @@ The following commands will generate those files.
 Make sure that the resulting files are committed back to VCS (e.g. `git add -A`) and push'd upstream. That way Atlantis will trigger on the "affected
 files" and propose a plan.
 
-### Example GitHUb Action
+### Example GitHub Action
 
 Here's an example GitHub Action to use Atlantis with Atmos.
 
