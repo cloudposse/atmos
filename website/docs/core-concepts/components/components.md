@@ -147,7 +147,7 @@ One important distinction about components that is worth noting: components shou
 child modules. Components are the building blocks of your infrastructure. This is where you define all the business logic for how to provision some
 common piece of infrastructure like ECR repos (with the [ecr](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/ecr)
 component) or EKS clusters (with the [eks](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/eks/cluster) component). Our
-convention is to stick components in the`components/terraform/`directory.
+convention is to stick components in the `components/terraform/` directory.
 
 If your components rely on submodules, our convention is to use a `modules/` subfolder of the component to store them.
 
