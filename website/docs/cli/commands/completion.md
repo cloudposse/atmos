@@ -45,6 +45,12 @@ atmos completion bash > /tmp/completion
 source /tmp/completion
 ```
 
+or
+
+```shell
+source <(atmos completion bash)
+```
+
 ## Arguments
 
 | Argument      | Description                                                         | Required |
