@@ -17,5 +17,5 @@ calling the [`atmos describe components`](/cli/commands/describe/component) comm
 For more powerful filtering options, consider [describing stacks](/core-concepts/stacks/describing) instead.
 
 The other helpful use-case for describing stacks is when developing polices for [validation](/core-concepts/components/validation) of Stacks and
-Components. OPA policies can enforce what is or is not permitted. Literally anything in the entire YAML output can be validated using policies that
+Components. OPA policies can enforce what is or is not permitted. Everything in the YAML output can be validated using policies that
 you develop.
