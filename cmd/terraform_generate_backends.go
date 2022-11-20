@@ -47,7 +47,7 @@ func init() {
 	)
 
 	terraformGenerateBackendsCmd.PersistentFlags().String("components", "",
-		"Only generate the backend files for the specified `atmos` components (comma-separated values).\n"+
+		"Only generate the backend files for the specified 'atmos' components (comma-separated values).\n"+
 			"atmos terraform generate backends --file-template <file_template> --components <component1>,<component2>",
 	)
 
