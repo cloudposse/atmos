@@ -38,6 +38,11 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 
 // ExecuteShell uses mvdan.cc/sh/v3's parser and interpreter to run a shell script
 func ExecuteShell(command string, name string, dir string, env []string, dryRun bool, verbose bool) error {
+	if verbose {
+		u.PrintInfo("\nExecuting command:")
+		fmt.Println(command)
+	}
+
 	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
 	if err != nil {
 		return err
@@ -52,10 +57,6 @@ func ExecuteShell(command string, name string, dir string, env []string, dryRun 
 		return err
 	}
 
-	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		fmt.Println(command)
-	}
 
 	if dryRun {
 		return nil
