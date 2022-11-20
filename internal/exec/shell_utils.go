@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/mvdan/sh/v3/expand"
+	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 )
