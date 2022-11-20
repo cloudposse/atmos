@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +10,9 @@ import (
 	"strings"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // ExecuteShellCommand prints and executes the provided command with args and flags
@@ -29,6 +34,68 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 	}
 
 	return cmd.Run()
+}
+
+// ExecuteShell uses mvdan.cc/sh/v3's parser and interpreter to run a shell script
+func ExecuteShell(command string, name string, dir string, env []string, dryRun bool, verbose bool) error {
+	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
+	if err != nil {
+		return err
+	}
+
+	runner, err := interp.New(
+		interp.Dir(dir),
+		interp.Env(expand.ListEnviron(append(os.Environ(), env...)...)),
+		interp.StdIO(os.Stdin, os.Stdout, os.Stderr),
+	)
+	if err != nil {
+		return err
+	}
+
+	if verbose {
+		u.PrintInfo("\nExecuting command:")
+		fmt.Println(command)
+	}
+
+	if dryRun {
+		return nil
+	}
+
+	return runner.Run(context.TODO(), parser)
+}
+
+// ExecuteShell uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and capture its standard output
+func ExecuteShellAndReturnOutput(command string, name string, dir string, env []string, dryRun bool, verbose bool) (string, error) {
+	var b bytes.Buffer
+	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
+	if err != nil {
+		return "", err
+	}
+
+	runner, err := interp.New(
+		interp.Dir(dir),
+		interp.Env(expand.ListEnviron(append(os.Environ(), env...)...)),
+		interp.StdIO(os.Stdin, &b, os.Stderr),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	if verbose {
+		u.PrintInfo("\nExecuting command:")
+		fmt.Println(command)
+	}
+
+	if dryRun {
+		return "", nil
+	}
+
+	err = runner.Run(context.TODO(), parser)
+	if err != nil {
+		return "", err
+	}
+
+	return b.String(), nil
 }
 
 // ExecuteShellCommandAndReturnOutput prints and executes the provided command with args and flags and returns the command output

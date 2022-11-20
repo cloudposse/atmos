@@ -21,6 +21,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	github.com/zclconf/go-cty v1.12.0
 	gopkg.in/yaml.v2 v2.4.0
+	mvdan.cc/sh/v3 v3.5.1
 )
 
 require (
@@ -111,6 +112,7 @@ require (
 	golang.org/x/sys v0.0.0-20221010170243-090e33056c14 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
+	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.102.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect

@@ -7,7 +7,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/spf13/cobra"
 	"os"
-	"strings"
 	"text/template"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -178,8 +177,8 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
-				valCommandArgs := strings.Fields(valCommand)
-				res, err := e.ExecuteShellCommandAndReturnOutput(valCommandArgs[0], valCommandArgs[1:], ".", nil, false, commandConfig.Verbose)
+				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
+				res, err := e.ExecuteShellAndReturnOutput(valCommand, valCommandName, ".", nil, false, commandConfig.Verbose)
 				if err != nil {
 					u.PrintErrorToStdErrorAndExit(err)
 				}
@@ -208,15 +207,14 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandTmpl, err := processTmpl(fmt.Sprintf("step-%d", i), step, data)
+		commandToRun, err := processTmpl(fmt.Sprintf("step-%d", i), step, data)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}
-		commandToRun := os.ExpandEnv(commandTmpl)
 
 		// Execute the command step
-		stepArgs := strings.Fields(commandToRun)
-		err = e.ExecuteShellCommand(stepArgs[0], stepArgs[1:], ".", envVarsList, false, commandConfig.Verbose)
+		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+		err = e.ExecuteShell(commandToRun, commandName, ".", envVarsList, false, commandConfig.Verbose)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}
