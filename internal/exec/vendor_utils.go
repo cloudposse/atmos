@@ -214,7 +214,7 @@ func ExecuteComponentVendorCommandInternal(
 			// Copy from the temp folder to the destination folder with skipping of some files
 			copyOptions := cp.Options{
 				// Skip specifies which files should be skipped
-				Skip: func(src string) (bool, error) {
+				Skip: func(srcinfo os.FileInfo, src, dest string) (bool, error) {
 					if strings.HasSuffix(src, ".git") {
 						return true, nil
 					}
