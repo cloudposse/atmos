@@ -92,10 +92,10 @@ vars:
   stage: dev
 
 terraform:
-  vars: { }
+  vars: {}
 
 helmfile:
-  vars: { }
+  vars: {}
 
 components:
   terraform:
@@ -110,7 +110,7 @@ components:
       backend:
         s3:
           workspace_key_prefix: "eks"
-      vars: { }
+      vars: {}
 
   helmfile:
     nginx-ingress:

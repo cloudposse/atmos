@@ -1,4 +1,4 @@
-package vender
+package generate
 
 import (
 	"github.com/stretchr/testify/assert"
