@@ -43,11 +43,11 @@ vars:
 # There can then be global variables for each type of component. 
 # Here we set global variables for any "terraform" component.
 terraform:
-  vars: { }
+  vars: {}
 
 # Here we set global variables for any "helmfile" component.
 helmfile:
-  vars: { }
+  vars: {}
 
 # Components are the building blocks of reusable infrastructure.
 # They can be anything. Atmos natively supports "terraform" and "helmfile".
@@ -64,7 +64,7 @@ components:
       backend:
         s3:
           workspace_key_prefix: "eks"
-      vars: { }
+      vars: {}
 
   helmfile:
     nginx-ingress:

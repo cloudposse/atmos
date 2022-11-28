@@ -5,47 +5,42 @@ sidebar_label: Inheritance
 id: inheritance
 ---
 
-Component inheritance is the ability to combine multiple configurations through ordered deep-merging of configurations. The concept is borrowed from
+Component Inheritance is one of the principles of [Component-Oriented Programming (COP)](/core-concepts/components/component-oriented-programming)
+supported by Atmos.
+
+Component Inheritance is the ability to combine multiple configurations through ordered deep-merging of configurations. The concept is borrowed from
 [Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming)) to logically organize complex configurations in
 a way that makes conceptual sense. The side effect of this are extremely DRY and reusable configurations.
 
 :::info
 
-In Object-Oriented Programming (OOP), inheritance is the mechanism of basing an object or class upon another object (prototype-based inheritance) or
+In Object-Oriented Programming (OOP), Inheritance is the mechanism of basing an object or class upon another object (prototype-based inheritance) or
 class (class-based inheritance), retaining similar implementation.
 
-Similarly, in Atmos, Component inheritance is the mechanism of deriving a component from one or more base components, inheriting all the
+Similarly, in Atmos, Component Inheritance is the mechanism of deriving a component from one or more base components, inheriting all the
 properties of the base component(s) and overriding only some fields specific to the derived component. The derived component acquires all the
 properties of the "parent" component(s), allowing creating very DRY configurations that are built upon existing components.
-
-In Atmos, we call it **Component-Oriented Programming (COP)**.
-
-:::
-
-:::info
-
-**Component-Oriented Programming** supports:
-
-- Single Inheritance
-- Multiple Inheritance
-- Dynamic Polymorphism (ability to override base component properties)
-- Abstraction, which is accomplished by these Atmos features:
-  - Principle of Abstraction: in a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity
-    and increase efficiency
-  - Abstract Components: if a component is marked as `abstract`, it can be used only as a base for other components and can't be provisioned
-    using `atmos` or CI/CD systems like [Spacelift](https://spacelift.io) or [Atlantis](https://www.runatlantis.io) (see
-    our [integrations](/category/integrations) for details)
 
 :::
 
 <br/>
 
-These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
+Component Inheritance is implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
 and `metadata` component's configuration section.
+
+<br/>
+
+:::info Definitions
+
+- **Base Component** is an Atmos component from which other Atmos components inherit all the configuration properties
+- **Derived Component** is an Atmos component which derives the configuration properties from other Atmos components
+
+:::
+
 
 ## Single Inheritance
 
-Single Inheritance is used when an Atmos component inherits from another Atmos component.
+Single Inheritance is used when an Atmos component inherits from another base Atmos component.
 
 Let's say we want to provision two VPCs with different settings into the same AWS account.
 
@@ -152,7 +147,7 @@ environment-agnostic). And the configurations are extremely DRY and reusable.
 
 ## Multiple Inheritance
 
-Multiple Inheritance is used when an Atmos component inherits from more than one base components.
+Multiple Inheritance is used when an Atmos component inherits from more than one Atmos component.
 
 Multiple Inheritance allows a component to inherit from many base components or mixins, each base component having its own inheritance chain,
 effectively making it an inheritance matrix. It uses a method similar to Method Resolution Order (MRO) using
@@ -214,7 +209,7 @@ import:
 components:
   terraform:
     test/test-component-override-3:
-      vars: { }
+      vars: {}
       metadata:
         # `real` is implicit, you don't need to specify it.
         # `abstract` makes the component protected from being deployed.

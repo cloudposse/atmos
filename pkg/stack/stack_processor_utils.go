@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -48,74 +49,111 @@ func FindComponentStacks(
 
 // FindComponentDependencies finds all imports where the component or the base component(s) are defined
 // Component depends on the imported config file if any of the following conditions is true:
-//  1. The imported file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
-//     `settings` or `vars` sections which are not empty
-//  2. The imported file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
-//     `remote_state_backend_type`, `settings` or `vars` sections which are not empty
-//  3. The imported config file has the "components" section, which has the component type section, which has the component section
-//  4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section
+//  1. The imported config file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
+//     `settings` or `vars` sections which are not empty.
+//  2. The imported config file has the component type section, which has any of the `backend`, `backend_type`, `env`, `remote_state_backend`,
+//     `remote_state_backend_type`, `settings` or `vars` sections which are not empty.
+//  3. The imported config file has the "components" section, which has the component type section, which has the component section.
+//  4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section,
+//     and the base component section is defined inline (not imported).
 func FindComponentDependencies(
 	stack string,
 	componentType string,
 	component string,
 	baseComponents []string,
-	importsConfig map[string]map[any]any) ([]string, error) {
+	stackImports map[string]map[any]any) ([]string, error) {
 
 	var deps []string
 
-	for imp, importConfig := range importsConfig {
-		if sectionContainsAnyNotEmptySections(importConfig, []string{
-			"backend",
-			"backend_type",
-			"env",
-			"remote_state_backend",
-			"remote_state_backend_type",
-			"settings",
-			"vars",
-		}) {
-			deps = append(deps, imp)
+	sectionsToCheck := []string{
+		"backend",
+		"backend_type",
+		"env",
+		"remote_state_backend",
+		"remote_state_backend_type",
+		"settings",
+		"vars",
+	}
+
+	for stackImportName, stackImportMap := range stackImports {
+
+		if sectionContainsAnyNotEmptySections(stackImportMap, sectionsToCheck) {
+			deps = append(deps, stackImportName)
 			continue
 		}
 
-		if sectionContainsAnyNotEmptySections(importConfig, []string{componentType}) {
-			if sectionContainsAnyNotEmptySections(importConfig[componentType].(map[any]any), []string{
-				"backend",
-				"backend_type",
-				"env",
-				"remote_state_backend",
-				"remote_state_backend_type",
-				"settings",
-				"vars",
-			}) {
-				deps = append(deps, imp)
+		if sectionContainsAnyNotEmptySections(stackImportMap, []string{componentType}) {
+			if sectionContainsAnyNotEmptySections(stackImportMap[componentType].(map[any]any), sectionsToCheck) {
+				deps = append(deps, stackImportName)
 				continue
 			}
 		}
 
-		if i, ok := importConfig["components"]; ok {
-			componentsSection := i.(map[any]any)
+		stackImportMapComponentsSection, ok := stackImportMap["components"].(map[any]any)
+		if !ok {
+			continue
+		}
 
-			if i2, ok2 := componentsSection[componentType]; ok2 {
-				componentTypeSection := i2.(map[any]any)
+		stackImportMapComponentTypeSection, ok := stackImportMapComponentsSection[componentType].(map[any]any)
+		if !ok {
+			continue
+		}
 
-				if i3, ok3 := componentTypeSection[component]; ok3 {
-					componentSection := i3.(map[any]any)
+		if stackImportMapComponentSection, ok := stackImportMapComponentTypeSection[component].(map[any]any); ok {
+			if len(stackImportMapComponentSection) > 0 {
+				deps = append(deps, stackImportName)
+				continue
+			}
+		}
 
-					if len(componentSection) > 0 {
-						deps = append(deps, imp)
-						continue
-					}
+		// Process base component(s)
+		// Only include the imported config file into "deps" if all the following conditions are `true`:
+		// 1. The imported config file has the base component(s) section(s)
+		// 2. The imported config file does not import other config files (which means it defined the base component sections inline)
+		// 3. If the imported config file does import other config files, check that the base component sections in them are different by using
+		// `reflect.DeepEqual`. If they are the same, don't include the imported config file since it does not specify anything for the base component
+		for _, baseComponent := range baseComponents {
+			baseComponentSection, ok := stackImportMapComponentTypeSection[baseComponent].(map[any]any)
+
+			if !ok || len(baseComponentSection) == 0 {
+				continue
+			}
+
+			importsOfStackImport, ok := stackImportMap["import"].([]any)
+			if !ok || len(importsOfStackImport) == 0 {
+				deps = append(deps, stackImportName)
+				continue
+			}
+
+			for _, importOfStackImport := range importsOfStackImport {
+				importOfStackImportStr, ok := importOfStackImport.(string)
+				if !ok {
+					continue
 				}
 
-				for _, baseComponent := range baseComponents {
-					if i3, ok3 := componentTypeSection[baseComponent]; ok3 {
-						baseComponentSection := i3.(map[any]any)
+				importOfStackImportMap, ok := stackImports[importOfStackImportStr]
+				if !ok {
+					continue
+				}
 
-						if len(baseComponentSection) > 0 {
-							deps = append(deps, imp)
-							continue
-						}
-					}
+				importOfStackImportComponentsSection, ok := importOfStackImportMap["components"].(map[any]any)
+				if !ok {
+					continue
+				}
+
+				importOfStackImportComponentTypeSection, ok := importOfStackImportComponentsSection[componentType].(map[any]any)
+				if !ok {
+					continue
+				}
+
+				importOfStackImportBaseComponentSection, ok := importOfStackImportComponentTypeSection[baseComponent].(map[any]any)
+				if !ok {
+					continue
+				}
+
+				if !reflect.DeepEqual(baseComponentSection, importOfStackImportBaseComponentSection) {
+					deps = append(deps, stackImportName)
+					break
 				}
 			}
 		}

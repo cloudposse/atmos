@@ -13,12 +13,12 @@ With `atmos`, all of your configuration is neatly defined in YAML. This makes tr
 The `atmos` tool supports (3) commands that when combined, make it easy to use `atlantis`.
 
 1. Generate the `atlantis.yaml` repo configuration: `atmos atlantis generate repo-config`
-2. Generate the backend configuration for all components: `atmos terraform generate backends --format=hcl`
-3. Generate the full deep-merged configurations of all stacks for each components: `atmos terraform generate varfiles`
+2. Generate the backend configuration for all components: `atmos terraform generate backends --format=backend-config|hcl`
+3. Generate the full deep-merged configurations of all stacks for each component: `atmos terraform generate varfiles`
 
 ## Configuration
 
-To configure Atmos to generate the Altantis repo configurations, update the `atmos.yaml` configuration.
+To configure Atmos to generate the Atlantis repo configurations, update the `atmos.yaml` configuration.
 
 Here's an example to get you started. As with *everything* in atmos, it supports deep-merging. Anything under the `integrations.atlantis` section can
 be overridden in the `components.terraform._name_.settings.atlantis` section at any level of the inheritance chain.
@@ -90,15 +90,15 @@ integrations:
             - run: terraform apply $PLANFILE
 ```
 
-Using the config, project and workflow templates, atmos generates a separate atlantis project for each atmos component in every stack:
+Using the config, project and workflow templates, atmos generates a separate atlantis project for each atmos component in every stack.
 
 By running:
 
-```
-atmos atlantis generate repo-config 
+```shell
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
 ```
 
-The following Atlantis repo-config would be generated.
+The following Atlantis repo-config would be generated:
 
 ```yaml
 version: 3
@@ -159,8 +159,114 @@ necessarily derived from the atmos stack configuration.
 
 The following commands will generate those files.
 
-1. `atmos terraform generate backends --format=hcl`
+1. `atmos terraform generate backends --format=backend-config|hcl`
 2. `atmos terraform generate varfiles`
 
-Make sure that the resulting files are commited back to VCS (e.g. `git add -A`) and push'd upstream. That way Atlantis will trigger on the "affected
+Make sure that the resulting files are committed back to VCS (e.g. `git add -A`) and push'd upstream. That way Atlantis will trigger on the "affected
 files" and propose a plan.
+
+### Example GitHub Action
+
+Here's an example GitHub Action to use Atlantis with Atmos.
+
+The action executes the `atmos generate varfiles/backends` commands to generate Terraform varfiles and backend config files for all Atmos stacks,
+then executes the `atmos atlantis generate repo-config` command to generate the Atlantis repo config file (`atlantis.yaml`) for all Atlantis projects,
+then commits all the generated files and calls Atlantis via a webhook.
+
+You can adopt and modify it to your own needs.
+
+```yaml
+name: atmos
+
+on:
+  workflow_dispatch:
+
+  issue_comment:
+    types:
+      - created
+
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - closed
+    branches: [ main ]
+
+env:
+  ATMOS_VERSION: 1.14.0
+  ATMOS_CLI_CONFIG_PATH: ./
+
+jobs:
+  generate-atlantis-yaml:
+    name: Generate varfiles, backend config and atlantis.yaml
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        if: github.event.pull_request.state == 'open' || ${{ github.event.issue.pull_request }}
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 2
+
+      # Install Atmos and generate tfvars and backend config files
+      - name: Generate TF var files and backend configs
+        if: github.event.pull_request.state == 'open' || ${{ github.event.issue.pull_request }}
+        shell: bash
+        run: |
+          wget -q https://github.com/cloudposse/atmos/releases/download/v${ATMOS_VERSION}/atmos_${ATMOS_VERSION}_linux_amd64 && \
+          mv atmos_${ATMOS_VERSION}_linux_amd64 /usr/local/bin/atmos && \
+          chmod +x /usr/local/bin/atmos
+          atmos terraform generate varfiles --file-template={component-path}/varfiles/{namespace}-{environment}-{component}.tfvars.json
+          atmos terraform generate backends --format=backend-config --file-template={component-path}/backends/{namespace}-{environment}-{component}.backend
+
+      # Commit changes (if any) to the PR branch
+      - name: Commit changes to the PR branch
+        if: github.event.pull_request.state == 'open' || ${{ github.event.issue.pull_request }}
+        shell: bash
+        run: |
+          untracked=$(git ls-files --others --exclude-standard)
+          changes_detected=$(git diff --name-only)
+          if [ -n "$untracked" ] || [ -n "$changes_detected" ]; then
+            git config --global user.name github-actions
+            git config --global user.email github-actions@github.com
+            git add -A *
+            git commit -m "Committing generated autogenerated var files"
+            git push
+          fi
+
+      # Generate atlantis.yaml with atmos
+      - name: Generate Dynamic atlantis.yaml file
+        if: github.event.pull_request.state == 'open' || ${{ github.event.issue.pull_request }}
+        shell: bash
+        run: |
+          atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
+
+      # Commit changes (if any) to the PR branch
+      - name: Commit changes to the PR branch
+        if: github.event.pull_request.state == 'open' || ${{ github.event.issue.pull_request }}
+        shell: bash
+        run: |
+          yaml_changes=$(git diff --name-only)
+          untracked=$(git ls-files --others --exclude-standard atlantis.yaml)
+          if [ -n "$yaml_changes" ] || [ -n "$untracked" ]; then
+            git config --global user.name github-actions
+            git config --global user.email github-actions@github.com
+            git add -A *
+            git commit -m "Committing generated atlantis.yaml"
+            git push
+          fi
+
+  call-atlantis:
+    needs: generate-atlantis-yaml
+    name: Sending data to Atlantis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke deployment hook
+        uses: distributhor/workflow-webhook@v2
+        env:
+          webhook_type: 'json-extended'
+          webhook_url: ${{ secrets.WEBHOOK_URL }}
+          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+          verbose: false
+```
