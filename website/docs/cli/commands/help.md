@@ -5,7 +5,6 @@ sidebar_class_name: command
 order: 10
 ---
 
-
 ## Usage
 
 `atmos help` shows help for all `atmos` CLI commands.
@@ -20,6 +19,7 @@ atmos help
 atmos help
 atmos atlantis --help    # Executes 'atlantis' commands
 atmos aws --help         # Executes 'aws' commands
+atmos completion --help  # Executes 'completion' commands
 atmos describe --help    # Executes 'describe' commands
 atmos helmfile --help    # Executes 'helmfile' commands
 atmos terraform --help   # Executes 'terraform' commands
