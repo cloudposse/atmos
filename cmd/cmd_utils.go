@@ -51,6 +51,9 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 				Use:   commandConfig.Name,
 				Short: commandConfig.Description,
 				Long:  commandConfig.Description,
+				PreRun: func(cmd *cobra.Command, args []string) {
+					preCustomCommand(cmd, args, parentCommand, commandConfig)
+				},
 				Run: func(cmd *cobra.Command, args []string) {
 					executeCustomCommand(cmd, args, parentCommand, commandConfig)
 				},
@@ -94,14 +97,25 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 	return nil
 }
 
-// executeCustomCommand executes a custom command
-func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobra.Command, commandConfig *cfg.Command) {
+// preCustomCommand is run before a custom command is executed
+func preCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobra.Command, commandConfig *cfg.Command) {
 	var err error
 
 	if len(args) != len(commandConfig.Arguments) {
 		err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(commandConfig.Arguments))
 		u.PrintErrorToStdErrorAndExit(err)
 	}
+
+	// no steps means a sub command should be specified
+	if len(commandConfig.Steps) == 0 {
+		cmd.Help()
+		os.Exit(0)
+	}
+}
+
+// executeCustomCommand executes a custom command
+func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobra.Command, commandConfig *cfg.Command) {
+	var err error
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
