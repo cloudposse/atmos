@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -36,51 +37,23 @@ func ExecuteShellCommand(command string, args []string, dir string, env []string
 	return cmd.Run()
 }
 
-// ExecuteShell uses mvdan.cc/sh/v3's parser and interpreter to run a shell script
+// ExecuteShell runs a shell script
 func ExecuteShell(command string, name string, dir string, env []string, dryRun bool, verbose bool) error {
 	if verbose {
 		u.PrintInfo("\nExecuting command:")
 		fmt.Println(command)
 	}
 
-	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
-	if err != nil {
-		return err
-	}
-
-	runner, err := interp.New(
-		interp.Dir(dir),
-		interp.Env(expand.ListEnviron(append(os.Environ(), env...)...)),
-		interp.StdIO(os.Stdin, os.Stdout, os.Stderr),
-	)
-	if err != nil {
-		return err
-	}
-
-
 	if dryRun {
 		return nil
 	}
 
-	return runner.Run(context.TODO(), parser)
+	return shellRunner(command, name, dir, env, os.Stdout)
 }
 
-// ExecuteShell uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and capture its standard output
+// ExecuteShellAndReturnOutput runs a shell script and capture its standard output
 func ExecuteShellAndReturnOutput(command string, name string, dir string, env []string, dryRun bool, verbose bool) (string, error) {
 	var b bytes.Buffer
-	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
-	if err != nil {
-		return "", err
-	}
-
-	runner, err := interp.New(
-		interp.Dir(dir),
-		interp.Env(expand.ListEnviron(append(os.Environ(), env...)...)),
-		interp.StdIO(os.Stdin, &b, os.Stderr),
-	)
-	if err != nil {
-		return "", err
-	}
 
 	if verbose {
 		u.PrintInfo("\nExecuting command:")
@@ -91,12 +64,33 @@ func ExecuteShellAndReturnOutput(command string, name string, dir string, env []
 		return "", nil
 	}
 
-	err = runner.Run(context.TODO(), parser)
+	err := shellRunner(command, name, dir, env, &b)
 	if err != nil {
 		return "", err
 	}
 
 	return b.String(), nil
+}
+
+// shellRunner uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and divert its stdout
+func shellRunner(command string, name string, dir string, env []string, out io.Writer) error {
+	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
+	if err != nil {
+		return err
+	}
+
+	environ := append(os.Environ(), env...)
+	listEnviron := expand.ListEnviron(environ...)
+	runner, err := interp.New(
+		interp.Dir(dir),
+		interp.Env(listEnviron),
+		interp.StdIO(os.Stdin, out, os.Stderr),
+	)
+	if err != nil {
+		return err
+	}
+
+	return runner.Run(context.TODO(), parser)
 }
 
 // ExecuteShellCommandAndReturnOutput prints and executes the provided command with args and flags and returns the command output
