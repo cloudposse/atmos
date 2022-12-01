@@ -16,7 +16,7 @@ jobs:
   # ensure the code builds...
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted"]
     timeout-minutes: 5
     steps:
       - name: Set up Go
@@ -44,7 +44,7 @@ jobs:
   test:
     name: Test
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted"]
     timeout-minutes: 15
     steps:
       - name: Set up Go

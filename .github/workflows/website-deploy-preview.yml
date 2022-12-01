@@ -28,7 +28,7 @@ jobs:
     # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted"]
 
     environment:
       name: preview

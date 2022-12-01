@@ -5,7 +5,7 @@ on:
 
 jobs:
   auto-format:
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted"]
     container: cloudposse/build-harness:latest
     steps:
     # Checkout the pull request branch

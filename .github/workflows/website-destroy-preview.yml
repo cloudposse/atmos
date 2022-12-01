@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   website-destroy-preview:
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted"]
     steps:
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials

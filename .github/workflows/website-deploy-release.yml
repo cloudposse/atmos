@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   website-deploy-release:
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted"]
 
     environment:
       name: production

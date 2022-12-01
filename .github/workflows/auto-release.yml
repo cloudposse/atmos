@@ -9,7 +9,7 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted"]
     steps:
       # Get PR from merged commit to master
       - uses: actions-ecosystem/action-get-merged-pull-request@v1
