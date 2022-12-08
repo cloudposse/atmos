@@ -5,9 +5,9 @@ module "vpc_flow_logs_bucket" {
   version = "1.3.1"
 
   component   = "vpc-flow-logs-bucket"
-  environment = var.vpc_flow_logs_bucket_environment_name
-  stage       = var.vpc_flow_logs_bucket_stage_name
-  tenant      = coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant)
+  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
+  stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
+  tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
 
   context = module.this.context
 }

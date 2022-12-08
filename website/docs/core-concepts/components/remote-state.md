@@ -5,37 +5,40 @@ sidebar_label: Remote State
 id: remote-state
 ---
 
-Component Inheritance is one of the principles of [Component-Oriented Programming (COP)](/core-concepts/components/component-oriented-programming)
-supported by Atmos.
-
-Component Inheritance is the ability to combine multiple configurations through ordered deep-merging of configurations. The concept is borrowed from
-[Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming)) to logically organize complex configurations in
-a way that makes conceptual sense. The side effect of this are extremely DRY and reusable configurations.
+Component Remote State is used when we need to get the outputs of an [Atmos component](/core-concepts/components),
+provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and use the outputs as inputs to another Atmos component.
 
 :::info
 
-In Object-Oriented Programming (OOP), Inheritance is the mechanism of basing an object or class upon another object (prototype-based inheritance) or
-class (class-based inheritance), retaining similar implementation.
+In Atmos, Remote State is implemented by using these modules:
 
-Similarly, in Atmos, Component Inheritance is the mechanism of deriving a component from one or more base components, inheriting all the
-properties of the base component(s) and overriding only some fields specific to the derived component. The derived component acquires all the
-properties of the "parent" component(s), allowing creating very DRY configurations that are built upon existing components.
+- [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) - The Cloud Posse Terraform Provider for various utilities (e.g.
+  deep merging, stack configuration management).
+
+- [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-stack-config) - Terraform module that loads and processes stack
+  configurations from local or remote YAML sources. It supports deep-merged variables, settings, ENV variables, backend config, and remote state
+  outputs for Terraform and helmfile components.
 
 :::
 
 <br/>
 
-Component Inheritance is implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
-and `metadata` component's configuration section.
+[terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) is implemented in [Go](https://go.dev/) and uses Atmos `Go`
+modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/core-concepts/stacks). The provider processes stack
+configurations to get the final configuration for a component in a given stack. The final component config is then used by
+the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote
+state for the component in the stack.
 
-<br/>
+Here is an example.
 
-:::info Definitions
+Suppose that we need to provision two Terraform components:
 
-- **Base Component** is an Atmos component from which other Atmos components inherit all the configuration properties
-- **Derived Component** is an Atmos component which derives the configuration properties from other Atmos components
+- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
+- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
 
-:::
+The `vpc` component needs the outputs from the `vpc-flow-logs-bucket` component to
+configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html)
+and store them in the S3 bucket.
 
 ## Single Inheritance
 
