@@ -13,11 +13,10 @@ provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and
 In Atmos, Remote State is implemented by using these modules:
 
 - [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) - The Cloud Posse Terraform Provider for various utilities (e.g.
-  deep merging, stack configuration management).
+  deep merging, stack configuration management)
 
-- [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-stack-config) - Terraform module that loads and processes stack
-  configurations from local or remote YAML sources. It supports deep-merged variables, settings, ENV variables, backend config, and remote state
-  outputs for Terraform and helmfile components.
+- [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) - Terraform module that loads and processes
+  stack configurations from YAML sources and returns remote state outputs for Terraform components
 
 :::
 
@@ -40,7 +39,33 @@ The `vpc` component needs the outputs from the `vpc-flow-logs-bucket` component 
 configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html)
 and store them in the S3 bucket.
 
-## Single Inheritance
+## Configure and Provision `vpc-flow-logs-bucket` Component
+
+## Configure Remote State for `vpc-flow-logs-bucket` Component
+
+## Configure and Provision `vpc` Component
+
+## Summary
+
+- Remote State for an Atmos component in an Atmos stack is obtained by using
+  the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module
+
+- The module calls the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider which processes the stack
+  configs and returns the configuration for the Atmos component in the stack.
+  The [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider utilizes Atmos `Go` modules to parse and
+  process stack configurations
+
+- The module accepts the `component` input as the Atmos component name for which to get the remote state outputs
+
+- The module accepts the `context` input as a way to provide the information about the stack (using the context
+  variables `namespace`, `tenant`, `environment`, `stage`)
+
+- If the Atmos component (for which we want to get the remote state outputs) is provisioned in a different Atmos stack (in different AWS account, or
+  different AWS region), we can override the context
+  variables `tenant`, `stage` and `environment` to point the module to the correct stack. For example, if the component is provisioned in a
+  different AWS region (let's say `us-west-2`), we can set `environment = "uw2"`, and
+  the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module will get the remote state
+  outputs for the Atmos component provisioned in that region
 
 Single Inheritance is used when an Atmos component inherits from another base Atmos component.
 
