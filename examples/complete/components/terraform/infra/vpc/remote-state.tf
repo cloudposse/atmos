@@ -4,7 +4,7 @@ module "vpc_flow_logs_bucket" {
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
   version = "1.3.1"
 
-  component   = "vpc-flow-logs-bucket"
+  component   = var.vpc_flow_logs_bucket_component_name
   environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
   stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)

@@ -42,7 +42,7 @@ and store them in the S3 bucket.
 We will provision the Terraform components in the `ue2-dev` Atmos stack (in the `dev` AWS account by setting `stage = "dev"` and in the `us-east-2`
 region by setting `environment = "ue2"`).
 
-## Configure and Provision `vpc-flow-logs-bucket` Component
+## Configure and Provision `vpc-flow-logs-bucket` Atmos Component
 
 In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket` component:
 
@@ -69,7 +69,7 @@ components:
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket` component in the `ue2-dev` Atmos stack:
 
 ```yaml title="stacks/ue2-dev.yaml"
-# Import the base component configuration from the `catalog`.
+# Import the base Atmos component configuration from the `catalog`.
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 # File extensions are optional (if not specified, `.yaml` is used by default).
 import:
@@ -104,9 +104,29 @@ atmos terraform apply vpc-flow-logs-bucket -s ue2-dev
 
 <br/>
 
-## Configure Remote State for `vpc-flow-logs-bucket` Component
+## Configure and Provision `vpc` Atmos Component
 
-## Configure and Provision `vpc` Component
+Having the `vpc-flow-logs-bucket` Atmos component provisioned into the `ue2-dev` Atmos stack, we can now configure the `vpc` Atmos component to obtain
+the outputs from the remote state of the `vpc-flow-logs-bucket` component and provision it into the `ue2-dev` stack.
+
+In `components/terraform/infra/vpc/remote-state.tf` file, we first configure the remote state for the `vpc-flow-logs-bucket` component by using
+the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module:
+
+```hcl title="components/terraform/infra/vpc/remote-state.tf"
+module "vpc_flow_logs_bucket" {
+  count = var.vpc_flow_logs_enabled ? 1 : 0
+
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.3.1"
+
+  component   = var.vpc_flow_logs_bucket_component_name
+  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
+  stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
+  tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
+
+  context = module.this.context
+}
+```
 
 In the `stacks/catalog/vpc.yaml` file, add the following config for the VPC component:
 
@@ -127,7 +147,7 @@ components:
         nat_gateway_enabled: false
         nat_instance_enabled: false
         max_subnet_count: 3
-        vpc_flow_logs_enabled: true
+        vpc_flow_logs_enabled: false
 ```
 
 <br/>
@@ -143,42 +163,32 @@ import:
 
 components:
   terraform:
-
-    vpc-1:
+    vpc:
       metadata:
-        component: infra/vpc # Point to the Terraform component in `components/terraform` folder
+        # Point to the Terraform component in `components/terraform` folder
+        component: infra/vpc
         inherits:
-          - vpc-defaults # Inherit all settings and variables from the `vpc-defaults` base component
+          - # Inherit all settings and variables from the `vpc-defaults` base Atmos component
+          - vpc-defaults
       vars:
         # Define variables that are specific for this component
         # and are not set in the base component
         name: vpc-1
         # Override the default variables from the base component
-        public_subnets_enabled: true
-        nat_gateway_enabled: true
-        vpc_flow_logs_enabled: false
-
-    vpc-2:
-      metadata:
-        component: infra/vpc # Point to the same Terraform component in `components/terraform` folder
-        inherits:
-          - vpc-defaults # Inherit all settings and variables from the `vpc-defaults` base component
-      vars:
-        # Define variables that are specific for this component
-        # and are not set in the base component
-        name: vpc-2
-        # Override the default variables from the base component
-        max_subnet_count: 2
-        vpc_flow_logs_enabled: false
+        vpc_flow_logs_enabled: true
+        # Specify the name of the Atmos component that configures
+        # the `infra/vpc-flow-logs-bucket` Terraform component
+        vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket
 ```
 
 <br/>
 
-Having the components in the stack configured as shown above, we can now provision the `vpc-1` and `vpc-2` components into the `ue2-dev` stack by
-executing the following `atmos` commands:
+Having the stacks configured as shown above, we can now provision the `vpc` Atmos component into the `ue2-dev` Atmos stack by
+executing the following Atmos commands:
 
 ```shell
-atmos terraform apply vpc-1 -s ue2-dev
+atmos terraform plan vpc -s ue2-dev
+atmos terraform apply vpc -s ue2-dev
 ```
 
 ## Summary

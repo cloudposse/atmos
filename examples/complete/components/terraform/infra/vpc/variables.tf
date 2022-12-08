@@ -118,6 +118,12 @@ variable "vpc_flow_logs_log_destination_type" {
   default     = "s3"
 }
 
+variable "vpc_flow_logs_bucket_component_name" {
+  type        = string
+  description = "The name of the VPC Flow Logs bucket component"
+  default     = "vpc-flow-logs-bucket"
+}
+
 variable "vpc_flow_logs_bucket_environment_name" {
   type        = string
   description = "The name of the environment where the VPC Flow Logs bucket is provisioned"
