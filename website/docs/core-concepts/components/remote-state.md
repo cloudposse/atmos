@@ -12,8 +12,8 @@ provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and
 
 In Atmos, Remote State is implemented by using these modules:
 
-- [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) - The Cloud Posse Terraform Provider for various utilities (e.g.
-  deep merging, stack configuration management)
+- [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) - The Cloud Posse Terraform Provider for various utilities,
+  including stack configuration management
 
 - [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) - Terraform module that loads and processes
   stack configurations from YAML sources and returns remote state outputs for Terraform components
@@ -82,7 +82,8 @@ components:
         # Point to the Terraform component in `components/terraform` folder
         component: infra/vpc-flow-logs-bucket
         inherits:
-          - # Inherit all settings and variables from the `vpc-flow-logs-bucket-defaults` base Atmos component
+          # Inherit all settings and variables from the 
+          # `vpc-flow-logs-bucket-defaults` base Atmos component
           - vpc-flow-logs-bucket-defaults
       vars:
         # Define variables that are specific for this component
@@ -109,8 +110,9 @@ atmos terraform apply vpc-flow-logs-bucket -s ue2-dev
 Having the `vpc-flow-logs-bucket` Atmos component provisioned into the `ue2-dev` Atmos stack, we can now configure the `vpc` Atmos component to obtain
 the outputs from the remote state of the `vpc-flow-logs-bucket` component and provision it into the `ue2-dev` stack.
 
-In `components/terraform/infra/vpc/remote-state.tf` file, we first configure the remote state for the `vpc-flow-logs-bucket` component by using
-the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module:
+In the `components/terraform/infra/vpc/remote-state.tf` file, we first configure the
+[remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
+for the `vpc-flow-logs-bucket` component:
 
 ```hcl title="components/terraform/infra/vpc/remote-state.tf"
 module "vpc_flow_logs_bucket" {
@@ -119,11 +121,18 @@ module "vpc_flow_logs_bucket" {
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
   version = "1.3.1"
 
-  component   = var.vpc_flow_logs_bucket_component_name
-  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
+  # Specify the Atmos component name (defined in YAML stack config files) 
+  # for which to get the remote state outputs
+  component = var.vpc_flow_logs_bucket_component_name
+
+  # Override the context variables to point to a different Atmos stack if the 
+  # `vpc-flow-logs-bucket` component is provisioned in another AWS account, OU or region
   stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
+  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
 
+  # `context` input is a way to provide the information about the stack (using the context
+  # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
   context = module.this.context
 }
 ```
@@ -168,7 +177,7 @@ components:
         # Point to the Terraform component in `components/terraform` folder
         component: infra/vpc
         inherits:
-          - # Inherit all settings and variables from the `vpc-defaults` base Atmos component
+          # Inherit all settings and variables from the `vpc-defaults` base Atmos component
           - vpc-defaults
       vars:
         # Define variables that are specific for this component
@@ -176,8 +185,8 @@ components:
         name: vpc-1
         # Override the default variables from the base component
         vpc_flow_logs_enabled: true
-        # Specify the name of the Atmos component that configures
-        # the `infra/vpc-flow-logs-bucket` Terraform component
+        # Specify the name of the Atmos component that provides configuration
+        # for the `infra/vpc-flow-logs-bucket` Terraform component
         vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket
 ```
 
@@ -204,11 +213,17 @@ atmos terraform apply vpc -s ue2-dev
 - The module accepts the `component` input as the Atmos component name for which to get the remote state outputs
 
 - The module accepts the `context` input as a way to provide the information about the stack (using the context
-  variables `namespace`, `tenant`, `environment`, `stage`)
+  variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
 
 - If the Atmos component (for which we want to get the remote state outputs) is provisioned in a different Atmos stack (in different AWS account, or
-  different AWS region), we can override the context
-  variables `tenant`, `stage` and `environment` to point the module to the correct stack. For example, if the component is provisioned in a
-  different AWS region (let's say `us-west-2`), we can set `environment = "uw2"`, and
+  different AWS region), we can override the context variables `tenant`, `stage` and `environment` to point the module to the correct stack. For
+  example, if the component is provisioned in a different AWS region (let's say `us-west-2`), we can set `environment = "uw2"`, and
   the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module will get the remote state
   outputs for the Atmos component provisioned in that region
+
+<br/>
+
+:::caution
+
+
+:::
