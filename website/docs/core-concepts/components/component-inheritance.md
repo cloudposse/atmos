@@ -57,7 +57,7 @@ components:
         # If `metadata.type` attribute is not specified, it defaults to `real`.
         # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis.
         type: abstract
-      # Default variables, which will be inherited and can be overriden in the derived components
+      # Default variables, which will be inherited and can be overridden in the derived components
       vars:
         public_subnets_enabled: false
         nat_gateway_enabled: false

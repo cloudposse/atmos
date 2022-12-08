@@ -57,7 +57,7 @@ components:
         # If `metadata.type` attribute is not specified, it defaults to `real`.
         # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis.
         type: abstract
-      # Default variables, which will be inherited and can be overriden in the derived components
+      # Default variables, which will be inherited and can be overridden in the derived components
       vars:
         force_destroy: false
         lifecycle_rule_enabled: false
@@ -110,7 +110,7 @@ atmos terraform apply vpc-flow-logs-bucket -s ue2-dev
 Having the `vpc-flow-logs-bucket` Atmos component provisioned into the `ue2-dev` Atmos stack, we can now configure the `vpc` Atmos component to obtain
 the outputs from the remote state of the `vpc-flow-logs-bucket` component and provision it into the `ue2-dev` stack.
 
-In the `components/terraform/infra/vpc/remote-state.tf` file, we first configure the
+In the `components/terraform/infra/vpc/remote-state.tf` file, configure the
 [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
 for the `vpc-flow-logs-bucket` component:
 
@@ -137,7 +137,30 @@ module "vpc_flow_logs_bucket" {
 }
 ```
 
-In the `stacks/catalog/vpc.yaml` file, add the following config for the VPC component:
+In the `components/terraform/infra/vpc/vpc-flow-logs.tf` file, configure the `aws_flow_log` resource for the `vpc` component to use the remote
+state output `vpc_flow_logs_bucket_arn` from the `vpc-flow-logs-bucket` component:
+
+```hcl title="components/terraform/infra/vpc/remote-state.tf"
+locals {
+  enabled               = module.this.enabled
+  vpc_flow_logs_enabled = local.enabled && var.vpc_flow_logs_enabled
+}
+
+resource "aws_flow_log" "default" {
+  count = local.vpc_flow_logs_enabled ? 1 : 0
+
+  # Use the remote state output `vpc_flow_logs_bucket_arn` of the `vpc_flow_logs_bucket` component
+  log_destination = module.vpc_flow_logs_bucket[0].outputs.vpc_flow_logs_bucket_arn
+
+  log_destination_type = var.vpc_flow_logs_log_destination_type
+  traffic_type         = var.vpc_flow_logs_traffic_type
+  vpc_id               = module.vpc.vpc_id
+
+  tags = module.this.tags
+}
+```
+
+In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc` component:
 
 ```yaml title="stacks/catalog/vpc.yaml"
 components:
@@ -150,7 +173,7 @@ components:
         # If `metadata.type` attribute is not specified, it defaults to `real`.
         # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis.
         type: abstract
-      # Default variables, which will be inherited and can be overriden in the derived components
+      # Default variables, which will be inherited and can be overridden in the derived components
       vars:
         public_subnets_enabled: false
         nat_gateway_enabled: false
@@ -161,7 +184,7 @@ components:
 
 <br/>
 
-In the `stacks/ue2-dev.yaml` stack config file, add the following config for the derived VPC components in the `ue2-dev` stack:
+In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc` components in the `ue2-dev` stack:
 
 ```yaml title="stacks/ue2-dev.yaml"
 # Import the base component configuration from the `catalog`.
@@ -224,6 +247,5 @@ atmos terraform apply vpc -s ue2-dev
 <br/>
 
 :::caution
-
 
 :::
