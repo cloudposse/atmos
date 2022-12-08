@@ -27,34 +27,11 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Check if the correct files were pulled and written to the correct folder
 	assert.FileExists(t, path.Join(componentPath, "context.tf"))
-	assert.FileExists(t, path.Join(componentPath, "default.auto.tfvars"))
-	assert.FileExists(t, path.Join(componentPath, "introspection.mixin.tf"))
 	assert.FileExists(t, path.Join(componentPath, "main.tf"))
 	assert.FileExists(t, path.Join(componentPath, "outputs.tf"))
 	assert.FileExists(t, path.Join(componentPath, "providers.tf"))
-	assert.FileExists(t, path.Join(componentPath, "README.md"))
 	assert.FileExists(t, path.Join(componentPath, "variables.tf"))
 	assert.FileExists(t, path.Join(componentPath, "versions.tf"))
-
-	// Delete the files
-	err = os.Remove(path.Join(componentPath, "context.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "default.auto.tfvars"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "introspection.mixin.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "main.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "outputs.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "providers.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "README.md"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "variables.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "versions.tf"))
-	assert.Nil(t, err)
 
 	// Test 'infra/account-map' component
 	component = "infra/account-map"

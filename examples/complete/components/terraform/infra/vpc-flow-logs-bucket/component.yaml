@@ -41,8 +41,6 @@ spec:
     # https://github.com/bmatcuk/doublestar#patterns
     included_paths:
       - "**/*.tf"
-      - "**/*.tfvars"
-      - "**/*.md"
     # Exclude the files that match any of the 'excluded_paths' patterns
     # Note that we are excluding 'context.tf' since a newer version of it will be downloaded using 'mixins'
     # 'excluded_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
