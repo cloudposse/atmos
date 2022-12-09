@@ -60,5 +60,9 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 		}
 	}
 
+	configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.ComponentSection["base_component"] = configAndStacksInfo.BaseComponent
+	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg
+
 	return configAndStacksInfo.ComponentSection, nil
 }

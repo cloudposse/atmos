@@ -51,7 +51,7 @@ components:
   terraform:
     vpc-flow-logs-bucket-defaults:
       metadata:
-        # Setting `metadata.type: abstract` makes the component `abstract`,
+        # `metadata.type: abstract` makes the component `abstract`,
         # explicitly prohibiting the component from being deployed.
         # `atmos terraform apply` will fail with an error.
         # If `metadata.type` attribute is not specified, it defaults to `real`.
@@ -167,7 +167,7 @@ components:
   terraform:
     vpc-defaults:
       metadata:
-        # Setting `metadata.type: abstract` makes the component `abstract`,
+        # `metadata.type: abstract` makes the component `abstract`,
         # explicitly prohibiting the component from being deployed.
         # `atmos terraform apply` will fail with an error.
         # If `metadata.type` attribute is not specified, it defaults to `real`.
