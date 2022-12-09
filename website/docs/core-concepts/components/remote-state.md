@@ -39,8 +39,8 @@ The `vpc` component needs the outputs from the `vpc-flow-logs-bucket` component 
 configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html)
 and store them in the S3 bucket.
 
-We will provision the Terraform components in the `ue2-dev` Atmos stack (in the `dev` AWS account by setting `stage = "dev"` and in the `us-east-2`
-region by setting `environment = "ue2"`).
+We will provision the Terraform components in the `ue2-dev` Atmos stack in the `dev` AWS account by setting `stage = "dev"` and in the `us-east-2`
+region by setting `environment = "ue2"`.
 
 ## Configure and Provision `vpc-flow-logs-bucket` Atmos Component
 
