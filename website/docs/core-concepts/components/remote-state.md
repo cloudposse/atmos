@@ -24,9 +24,20 @@ In Atmos, Remote State is implemented by using these modules:
 
 [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) is implemented in [Go](https://go.dev/) and uses Atmos `Go`
 modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/core-concepts/stacks). The provider processes stack
-configurations to get the final configuration for a component in a given stack. The final component config is then used by
+configurations to get the final config for an Atmos component in an Atmos stack. The final component config is then used by
 the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote
 state for the component in the stack.
+
+<br/>
+
+:::info Disambiguation
+
+- **Terraform Component** is a Terraform root module (Terraform code), e.g. `components/terraform/infra/vpc`
+- **Atmos Component** is defined in YAML stack config and provides configuration (variables and other settings) for a Terraform component
+
+:::
+
+<br/>
 
 Here is an example.
 
@@ -38,8 +49,10 @@ Suppose that we need to provision two Terraform components:
 The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
 configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket.
 
-We will provision the Terraform components in the `ue2-dev` Atmos stack (in the `dev` AWS account by setting `stage = "dev"` and in the `us-east-2`
-region by setting `environment = "ue2"`).
+We will provision the two Terraform components in the `ue2-dev` Atmos stack (in the `dev` AWS account by setting `stage = "dev"` and in
+the `us-east-2` region by setting `environment = "ue2"`).
+
+<br/>
 
 ## Configure and Provision `vpc-flow-logs-bucket` Component
 
