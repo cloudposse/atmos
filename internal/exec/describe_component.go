@@ -60,6 +60,7 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 		}
 	}
 
+	// Always add component, base component (if any) and stack to the `atmos describe component` command output
 	configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
 	configAndStacksInfo.ComponentSection["base_component"] = configAndStacksInfo.BaseComponent
 	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg

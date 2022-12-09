@@ -122,7 +122,7 @@ components:
       vars: {}
 
     output-results:
-      vars: {}
+      vars:
         print_users_weather_enabled: true
 
   helmfile: {}
@@ -131,9 +131,9 @@ workflows:
   deploy-all:
     description: Deploy terraform projects in order
     steps:
-      - job: terraform deploy fetch-location
-      - job: terraform deploy fetch-weather
-      - job: terraform deploy output-results
+      - command: terraform deploy fetch-location
+      - command: terraform deploy fetch-weather
+      - command: terraform deploy output-results
 ```
 
 Here we can see our first stack, so let's break this file down to help understand what it is doing:
@@ -148,7 +148,7 @@ To sum it up, our stack represents an environment: It describes the components w
 Now that we know what is in our `example.yaml` stack configuration, let's invoke that workflow:
 
 ```bash
-atmos workflow deploy-all -s example
+atmos workflow deploy-all -s example -f example.yaml
 ```
 
 This will run our various steps through `atmos` and you should see the sequential `init`, `plan`, and `apply` of each component in the workflow to output the current weather for your area. We hope it's sunny wherever you're at 😁 🌤
@@ -190,9 +190,9 @@ workflows:
   deploy-all:
     description: Deploy terraform projects in order
     steps:
-      - job: terraform deploy fetch-location
-      - job: terraform deploy fetch-weather
-      - job: terraform deploy output-results
+      - command: terraform deploy fetch-location
+      - command: terraform deploy fetch-weather
+      - command: terraform deploy output-results
 ```
 
 Above we updated a couple variables to change the behavior of our terraform code for this particular stack. Since we mounted our local `stacks/` folder to our `atmos` container via `--volume`, when you save the above stack file docker will update your container's `/stacks/example.yaml` file as well. Now to execute this again... we simply invoke our `deploy-all` workflow command:
