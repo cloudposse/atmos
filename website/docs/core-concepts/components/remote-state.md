@@ -291,7 +291,8 @@ For this to work for both the Atmos CLI and the Terraform provider, we usually d
   The [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider utilizes Atmos `Go` modules to parse and
   process stack configurations
 
-- The module accepts the `component` input as the Atmos component name for which to get the remote state outputs
+- The [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module accepts the `component` input as
+  the Atmos component name for which to get the remote state outputs
 
 - The module accepts the `context` input as a way to provide the information about the stack (using the context
   variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
