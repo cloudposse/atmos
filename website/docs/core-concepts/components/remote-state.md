@@ -32,8 +32,12 @@ state for the component in the stack.
 
 :::info Disambiguation
 
-- **Terraform Component** is a Terraform root module (Terraform code), e.g. `components/terraform/infra/vpc`
-- **Atmos Component** is defined in YAML stack config and provides configuration (variables and other settings) for a Terraform component
+- **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module)
+  that consists of the resources defined in the `.tf` files in a working directory
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc))
+
+- **Atmos Component** provides configuration (variables and other settings) for a Terraform component and is defined in one or more YAML stack config
+  files (which are called [Atmos stacks](/core-concepts/stacks))
 
 :::
 
