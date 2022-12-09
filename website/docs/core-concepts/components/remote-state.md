@@ -244,6 +244,13 @@ atmos terraform apply vpc -s ue2-dev
 
 <br/>
 
+:::caution
+
+Both `atmos` and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) use the same `Go` modules, which try to find and
+process the [Atmos CLI config](/cli/configuration) `atmos.yaml` file before it could parse and process [Atmos stacks](/core-concepts/stacks).
+
+:::
+
 ## Summary
 
 - Remote State for an Atmos component in an Atmos stack is obtained by using
@@ -264,9 +271,3 @@ atmos terraform apply vpc -s ue2-dev
   example, if the component is provisioned in a different AWS region (let's say `us-west-2`), we can set `environment = "uw2"`, and
   the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module will get the remote state
   outputs for the Atmos component provisioned in that region
-
-<br/>
-
-:::caution
-
-:::
