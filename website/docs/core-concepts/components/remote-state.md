@@ -242,14 +242,44 @@ atmos terraform plan vpc -s ue2-dev
 atmos terraform apply vpc -s ue2-dev
 ```
 
-<br/>
+## Caveats
 
-:::caution
+Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
+which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
 
-Both `atmos` and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) use the same `Go` modules, which try to find and
-process the [Atmos CLI config](/cli/configuration) `atmos.yaml` file before it could parse and process [Atmos stacks](/core-concepts/stacks).
+This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
+
+While placing `atmos.yaml` at the root of the repository will work for Atmos, it will not work for
+the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider because the provider gets executed from the
+component's directory (e.g. `components/terraform/infra/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
+
+:::info
+
+`atmos.yaml` is loaded from the following locations (from lowest to highest priority):
+
+- System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- Home dir (`~/.atmos/atmos.yaml`)
+- Current directory
+- ENV var `ATMOS_CLI_CONFIG_PATH`
 
 :::
+
+<br/>
+
+For this to work for both the Atmos CLI and the Terraform provider, we usually do one of the following:
+
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host
+
+- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`)
+
+- Put `atmos.yaml` at a location in the file system and then set the ENV var `ATMOS_CLI_CONFIG_PATH` to point to that location. The ENV var must
+  point to a folder without the `atmos.yaml` file name. For example, if `atmos.yaml` is at `/atmos/config/atmos.yaml`,
+  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`
+
+- When working in a Docker container, put `atmos.yaml`
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/complete/Dockerfile)
+  by executing the `COPY rootfs/ /` Docker command
 
 ## Summary
 
@@ -266,8 +296,8 @@ process the [Atmos CLI config](/cli/configuration) `atmos.yaml` file before it c
 - The module accepts the `context` input as a way to provide the information about the stack (using the context
   variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
 
-- If the Atmos component (for which we want to get the remote state outputs) is provisioned in a different Atmos stack (in different AWS account, or
-  different AWS region), we can override the context variables `tenant`, `stage` and `environment` to point the module to the correct stack. For
-  example, if the component is provisioned in a different AWS region (let's say `us-west-2`), we can set `environment = "uw2"`, and
-  the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module will get the remote state
+- If the Atmos component (for which we want to get the remote state outputs) is provisioned in a different Atmos stack (in a different AWS OU, or
+  different AWS account, or different AWS region), we can override the context variables `tenant`, `stage` and `environment` to point the module to
+  the correct stack. For example, if the component is provisioned in a different AWS region (let's say `us-west-2`), we can set `environment = "uw2"`,
+  and the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module will get the remote state
   outputs for the Atmos component provisioned in that region
