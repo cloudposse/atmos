@@ -128,8 +128,8 @@ module "vpc_flow_logs_bucket" {
   # Override the context variables to point to a different Atmos stack if the 
   # `vpc-flow-logs-bucket` component is provisioned in another AWS account, OU or region
   stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
-  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
+  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
 
   # `context` input is a way to provide the information about the stack (using the context
   # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
@@ -180,6 +180,8 @@ components:
         nat_instance_enabled: false
         max_subnet_count: 3
         vpc_flow_logs_enabled: false
+        vpc_flow_logs_log_destination_type: s3
+        vpc_flow_logs_traffic_type: "ALL"
 ```
 
 <br/>
@@ -208,11 +210,26 @@ components:
         name: vpc-1
         # Override the default variables from the base component
         vpc_flow_logs_enabled: true
+        vpc_flow_logs_traffic_type: "REJECT"
+
         # Specify the name of the Atmos component that provides configuration
         # for the `infra/vpc-flow-logs-bucket` Terraform component
         vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket
-        vpc_flow_logs_log_destination_type: s3
-        vpc_flow_logs_traffic_type: "REJECT"
+
+        # Override the context variables to point to a different Atmos stack if the 
+        # `vpc-flow-logs-bucket` component is provisioned in another AWS account, OU or region.
+
+        # If the bucket is provisioned in a different AWS account, 
+        # set `vpc_flow_logs_bucket_stage_name`
+        # vpc_flow_logs_bucket_stage_name: prod
+
+        # If the bucket is provisioned in a different AWS OU, 
+        # set `vpc_flow_logs_bucket_tenant_name`
+        # vpc_flow_logs_bucket_tenant_name: core
+
+        # If the bucket is provisioned in a different AWS region, 
+        # set `vpc_flow_logs_bucket_environment_name`
+        # vpc_flow_logs_bucket_environment_name: uw2
 ```
 
 <br/>
@@ -224,6 +241,8 @@ executing the following Atmos commands:
 atmos terraform plan vpc -s ue2-dev
 atmos terraform apply vpc -s ue2-dev
 ```
+
+<br/>
 
 ## Summary
 
