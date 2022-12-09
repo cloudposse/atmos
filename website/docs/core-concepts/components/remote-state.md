@@ -35,16 +35,16 @@ Suppose that we need to provision two Terraform components:
 - [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
 - [vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
 
-The `vpc` component needs the outputs from the `vpc-flow-logs-bucket` component to
-configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html)
-and store them in the S3 bucket.
+The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
+configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket.
 
-We will provision the Terraform components in the `ue2-dev` Atmos stack in the `dev` AWS account by setting `stage = "dev"` and in the `us-east-2`
-region by setting `environment = "ue2"`.
+We will provision the Terraform components in the `ue2-dev` Atmos stack (in the `dev` AWS account by setting `stage = "dev"` and in the `us-east-2`
+region by setting `environment = "ue2"`).
 
-## Configure and Provision `vpc-flow-logs-bucket` Atmos Component
+## Configure and Provision `vpc-flow-logs-bucket` Component
 
-In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket` component:
+In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket-defaults` Atmos
+component:
 
 ```yaml title="stacks/catalog/vpc-flow-logs-bucket.yaml"
 components:
@@ -66,7 +66,8 @@ components:
 
 <br/>
 
-In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket` component in the `ue2-dev` Atmos stack:
+In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket-1` Atmos component in the `ue2-dev` Atmos
+stack:
 
 ```yaml title="stacks/ue2-dev.yaml"
 # Import the base Atmos component configuration from the `catalog`.
@@ -95,8 +96,8 @@ components:
 
 <br/>
 
-Having the stacks configured as shown above, we can now provision the `vpc-flow-logs-bucket` component into the `ue2-dev` stack by executing the
-following Atmos commands:
+Having the stacks configured as shown above, we can now provision the `vpc-flow-logs-bucket-1` Atmos component into the `ue2-dev` stack by executing
+the following Atmos commands:
 
 ```shell
 atmos terraform plan vpc-flow-logs-bucket-1 -s ue2-dev
@@ -105,14 +106,14 @@ atmos terraform apply vpc-flow-logs-bucket-1 -s ue2-dev
 
 <br/>
 
-## Configure and Provision `vpc` Atmos Component
+## Configure and Provision `vpc` Component
 
-Having the `vpc-flow-logs-bucket` Terraform component provisioned into the `ue2-dev` Atmos stack, we can now configure the `vpc` component to obtain
-the outputs from the remote state of the `vpc-flow-logs-bucket-1` Atmos component and provision it into the `ue2-dev` stack.
+Having the `vpc-flow-logs-bucket` Terraform component provisioned into the `ue2-dev` stack, we can now configure the `vpc` Terraform component
+to obtain the outputs from the remote state of the `vpc-flow-logs-bucket-1` Atmos component.
 
 In the `components/terraform/infra/vpc/remote-state.tf` file, configure the
 [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
-for the `vpc-flow-logs-bucket` component:
+for the `vpc-flow-logs-bucket-1` Atmos component:
 
 ```hcl title="components/terraform/infra/vpc/remote-state.tf"
 module "vpc_flow_logs_bucket" {
@@ -126,7 +127,7 @@ module "vpc_flow_logs_bucket" {
   component = var.vpc_flow_logs_bucket_component_name
 
   # Override the context variables to point to a different Atmos stack if the 
-  # `vpc-flow-logs-bucket` component is provisioned in another AWS account, OU or region
+  # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region
   stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
   environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
@@ -217,7 +218,7 @@ components:
         vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket-1
 
         # Override the context variables to point to a different Atmos stack if the 
-        # `vpc-flow-logs-bucket` component is provisioned in another AWS account, OU or region.
+        # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region.
 
         # If the bucket is provisioned in a different AWS account, 
         # set `vpc_flow_logs_bucket_stage_name`
@@ -234,7 +235,7 @@ components:
 
 <br/>
 
-Having the stacks configured as shown above, we can now provision the `vpc-1` Atmos component into the `ue2-dev` Atmos stack by
+Having the stacks configured as shown above, we can now provision the `vpc-1` Atmos component into the `ue2-dev` stack by
 executing the following Atmos commands:
 
 ```shell
