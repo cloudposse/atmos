@@ -211,6 +211,8 @@ components:
         # Specify the name of the Atmos component that provides configuration
         # for the `infra/vpc-flow-logs-bucket` Terraform component
         vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket
+        vpc_flow_logs_log_destination_type: s3
+        vpc_flow_logs_traffic_type: "REJECT"
 ```
 
 <br/>
