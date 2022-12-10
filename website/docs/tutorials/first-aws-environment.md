@@ -26,7 +26,7 @@ Prior to starting this tutorial, you should be sure that you understand [our var
 
 ## Tutorial
 
-### 1. Clone the tutorials repository + Run the `tutorials` image
+### 1. Clone the Tutorials Repository + Run the `tutorials` Image
 
 As part of this tutorial (and others following in our tutorial series), we will utilize [our tutorials](https://github.com/cloudposse/tutorials) repository](https://github.com/cloudposse/tutorials). This repository includes code and relevant materials for you to use alongside this tutorial walkthrough.
 
