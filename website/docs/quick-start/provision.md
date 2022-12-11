@@ -1,7 +1,7 @@
 ---
-title: "Example #1"
-sidebar_position: 6
-sidebar_label: Simple Example
+title: Provision
+sidebar_position: 7
+sidebar_label: Provision
 ---
 
 The [example](https://github.com/cloudposse/atmos/tree/master/examples/complete) folder contains a complete solution that shows how to:
