@@ -1,5 +1,6 @@
 ---
 title: Install Atmos
+sidebar_label: Install Atmos
 sidebar_position: 1
 ---
 
@@ -26,7 +27,7 @@ always be available for download here.
 
 From Homebrew, install directly by running:
 
-```console
+```shell
 brew install atmos
 ```
 
@@ -80,7 +81,7 @@ go install github.com/cloudposse/atmos
 
 Get a specific version
 
-```console
+```shell
 go install github.com/cloudposse/atmos@v1.3.9
 ```
 
