@@ -3,11 +3,11 @@ title: atmos terraform generate varfiles
 sidebar_label: generate varfiles
 sidebar_class_name: command
 id: generate-varfiles
-description: Use this command to generate the Terraform varfiles (`.tfvar`) for all `atmos` Terraform Components in all Stacks.
+description: Use this command to generate the Terraform varfiles (`.tfvar`) for all Atmos terraform components in all stacks.
 ---
 
 :::note Purpose
-Use this command to generate the Terraform varfiles (`.tfvar`) for all `atmos` Terraform [Components](/core-concepts/components) in all [Stacks](/core-concepts/stacks).
+Use this command to generate the Terraform varfiles (`.tfvar`) for all Atmos terraform [components](/core-concepts/components) in all [stacks](/core-concepts/stacks).
 :::
 
 ## Usage

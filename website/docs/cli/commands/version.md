@@ -2,11 +2,11 @@
 title: atmos version
 sidebar_label: version
 sidebar_class_name: command
-description: Use this command to get the `atmos` CLI version
+description: Use this command to get the Atmos CLI version
 ---
 
 :::note Purpose
-Use this command to get the `atmos` CLI version
+Use this command to get the Atmos CLI version
 :::
 
 ## Usage

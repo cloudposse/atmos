@@ -3,12 +3,12 @@ title: atmos terraform shell
 sidebar_label: shell
 sidebar_class_name: command
 id: shell
-description: This command starts a new `SHELL` configured with the environment for an `atmos` Component in a Stack so allow executing all native terraform commands inside of the shell without using any atmos-specific arguments and flags.
+description: This command starts a new `SHELL` configured with the environment for an Atmos component in a stack so allow executing all native terraform commands inside the shell without using any atmos-specific arguments and flags.
 ---
 
 :::note Purpose
-This command starts a new `SHELL` configured with the environment for an `atmos` Component in a Stack to allow executing all native terraform commands
-inside of the shell without using any atmos-specific arguments and flags.
+This command starts a new `SHELL` configured with the environment for an Atmos component in a Stack to allow executing all native terraform commands
+inside the shell without using any atmos-specific arguments and flags.
 :::
 
 ## Usage

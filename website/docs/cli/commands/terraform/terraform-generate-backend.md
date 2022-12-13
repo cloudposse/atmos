@@ -3,11 +3,11 @@ title: atmos terraform generate backend
 sidebar_label: generate backend
 sidebar_class_name: command
 id: generate-backend
-description: Use this command to generate a backend config file for an `atmos` terraform component in a stack.
+description: Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
 ---
 
 :::note purpose
-Use this command to generate a backend config file for an `atmos` terraform component in a stack.
+Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
 :::
 
 ## Usage

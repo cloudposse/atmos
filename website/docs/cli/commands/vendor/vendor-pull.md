@@ -3,11 +3,11 @@ title: atmos vendor pull
 sidebar_label: pull
 sidebar_class_name: command
 id: pull
-description: Use this command to pull sources and mixins from remote repositories for a `terraform` or `helmfile` component.
+description: Use this command to pull sources and mixins from remote repositories for a Terraform or Helmfile component.
 ---
 
 :::note Purpose
-Use this command to pull sources and mixins from remote repositories for a `terraform` or `helmfile` component.
+Use this command to pull sources and mixins from remote repositories for a Terraform or Helmfile component.
 :::
 
 ## Usage

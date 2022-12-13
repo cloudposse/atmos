@@ -3,14 +3,15 @@ title: atmos describe stacks
 sidebar_label: stacks
 sidebar_class_name: command
 id: stacks
-description: Use this command to show the fully deep-merged configuration for all stacks and their components in the stacks.
+description: Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
 ---
 
 :::note Purpose
-Use this command to show the fully deep-merged configuration for all stacks and their components in the stacks.
+Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
 :::
 
 ## Usage
+
 Execute the `describe stacks` command like this:
 
 ```shell

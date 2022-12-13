@@ -6,7 +6,7 @@ id: generate-varfile
 ---
 
 :::note purpose
-Use this command to generate a varfile (`.tfvar` ) for a Terraform [Component](/core-concepts/components) in a [Stack](/core-concepts/stacks).
+Use this command to generate a varfile (`.tfvar` ) for an Atmos terraform [component](/core-concepts/components) in a [stack](/core-concepts/stacks).
 :::
 
 ## Usage
