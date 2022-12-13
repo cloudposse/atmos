@@ -24,11 +24,11 @@ var describeAffectedCmd = &cobra.Command{
 func init() {
 	describeAffectedCmd.DisableFlagParsing = false
 
-	describeAffectedCmd.PersistentFlags().String("target", "", "The SHA of a Git commit to compare the current Git checkout to: atmos describe affected --target origin/main")
-	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to file: atmos describe affected --file affected.yaml")
-	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: atmos describe affected --format=json|yaml ('json' is default)")
+	describeAffectedCmd.PersistentFlags().String("base", "", "The SHA of a Git commit to compare the current Git checkout to: atmos describe affected --base origin/main")
+	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to file: atmos describe affected --base origin/main --file affected.json")
+	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: atmos describe affected --base origin/main --format=json|yaml ('json' is default)")
 
-	err := describeAffectedCmd.MarkPersistentFlagRequired("target")
+	err := describeAffectedCmd.MarkPersistentFlagRequired("base")
 	if err != nil {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
