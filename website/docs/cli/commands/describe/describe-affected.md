@@ -27,16 +27,16 @@ Run `atmos describe affected --help` to see all the available options
 ## Examples
 
 ```shell
-atmos describe affected --base origin/main
-atmos describe affected --base origin/main --format json
-atmos describe affected --base origin/main --file affected.json
-atmos describe affected --base origin/main --file affected.yaml --format yaml
+atmos describe affected --target origin/main
+atmos describe affected --target origin/main --format json
+atmos describe affected --target origin/main --file affected.json
+atmos describe affected --target origin/main --file affected.yaml --format yaml
 ```
 
 ## Flags
 
 | Flag       | Description                                                     | Required |
 |:-----------|:----------------------------------------------------------------|:---------|
-| `--base`   | The SHA of a Git commit to compare the current Git checkout to  | yes      |
+| `--target` | The SHA of a Git commit to compare the current Git checkout to  | yes      |
 | `--file`   | If specified, write the result to the file                      | no       |
 | `--format` | Specify the output format: `json` or `yaml` (`json` is default) | no       |
