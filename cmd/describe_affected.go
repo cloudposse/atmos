@@ -7,14 +7,14 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeAffectedCmd shows the affected (changed) configurations for Atmos stacks and components in the stacks
+// describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
 	Short:              "Execute 'describe affected' command",
-	Long:               `This command shows the affected (changed) configurations for Atmos stacks and components in the stacks: atmos describe stacks [options]`,
+	Long:               `This command produces a list of the affected Atmos components and stacks given two Git commits: atmos describe stacks [options]`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteDescribeStacksCmd(cmd, args)
+		err := e.ExecuteDescribeAffectedCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}
@@ -24,8 +24,14 @@ var describeAffectedCmd = &cobra.Command{
 func init() {
 	describeAffectedCmd.DisableFlagParsing = false
 
+	describeAffectedCmd.PersistentFlags().String("base", "", "The SHA of a Git commit to compare the current Git checkout to: atmos describe affected --since=origin/main")
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to file: atmos describe affected --file=affected.yaml")
-	describeAffectedCmd.PersistentFlags().String("format", "yaml", "Specify the output format: atmos describe affected --format=json|yaml ('json' is default)")
+	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: atmos describe affected --format=json|yaml ('json' is default)")
+
+	err := describeAffectedCmd.MarkPersistentFlagRequired("base")
+	if err != nil {
+		u.PrintErrorToStdErrorAndExit(err)
+	}
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }
