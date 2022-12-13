@@ -4,7 +4,7 @@ sidebar_label: Next Steps
 sidebar_position: 10
 ---
 
-You have just learned the **basics of atmos**.
+You have just learned the **basics of Atmos**.
 
 Atmos is a powerful enterprise-grade workflow automation tool with so **much more to offer**!
 
