@@ -1,6 +1,6 @@
 {
-  "label": "validate",
-  "position": 6,
+  "label": "atlantis",
+  "position": 1,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

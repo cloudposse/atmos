@@ -23,13 +23,13 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 func init() {
 	atlantisGenerateRepoConfigCmd.DisableFlagParsing = false
 
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("output-path", "", "atmos atlantis generate repo-config --output-path ./atmos.yaml --config-template config-1 --project-template project-1 --workflow-template workflow-1")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("output-path", "", "atmos atlantis generate repo-config --output-path ./atlantis.yaml --config-template config-1 --project-template project-1 --workflow-template workflow-1")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("config-template", "", "atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("project-template", "", "atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("workflow-template", "", "atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1")
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("stacks", "",
-		"Only generate config for the specified stacks (comma-separated values).\n"+
+		"Generate Atlantis projects for the specified stacks only (comma-separated values).\n"+
 			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks <stack1>,<stack2>\n"+
 			"The filter can contain the names of the top-level stack config files and the logical stack names (derived from the context vars)\n"+
 			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --workflow-template <workflow_template> --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
@@ -38,7 +38,7 @@ func init() {
 	)
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("components", "",
-		"Only generate config for the specified components (comma-separated values).\n"+
+		"Generate Atlantis projects for the specified components only (comma-separated values).\n"+
 			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --workflow-template <workflow_template> --components <component1>,<component2>",
 	)
 
