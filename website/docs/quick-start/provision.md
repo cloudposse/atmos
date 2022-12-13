@@ -79,8 +79,7 @@ In the example, we defined a few config files:
 
 __NOTE:__ The stack configuration structure and the file names described above are just an example of how to name and structure the config files.
 You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire
-solution)
-into a stack config using the `import` directive.
+solution) into a stack config using the `import` directive.
 
 Stack configuration files have a predefined format:
 
