@@ -52,4 +52,4 @@ For more information, refer to:
 
 - [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html)
 - [Atlantis Custom Workflows](https://www.runatlantis.io/docs/custom-workflows.html)
-  :::
+:::
