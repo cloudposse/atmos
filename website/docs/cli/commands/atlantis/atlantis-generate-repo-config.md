@@ -10,9 +10,13 @@ description: Use this command to generate repository configuration for Atlantis.
 Use this command to generate repository configuration for Atlantis.
 :::
 
+<br/>
+
 ```shell
 atmos atmos atlantis generate repo-config [options]
 ```
+
+<br/>
 
 :::tip
 Run `atmos atlantis generate repo-config --help` to see all the available options
