@@ -107,6 +107,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// ExecuteDescribeStacks processes stack configs and returns the final map of stacks and components
 func ExecuteDescribeStacks(
 	cliConfig cfg.CliConfiguration,
 	filterByStack string,
