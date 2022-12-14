@@ -72,17 +72,17 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if format == "yaml" {
-		//if file == "" {
-		//	err = u.PrintAsYAML(affected)
-		//	if err != nil {
-		//		return err
-		//	}
-		//} else {
-		//	err = u.WriteToFileAsYAML(file, affected, 0644)
-		//	if err != nil {
-		//		return err
-		//	}
-		//}
+		if file == "" {
+			err = u.PrintAsYAML(affected)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = u.WriteToFileAsYAML(file, affected, 0644)
+			if err != nil {
+				return err
+			}
+		}
 	} else if format == "json" {
 		if file == "" {
 			err = u.PrintAsJSON(affected)
@@ -106,7 +106,7 @@ func ExecuteDescribeAffected(
 	ref string,
 	sha string,
 	verbose bool,
-) (map[string]any, error) {
+) ([]cfg.Affected, error) {
 
 	// Get the origin URL of the current branch
 	repoUrl, err := gitconfig.OriginURL()
@@ -132,6 +132,7 @@ func ExecuteDescribeAffected(
 
 	// Clone the remote repo
 	// https://git-scm.com/book/en/v2/Git-Internals-Git-References
+	// https://github.com/go-git/go-git/tree/master/_examples
 	// https://stackoverflow.com/questions/56810719/how-to-checkout-a-specific-sha-in-a-git-repo-using-golang
 	// https://golang.hotexamples.com/examples/gopkg.in.src-d.go-git.v4.plumbing/-/ReferenceName/golang-referencename-function-examples.html
 
@@ -184,10 +185,12 @@ func ExecuteDescribeAffected(
 		}
 	}
 
-	affected, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
+	_, err = ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	affected := []cfg.Affected{{}}
 
 	return affected, nil
 }
