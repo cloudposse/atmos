@@ -223,8 +223,21 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 									}
 								}
 							}
+							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
+									affected := cfg.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+									}
+									res = append(res, affected)
+									continue
+								}
+							}
+							// Check `env` section
+							if envSection, ok := componentSection["env"].(map[any]any); ok {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, envSection, "env") {
 									affected := cfg.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
@@ -248,8 +261,21 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 									}
 								}
 							}
+							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
+									affected := cfg.Affected{
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+									}
+									res = append(res, affected)
+									continue
+								}
+							}
+							// Check `env` section
+							if envSection, ok := componentSection["env"].(map[any]any); ok {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, envSection, "env") {
 									affected := cfg.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
