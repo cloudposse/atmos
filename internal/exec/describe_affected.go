@@ -95,6 +95,7 @@ func ExecuteDescribeAffected(
 	if err != nil {
 		return nil, err
 	}
+
 	if repoUrl == "" {
 		return nil, errors.New("the current repo is not a Git repository. Check that it was initialized and has '.git' folder")
 	}
@@ -105,12 +106,7 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	defer func(path string) {
-		err := os.RemoveAll(path)
-		if err != nil {
-			u.PrintError(err)
-		}
-	}(tempDir)
+	defer removeTempDir(tempDir)
 
 	// Clone the remote repo
 	// https://git-scm.com/book/en/v2/Git-Internals-Git-References

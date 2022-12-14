@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -710,4 +711,11 @@ func printOrWriteToFile(format string, file string, data any) error {
 	}
 
 	return nil
+}
+
+func removeTempDir(path string) {
+	err := os.RemoveAll(path)
+	if err != nil {
+		u.PrintError(err)
+	}
 }
