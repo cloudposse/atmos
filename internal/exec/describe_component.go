@@ -60,10 +60,14 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 		}
 	}
 
-	// Always add component, base component (if any) and stack to the `atmos describe component` command output
-	configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
-	configAndStacksInfo.ComponentSection["base_component"] = configAndStacksInfo.BaseComponent
-	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg
+	// Add Atmos component and stack
+	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+
+	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
+	if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
+		configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
+	}
 
 	return configAndStacksInfo.ComponentSection, nil
 }
