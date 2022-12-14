@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tcnksm/go-gitconfig"
 	"os"
+	"path"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -136,9 +138,7 @@ func ExecuteDescribeAffected(
 	// https://stackoverflow.com/questions/56810719/how-to-checkout-a-specific-sha-in-a-git-repo-using-golang
 	// https://golang.hotexamples.com/examples/gopkg.in.src-d.go-git.v4.plumbing/-/ReferenceName/golang-referencename-function-examples.html
 
-	if verbose {
-		u.PrintInfo(fmt.Sprintf("\nCloning repo '%s' into a temp dir", repoUrl))
-	}
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nCloning repo '%s' into a temp dir '%s'", repoUrl, tempDir))
 
 	cloneOptions := git.CloneOptions{
 		URL:          repoUrl,
@@ -148,9 +148,7 @@ func ExecuteDescribeAffected(
 
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		if verbose {
-			u.PrintInfo(fmt.Sprintf("Git ref: %s", ref))
-		}
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("Git ref: %s", ref))
 	}
 	if verbose {
 		cloneOptions.Progress = os.Stdout
@@ -163,9 +161,7 @@ func ExecuteDescribeAffected(
 
 	// Check if a commit SHA was provided and checkout the repo at that commit SHA
 	if sha != "" {
-		if verbose {
-			u.PrintInfo(fmt.Sprintf("\nChecking out SHA: %s\n", sha))
-		}
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out SHA: %s\n", sha))
 
 		w, err := repo.Worktree()
 		if err != nil {
@@ -185,12 +181,37 @@ func ExecuteDescribeAffected(
 		}
 	}
 
-	_, err = ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
+	currentStacks, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return nil, err
 	}
 
+	// Point base path to the temp dir
+	cliConfig.StacksBaseAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath)
+	cliConfig.TerraformDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
+	cliConfig.HelmfileDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
+
+	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
+		path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath),
+		cliConfig.StackConfigFilesRelativePaths,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	remoteStacks, err := FindStacksMap(cliConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	res := findAffected(currentStacks, remoteStacks)
+	u.PrintInfo(fmt.Sprintf("%v", res))
+
 	affected := []cfg.Affected{{}}
 
 	return affected, nil
+}
+
+func findAffected(currentStacks map[string]any, remoteStacks map[string]any) bool {
+	return reflect.DeepEqual(currentStacks, remoteStacks)
 }
