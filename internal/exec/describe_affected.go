@@ -147,7 +147,7 @@ func ExecuteDescribeAffected(
 
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("Git ref: %s", ref))
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out Git ref: %s\n", ref))
 	}
 	if verbose {
 		cloneOptions.Progress = os.Stdout
