@@ -6,7 +6,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/tcnksm/go-gitconfig"
@@ -189,7 +188,6 @@ func ExecuteDescribeAffected(
 	cliConfig.StacksBaseAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath)
 	cliConfig.TerraformDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
 	cliConfig.HelmfileDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
-
 	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath),
 		cliConfig.StackConfigFilesRelativePaths,
@@ -208,9 +206,58 @@ func ExecuteDescribeAffected(
 }
 
 func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []cfg.Affected {
-	if diff := cmp.Diff(currentStacks, remoteStacks); diff != "" {
-		fmt.Println(diff)
+	res := []cfg.Affected{}
+
+	for stackName, stackSection := range currentStacks {
+		if stackSectionMap, ok := stackSection.(map[string]any); ok {
+			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
+				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+					for componentName, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							// Skip abstract components
+							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+								if metadataType, ok := metadataSection["type"].(string); ok {
+									if metadataType == "abstract" {
+										continue
+									}
+								}
+							}
+							if _, ok := componentSection["vars"].(map[any]any); ok {
+								affected := cfg.Affected{
+									ComponentType: "terraform",
+									Component:     componentName,
+									Stack:         stackName,
+								}
+								res = append(res, affected)
+							}
+						}
+					}
+				}
+				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
+					for componentName, compSection := range helmfileSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							// Skip abstract components
+							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+								if metadataType, ok := metadataSection["type"].(string); ok {
+									if metadataType == "abstract" {
+										continue
+									}
+								}
+							}
+							if _, ok := componentSection["vars"].(map[any]any); ok {
+								affected := cfg.Affected{
+									ComponentType: "helmfile",
+									Component:     componentName,
+									Stack:         stackName,
+								}
+								res = append(res, affected)
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
-	return []cfg.Affected{}
+	return res
 }
