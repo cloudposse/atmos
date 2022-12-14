@@ -34,9 +34,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	if format != "" && format != "yaml" && format != "json" {
 		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
 	}
+
 	if format == "" {
 		format = "yaml"
 	}
@@ -50,6 +52,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	var components []string
 	if componentsCsv != "" {
 		components = strings.Split(componentsCsv, ",")
@@ -59,6 +62,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	var componentTypes []string
 	if componentTypesCsv != "" {
 		componentTypes = strings.Split(componentTypesCsv, ",")
@@ -78,30 +82,9 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if format == "yaml" {
-		if file == "" {
-			err = u.PrintAsYAML(finalStacksMap)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = u.WriteToFileAsYAML(file, finalStacksMap, 0644)
-			if err != nil {
-				return err
-			}
-		}
-	} else if format == "json" {
-		if file == "" {
-			err = u.PrintAsJSON(finalStacksMap)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = u.WriteToFileAsJSON(file, finalStacksMap, 0644)
-			if err != nil {
-				return err
-			}
-		}
+	err = printOrWriteToFile(format, file, finalStacksMap)
+	if err != nil {
+		return err
 	}
 
 	return nil

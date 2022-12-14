@@ -43,16 +43,18 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if ref == "" && sha == "" {
-		return fmt.Errorf("invalid flag. Either '--ref' or '--sha' is required. Both can be specified")
+		return fmt.Errorf("invalid flags. Either '--ref' or '--sha' is required. Both can be specified")
 	}
 
 	format, err := flags.GetString("format")
 	if err != nil {
 		return err
 	}
+
 	if format != "" && format != "yaml" && format != "json" {
 		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
 	}
+
 	if format == "" {
 		format = "json"
 	}
@@ -72,30 +74,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if format == "yaml" {
-		if file == "" {
-			err = u.PrintAsYAML(affected)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = u.WriteToFileAsYAML(file, affected, 0644)
-			if err != nil {
-				return err
-			}
-		}
-	} else if format == "json" {
-		if file == "" {
-			err = u.PrintAsJSON(affected)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = u.WriteToFileAsJSON(file, affected, 0644)
-			if err != nil {
-				return err
-			}
-		}
+	err = printOrWriteToFile(format, file, affected)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -149,6 +130,7 @@ func ExecuteDescribeAffected(
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out Git ref: %s\n", ref))
 	}
+
 	if verbose {
 		cloneOptions.Progress = os.Stdout
 	}
@@ -189,6 +171,7 @@ func ExecuteDescribeAffected(
 	cliConfig.StacksBaseAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath)
 	cliConfig.TerraformDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
 	cliConfig.HelmfileDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
+
 	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath),
 		cliConfig.StackConfigFilesRelativePaths,
