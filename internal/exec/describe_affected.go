@@ -9,7 +9,6 @@ import (
 	"github.com/tcnksm/go-gitconfig"
 	"os"
 	"path"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -204,14 +203,10 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	res := findAffected(currentStacks, remoteStacks)
-	u.PrintInfo(fmt.Sprintf("%v", res))
-
-	affected := []cfg.Affected{{}}
-
+	affected := findAffected(currentStacks, remoteStacks)
 	return affected, nil
 }
 
-func findAffected(currentStacks map[string]any, remoteStacks map[string]any) bool {
-	return reflect.DeepEqual(currentStacks, remoteStacks)
+func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []cfg.Affected {
+	return []cfg.Affected{}
 }
