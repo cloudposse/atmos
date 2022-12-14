@@ -207,12 +207,23 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							// Skip abstract components
 							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
 										continue
 									}
+								}
+								// Check `metadata` section
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, metadataSection, "metadata") {
+									affected := cfg.Affected{
+										ComponentType:   "terraform",
+										Component:       componentName,
+										Stack:           stackName,
+										AffectedSection: "metadata",
+									}
+									res = append(res, affected)
+									continue
 								}
 							}
 							// Check `vars` section
@@ -260,12 +271,23 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							// Skip abstract components
 							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
 										continue
 									}
+								}
+								// Check `metadata` section
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, metadataSection, "metadata") {
+									affected := cfg.Affected{
+										ComponentType:   "helmfile",
+										Component:       componentName,
+										Stack:           stackName,
+										AffectedSection: "metadata",
+									}
+									res = append(res, affected)
+									continue
 								}
 							}
 							// Check `vars` section
