@@ -8,10 +8,15 @@ description: This command produces a list of the affected Atmos components and s
 
 :::note Purpose
 Use this command to show a list of the affected Atmos components and stacks given two Git commits.
+:::
 
+<br/>
+
+:::info
 For the first commit, the command assumes that the repo root is a Git checkout.
 
-The second commit is specified on the command line using the `--ref` and `--sha` flags.
+The second commit is specified on the command line by using the `--ref` or `--sha` flags.
+
 If the flags are not provided, it will clone the HEAD of the default branch.
 :::
 
@@ -32,10 +37,10 @@ Run `atmos describe affected --help` to see all the available options
 ```shell
 atmos describe affected
 atmos describe affected --ref refs/heads/main
+atmos describe affected --ref refs/heads/my-new-branch --verbose=true
 atmos describe affected --ref refs/heads/main --format json
 atmos describe affected --ref refs/tags/v1.16.0 --file affected.yaml --format yaml
-atmos describe affected --ref refs/heads/my-new-branch --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
-atmos describe affected --ref refs/heads/my-new-branch --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
+atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
 atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 ```
 
