@@ -32,7 +32,8 @@ Provide the default settings for operating in a particular stage (e.g. Dev, Stag
 For example, let's define the stage name for production in the mixin file named `mixins/stage/prod.yaml`
 
 ```yaml
-stage: prod
+vars:
+  stage: prod
 ```
 
 Now, anytime we want to provision a parent stack in production, we'll want to add this to the imports:
