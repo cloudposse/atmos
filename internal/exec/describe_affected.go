@@ -106,6 +106,7 @@ func ExecuteDescribeAffected(
 
 	// Clone the remote repo
 	// https://git-scm.com/book/en/v2/Git-Internals-Git-References
+	// https://git-scm.com/docs/git-show-ref
 	// https://github.com/go-git/go-git/tree/master/_examples
 	// https://stackoverflow.com/questions/56810719/how-to-checkout-a-specific-sha-in-a-git-repo-using-golang
 	// https://golang.hotexamples.com/examples/gopkg.in.src-d.go-git.v4.plumbing/-/ReferenceName/golang-referencename-function-examples.html
@@ -118,9 +119,12 @@ func ExecuteDescribeAffected(
 		SingleBranch: false,
 	}
 
+	// If `ref` flag is not provided, it will clone the HEAD of the default branch
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out Git ref: %s\n", ref))
+	} else {
+		u.PrintInfoVerbose(verbose, "\nChecking out the HEAD of the default branch\n")
 	}
 
 	if verbose {
@@ -132,9 +136,20 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
+	head, err := repo.Head()
+	if err != nil {
+		return nil, err
+	}
+
+	if ref != "" {
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out Git ref: %s\n", ref))
+	} else {
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out Git ref: %s\n", head.Name()))
+	}
+
 	// Check if a commit SHA was provided and checkout the repo at that commit SHA
 	if sha != "" {
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out SHA: %s\n", sha))
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out commit SHA: %s\n", sha))
 
 		w, err := repo.Worktree()
 		if err != nil {
@@ -152,6 +167,8 @@ func ExecuteDescribeAffected(
 		if err != nil {
 			return nil, err
 		}
+
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out commit SHA: %s\n", sha))
 	}
 
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
