@@ -268,13 +268,19 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 }
 
 // isEqual compares the vars sections of the component from the remote stacks with the vars section of the current local component
-func isEqual(remoteStacks map[string]any, stackName string, componentType string, componentName string, varSection map[any]any) bool {
-	if stackSection, ok := remoteStacks[stackName].(map[string]any); ok {
-		if componentsSection, ok := stackSection["components"].(map[string]any); ok {
-			if componentTypeSection, ok := componentsSection[componentType].(map[string]any); ok {
-				if componentSection, ok := componentTypeSection[componentName].(map[string]any); ok {
-					if componentVarSection, ok := componentSection["vars"].(map[any]any); ok {
-						if reflect.DeepEqual(varSection, componentVarSection) {
+func isEqual(
+	remoteStacks map[string]any,
+	localStackName string,
+	componentType string,
+	localComponentName string,
+	localVarSection map[any]any) bool {
+
+	if remoteStackSection, ok := remoteStacks[localStackName].(map[string]any); ok {
+		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
+			if remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any); ok {
+				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
+					if remoteComponentVarSection, ok := remoteComponentSection["vars"].(map[any]any); ok {
+						if reflect.DeepEqual(localVarSection, remoteComponentVarSection) {
 							return true
 						}
 					}
