@@ -227,9 +227,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
 									affected := cfg.Affected{
-										ComponentType: "terraform",
-										Component:     componentName,
-										Stack:         stackName,
+										ComponentType:   "terraform",
+										Component:       componentName,
+										Stack:           stackName,
+										AffectedSection: "vars",
 									}
 									res = append(res, affected)
 									continue
@@ -239,9 +240,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if envSection, ok := componentSection["env"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, envSection, "env") {
 									affected := cfg.Affected{
-										ComponentType: "terraform",
-										Component:     componentName,
-										Stack:         stackName,
+										ComponentType:   "terraform",
+										Component:       componentName,
+										Stack:           stackName,
+										AffectedSection: "env",
 									}
 									res = append(res, affected)
 									continue
@@ -265,9 +267,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
 									affected := cfg.Affected{
-										ComponentType: "helmfile",
-										Component:     componentName,
-										Stack:         stackName,
+										ComponentType:   "helmfile",
+										Component:       componentName,
+										Stack:           stackName,
+										AffectedSection: "vars",
 									}
 									res = append(res, affected)
 									continue
@@ -277,9 +280,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if envSection, ok := componentSection["env"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, envSection, "env") {
 									affected := cfg.Affected{
-										ComponentType: "helmfile",
-										Component:     componentName,
-										Stack:         stackName,
+										ComponentType:   "helmfile",
+										Component:       componentName,
+										Stack:           stackName,
+										AffectedSection: "env",
 									}
 									res = append(res, affected)
 									continue
@@ -302,7 +306,8 @@ func isEqual(
 	componentType string,
 	localComponentName string,
 	localSection map[any]any,
-	sectionName string) bool {
+	sectionName string,
+) bool {
 
 	if remoteStackSection, ok := remoteStacks[localStackName].(map[string]any); ok {
 		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
