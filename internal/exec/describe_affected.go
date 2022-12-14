@@ -2,8 +2,11 @@ package exec
 
 import (
 	"fmt"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/tcnksm/go-gitconfig"
@@ -11,9 +14,6 @@ import (
 	"path"
 	"strconv"
 	"time"
-
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeAffectedCmd executes `describe affected` command
@@ -208,5 +208,9 @@ func ExecuteDescribeAffected(
 }
 
 func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []cfg.Affected {
+	if diff := cmp.Diff(currentStacks, remoteStacks); diff != "" {
+		fmt.Println(diff)
+	}
+
 	return []cfg.Affected{}
 }
