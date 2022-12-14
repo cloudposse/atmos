@@ -181,12 +181,12 @@ func ExecuteDescribeAffected(
 		}
 	}
 
-	currentStacks, err := FindStacksMap(cliConfig)
+	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Point base path to the temp dir
+	// Update paths to point to the temp dir
 	cliConfig.StacksBaseAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath)
 	cliConfig.TerraformDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
 	cliConfig.HelmfileDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
@@ -199,7 +199,7 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	remoteStacks, err := FindStacksMap(cliConfig)
+	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
