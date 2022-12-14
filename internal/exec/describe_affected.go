@@ -42,17 +42,13 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if ref == "" && sha == "" {
-		return fmt.Errorf("invalid flags. Either '--ref' or '--sha' is required. Both can be specified")
-	}
-
 	format, err := flags.GetString("format")
 	if err != nil {
 		return err
 	}
 
 	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
+		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", format)
 	}
 
 	if format == "" {
@@ -114,7 +110,7 @@ func ExecuteDescribeAffected(
 	// https://stackoverflow.com/questions/56810719/how-to-checkout-a-specific-sha-in-a-git-repo-using-golang
 	// https://golang.hotexamples.com/examples/gopkg.in.src-d.go-git.v4.plumbing/-/ReferenceName/golang-referencename-function-examples.html
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nCloning repo '%s' into a temp dir '%s'", repoUrl, tempDir))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", repoUrl, tempDir))
 
 	cloneOptions := git.CloneOptions{
 		URL:          repoUrl,
@@ -228,6 +224,19 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 									continue
 								}
 							}
+							// Check `settings` section
+							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, "settings") {
+									affected := cfg.Affected{
+										ComponentType:   "terraform",
+										Component:       componentName,
+										Stack:           stackName,
+										AffectedSection: "settings",
+									}
+									res = append(res, affected)
+									continue
+								}
+							}
 						}
 					}
 				}
@@ -263,6 +272,19 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 										Component:       componentName,
 										Stack:           stackName,
 										AffectedSection: "env",
+									}
+									res = append(res, affected)
+									continue
+								}
+							}
+							// Check `settings` section
+							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, "settings") {
+									affected := cfg.Affected{
+										ComponentType:   "helmfile",
+										Component:       componentName,
+										Stack:           stackName,
+										AffectedSection: "settings",
 									}
 									res = append(res, affected)
 									continue
