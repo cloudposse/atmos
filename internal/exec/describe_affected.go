@@ -224,13 +224,14 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 								}
 							}
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection) {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
 									affected := cfg.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
 									}
 									res = append(res, affected)
+									continue
 								}
 							}
 						}
@@ -248,13 +249,14 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 								}
 							}
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection) {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
 									affected := cfg.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
 									}
 									res = append(res, affected)
+									continue
 								}
 							}
 						}
@@ -267,20 +269,21 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 	return res
 }
 
-// isEqual compares the vars sections of the component from the remote stacks with the vars section of the current local component
+// isEqual compares a section of a component from the remote stacks with a section of a local component
 func isEqual(
 	remoteStacks map[string]any,
 	localStackName string,
 	componentType string,
 	localComponentName string,
-	localVarSection map[any]any) bool {
+	localSection map[any]any,
+	sectionName string) bool {
 
 	if remoteStackSection, ok := remoteStacks[localStackName].(map[string]any); ok {
 		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
 			if remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any); ok {
 				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
-					if remoteComponentVarSection, ok := remoteComponentSection["vars"].(map[any]any); ok {
-						if reflect.DeepEqual(localVarSection, remoteComponentVarSection) {
+					if remoteSection, ok := remoteComponentSection[sectionName].(map[any]any); ok {
+						if reflect.DeepEqual(localSection, remoteSection) {
 							return true
 						}
 					}
