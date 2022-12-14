@@ -11,6 +11,7 @@ import (
 	"github.com/tcnksm/go-gitconfig"
 	"os"
 	"path"
+	"reflect"
 	"strconv"
 	"time"
 )
@@ -108,7 +109,7 @@ func ExecuteDescribeAffected(
 	verbose bool,
 ) ([]cfg.Affected, error) {
 
-	// Get the origin URL of the current branch
+	// Get the origin URL of the current repo
 	repoUrl, err := gitconfig.OriginURL()
 	if err != nil {
 		return nil, err
@@ -222,13 +223,15 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 									}
 								}
 							}
-							if _, ok := componentSection["vars"].(map[any]any); ok {
-								affected := cfg.Affected{
-									ComponentType: "terraform",
-									Component:     componentName,
-									Stack:         stackName,
+							if varSection, ok := componentSection["vars"].(map[any]any); ok {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection) {
+									affected := cfg.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+									}
+									res = append(res, affected)
 								}
-								res = append(res, affected)
 							}
 						}
 					}
@@ -244,13 +247,15 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 									}
 								}
 							}
-							if _, ok := componentSection["vars"].(map[any]any); ok {
-								affected := cfg.Affected{
-									ComponentType: "helmfile",
-									Component:     componentName,
-									Stack:         stackName,
+							if varSection, ok := componentSection["vars"].(map[any]any); ok {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection) {
+									affected := cfg.Affected{
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+									}
+									res = append(res, affected)
 								}
-								res = append(res, affected)
 							}
 						}
 					}
@@ -260,4 +265,22 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 	}
 
 	return res
+}
+
+// isEqual compares the vars sections of the component from the remote stacks with the vars section of the current local component
+func isEqual(remoteStacks map[string]any, stackName string, componentType string, componentName string, varSection map[any]any) bool {
+	if stackSection, ok := remoteStacks[stackName].(map[string]any); ok {
+		if componentsSection, ok := stackSection["components"].(map[string]any); ok {
+			if componentTypeSection, ok := componentsSection[componentType].(map[string]any); ok {
+				if componentSection, ok := componentTypeSection[componentName].(map[string]any); ok {
+					if componentVarSection, ok := componentSection["vars"].(map[any]any); ok {
+						if reflect.DeepEqual(varSection, componentVarSection) {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
 }
