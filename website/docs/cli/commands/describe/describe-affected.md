@@ -10,7 +10,7 @@ description: This command produces a list of the affected Atmos components and s
 Use this command to show a list of the affected Atmos components and stacks given two Git commits.
 
 For the first commit, the command assumes that the repo root is a Git checkout.
-The second commit SHA is specified on the command line using the `--base` flag.
+The second commit is specified on the command line using the `--ref` and `--sha` flags.
 :::
 
 ## Usage
@@ -28,16 +28,20 @@ Run `atmos describe affected --help` to see all the available options
 ## Examples
 
 ```shell
-atmos describe affected --base origin/main
-atmos describe affected --base origin/main --format json
-atmos describe affected --base origin/main --file affected.json
-atmos describe affected --base origin/main --file affected.yaml --format yaml
+atmos describe affected --ref refs/heads/main
+atmos describe affected --ref refs/heads/main --format json
+atmos describe affected --ref refs/tags/v1.16.0 --file affected.yaml --format yaml
+atmos describe affected --ref refs/heads/my-new-branch --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+atmos describe affected --ref refs/heads/my-new-branch --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
+atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 ```
 
 ## Flags
 
-| Flag       | Description                                                     | Required |
-|:-----------|:----------------------------------------------------------------|:---------|
-| `--base`   | The SHA of a Git commit to compare the current Git checkout to  | yes      |
-| `--file`   | If specified, write the result to the file                      | no       |
-| `--format` | Specify the output format: `json` or `yaml` (`json` is default) | no       |
+| Flag        | Description                                                                                                                                                     | Required                                                     |
+|:------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------|:-------------------------------------------------------------|
+| `--ref`     | Git reference with which to compare the current branch. Refer to [Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References) for more details | Either `--ref` or `--sha` is required. Both can be specified |
+| `--sha`     | Git commit SHA with which to compare the current branch                                                                                                         | Either `--ref` or `--sha` is required. Both can be specified |
+| `--file`    | If specified, write the result to the file                                                                                                                      | no                                                           |
+| `--format`  | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                 | no                                                           |
+| `--verbose` | Print more detailed output when cloning and checking out the Git repository                                                                                     | no                                                           |
