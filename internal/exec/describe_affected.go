@@ -198,6 +198,7 @@ func ExecuteDescribeAffected(
 	return affected, nil
 }
 
+// findAffected returns a list of all affected components in all stacks
 func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []cfg.Affected {
 	res := []cfg.Affected{}
 
