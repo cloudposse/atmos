@@ -233,9 +233,34 @@ func ExecuteDescribeAffected(
 		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
 	}
 
-	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
+	localSha := localRepoHead.Hash()
+	localCommit, err := localRepo.CommitObject(localSha)
 	if err != nil {
-		return nil, err
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nNo local commits found. Checking out HEAD SHA: %s\n", localSha))
+
+		w, err := localRepo.Worktree()
+		if err != nil {
+			return nil, err
+		}
+
+		checkoutOptions := git.CheckoutOptions{
+			Hash:   localSha,
+			Create: false,
+			Force:  true,
+			Keep:   false,
+		}
+
+		err = w.Checkout(&checkoutOptions)
+		if err != nil {
+			return nil, err
+		}
+
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out HEAD SHA: %s\n", localSha))
+
+		localCommit, err = localRepo.CommitObject(localSha)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	localTree, err := localCommit.Tree()
