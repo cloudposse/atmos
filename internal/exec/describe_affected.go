@@ -315,7 +315,7 @@ func findAffected(
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "metadata",
+										Affected:      "stack.metadata",
 									}
 									res = append(res, affected)
 									continue
@@ -328,7 +328,7 @@ func findAffected(
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "terraform",
+										Affected:      "component",
 									}
 									res = append(res, affected)
 									continue
@@ -341,7 +341,7 @@ func findAffected(
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "vars",
+										Affected:      "stack.vars",
 									}
 									res = append(res, affected)
 									continue
@@ -354,7 +354,7 @@ func findAffected(
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "env",
+										Affected:      "stack.env",
 									}
 									res = append(res, affected)
 									continue
@@ -367,7 +367,7 @@ func findAffected(
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "settings",
+										Affected:      "stack.settings",
 									}
 									res = append(res, affected)
 									continue
@@ -392,7 +392,7 @@ func findAffected(
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "metadata",
+										Affected:      "stack.metadata",
 									}
 									res = append(res, affected)
 									continue
@@ -405,7 +405,7 @@ func findAffected(
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "helmfile",
+										Affected:      "component",
 									}
 									res = append(res, affected)
 									continue
@@ -418,7 +418,7 @@ func findAffected(
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "vars",
+										Affected:      "stack.vars",
 									}
 									res = append(res, affected)
 									continue
@@ -431,7 +431,7 @@ func findAffected(
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "env",
+										Affected:      "stack.env",
 									}
 									res = append(res, affected)
 									continue
@@ -444,7 +444,7 @@ func findAffected(
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
-										Affected:      "settings",
+										Affected:      "stack.settings",
 									}
 									res = append(res, affected)
 									continue

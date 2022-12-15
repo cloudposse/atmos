@@ -27,8 +27,8 @@ func init() {
 	describeAffectedCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos describe affected --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details")
 	describeAffectedCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to the file: atmos describe affected --ref refs/tags/v1.16.0 --file affected.json")
-	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: atmos describe affected --ref refs/heads/main --format=json|yaml ('json' is default)")
-	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "atmos describe affected --ref refs/heads/main --verbose=true")
+	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: atmos describe affected --format=json|yaml ('json' is default)")
+	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Print more detailed output when cloning and checking out the Git repository: atmos describe affected --verbose=true")
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }

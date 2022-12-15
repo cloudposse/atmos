@@ -15,9 +15,9 @@ Use this command to show a list of the affected Atmos components and stacks give
 :::info
 For the first commit, the command assumes that the repo root is a Git checkout.
 
-The second commit is specified on the command line by using the `--ref` or `--sha` flags.
+The second commit is specified on the command line by using the `--ref` (Git Reference) or `--sha` (commit SHA) flags.
 
-If the flags are not provided, the `ref` will be the default branch (e.g. `main`) and the `sha` will point to the `HEAD` of the branch.
+If the flags are not provided, the `ref` will be the default branch (e.g. `main`) and the commit SHA will point to the `HEAD` of the branch.
 :::
 
 ## Usage
@@ -74,15 +74,14 @@ where:
 
 - `stack` is the affected Atmos stack
 - `component` is the affected Atmos component in the stack
-- `component_type` is the type of the affected Atmos component (`terraform` or `helmfile`)
+- `component_type` is the type of the component (`terraform` or `helmfile`)
 - `affected` shows what was changed for the component. The possible values are:
 
-  - `vars` - the `vars` component section in the stack config has been modified
-  - `env` - the `env` component section in the stack config has been modified
-  - `settings` - the `settings` component section in the stack config has been modified
-  - `metadata` - the `metadata` component section in the stack config has been modified
-  - `terraform` - the Terraform component (Terraform files) that the affected Atmos component provisions has been changed
-  - `helmfile` - the Helmfile component (Helmfile files) that the affected Atmos component provisions has been changed
+  - `stack.vars` - the `vars` component section in the stack config has been modified
+  - `stack.env` - the `env` component section in the stack config has been modified
+  - `stack.settings` - the `settings` component section in the stack config has been modified
+  - `stack.metadata` - the `metadata` component section in the stack config has been modified
+  - `component` - the Terraform or Helmfile component (Terraform/Helmfile files) that the affected Atmos component provisions has been changed
 
 <br/>
 
@@ -94,19 +93,19 @@ For example:
     "stack": "tenant2-ue2-staging",
     "component_type": "terraform",
     "component": "infra/vpc",
-    "affected": "terraform"
+    "affected": "component"
   },
   {
     "stack": "tenant1-ue2-prod",
     "component_type": "terraform",
     "component": "test/test-component-override-3",
-    "affected": "env"
+    "affected": "stack.env"
   },
   {
     "stack": "tenant1-ue2-dev",
     "component_type": "terraform",
     "component": "test/test-component-override-3",
-    "affected": "vars"
+    "affected": "stack.vars"
   }
 ]
 ```
