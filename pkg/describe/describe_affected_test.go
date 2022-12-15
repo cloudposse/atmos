@@ -1,6 +1,7 @@
 package describe
 
 import (
+	"fmt"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -27,7 +28,8 @@ func TestDescribeAffected(t *testing.T) {
 	affected, err := e.ExecuteDescribeAffected(cliConfig, ref, sha, true)
 	assert.Nil(t, err)
 
-	componentSectionYaml, err := yaml.Marshal(affected)
+	affectedYaml, err := yaml.Marshal(affected)
 	assert.Nil(t, err)
-	t.Log(string(componentSectionYaml))
+
+	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", string(affectedYaml)))
 }

@@ -235,34 +235,9 @@ func ExecuteDescribeAffected(
 
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nGetting local repo commit object..."))
 
-	localSha := localRepoHead.Hash()
-	localCommit, err := localRepo.CommitObject(localSha)
+	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
 	if err != nil {
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("No local commits found. Checking out HEAD SHA: %s\n", localSha))
-
-		w, err := localRepo.Worktree()
-		if err != nil {
-			return nil, err
-		}
-
-		checkoutOptions := git.CheckoutOptions{
-			Hash:   localSha,
-			Create: false,
-			Force:  true,
-			Keep:   false,
-		}
-
-		err = w.Checkout(&checkoutOptions)
-		if err != nil {
-			return nil, err
-		}
-
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("Checked out HEAD SHA: %s\n", localSha))
-
-		localCommit, err = localRepo.CommitObject(localSha)
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got local repo commit object"))
@@ -290,7 +265,7 @@ func ExecuteDescribeAffected(
 	}
 
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit tree"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Finding diff between the local and remote repos..."))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Finding diff between the local and remote commits..."))
 
 	// Find a slice of Patch objects with all the changes between the local and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -298,7 +273,7 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found diff between the local and remote repos"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found diff between the local and remote commits"))
 	u.PrintInfoVerbose(verbose, "\nChanged files:")
 
 	var changedFiles []string
