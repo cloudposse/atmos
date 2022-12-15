@@ -134,6 +134,8 @@ func ExecuteDescribeAffected(
 	// https://github.com/go-git/go-git/tree/master/_examples
 	// https://stackoverflow.com/questions/56810719/how-to-checkout-a-specific-sha-in-a-git-repo-using-golang
 	// https://golang.hotexamples.com/examples/gopkg.in.src-d.go-git.v4.plumbing/-/ReferenceName/golang-referencename-function-examples.html
+	// https://stackoverflow.com/questions/58905690/how-to-identify-which-files-have-changed-between-git-commits
+	// https://github.com/src-d/go-git/issues/604
 
 	// Create a temp dir to clone the remote repo to
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
