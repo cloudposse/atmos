@@ -95,7 +95,7 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	repoIsNotGitRepoError := errors.New("the current remoteRepo is not a Git repository. Check that it was initialized and has '.git' folder")
+	repoIsNotGitRepoError := errors.New("the current repo is not a Git repository. Check that it was initialized and has '.git' folder")
 
 	// Get the Git config of the current remoteRepo
 	localRepoConfig, err := localRepo.Config()
@@ -179,7 +179,7 @@ func ExecuteDescribeAffected(
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out Git ref: %s\n", remoteRepoHead.Name()))
 	}
 
-	// Check if a commit SHA was provided and checkout the remoteRepo at that commit SHA
+	// Check if a commit SHA was provided and checkout the repo at that commit SHA
 	if sha != "" {
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out commit SHA: %s\n", sha))
 
