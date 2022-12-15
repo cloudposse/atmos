@@ -69,6 +69,8 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	u.PrintInfoVerbose(verbose && file == "", fmt.Sprintf("Affected: \n"))
+
 	err = printOrWriteToFile(format, file, affected)
 	if err != nil {
 		return err
@@ -93,9 +95,9 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	repoIsNotGitRepoError := errors.New("the current repo is not a Git repository. Check that it was initialized and has '.git' folder")
+	repoIsNotGitRepoError := errors.New("the current remoteRepo is not a Git repository. Check that it was initialized and has '.git' folder")
 
-	// Get the Git config of the current repo
+	// Get the Git config of the current remoteRepo
 	localRepoConfig, err := localRepo.Config()
 	if err != nil {
 		return nil, err
@@ -110,7 +112,7 @@ func ExecuteDescribeAffected(
 		return nil, repoIsNotGitRepoError
 	}
 
-	// Get the origin URL of the current repo
+	// Get the origin URL of the current remoteRepo
 	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
 	if len(remoteUrls) == 0 {
 		return nil, repoIsNotGitRepoError
@@ -119,6 +121,11 @@ func ExecuteDescribeAffected(
 	repoUrl := remoteUrls[0]
 	if repoUrl == "" {
 		return nil, repoIsNotGitRepoError
+	}
+
+	localRepoHead, err := localRepo.Head()
+	if err != nil {
+		return nil, err
 	}
 
 	// Clone the remote repo
@@ -156,12 +163,12 @@ func ExecuteDescribeAffected(
 		cloneOptions.Progress = os.Stdout
 	}
 
-	repo, err := git.PlainClone(tempDir, false, &cloneOptions)
+	remoteRepo, err := git.PlainClone(tempDir, false, &cloneOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	head, err := repo.Head()
+	remoteRepoHead, err := remoteRepo.Head()
 	if err != nil {
 		return nil, err
 	}
@@ -169,14 +176,14 @@ func ExecuteDescribeAffected(
 	if ref != "" {
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out Git ref: %s\n", ref))
 	} else {
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out Git ref: %s\n", head.Name()))
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out Git ref: %s\n", remoteRepoHead.Name()))
 	}
 
-	// Check if a commit SHA was provided and checkout the repo at that commit SHA
+	// Check if a commit SHA was provided and checkout the remoteRepo at that commit SHA
 	if sha != "" {
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out commit SHA: %s\n", sha))
 
-		w, err := repo.Worktree()
+		w, err := remoteRepo.Worktree()
 		if err != nil {
 			return nil, err
 		}
@@ -194,6 +201,11 @@ func ExecuteDescribeAffected(
 		}
 
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out commit SHA: %s\n", sha))
+	}
+
+	if verbose {
+		u.PrintInfo(fmt.Sprintf("Local repo HEAD: %s", localRepoHead))
+		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s\n", remoteRepoHead))
 	}
 
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
