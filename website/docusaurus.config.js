@@ -125,6 +125,7 @@ const config = {
                 additionalLanguages: ['hcl', 'bash']
             },
         }),
+    plugins: [require.resolve("@cmfcmf/docusaurus-search-local")],
 };
 
 module.exports = config;

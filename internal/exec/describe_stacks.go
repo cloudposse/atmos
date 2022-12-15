@@ -34,9 +34,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	if format != "" && format != "yaml" && format != "json" {
 		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
 	}
+
 	if format == "" {
 		format = "yaml"
 	}
@@ -50,6 +52,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	var components []string
 	if componentsCsv != "" {
 		components = strings.Split(componentsCsv, ",")
@@ -59,6 +62,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	var componentTypes []string
 	if componentTypesCsv != "" {
 		componentTypes = strings.Split(componentTypesCsv, ",")
@@ -73,9 +77,31 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		sections = strings.Split(sectionsCsv, ",")
 	}
 
-	stacksMap, err := FindStacksMap(cliConfig)
+	finalStacksMap, err := ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections)
 	if err != nil {
 		return err
+	}
+
+	err = printOrWriteToFile(format, file, finalStacksMap)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ExecuteDescribeStacks processes stack configs and returns the final map of stacks and components
+func ExecuteDescribeStacks(
+	cliConfig cfg.CliConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+) (map[string]any, error) {
+
+	stacksMap, err := FindStacksMap(cliConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	finalStacksMap := make(map[string]any)
@@ -93,13 +119,13 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 					for componentName, compSection := range terraformSection {
 						componentSection, ok := compSection.(map[string]any)
 						if !ok {
-							return fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackFileName)
+							return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
 						// Find all derived components of the provided components and include them in the output
 						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
 						if err != nil {
-							return err
+							return nil, err
 						}
 
 						// Component vars
@@ -107,7 +133,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 							context := cfg.GetContextFromVars(varsSection)
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
 							if err != nil {
-								return err
+								return nil, err
 							}
 						}
 
@@ -149,13 +175,13 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 					for componentName, compSection := range helmfileSection {
 						componentSection, ok := compSection.(map[string]any)
 						if !ok {
-							return fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackFileName)
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
 						// Find all derived components of the provided components and include them in the output
 						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
 						if err != nil {
-							return err
+							return nil, err
 						}
 
 						// Component vars
@@ -163,7 +189,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 							context := cfg.GetContextFromVars(varsSection)
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
 							if err != nil {
-								return err
+								return nil, err
 							}
 						}
 
@@ -209,31 +235,5 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if format == "yaml" {
-		if file == "" {
-			err = u.PrintAsYAML(finalStacksMap)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = u.WriteToFileAsYAML(file, finalStacksMap, 0644)
-			if err != nil {
-				return err
-			}
-		}
-	} else if format == "json" {
-		if file == "" {
-			err = u.PrintAsJSON(finalStacksMap)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = u.WriteToFileAsJSON(file, finalStacksMap, 0644)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return finalStacksMap, nil
 }

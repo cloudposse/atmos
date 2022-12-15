@@ -190,12 +190,7 @@ func ExecuteComponentVendorCommandInternal(
 				return err
 			}
 
-			defer func(path string) {
-				err := os.RemoveAll(path)
-				if err != nil {
-					u.PrintError(err)
-				}
-			}(tempDir)
+			defer removeTempDir(tempDir)
 
 			// Download the source into the temp folder
 			client := &getter.Client{
