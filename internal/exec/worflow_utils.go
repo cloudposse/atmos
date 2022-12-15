@@ -8,10 +8,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func executeWorkflowSteps(workflowDefinition cfg.WorkflowDefinition, dryRun bool, commandLineStack string) error {
+func executeWorkflowSteps(workflow string, workflowDefinition cfg.WorkflowDefinition, dryRun bool, commandLineStack string) error {
 	var steps = workflowDefinition.Steps
 
-	for _, step := range steps {
+	for stepIdx, step := range steps {
 		var command = strings.TrimSpace(step.Command)
 		var commandType = strings.TrimSpace(step.Type)
 
@@ -22,8 +22,8 @@ func executeWorkflowSteps(workflowDefinition cfg.WorkflowDefinition, dryRun bool
 		}
 
 		if commandType == "shell" {
-			args := strings.Fields(command)
-			if err := ExecuteShellCommand(args[0], args[1:], ".", []string{}, dryRun, true); err != nil {
+			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
+			if err := ExecuteShell(command, commandName, ".", []string{}, dryRun, true); err != nil {
 				return err
 			}
 		} else if commandType == "atmos" {
