@@ -59,6 +59,10 @@ li > ul.menu__list {
     --ifm-color-primary-light: #538ce9;
     --ifm-color-primary-lighter: #72a1ed;
     --ifm-color-primary-lightest: #9abcf2;
+
+    --aa-input-border-color-rgb: var(--ifm-toc-border-color);
+    --aa-input-border-color-alpha: var(--ifm-toc-border-color);
+    --aa-primary-color-rgb: var(--ifm-toc-border-color) !important;
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
@@ -134,4 +138,12 @@ pre code {
 
 li.menu__list-item.command {
  font-family: var(--ifm-font-family-monospace);
+}
+
+.aa-Autocomplete > .aa-DetachedSearchButton {
+    border-radius: 32px;
+}
+
+.aa-Autocomplete {
+    min-width: 150px;
 }
