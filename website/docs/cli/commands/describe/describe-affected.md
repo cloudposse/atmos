@@ -36,6 +36,7 @@ Run `atmos describe affected --help` to see all the available options
 
 ```shell
 atmos describe affected
+atmos describe affected --verbose=true
 atmos describe affected --ref refs/heads/main
 atmos describe affected --ref refs/heads/my-new-branch --verbose=true
 atmos describe affected --ref refs/heads/main --format json
@@ -53,3 +54,59 @@ atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 | `--file`    | If specified, write the result to the file                                                                                                                      | no       |
 | `--format`  | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                 | no       |
 | `--verbose` | Print more detailed output when cloning and checking out the Git repository                                                                                     | no       |
+
+## Output
+
+The command outputs a list of objects (in JSON or YAML formats).
+
+Each object has the following schema:
+
+```json
+{
+  "stack": "....",
+  "component_type": "....",
+  "component": "....",
+  "affected": "....."
+}
+```
+
+where:
+
+- `stack` is the affected Atmos stack
+- `component` is the affected Atmos component in the stack
+- `component_type` is the type of the affected Atmos component (`terraform` or `helmfile`)
+- `affected` shows what was changed for the component. The possible values are:
+
+  - `vars` - the `vars` component section in the stack config has been modified
+  - `env` - the `env` component section in the stack config has been modified
+  - `settings` - the `settings` component section in the stack config has been modified
+  - `metadata` - the `metadata` component section in the stack config has been modified
+  - `terraform` - the Terraform component (Terraform files) that the affected Atmos component provisions has been changed
+  - `helmfile` - the Helmfile component (Helmfile files) that the affected Atmos component provisions has been changed
+
+<br/>
+
+For example:
+
+```json
+[
+  {
+    "stack": "tenant2-ue2-staging",
+    "component_type": "terraform",
+    "component": "infra/vpc",
+    "affected": "terraform"
+  },
+  {
+    "stack": "tenant1-ue2-prod",
+    "component_type": "terraform",
+    "component": "test/test-component-override-3",
+    "affected": "env"
+  },
+  {
+    "stack": "tenant1-ue2-dev",
+    "component_type": "terraform",
+    "component": "test/test-component-override-3",
+    "affected": "vars"
+  }
+]
+```
