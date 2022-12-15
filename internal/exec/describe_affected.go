@@ -8,7 +8,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/tcnksm/go-gitconfig"
 	"os"
 	"path"
 	"reflect"
@@ -86,15 +85,48 @@ func ExecuteDescribeAffected(
 	verbose bool,
 ) ([]cfg.Affected, error) {
 
-	// Get the origin URL of the current repo
-	repoUrl, err := gitconfig.OriginURL()
+	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: false,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	if repoUrl == "" {
-		return nil, errors.New("the current repo is not a Git repository. Check that it was initialized and has '.git' folder")
+	repoIsNotGitRepoError := errors.New("the current repo is not a Git repository. Check that it was initialized and has '.git' folder")
+
+	// Get the Git config of the current repo
+	localRepoConfig, err := localRepo.Config()
+	if err != nil {
+		return nil, err
 	}
+
+	keys := []string{}
+	for k := range localRepoConfig.Remotes {
+		keys = append(keys, k)
+	}
+
+	if len(keys) == 0 {
+		return nil, repoIsNotGitRepoError
+	}
+
+	// Get the origin URL of the current repo
+	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
+	if len(remoteUrls) == 0 {
+		return nil, repoIsNotGitRepoError
+	}
+
+	repoUrl := remoteUrls[0]
+	if repoUrl == "" {
+		return nil, repoIsNotGitRepoError
+	}
+
+	// Clone the remote repo
+	// https://git-scm.com/book/en/v2/Git-Internals-Git-References
+	// https://git-scm.com/docs/git-show-ref
+	// https://github.com/go-git/go-git/tree/master/_examples
+	// https://stackoverflow.com/questions/56810719/how-to-checkout-a-specific-sha-in-a-git-repo-using-golang
+	// https://golang.hotexamples.com/examples/gopkg.in.src-d.go-git.v4.plumbing/-/ReferenceName/golang-referencename-function-examples.html
 
 	// Create a temp dir to clone the remote repo to
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
@@ -103,13 +135,6 @@ func ExecuteDescribeAffected(
 	}
 
 	defer removeTempDir(tempDir)
-
-	// Clone the remote repo
-	// https://git-scm.com/book/en/v2/Git-Internals-Git-References
-	// https://git-scm.com/docs/git-show-ref
-	// https://github.com/go-git/go-git/tree/master/_examples
-	// https://stackoverflow.com/questions/56810719/how-to-checkout-a-specific-sha-in-a-git-repo-using-golang
-	// https://golang.hotexamples.com/examples/gopkg.in.src-d.go-git.v4.plumbing/-/ReferenceName/golang-referencename-function-examples.html
 
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", repoUrl, tempDir))
 
