@@ -233,10 +233,12 @@ func ExecuteDescribeAffected(
 		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
 	}
 
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nGetting local repo commit object..."))
+
 	localSha := localRepoHead.Hash()
 	localCommit, err := localRepo.CommitObject(localSha)
 	if err != nil {
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nNo local commits found. Checking out HEAD SHA: %s\n", localSha))
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("No local commits found. Checking out HEAD SHA: %s\n", localSha))
 
 		w, err := localRepo.Worktree()
 		if err != nil {
@@ -255,7 +257,7 @@ func ExecuteDescribeAffected(
 			return nil, err
 		}
 
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out HEAD SHA: %s\n", localSha))
+		u.PrintInfoVerbose(verbose, fmt.Sprintf("Checked out HEAD SHA: %s\n", localSha))
 
 		localCommit, err = localRepo.CommitObject(localSha)
 		if err != nil {
@@ -263,25 +265,42 @@ func ExecuteDescribeAffected(
 		}
 	}
 
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got local repo commit object"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting local repo commit tree..."))
+
 	localTree, err := localCommit.Tree()
 	if err != nil {
 		return nil, err
 	}
+
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got local repo commit tree"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit object..."))
 
 	remoteCommit, err := localRepo.CommitObject(remoteRepoHead.Hash())
 	if err != nil {
 		return nil, err
 	}
 
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit object"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit tree..."))
+
 	remoteTree, err := remoteCommit.Tree()
 	if err != nil {
 		return nil, err
 	}
 
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit tree"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting diff between the local and remote repos..."))
+
 	// Find a slice of Patch objects with all the changes between the local and remote trees
 	patch, err := localTree.Patch(remoteTree)
+	if err != nil {
+		return nil, err
+	}
 
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got diff between the local and remote repos"))
 	u.PrintInfoVerbose(verbose, "\nChanged files:")
+
 	var changedFiles []string
 	for _, fileStat := range patch.Stats() {
 		u.PrintMessageVerbose(verbose && fileStat.Name != "", fileStat.Name)
