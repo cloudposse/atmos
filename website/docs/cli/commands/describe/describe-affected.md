@@ -17,7 +17,7 @@ For the first commit, the command assumes that the repo root is a Git checkout.
 
 The second commit is specified on the command line by using the `--ref` or `--sha` flags.
 
-If the flags are not provided, it will clone the HEAD of the default branch.
+If the flags are not provided, the `ref` will be the default branch (e.g. `main`) and the `sha` will point to the `HEAD` of the branch.
 :::
 
 ## Usage
