@@ -69,7 +69,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	u.PrintInfoVerbose(verbose && file == "", fmt.Sprintf("Affected: \n"))
+	u.PrintInfoVerbose(verbose && file == "", fmt.Sprintf("\nAffected components and stacks: \n"))
 
 	err = printOrWriteToFile(format, file, affected)
 	if err != nil {
@@ -203,11 +203,6 @@ func ExecuteDescribeAffected(
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out commit SHA: %s\n", sha))
 	}
 
-	if verbose {
-		u.PrintInfo(fmt.Sprintf("Local repo HEAD: %s", localRepoHead))
-		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s\n", remoteRepoHead))
-	}
-
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
 	if err != nil {
 		return nil, err
@@ -229,6 +224,40 @@ func ExecuteDescribeAffected(
 	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if verbose {
+		u.PrintInfo(fmt.Sprintf("Local repo HEAD: %s", localRepoHead))
+		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
+	}
+
+	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	localTree, err := localCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	remoteCommit, err := localRepo.CommitObject(remoteRepoHead.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	remoteTree, err := remoteCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	patch, err := localTree.Patch(remoteTree)
+
+	u.PrintInfoVerbose(verbose, "\nChanged files:")
+	var changedFiles []string
+	for _, fileStat := range patch.Stats() {
+		u.PrintMessageVerbose(verbose && fileStat.Name != "", fileStat.Name)
+		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
 	affected := findAffected(currentStacks, remoteStacks)
