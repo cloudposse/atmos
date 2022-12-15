@@ -121,3 +121,14 @@ func EnsureDir(fileName string) error {
 	}
 	return nil
 }
+
+// SliceOfPathsContainsPath checks if a slice of file paths contains a path
+func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
+	for _, v := range paths {
+		dir := path.Dir(v)
+		if dir == checkPath {
+			return true
+		}
+	}
+	return false
+}

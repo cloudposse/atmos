@@ -331,8 +331,8 @@ type Validation map[string]ValidationItem
 // Affected Atmos components and stacks given two Git commits
 
 type Affected struct {
-	Stack           string `yaml:"stack" json:"stack" mapstructure:"stack"`
-	ComponentType   string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
-	Component       string `yaml:"component" json:"component" mapstructure:"component"`
-	AffectedSection string `yaml:"affected_section" json:"affected_section" mapstructure:"affected_section"`
+	Stack         string `yaml:"stack" json:"stack" mapstructure:"stack"`
+	ComponentType string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
+	Component     string `yaml:"component" json:"component" mapstructure:"component"`
+	Affected      string `yaml:"affected" json:"affected" mapstructure:"affected"`
 }

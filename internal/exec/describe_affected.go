@@ -253,6 +253,7 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
+	// Find a slice of Patch objects with all the changes between the local and remote trees
 	patch, err := localTree.Patch(remoteTree)
 
 	u.PrintInfoVerbose(verbose, "\nChanged files:")
@@ -262,12 +263,18 @@ func ExecuteDescribeAffected(
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
-	affected := findAffected(currentStacks, remoteStacks)
+	affected := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
 	return affected, nil
 }
 
 // findAffected returns a list of all affected components in all stacks
-func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []cfg.Affected {
+func findAffected(
+	currentStacks map[string]any,
+	remoteStacks map[string]any,
+	cliConfig cfg.CliConfiguration,
+	changedFiles []string,
+) []cfg.Affected {
+
 	res := []cfg.Affected{}
 
 	for stackName, stackSection := range currentStacks {
@@ -286,10 +293,23 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, metadataSection, "metadata") {
 									affected := cfg.Affected{
-										ComponentType:   "terraform",
-										Component:       componentName,
-										Stack:           stackName,
-										AffectedSection: "metadata",
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "metadata",
+									}
+									res = append(res, affected)
+									continue
+								}
+							}
+							// Check if any files in the component's folder have changed
+							if component, ok := componentSection["component"].(string); ok && component != "" {
+								if isComponentFolderChanged(component, "terraform", cliConfig, changedFiles) {
+									affected := cfg.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "terraform",
 									}
 									res = append(res, affected)
 									continue
@@ -299,10 +319,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
 									affected := cfg.Affected{
-										ComponentType:   "terraform",
-										Component:       componentName,
-										Stack:           stackName,
-										AffectedSection: "vars",
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "vars",
 									}
 									res = append(res, affected)
 									continue
@@ -312,10 +332,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if envSection, ok := componentSection["env"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, envSection, "env") {
 									affected := cfg.Affected{
-										ComponentType:   "terraform",
-										Component:       componentName,
-										Stack:           stackName,
-										AffectedSection: "env",
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "env",
 									}
 									res = append(res, affected)
 									continue
@@ -325,10 +345,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, "settings") {
 									affected := cfg.Affected{
-										ComponentType:   "terraform",
-										Component:       componentName,
-										Stack:           stackName,
-										AffectedSection: "settings",
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "settings",
 									}
 									res = append(res, affected)
 									continue
@@ -350,10 +370,23 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, metadataSection, "metadata") {
 									affected := cfg.Affected{
-										ComponentType:   "helmfile",
-										Component:       componentName,
-										Stack:           stackName,
-										AffectedSection: "metadata",
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "metadata",
+									}
+									res = append(res, affected)
+									continue
+								}
+							}
+							// Check if any files in the component's folder have changed
+							if component, ok := componentSection["component"].(string); ok && component != "" {
+								if isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles) {
+									affected := cfg.Affected{
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "helmfile",
 									}
 									res = append(res, affected)
 									continue
@@ -363,10 +396,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
 									affected := cfg.Affected{
-										ComponentType:   "helmfile",
-										Component:       componentName,
-										Stack:           stackName,
-										AffectedSection: "vars",
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "vars",
 									}
 									res = append(res, affected)
 									continue
@@ -376,10 +409,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if envSection, ok := componentSection["env"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, envSection, "env") {
 									affected := cfg.Affected{
-										ComponentType:   "helmfile",
-										Component:       componentName,
-										Stack:           stackName,
-										AffectedSection: "env",
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "env",
 									}
 									res = append(res, affected)
 									continue
@@ -389,10 +422,10 @@ func findAffected(currentStacks map[string]any, remoteStacks map[string]any) []c
 							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, "settings") {
 									affected := cfg.Affected{
-										ComponentType:   "helmfile",
-										Component:       componentName,
-										Stack:           stackName,
-										AffectedSection: "settings",
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "settings",
 									}
 									res = append(res, affected)
 									continue
@@ -430,6 +463,29 @@ func isEqual(
 				}
 			}
 		}
+	}
+	return false
+}
+
+// isComponentFolderChanged checks if a component folder changed (has changed files in it)
+func isComponentFolderChanged(
+	component string,
+	componentType string,
+	cliConfig cfg.CliConfiguration,
+	changedFiles []string,
+) bool {
+
+	var pathPrefix string
+
+	switch componentType {
+	case "terraform":
+		pathPrefix = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+	case "helmfile":
+		pathPrefix = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
+	}
+
+	if u.SliceOfPathsContainsPath(changedFiles, pathPrefix) {
+		return true
 	}
 	return false
 }
