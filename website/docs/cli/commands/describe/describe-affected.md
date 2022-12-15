@@ -34,7 +34,8 @@ The command works by:
 - Comparing each section of the stack configuration looking for differences
 - Output a JSON or YAML document consisting of a list of affected components and stacks and what caused it to be affected
 
-Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related stacks as affected. Atmos will then skip evaluating those stacks for differences since we already know that they are affected.
+Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related components and stacks as
+affected. Atmos will then skip evaluating those stacks for differences since we already know that they are affected.
 
 <br/>
 
