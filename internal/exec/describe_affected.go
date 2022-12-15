@@ -276,7 +276,7 @@ func ExecuteDescribeAffected(
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got local repo commit tree"))
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit object..."))
 
-	remoteCommit, err := localRepo.CommitObject(remoteRepoHead.Hash())
+	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +290,7 @@ func ExecuteDescribeAffected(
 	}
 
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit tree"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting diff between the local and remote repos..."))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Finding diff between the local and remote repos..."))
 
 	// Find a slice of Patch objects with all the changes between the local and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -298,7 +298,7 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got diff between the local and remote repos"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found diff between the local and remote repos"))
 	u.PrintInfoVerbose(verbose, "\nChanged files:")
 
 	var changedFiles []string
