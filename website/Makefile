@@ -5,4 +5,5 @@ deps:
 	npm install
 
 up:
+	npm run build
 	npm run start
