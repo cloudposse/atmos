@@ -162,4 +162,4 @@ For everything else, we usually have catalog that we just call `catalog/`. We pl
 
 ## Refactoring Configurations
 
-One of the amazing things about the Atmos [Stack](/core-concepts/stacks) configurations is that the entire state of configuration is stored in the YAML configurations. The filesystem layout has no bearing on the desired state of the configuratino. This means that configurations can be easily refactored at at time in the future, if you discover there's a better way to organize your Stack configurations. So long as the deep-merged configuration is the same, it will not affect any of the [Components](/core-concepts/components).
+One of the amazing things about the Atmos [Stack](/core-concepts/stacks) configurations is that the entire state of configuration is stored in the YAML configurations. The filesystem layout has no bearing on the desired state of the configuration. This means that configurations can be easily refactored at at time in the future, if you discover there's a better way to organize your Stack configurations. So long as the deep-merged configuration is the same, it will not affect any of the [Components](/core-concepts/components).
