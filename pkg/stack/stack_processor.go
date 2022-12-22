@@ -32,6 +32,7 @@ func ProcessYAMLConfigFiles(
 	processComponentDeps bool) (
 	[]string,
 	map[string]any,
+	[]map[any]any,
 	error,
 ) {
 
@@ -40,6 +41,7 @@ func ProcessYAMLConfigFiles(
 	mapResult := map[string]any{}
 	var errorResult error
 	var wg sync.WaitGroup
+	var rawYamlStackConfigs []map[any]any
 	wg.Add(count)
 
 	for i, filePath := range filePaths {
@@ -51,7 +53,7 @@ func ProcessYAMLConfigFiles(
 				stackBasePath = path.Dir(p)
 			}
 
-			stackConfig, importsConfig, _, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
+			stackConfig, importsConfig, rawYamlStackConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
 			if err != nil {
 				errorResult = err
 				return
@@ -112,6 +114,7 @@ func ProcessYAMLConfigFiles(
 			processYAMLConfigFilesLock.Lock()
 			defer processYAMLConfigFilesLock.Unlock()
 
+			rawYamlStackConfigs = append(rawYamlStackConfigs, rawYamlStackConfig...)
 			listResult[i] = string(yamlConfig)
 			mapResult[stackName] = finalConfig
 		}(i, filePath)
@@ -120,10 +123,10 @@ func ProcessYAMLConfigFiles(
 	wg.Wait()
 
 	if errorResult != nil {
-		return nil, nil, errorResult
+		return nil, nil, nil, errorResult
 	}
 
-	return listResult, mapResult, nil
+	return listResult, mapResult, rawYamlStackConfigs, nil
 }
 
 // ProcessYAMLConfigFile takes a path to a YAML stack config file,
@@ -132,7 +135,8 @@ func ProcessYAMLConfigFiles(
 func ProcessYAMLConfigFile(
 	basePath string,
 	filePath string,
-	importsConfig map[string]map[any]any) (
+	importsConfig map[string]map[any]any,
+) (
 	map[any]any,
 	map[string]map[any]any,
 	[]map[any]any,

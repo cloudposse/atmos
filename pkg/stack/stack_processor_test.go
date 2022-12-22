@@ -23,7 +23,7 @@ func TestStackProcessor(t *testing.T) {
 	processStackDeps := true
 	processComponentDeps := true
 
-	var listResult, mapResult, err = ProcessYAMLConfigFiles(
+	var listResult, mapResult, _, err = ProcessYAMLConfigFiles(
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
