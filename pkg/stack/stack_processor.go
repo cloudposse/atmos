@@ -32,16 +32,16 @@ func ProcessYAMLConfigFiles(
 	processComponentDeps bool) (
 	[]string,
 	map[string]any,
-	[]map[any]any,
+	map[string]map[string]any,
 	error,
 ) {
 
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
+	rawYamlStackConfigs := map[string]map[string]any{}
 	var errorResult error
 	var wg sync.WaitGroup
-	var rawYamlStackConfigs []map[any]any
 	wg.Add(count)
 
 	for i, filePath := range filePaths {
@@ -60,7 +60,7 @@ func ProcessYAMLConfigFiles(
 				".yml",
 			)
 
-			stackConfig, importsConfig, rawYamlStackConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
+			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
 			if err != nil {
 				errorResult = err
 				return
@@ -74,8 +74,6 @@ func ProcessYAMLConfigFiles(
 			uniqueImports := u.UniqueStrings(imports)
 			sort.Strings(uniqueImports)
 
-			componentStackMap := map[string]map[string][]string{}
-
 			// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
 			// TODO: review it to use the new `atmos.yaml CLI stackConfig
 			//if processStackDeps {
@@ -86,12 +84,14 @@ func ProcessYAMLConfigFiles(
 			//	}
 			//}
 
+			componentStackMap := map[string]map[string][]string{}
+
 			finalConfig, err := ProcessStackConfig(
 				stackBasePath,
 				terraformComponentsBasePath,
 				helmfileComponentsBasePath,
 				p,
-				stackConfig,
+				deepMergedStackConfig,
 				processStackDeps,
 				processComponentDeps,
 				"",
@@ -114,9 +114,11 @@ func ProcessYAMLConfigFiles(
 			processYAMLConfigFilesLock.Lock()
 			defer processYAMLConfigFilesLock.Unlock()
 
-			rawYamlStackConfigs = append(rawYamlStackConfigs, rawYamlStackConfig...)
 			listResult[i] = string(yamlConfig)
 			mapResult[stackFileName] = finalConfig
+			rawYamlStackConfigs[stackFileName] = map[string]any{}
+			rawYamlStackConfigs[stackFileName]["stack"] = stackConfig
+			rawYamlStackConfigs[stackFileName]["imports"] = importsConfig
 		}(i, filePath)
 	}
 
@@ -139,11 +141,11 @@ func ProcessYAMLConfigFile(
 ) (
 	map[any]any,
 	map[string]map[any]any,
-	[]map[any]any,
+	map[any]any,
 	error,
 ) {
 
-	var rawYamlStackConfigs []map[any]any
+	var stackConfigs []map[any]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	stackYamlConfig, err := getFileContent(filePath)
@@ -151,14 +153,14 @@ func ProcessYAMLConfigFile(
 		return nil, nil, nil, err
 	}
 
-	stackMapConfig, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
+	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
 		e := fmt.Errorf("invalid YAML file '%s'\n%v", relativeFilePath, err)
 		return nil, nil, nil, e
 	}
 
 	// Find and process all imports
-	if importsSection, ok := stackMapConfig["import"]; ok {
+	if importsSection, ok := stackConfigMap["import"]; ok {
 		imports, ok := importsSection.([]any)
 		if !ok {
 			return nil, nil, nil, fmt.Errorf("invalid 'import' section in the file '%s'\nThe 'import' section must be a list of strings", relativeFilePath)
@@ -220,7 +222,7 @@ func ProcessYAMLConfigFile(
 					return nil, nil, nil, err
 				}
 
-				rawYamlStackConfigs = append(rawYamlStackConfigs, yamlConfig)
+				stackConfigs = append(stackConfigs, yamlConfig)
 				importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
 				ext2 := filepath.Ext(importRelativePathWithExt)
 				if ext2 == "" {
@@ -232,15 +234,15 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	rawYamlStackConfigs = append(rawYamlStackConfigs, stackMapConfig)
+	stackConfigs = append(stackConfigs, stackConfigMap)
 
 	// Deep-merge the stack config file and all the imports
-	rawYamlStackConfigsDeepMerged, err := m.Merge(rawYamlStackConfigs)
+	stackConfigsDeepMerged, err := m.Merge(stackConfigs)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	return rawYamlStackConfigsDeepMerged, importsConfig, rawYamlStackConfigs, nil
+	return stackConfigsDeepMerged, importsConfig, stackConfigMap, nil
 }
 
 // ProcessStackConfig takes a raw stack config, deep-merges all variables, settings, environments and backends,
