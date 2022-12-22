@@ -99,7 +99,7 @@ func ExecuteDescribeStacks(
 	sections []string,
 ) (map[string]any, error) {
 
-	stacksMap, err := FindStacksMap(cliConfig)
+	stacksMap, _, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return nil, err
 	}

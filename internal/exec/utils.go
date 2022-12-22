@@ -186,9 +186,13 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(cliConfig cfg.CliConfiguration) (map[string]any, error) {
+func FindStacksMap(cliConfig cfg.CliConfiguration) (
+	map[string]any,
+	map[string]map[string]any,
+	error,
+) {
 	// Process stack config file(s)
-	_, stacksMap, raw, err := s.ProcessYAMLConfigFiles(
+	_, stacksMap, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
 		cliConfig.StacksBaseAbsolutePath,
 		cliConfig.TerraformDirAbsolutePath,
 		cliConfig.HelmfileDirAbsolutePath,
@@ -197,17 +201,22 @@ func FindStacksMap(cliConfig cfg.CliConfiguration) (map[string]any, error) {
 		true)
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if raw != nil {
-
-	}
-	return stacksMap, nil
+	return stacksMap, rawStackConfigs, nil
 }
 
 // ProcessStacks processes stack config
-func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.ConfigAndStacksInfo, checkStack bool) (cfg.ConfigAndStacksInfo, error) {
+func ProcessStacks(
+	cliConfig cfg.CliConfiguration,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	checkStack bool,
+) (
+	cfg.ConfigAndStacksInfo,
+	error,
+) {
+
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
@@ -222,7 +231,7 @@ func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.Confi
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	stacksMap, err := FindStacksMap(cliConfig)
+	stacksMap, _, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return configAndStacksInfo, err
 	}

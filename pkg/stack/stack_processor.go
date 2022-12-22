@@ -39,7 +39,7 @@ func ProcessYAMLConfigFiles(
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
-	rawYamlStackConfigs := map[string]map[string]any{}
+	rawStackConfigs := map[string]map[string]any{}
 	var errorResult error
 	var wg sync.WaitGroup
 	wg.Add(count)
@@ -116,9 +116,9 @@ func ProcessYAMLConfigFiles(
 
 			listResult[i] = string(yamlConfig)
 			mapResult[stackFileName] = finalConfig
-			rawYamlStackConfigs[stackFileName] = map[string]any{}
-			rawYamlStackConfigs[stackFileName]["stack"] = stackConfig
-			rawYamlStackConfigs[stackFileName]["imports"] = importsConfig
+			rawStackConfigs[stackFileName] = map[string]any{}
+			rawStackConfigs[stackFileName]["stack"] = stackConfig
+			rawStackConfigs[stackFileName]["imports"] = importsConfig
 		}(i, filePath)
 	}
 
@@ -128,7 +128,7 @@ func ProcessYAMLConfigFiles(
 		return nil, nil, nil, errorResult
 	}
 
-	return listResult, mapResult, rawYamlStackConfigs, nil
+	return listResult, mapResult, rawStackConfigs, nil
 }
 
 // ProcessYAMLConfigFile takes a path to a YAML stack config file,
