@@ -53,6 +53,13 @@ func ProcessYAMLConfigFiles(
 				stackBasePath = path.Dir(p)
 			}
 
+			stackFileName := strings.TrimSuffix(
+				strings.TrimSuffix(
+					u.TrimBasePathFromPath(stackBasePath+"/", p),
+					cfg.DefaultStackConfigFileExtension),
+				".yml",
+			)
+
 			stackConfig, importsConfig, rawYamlStackConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
 			if err != nil {
 				errorResult = err
@@ -104,19 +111,12 @@ func ProcessYAMLConfigFiles(
 				return
 			}
 
-			stackName := strings.TrimSuffix(
-				strings.TrimSuffix(
-					u.TrimBasePathFromPath(stackBasePath+"/", p),
-					cfg.DefaultStackConfigFileExtension),
-				".yml",
-			)
-
 			processYAMLConfigFilesLock.Lock()
 			defer processYAMLConfigFilesLock.Unlock()
 
 			rawYamlStackConfigs = append(rawYamlStackConfigs, rawYamlStackConfig...)
 			listResult[i] = string(yamlConfig)
-			mapResult[stackName] = finalConfig
+			mapResult[stackFileName] = finalConfig
 		}(i, filePath)
 	}
 

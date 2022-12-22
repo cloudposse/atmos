@@ -188,7 +188,7 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 // FindStacksMap processes stack config and returns a map of all stacks
 func FindStacksMap(cliConfig cfg.CliConfiguration) (map[string]any, error) {
 	// Process stack config file(s)
-	_, stacksMap, _, err := s.ProcessYAMLConfigFiles(
+	_, stacksMap, raw, err := s.ProcessYAMLConfigFiles(
 		cliConfig.StacksBaseAbsolutePath,
 		cliConfig.TerraformDirAbsolutePath,
 		cliConfig.HelmfileDirAbsolutePath,
@@ -200,6 +200,9 @@ func FindStacksMap(cliConfig cfg.CliConfiguration) (map[string]any, error) {
 		return nil, err
 	}
 
+	if raw != nil {
+
+	}
 	return stacksMap, nil
 }
 
