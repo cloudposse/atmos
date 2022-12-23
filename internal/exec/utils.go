@@ -231,7 +231,7 @@ func ProcessStacks(
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	stacksMap, _, err := FindStacksMap(cliConfig)
+	stacksMap, rawStackConfigs, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -412,10 +412,24 @@ func ProcessStacks(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+	// sources (stack config files where the variables and other settings are defined)
+	sources, err := findConfigSources(configAndStacksInfo.ComponentSection, rawStackConfigs)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	configAndStacksInfo.ComponentSection["sources"] = sources
+
 	return configAndStacksInfo, nil
+}
+
+// findConfigSources finds the sources (files) for all variables for a component in a stack
+func findConfigSources(componentSection map[string]any, rawStackConfigs map[string]map[string]any) (map[string]any, error) {
+	return map[string]any{}, nil
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
