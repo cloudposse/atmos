@@ -448,7 +448,7 @@ func processConfigSources(
 		varObj := map[string]any{}
 		varObj["name"] = variable
 		varObj["final_value"] = varVal
-		varObj["variable_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
+		varObj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
 		vars[variable] = varObj
 	}
 
@@ -463,10 +463,10 @@ func processVariableInStacks(
 
 	result := []map[string]any{}
 
-	// Process the component in the stack
+	// Process the variable for the component in the stack
 	processVariableInStack(configAndStacksInfo.ComponentFromArg, false, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
 
-	// Process all the base components in the stack from the inheritance chain
+	// Process the variable for all the base components in the stack from the inheritance chain
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
 		processVariableInStack(baseComponent, true, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
 	}
