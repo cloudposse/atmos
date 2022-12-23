@@ -270,6 +270,7 @@ func ProcessStacks(
 		}
 
 		configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
+		configAndStacksInfo.StackFile = configAndStacksInfo.Stack
 
 		// Process context
 		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
@@ -327,9 +328,11 @@ func ProcessStacks(
 
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+				configAndStacksInfo.StackFile = stackName
 				foundConfigAndStacksInfo = configAndStacksInfo
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
+
 				u.PrintInfoVerbose(
 					cliConfig.Logs.Verbose,
 					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
@@ -417,7 +420,7 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
 	// sources (stack config files where the variables and other settings are defined)
-	sources, err := findConfigSources(configAndStacksInfo.ComponentSection, rawStackConfigs)
+	sources, err := findConfigSources(configAndStacksInfo, rawStackConfigs)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -428,7 +431,7 @@ func ProcessStacks(
 }
 
 // findConfigSources finds the sources (files) for all variables for a component in a stack
-func findConfigSources(componentSection map[string]any, rawStackConfigs map[string]map[string]any) (map[string]any, error) {
+func findConfigSources(configAndStacksInfo cfg.ConfigAndStacksInfo, rawStackConfigs map[string]map[string]any) (map[string]any, error) {
 	return map[string]any{}, nil
 }
 
