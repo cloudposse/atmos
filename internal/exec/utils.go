@@ -445,6 +445,7 @@ func findConfigSources(
 	for varKey, varVal := range configAndStacksInfo.ComponentVarsSection {
 		varKeyStr := varKey.(string)
 		varObj := map[string]any{}
+		varObj["name"] = varKeyStr
 		varObj["final_value"] = varVal
 		varObj["stacks"] = findVariableInStacks(configAndStacksInfo, rawStackConfigs, varKeyStr)
 		vars[varKeyStr] = varObj
@@ -460,11 +461,42 @@ func findVariableInStacks(
 ) []map[string]any {
 
 	result := []map[string]any{}
-	val := map[string]any{
-		"file":  "z",
-		"value": "x",
+
+	if rawStackConfig, ok := rawStackConfigs[configAndStacksInfo.StackFile]; ok {
+		if rawStack, ok := rawStackConfig["stack"]; ok {
+			if rawStackMap, ok := rawStack.(map[any]any); ok {
+				if rawStackComponentTypeSection, ok := rawStackMap[configAndStacksInfo.ComponentType]; ok {
+					if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
+						if rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]; ok {
+							if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
+								if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+									val := map[string]any{
+										"file":    configAndStacksInfo.StackFile,
+										"section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
+										"value":   rawStackVarVal,
+									}
+									result = append(result, val)
+								}
+							}
+						}
+					}
+				}
+				if rawStackVars, ok := rawStackMap["vars"]; ok {
+					if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
+						if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+							val := map[string]any{
+								"file":    configAndStacksInfo.StackFile,
+								"section": "vars",
+								"value":   rawStackVarVal,
+							}
+							result = append(result, val)
+						}
+					}
+				}
+			}
+		}
 	}
-	result = append(result, val)
+
 	return result
 }
 
