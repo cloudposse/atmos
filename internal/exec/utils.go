@@ -504,6 +504,26 @@ func processVariableInStacks(
 		variable,
 	)
 
+	processComponentTypeVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		false,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	processGlobalVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		false,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
 	// Process the variable for all the base components in the stack from the inheritance chain
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
 		processComponentVariableInStack(
@@ -516,7 +536,47 @@ func processVariableInStacks(
 			variable,
 		)
 
+		processComponentTypeVariableInStack(
+			baseComponent,
+			true,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processGlobalVariableInStack(
+			baseComponent,
+			true,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
 		processComponentVariableInStackImports(
+			baseComponent,
+			true,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processComponentTypeVariableInStackImports(
+			baseComponent,
+			true,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processGlobalVariableInStackImports(
 			baseComponent,
 			true,
 			configAndStacksInfo.StackFile,
@@ -709,6 +769,28 @@ func processComponentVariableInStackImports(
 							}
 						}
 					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+func processComponentTypeVariableInStackImports(
+	component string,
+	isBaseComponent bool,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	if rawStackConfig, ok := rawStackConfigs[stackFile]; ok {
+		if rawStackImports, ok := rawStackConfig["imports"]; ok {
+			if rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any); ok {
+				for impKey, impVal := range rawStackImportsMap {
 					if rawStackComponentTypeSection, ok := impVal[configAndStacksInfo.ComponentType]; ok {
 						if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
 							if rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]; ok {
@@ -732,6 +814,28 @@ func processComponentVariableInStackImports(
 							}
 						}
 					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+func processGlobalVariableInStackImports(
+	component string,
+	isBaseComponent bool,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	if rawStackConfig, ok := rawStackConfigs[stackFile]; ok {
+		if rawStackImports, ok := rawStackConfig["imports"]; ok {
+			if rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any); ok {
+				for impKey, impVal := range rawStackImportsMap {
 					if rawStackVars, ok := impVal["vars"]; ok {
 						if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
 							if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
