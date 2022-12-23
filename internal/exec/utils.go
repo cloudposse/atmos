@@ -448,7 +448,7 @@ func processConfigSources(
 		varObj := map[string]any{}
 		varObj["name"] = variable
 		varObj["final_value"] = varVal
-		varObj["stacks"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
+		varObj["variable_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
 		vars[variable] = varObj
 	}
 
@@ -463,13 +463,13 @@ func processVariableInStacks(
 
 	result := []map[string]any{}
 
+	// Process the component in the stack
+	processVariableInStack(configAndStacksInfo.ComponentFromArg, false, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
+
 	// Process all the base components in the stack from the inheritance chain
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processVariableInStack(baseComponent, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
+		processVariableInStack(baseComponent, true, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
 	}
-
-	// Process the component in the stack
-	processVariableInStack(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
 
 	return result
 }
@@ -477,6 +477,7 @@ func processVariableInStacks(
 // https://medium.com/swlh/golang-tips-why-pointers-to-slices-are-useful-and-how-ignoring-them-can-lead-to-tricky-bugs-cac90f72e77b
 func processVariableInStack(
 	component string,
+	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo cfg.ConfigAndStacksInfo,
@@ -496,13 +497,19 @@ func processVariableInStack(
 										if rawStackVars, ok := rawStackComponentSectionMap["vars"]; ok {
 											if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
 												if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+
 													val := map[string]any{
-														"file":    configAndStacksInfo.StackFile,
-														"section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
-														"value":   rawStackVarVal,
-														"type":    "inline",
+														"stack_file":         configAndStacksInfo.StackFile,
+														"stack_file_section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
+														"variable_value":     rawStackVarVal,
+														"dependency_type":    "inline",
 													}
+
 													appendVariableDescriptor(result, val)
+
+													if isBaseComponent {
+														val["base_component"] = component
+													}
 												}
 											}
 										}
@@ -517,13 +524,19 @@ func processVariableInStack(
 						if rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]; ok {
 							if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
 								if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+
 									val := map[string]any{
-										"file":    configAndStacksInfo.StackFile,
-										"section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
-										"value":   rawStackVarVal,
-										"type":    "inline",
+										"stack_file":         configAndStacksInfo.StackFile,
+										"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
+										"variable_value":     rawStackVarVal,
+										"dependency_type":    "inline",
 									}
+
 									appendVariableDescriptor(result, val)
+
+									if isBaseComponent {
+										val["base_component"] = component
+									}
 								}
 							}
 						}
@@ -532,13 +545,19 @@ func processVariableInStack(
 				if rawStackVars, ok := rawStackMap["vars"]; ok {
 					if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
 						if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+
 							val := map[string]any{
-								"file":    configAndStacksInfo.StackFile,
-								"section": "vars",
-								"value":   rawStackVarVal,
-								"type":    "inline",
+								"stack_file":         configAndStacksInfo.StackFile,
+								"stack_file_section": "vars",
+								"variable_value":     rawStackVarVal,
+								"dependency_type":    "inline",
 							}
+
 							appendVariableDescriptor(result, val)
+
+							if isBaseComponent {
+								val["base_component"] = component
+							}
 						}
 					}
 				}
@@ -557,13 +576,19 @@ func processVariableInStack(
 											if rawStackVars, ok := rawStackComponentSectionMap["vars"]; ok {
 												if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
 													if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+
 														val := map[string]any{
-															"file":    impKey,
-															"section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
-															"value":   rawStackVarVal,
-															"type":    "import",
+															"stack_file":         impKey,
+															"stack_file_section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
+															"variable_value":     rawStackVarVal,
+															"dependency_type":    "import",
 														}
+
 														appendVariableDescriptor(result, val)
+
+														if isBaseComponent {
+															val["base_component"] = component
+														}
 													}
 												}
 											}
@@ -578,13 +603,19 @@ func processVariableInStack(
 							if rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]; ok {
 								if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
 									if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+
 										val := map[string]any{
-											"file":    impKey,
-											"section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
-											"value":   rawStackVarVal,
-											"type":    "import",
+											"stack_file":         impKey,
+											"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
+											"variable_value":     rawStackVarVal,
+											"dependency_type":    "import",
 										}
+
 										appendVariableDescriptor(result, val)
+
+										if isBaseComponent {
+											val["base_component"] = component
+										}
 									}
 								}
 							}
@@ -593,13 +624,19 @@ func processVariableInStack(
 					if rawStackVars, ok := impVal["vars"]; ok {
 						if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
 							if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+
 								val := map[string]any{
-									"file":    impKey,
-									"section": "vars",
-									"value":   rawStackVarVal,
-									"type":    "import",
+									"stack_file":         impKey,
+									"stack_file_section": "vars",
+									"variable_value":     rawStackVarVal,
+									"dependency_type":    "import",
 								}
+
 								appendVariableDescriptor(result, val)
+
+								if isBaseComponent {
+									val["base_component"] = component
+								}
 							}
 						}
 					}
