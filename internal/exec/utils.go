@@ -464,9 +464,10 @@ func processVariableInStacks(
 	result := []map[string]any{}
 
 	// Process the variable for the component in the stack
+	// Because we want to show the variable dependencies from higher to lower priority,
+	// the order of processing is the reverse order from what Atmos follows when calculating the final variables in the `vars` section
 	processComponentVariableInStack(
 		configAndStacksInfo.ComponentFromArg,
-		false,
 		configAndStacksInfo.StackFile,
 		&result,
 		configAndStacksInfo,
@@ -474,9 +475,38 @@ func processVariableInStacks(
 		variable,
 	)
 
+	processComponentVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	// Process the variable for all the base components in the stack from the inheritance chain
+	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
+		processComponentVariableInStack(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processComponentVariableInStackImports(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+	}
+
 	processComponentTypeVariableInStack(
 		configAndStacksInfo.ComponentFromArg,
-		false,
 		configAndStacksInfo.StackFile,
 		&result,
 		configAndStacksInfo,
@@ -486,57 +516,15 @@ func processVariableInStacks(
 
 	processGlobalVariableInStack(
 		configAndStacksInfo.ComponentFromArg,
-		false,
 		configAndStacksInfo.StackFile,
 		&result,
 		rawStackConfigs,
 		variable,
 	)
 
-	processComponentVariableInStackImports(
-		configAndStacksInfo.ComponentFromArg,
-		false,
-		configAndStacksInfo.StackFile,
-		&result,
-		configAndStacksInfo,
-		rawStackConfigs,
-		variable,
-	)
-
-	processComponentTypeVariableInStackImports(
-		configAndStacksInfo.ComponentFromArg,
-		false,
-		configAndStacksInfo.StackFile,
-		&result,
-		configAndStacksInfo,
-		rawStackConfigs,
-		variable,
-	)
-
-	processGlobalVariableInStackImports(
-		configAndStacksInfo.ComponentFromArg,
-		false,
-		configAndStacksInfo.StackFile,
-		&result,
-		rawStackConfigs,
-		variable,
-	)
-
-	// Process the variable for all the base components in the stack from the inheritance chain
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processComponentVariableInStack(
-			baseComponent,
-			true,
-			configAndStacksInfo.StackFile,
-			&result,
-			configAndStacksInfo,
-			rawStackConfigs,
-			variable,
-		)
-
 		processComponentTypeVariableInStack(
 			baseComponent,
-			true,
 			configAndStacksInfo.StackFile,
 			&result,
 			configAndStacksInfo,
@@ -546,26 +534,14 @@ func processVariableInStacks(
 
 		processGlobalVariableInStack(
 			baseComponent,
-			true,
 			configAndStacksInfo.StackFile,
 			&result,
-			rawStackConfigs,
-			variable,
-		)
-
-		processComponentVariableInStackImports(
-			baseComponent,
-			true,
-			configAndStacksInfo.StackFile,
-			&result,
-			configAndStacksInfo,
 			rawStackConfigs,
 			variable,
 		)
 
 		processComponentTypeVariableInStackImports(
 			baseComponent,
-			true,
 			configAndStacksInfo.StackFile,
 			&result,
 			configAndStacksInfo,
@@ -575,7 +551,6 @@ func processVariableInStacks(
 
 		processGlobalVariableInStackImports(
 			baseComponent,
-			true,
 			configAndStacksInfo.StackFile,
 			&result,
 			rawStackConfigs,
@@ -583,13 +558,29 @@ func processVariableInStacks(
 		)
 	}
 
+	processComponentTypeVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	processGlobalVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		rawStackConfigs,
+		variable,
+	)
+
 	return result
 }
 
 // https://medium.com/swlh/golang-tips-why-pointers-to-slices-are-useful-and-how-ignoring-them-can-lead-to-tricky-bugs-cac90f72e77b
 func processComponentVariableInStack(
 	component string,
-	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo cfg.ConfigAndStacksInfo,
@@ -618,10 +609,6 @@ func processComponentVariableInStack(
 													}
 
 													appendVariableDescriptor(result, val)
-
-													if isBaseComponent {
-														val["base_component"] = component
-													}
 												}
 											}
 										}
@@ -640,7 +627,6 @@ func processComponentVariableInStack(
 
 func processComponentTypeVariableInStack(
 	component string,
-	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo cfg.ConfigAndStacksInfo,
@@ -665,10 +651,6 @@ func processComponentTypeVariableInStack(
 									}
 
 									appendVariableDescriptor(result, val)
-
-									if isBaseComponent {
-										val["base_component"] = component
-									}
 								}
 							}
 						}
@@ -683,7 +665,6 @@ func processComponentTypeVariableInStack(
 
 func processGlobalVariableInStack(
 	component string,
-	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
 	rawStackConfigs map[string]map[string]any,
@@ -705,10 +686,6 @@ func processGlobalVariableInStack(
 							}
 
 							appendVariableDescriptor(result, val)
-
-							if isBaseComponent {
-								val["base_component"] = component
-							}
 						}
 					}
 				}
@@ -721,7 +698,6 @@ func processGlobalVariableInStack(
 
 func processComponentVariableInStackImports(
 	component string,
-	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo cfg.ConfigAndStacksInfo,
@@ -751,10 +727,6 @@ func processComponentVariableInStackImports(
 														}
 
 														appendVariableDescriptor(result, val)
-
-														if isBaseComponent {
-															val["base_component"] = component
-														}
 													}
 												}
 											}
@@ -774,7 +746,6 @@ func processComponentVariableInStackImports(
 
 func processComponentTypeVariableInStackImports(
 	component string,
-	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo cfg.ConfigAndStacksInfo,
@@ -800,10 +771,6 @@ func processComponentTypeVariableInStackImports(
 										}
 
 										appendVariableDescriptor(result, val)
-
-										if isBaseComponent {
-											val["base_component"] = component
-										}
 									}
 								}
 							}
@@ -819,7 +786,6 @@ func processComponentTypeVariableInStackImports(
 
 func processGlobalVariableInStackImports(
 	component string,
-	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
 	rawStackConfigs map[string]map[string]any,
@@ -842,10 +808,6 @@ func processGlobalVariableInStackImports(
 								}
 
 								appendVariableDescriptor(result, val)
-
-								if isBaseComponent {
-									val["base_component"] = component
-								}
 							}
 						}
 					}
