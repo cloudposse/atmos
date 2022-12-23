@@ -464,7 +464,7 @@ func processVariableInStacks(
 	result := []map[string]any{}
 
 	// Process the variable for the component in the stack
-	processVariableInStack(
+	processComponentVariableInStack(
 		configAndStacksInfo.ComponentFromArg,
 		false,
 		configAndStacksInfo.StackFile,
@@ -474,7 +474,27 @@ func processVariableInStacks(
 		variable,
 	)
 
-	processVariableInStackImports(
+	processComponentTypeVariableInStack(
+		configAndStacksInfo.ComponentFromArg,
+		false,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	processGlobalVariableInStack(
+		configAndStacksInfo.ComponentFromArg,
+		false,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	processComponentVariableInStackImports(
 		configAndStacksInfo.ComponentFromArg,
 		false,
 		configAndStacksInfo.StackFile,
@@ -486,7 +506,7 @@ func processVariableInStacks(
 
 	// Process the variable for all the base components in the stack from the inheritance chain
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processVariableInStack(
+		processComponentVariableInStack(
 			baseComponent,
 			true,
 			configAndStacksInfo.StackFile,
@@ -496,7 +516,7 @@ func processVariableInStacks(
 			variable,
 		)
 
-		processVariableInStackImports(
+		processComponentVariableInStackImports(
 			baseComponent,
 			true,
 			configAndStacksInfo.StackFile,
@@ -511,7 +531,7 @@ func processVariableInStacks(
 }
 
 // https://medium.com/swlh/golang-tips-why-pointers-to-slices-are-useful-and-how-ignoring-them-can-lead-to-tricky-bugs-cac90f72e77b
-func processVariableInStack(
+func processComponentVariableInStack(
 	component string,
 	isBaseComponent bool,
 	stackFile string,
@@ -555,6 +575,26 @@ func processVariableInStack(
 						}
 					}
 				}
+			}
+		}
+	}
+
+	return result
+}
+
+func processComponentTypeVariableInStack(
+	component string,
+	isBaseComponent bool,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	if rawStackConfig, ok := rawStackConfigs[stackFile]; ok {
+		if rawStack, ok := rawStackConfig["stack"]; ok {
+			if rawStackMap, ok := rawStack.(map[any]any); ok {
 				if rawStackComponentTypeSection, ok := rawStackMap[configAndStacksInfo.ComponentType]; ok {
 					if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
 						if rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]; ok {
@@ -578,6 +618,26 @@ func processVariableInStack(
 						}
 					}
 				}
+			}
+		}
+	}
+
+	return result
+}
+
+func processGlobalVariableInStack(
+	component string,
+	isBaseComponent bool,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	if rawStackConfig, ok := rawStackConfigs[stackFile]; ok {
+		if rawStack, ok := rawStackConfig["stack"]; ok {
+			if rawStackMap, ok := rawStack.(map[any]any); ok {
 				if rawStackVars, ok := rawStackMap["vars"]; ok {
 					if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
 						if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
@@ -604,7 +664,7 @@ func processVariableInStack(
 	return result
 }
 
-func processVariableInStackImports(
+func processComponentVariableInStackImports(
 	component string,
 	isBaseComponent bool,
 	stackFile string,
