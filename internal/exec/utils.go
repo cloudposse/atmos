@@ -420,7 +420,7 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
 	// sources (stack config files where the variables and other settings are defined)
-	sources, err := findConfigSources(configAndStacksInfo, rawStackConfigs)
+	sources, err := processConfigSources(configAndStacksInfo, rawStackConfigs)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -430,8 +430,8 @@ func ProcessStacks(
 	return configAndStacksInfo, nil
 }
 
-// findConfigSources finds the sources (files) for all variables for a component in a stack
-func findConfigSources(
+// processConfigSources processes the sources (files) for all variables for a component in a stack
+func processConfigSources(
 	configAndStacksInfo cfg.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 ) (
@@ -447,14 +447,14 @@ func findConfigSources(
 		varObj := map[string]any{}
 		varObj["name"] = variable
 		varObj["final_value"] = varVal
-		varObj["stacks"] = findVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
+		varObj["stacks"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
 		vars[variable] = varObj
 	}
 
 	return result, nil
 }
 
-func findVariableInStacks(
+func processVariableInStacks(
 	configAndStacksInfo cfg.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	variable string,
@@ -462,13 +462,20 @@ func findVariableInStacks(
 
 	result := []map[string]any{}
 
-	findVariableInStack(configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
+	// Process the component in the stack
+	processVariableInStack(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
+
+	// Process all the base components in the stack from the inheritance chain
+	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
+		processVariableInStack(baseComponent, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
+	}
 
 	return result
 }
 
 // https://medium.com/swlh/golang-tips-why-pointers-to-slices-are-useful-and-how-ignoring-them-can-lead-to-tricky-bugs-cac90f72e77b
-func findVariableInStack(
+func processVariableInStack(
+	component string,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo cfg.ConfigAndStacksInfo,
@@ -483,7 +490,7 @@ func findVariableInStack(
 					if rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any); ok {
 						if rawStackComponentTypeSection, ok := rawStackComponentsSectionMap[configAndStacksInfo.ComponentType]; ok {
 							if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
-								if rawStackComponentSection, ok := rawStackComponentTypeSectionMap[configAndStacksInfo.ComponentFromArg]; ok {
+								if rawStackComponentSection, ok := rawStackComponentTypeSectionMap[component]; ok {
 									if rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any); ok {
 										if rawStackVars, ok := rawStackComponentSectionMap["vars"]; ok {
 											if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
@@ -544,7 +551,7 @@ func findVariableInStack(
 						if rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any); ok {
 							if rawStackComponentTypeSection, ok := rawStackComponentsSectionMap[configAndStacksInfo.ComponentType]; ok {
 								if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
-									if rawStackComponentSection, ok := rawStackComponentTypeSectionMap[configAndStacksInfo.ComponentFromArg]; ok {
+									if rawStackComponentSection, ok := rawStackComponentTypeSectionMap[component]; ok {
 										if rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any); ok {
 											if rawStackVars, ok := rawStackComponentSectionMap["vars"]; ok {
 												if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
