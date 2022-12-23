@@ -431,8 +431,20 @@ func ProcessStacks(
 }
 
 // findConfigSources finds the sources (files) for all variables for a component in a stack
-func findConfigSources(configAndStacksInfo cfg.ConfigAndStacksInfo, rawStackConfigs map[string]map[string]any) (map[string]any, error) {
-	return map[string]any{}, nil
+func findConfigSources(configAndStacksInfo cfg.ConfigAndStacksInfo, rawStackConfigs map[string]map[string]any) (map[string]map[string]any, error) {
+	result := map[string]map[string]any{}
+	vars := map[string]any{}
+	result["vars"] = vars
+
+	for varKey, varVal := range configAndStacksInfo.ComponentVarsSection {
+		varKeyStr := varKey.(string)
+		varObj := map[string]any{}
+		varObj["final"] = varVal
+		varObj["inherited"] = map[string]any{}
+		vars[varKeyStr] = varObj
+	}
+
+	return result, nil
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
