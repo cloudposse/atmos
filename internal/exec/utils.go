@@ -489,7 +489,6 @@ func processVariableInStacks(
 		false,
 		configAndStacksInfo.StackFile,
 		&result,
-		configAndStacksInfo,
 		rawStackConfigs,
 		variable,
 	)
@@ -519,7 +518,6 @@ func processVariableInStacks(
 		false,
 		configAndStacksInfo.StackFile,
 		&result,
-		configAndStacksInfo,
 		rawStackConfigs,
 		variable,
 	)
@@ -551,7 +549,6 @@ func processVariableInStacks(
 			true,
 			configAndStacksInfo.StackFile,
 			&result,
-			configAndStacksInfo,
 			rawStackConfigs,
 			variable,
 		)
@@ -581,7 +578,6 @@ func processVariableInStacks(
 			true,
 			configAndStacksInfo.StackFile,
 			&result,
-			configAndStacksInfo,
 			rawStackConfigs,
 			variable,
 		)
@@ -615,7 +611,7 @@ func processComponentVariableInStack(
 												if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
 
 													val := map[string]any{
-														"stack_file":         configAndStacksInfo.StackFile,
+														"stack_file":         stackFile,
 														"stack_file_section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
 														"variable_value":     rawStackVarVal,
 														"dependency_type":    "inline",
@@ -662,7 +658,7 @@ func processComponentTypeVariableInStack(
 								if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
 
 									val := map[string]any{
-										"stack_file":         configAndStacksInfo.StackFile,
+										"stack_file":         stackFile,
 										"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
 										"variable_value":     rawStackVarVal,
 										"dependency_type":    "inline",
@@ -690,7 +686,6 @@ func processGlobalVariableInStack(
 	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	variable string,
 ) *[]map[string]any {
@@ -703,7 +698,7 @@ func processGlobalVariableInStack(
 						if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
 
 							val := map[string]any{
-								"stack_file":         configAndStacksInfo.StackFile,
+								"stack_file":         stackFile,
 								"stack_file_section": "vars",
 								"variable_value":     rawStackVarVal,
 								"dependency_type":    "inline",
@@ -827,7 +822,6 @@ func processGlobalVariableInStackImports(
 	isBaseComponent bool,
 	stackFile string,
 	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	variable string,
 ) *[]map[string]any {
