@@ -464,11 +464,47 @@ func processVariableInStacks(
 	result := []map[string]any{}
 
 	// Process the variable for the component in the stack
-	processVariableInStack(configAndStacksInfo.ComponentFromArg, false, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
+	processVariableInStack(
+		configAndStacksInfo.ComponentFromArg,
+		false,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	processVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		false,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
 
 	// Process the variable for all the base components in the stack from the inheritance chain
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processVariableInStack(baseComponent, true, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
+		processVariableInStack(
+			baseComponent,
+			true,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processVariableInStackImports(
+			baseComponent,
+			true,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
 	}
 
 	return result
@@ -563,7 +599,22 @@ func processVariableInStack(
 				}
 			}
 		}
+	}
 
+	return result
+}
+
+func processVariableInStackImports(
+	component string,
+	isBaseComponent bool,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	if rawStackConfig, ok := rawStackConfigs[stackFile]; ok {
 		if rawStackImports, ok := rawStackConfig["imports"]; ok {
 			if rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any); ok {
 				for impKey, impVal := range rawStackImportsMap {
