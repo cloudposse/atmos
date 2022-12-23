@@ -217,7 +217,7 @@ func ProcessYAMLConfigFile(
 			}
 
 			for _, importFile := range importMatches {
-				yamlConfig, _, _, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
+				yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
 				if err != nil {
 					return nil, nil, nil, err
 				}
@@ -229,7 +229,7 @@ func ProcessYAMLConfigFile(
 					ext2 = cfg.DefaultStackConfigFileExtension
 				}
 				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
-				importsConfig[importRelativePathWithoutExt] = yamlConfig
+				importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
 			}
 		}
 	}
