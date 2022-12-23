@@ -465,6 +465,30 @@ func findVariableInStacks(
 	if rawStackConfig, ok := rawStackConfigs[configAndStacksInfo.StackFile]; ok {
 		if rawStack, ok := rawStackConfig["stack"]; ok {
 			if rawStackMap, ok := rawStack.(map[any]any); ok {
+				if rawStackComponentsSection, ok := rawStackMap["components"]; ok {
+					if rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any); ok {
+						if rawStackComponentTypeSection, ok := rawStackComponentsSectionMap[configAndStacksInfo.ComponentType]; ok {
+							if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
+								if rawStackComponentSection, ok := rawStackComponentTypeSectionMap[configAndStacksInfo.ComponentFromArg]; ok {
+									if rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any); ok {
+										if rawStackVars, ok := rawStackComponentSectionMap["vars"]; ok {
+											if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
+												if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+													val := map[string]any{
+														"file":    configAndStacksInfo.StackFile,
+														"section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
+														"value":   rawStackVarVal,
+													}
+													result = append(result, val)
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
 				if rawStackComponentTypeSection, ok := rawStackMap[configAndStacksInfo.ComponentType]; ok {
 					if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
 						if rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]; ok {
