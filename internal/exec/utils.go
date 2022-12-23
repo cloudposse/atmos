@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -462,13 +463,13 @@ func processVariableInStacks(
 
 	result := []map[string]any{}
 
-	// Process the component in the stack
-	processVariableInStack(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
-
 	// Process all the base components in the stack from the inheritance chain
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
 		processVariableInStack(baseComponent, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
 	}
+
+	// Process the component in the stack
+	processVariableInStack(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
 
 	return result
 }
@@ -501,7 +502,7 @@ func processVariableInStack(
 														"value":   rawStackVarVal,
 														"type":    "inline",
 													}
-													*result = append(*result, val)
+													appendVariableDescriptor(result, val)
 												}
 											}
 										}
@@ -522,7 +523,7 @@ func processVariableInStack(
 										"value":   rawStackVarVal,
 										"type":    "inline",
 									}
-									*result = append(*result, val)
+									appendVariableDescriptor(result, val)
 								}
 							}
 						}
@@ -537,7 +538,7 @@ func processVariableInStack(
 								"value":   rawStackVarVal,
 								"type":    "inline",
 							}
-							*result = append(*result, val)
+							appendVariableDescriptor(result, val)
 						}
 					}
 				}
@@ -562,7 +563,7 @@ func processVariableInStack(
 															"value":   rawStackVarVal,
 															"type":    "import",
 														}
-														*result = append(*result, val)
+														appendVariableDescriptor(result, val)
 													}
 												}
 											}
@@ -583,7 +584,7 @@ func processVariableInStack(
 											"value":   rawStackVarVal,
 											"type":    "import",
 										}
-										*result = append(*result, val)
+										appendVariableDescriptor(result, val)
 									}
 								}
 							}
@@ -598,7 +599,7 @@ func processVariableInStack(
 									"value":   rawStackVarVal,
 									"type":    "import",
 								}
-								*result = append(*result, val)
+								appendVariableDescriptor(result, val)
 							}
 						}
 					}
@@ -608,6 +609,15 @@ func processVariableInStack(
 	}
 
 	return result
+}
+
+func appendVariableDescriptor(result *[]map[string]any, descriptor map[string]any) {
+	for _, item := range *result {
+		if reflect.DeepEqual(item, descriptor) {
+			return
+		}
+	}
+	*result = append(*result, descriptor)
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
