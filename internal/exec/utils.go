@@ -443,12 +443,12 @@ func findConfigSources(
 	result["vars"] = vars
 
 	for varKey, varVal := range configAndStacksInfo.ComponentVarsSection {
-		varKeyStr := varKey.(string)
+		variable := varKey.(string)
 		varObj := map[string]any{}
-		varObj["name"] = varKeyStr
+		varObj["name"] = variable
 		varObj["final_value"] = varVal
-		varObj["stacks"] = findVariableInStacks(configAndStacksInfo, rawStackConfigs, varKeyStr)
-		vars[varKeyStr] = varObj
+		varObj["stacks"] = findVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
+		vars[variable] = varObj
 	}
 
 	return result, nil
@@ -462,7 +462,20 @@ func findVariableInStacks(
 
 	result := []map[string]any{}
 
-	if rawStackConfig, ok := rawStackConfigs[configAndStacksInfo.StackFile]; ok {
+	findVariableInStack(configAndStacksInfo.StackFile, &result, configAndStacksInfo, rawStackConfigs, variable)
+
+	return result
+}
+
+func findVariableInStack(
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	if rawStackConfig, ok := rawStackConfigs[stackFile]; ok {
 		if rawStack, ok := rawStackConfig["stack"]; ok {
 			if rawStackMap, ok := rawStack.(map[any]any); ok {
 				if rawStackComponentsSection, ok := rawStackMap["components"]; ok {
@@ -480,7 +493,7 @@ func findVariableInStacks(
 														"value":   rawStackVarVal,
 														"type":    "inline",
 													}
-													result = append(result, val)
+													*result = append(*result, val)
 												}
 											}
 										}
@@ -501,7 +514,7 @@ func findVariableInStacks(
 										"value":   rawStackVarVal,
 										"type":    "inline",
 									}
-									result = append(result, val)
+									*result = append(*result, val)
 								}
 							}
 						}
@@ -516,7 +529,7 @@ func findVariableInStacks(
 								"value":   rawStackVarVal,
 								"type":    "inline",
 							}
-							result = append(result, val)
+							*result = append(*result, val)
 						}
 					}
 				}
@@ -541,7 +554,7 @@ func findVariableInStacks(
 															"value":   rawStackVarVal,
 															"type":    "import",
 														}
-														result = append(result, val)
+														*result = append(*result, val)
 													}
 												}
 											}
@@ -562,7 +575,7 @@ func findVariableInStacks(
 											"value":   rawStackVarVal,
 											"type":    "import",
 										}
-										result = append(result, val)
+										*result = append(*result, val)
 									}
 								}
 							}
@@ -577,7 +590,7 @@ func findVariableInStacks(
 									"value":   rawStackVarVal,
 									"type":    "import",
 								}
-								result = append(result, val)
+								*result = append(*result, val)
 							}
 						}
 					}
