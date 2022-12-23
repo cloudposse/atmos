@@ -467,6 +467,7 @@ func findVariableInStacks(
 	return result
 }
 
+// https://medium.com/swlh/golang-tips-why-pointers-to-slices-are-useful-and-how-ignoring-them-can-lead-to-tricky-bugs-cac90f72e77b
 func findVariableInStack(
 	stackFile string,
 	result *[]map[string]any,
