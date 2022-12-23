@@ -478,6 +478,7 @@ func findVariableInStacks(
 														"file":    configAndStacksInfo.StackFile,
 														"section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
 														"value":   rawStackVarVal,
+														"type":    "inline",
 													}
 													result = append(result, val)
 												}
@@ -498,6 +499,7 @@ func findVariableInStacks(
 										"file":    configAndStacksInfo.StackFile,
 										"section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
 										"value":   rawStackVarVal,
+										"type":    "inline",
 									}
 									result = append(result, val)
 								}
@@ -512,8 +514,71 @@ func findVariableInStacks(
 								"file":    configAndStacksInfo.StackFile,
 								"section": "vars",
 								"value":   rawStackVarVal,
+								"type":    "inline",
 							}
 							result = append(result, val)
+						}
+					}
+				}
+			}
+		}
+
+		if rawStackImports, ok := rawStackConfig["imports"]; ok {
+			if rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any); ok {
+				for impKey, impVal := range rawStackImportsMap {
+					if rawStackComponentsSection, ok := impVal["components"]; ok {
+						if rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any); ok {
+							if rawStackComponentTypeSection, ok := rawStackComponentsSectionMap[configAndStacksInfo.ComponentType]; ok {
+								if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
+									if rawStackComponentSection, ok := rawStackComponentTypeSectionMap[configAndStacksInfo.ComponentFromArg]; ok {
+										if rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any); ok {
+											if rawStackVars, ok := rawStackComponentSectionMap["vars"]; ok {
+												if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
+													if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+														val := map[string]any{
+															"file":    impKey,
+															"section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
+															"value":   rawStackVarVal,
+															"type":    "import",
+														}
+														result = append(result, val)
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					if rawStackComponentTypeSection, ok := impVal[configAndStacksInfo.ComponentType]; ok {
+						if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
+							if rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]; ok {
+								if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
+									if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+										val := map[string]any{
+											"file":    impKey,
+											"section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
+											"value":   rawStackVarVal,
+											"type":    "import",
+										}
+										result = append(result, val)
+									}
+								}
+							}
+						}
+					}
+					if rawStackVars, ok := impVal["vars"]; ok {
+						if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
+							if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+								val := map[string]any{
+									"file":    impKey,
+									"section": "vars",
+									"value":   rawStackVarVal,
+									"type":    "import",
+								}
+								result = append(result, val)
+							}
 						}
 					}
 				}
