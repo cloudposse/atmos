@@ -865,32 +865,55 @@ func processComponentTypeVariableInStackImports(
 	variable string,
 ) *[]map[string]any {
 
-	if rawStackConfig, ok := rawStackConfigs[stackFile]; ok {
-		if rawStackImports, ok := rawStackConfig["imports"]; ok {
-			if rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any); ok {
-				for impKey, impVal := range rawStackImportsMap {
-					if rawStackComponentTypeSection, ok := impVal[configAndStacksInfo.ComponentType]; ok {
-						if rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any); ok {
-							if rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]; ok {
-								if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
-									if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+	rawStackConfig, ok := rawStackConfigs[stackFile]
+	if !ok {
+		return result
+	}
 
-										val := map[string]any{
-											"stack_file":         impKey,
-											"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
-											"variable_value":     rawStackVarVal,
-											"dependency_type":    "import",
-										}
+	rawStackImports, ok := rawStackConfig["imports"]
+	if !ok {
+		return result
+	}
 
-										appendVariableDescriptor(result, val)
-									}
-								}
-							}
-						}
-					}
-				}
-			}
+	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
+	if !ok {
+		return result
+	}
+
+	for impKey, impVal := range rawStackImportsMap {
+		rawStackComponentTypeSection, ok := impVal[configAndStacksInfo.ComponentType]
+		if !ok {
+			continue
 		}
+
+		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]
+		if !ok {
+			continue
+		}
+
+		rawStackVarsMap, ok := rawStackVars.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackVarVal, ok := rawStackVarsMap[variable]
+		if !ok {
+			continue
+		}
+
+		val := map[string]any{
+			"stack_file":         impKey,
+			"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
+			"variable_value":     rawStackVarVal,
+			"dependency_type":    "import",
+		}
+
+		appendVariableDescriptor(result, val)
 	}
 
 	return result
@@ -904,28 +927,45 @@ func processGlobalVariableInStackImports(
 	variable string,
 ) *[]map[string]any {
 
-	if rawStackConfig, ok := rawStackConfigs[stackFile]; ok {
-		if rawStackImports, ok := rawStackConfig["imports"]; ok {
-			if rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any); ok {
-				for impKey, impVal := range rawStackImportsMap {
-					if rawStackVars, ok := impVal["vars"]; ok {
-						if rawStackVarsMap, ok := rawStackVars.(map[any]any); ok {
-							if rawStackVarVal, ok := rawStackVarsMap[variable]; ok {
+	rawStackConfig, ok := rawStackConfigs[stackFile]
+	if !ok {
+		return result
+	}
 
-								val := map[string]any{
-									"stack_file":         impKey,
-									"stack_file_section": "vars",
-									"variable_value":     rawStackVarVal,
-									"dependency_type":    "import",
-								}
+	rawStackImports, ok := rawStackConfig["imports"]
+	if !ok {
+		return result
+	}
 
-								appendVariableDescriptor(result, val)
-							}
-						}
-					}
-				}
-			}
+	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
+	if !ok {
+		return result
+	}
+
+	for impKey, impVal := range rawStackImportsMap {
+		rawStackVars, ok := impVal["vars"]
+		if !ok {
+			continue
 		}
+
+		rawStackVarsMap, ok := rawStackVars.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackVarVal, ok := rawStackVarsMap[variable]
+		if !ok {
+			continue
+		}
+
+		val := map[string]any{
+			"stack_file":         impKey,
+			"stack_file_section": "vars",
+			"variable_value":     rawStackVarVal,
+			"dependency_type":    "import",
+		}
+
+		appendVariableDescriptor(result, val)
 	}
 
 	return result
