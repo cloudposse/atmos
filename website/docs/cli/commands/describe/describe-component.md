@@ -289,6 +289,47 @@ sources:
 
 :::info
 
-The `stack_dependencies` variable's inheritance chain
+The `stack_dependencies` inheritance chain shows the variable sources in the reverse order the sources were processed.
+The first item in the list was processed the last and its `variable_value` overrode all the previous values of the variable.
 
 :::
+
+<br/>
+
+For example, the component's `enabled` variable has the following inheritance chain:
+
+```yaml
+sources:
+  vars:
+    enabled:
+      final_value: true
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component
+          stack_file_section: components.terraform.vars
+          variable_value: true
+        - dependency_type: inline
+          stack_file: orgs/cp/tenant1/dev/us-east-2
+          stack_file_section: terraform.vars
+          variable_value: false
+        - dependency_type: inline
+          stack_file: orgs/cp/tenant1/dev/us-east-2
+          stack_file_section: vars
+          variable_value: true
+```
+
+<br/>
+
+Which we can interpret as follows (reading from the last to the first item in the `stack_dependencies` list):
+
+- In the `orgs/cp/tenant1/dev/us-east-2` stack config file (the last item in the list), the value for `enabled` was set to `true` in the global `vars`
+  section (inline)
+
+- Then in the same `orgs/cp/tenant1/dev/us-east-2` stack config file, the value for `enabled` was set to `false` in the `terraform.vars`
+  section (inline). This value overrode the value set in the global `vars` section
+
+- Finally, in the `catalog/terraform/test-component` stack config file (which was imported into the parent Atmos stack
+  via [`import`](/core-concepts/stacks/imports)), the value for `enabled` was set to `true` in the `components.terraform.vars` section of
+  the `test/test-component-override-3` Atmos component. This value overrode all the previous values arriving at the `final_value: true` for the
+  variable. This final value is then set for the `enabled` variable of the Terraform component `test/test-component` when Atmos
+  executes `atmos terraform apply test/test-component-override-3 -s <stack>` command
