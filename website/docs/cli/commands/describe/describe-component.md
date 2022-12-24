@@ -59,7 +59,7 @@ The output contains the following sections:
 - `component` - Terraform component which the Atmos component configures
 - `deps` - list of stack dependencies (stack config files where the Atmos component settings are defined, either inline or via imports)
 - `env` - list of ENV variables defined for the Atmos component
-- `inheritance` - component's [inheritance chain](/core-concepts/components/component-inheritance)
+- `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
 - `metadata` - component's metadata config
 - `remote_state_backend` - Terraform backend config for remote state
 - `remote_state_backend_type` - Terraform backend type for remote state
