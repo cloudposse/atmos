@@ -245,7 +245,7 @@ When we run the following command to provision the `test/test-component-override
 atmos terraform apply test/test-component-override-3 -s tenant1-ue2-dev
 ```
 
-`atmos` will process all configurations for the current component and all the base components/mixins and will show the following console output:
+Atmos will process all configurations for the current component and all the base components/mixins and will show the following console output:
 
 ```text
 Command info:

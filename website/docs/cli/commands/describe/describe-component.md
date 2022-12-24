@@ -55,10 +55,10 @@ The output contains the following sections:
 - `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
 - `backend` - Terraform backend configuration
 - `backend_type` - Terraform backend type
-- `command` - binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `helmfile`)
-- `component` - Terraform component which the Atmos component configures
-- `deps` - list of stack dependencies (stack config files where the Atmos component settings are defined, either inline or via imports)
-- `env` - list of ENV variables defined for the Atmos component
+- `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `helmfile`)
+- `component` - the Terraform component for which the Atmos component provides configuration
+- `deps` - a list of stack dependencies (stack config files where the component settings are defined, either inline or via imports)
+- `env` - a list of ENV variables defined for the Atmos component
 - `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
 - `metadata` - component's metadata config
 - `remote_state_backend` - Terraform backend config for remote state
@@ -158,6 +158,23 @@ workspace: test-component-override-3-workspace
 ```
 
 ## Sources of Component Variables
+
+The `sources.vars` section of the output shows the final deep-merged component's variables and their inheritance chain.
+
+Each variable descriptor has the following schema:
+
+- `final_value` - the final value of the variable after Atmos processes and deep-merges all values from all stack config files
+- `name` - the variable name
+- `stack_dependencies` - the variable's inheritance chain (stack config files where the values for the variable were provided). It has the following
+  schema:
+
+  - `stack_file` - the stack config file where a value for the variable was provided
+  - `stack_file_section` - the section of the stack config file where the value for the variable was provided
+  - `variable_value` - the variable's value
+  - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
+    in the stack config file. `import` means the stack config file where the variable is defined was imported into the parent Atmos stack
+
+<br/>
 
 For example:
 
@@ -267,3 +284,11 @@ sources:
           stack_file_section: vars
           variable_value: dev
 ```
+
+<br/>
+
+:::info
+
+The `stack_dependencies` variable's inheritance chain
+
+:::
