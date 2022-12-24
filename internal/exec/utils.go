@@ -539,23 +539,6 @@ func processVariableInStacks(
 			rawStackConfigs,
 			variable,
 		)
-
-		processComponentTypeVariableInStackImports(
-			baseComponent,
-			configAndStacksInfo.StackFile,
-			&result,
-			configAndStacksInfo,
-			rawStackConfigs,
-			variable,
-		)
-
-		processGlobalVariableInStackImports(
-			baseComponent,
-			configAndStacksInfo.StackFile,
-			&result,
-			rawStackConfigs,
-			variable,
-		)
 	}
 
 	processComponentTypeVariableInStackImports(
@@ -574,6 +557,25 @@ func processVariableInStacks(
 		rawStackConfigs,
 		variable,
 	)
+
+	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
+		processComponentTypeVariableInStackImports(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processGlobalVariableInStackImports(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			rawStackConfigs,
+			variable,
+		)
+	}
 
 	return result
 }

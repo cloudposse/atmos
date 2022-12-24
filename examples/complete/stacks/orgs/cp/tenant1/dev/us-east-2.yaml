@@ -12,6 +12,13 @@ import:
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
 
+vars:
+  enabled: true
+
+terraform:
+  vars:
+    enabled: false
+
 components:
   terraform:
     "infra/vpc":
