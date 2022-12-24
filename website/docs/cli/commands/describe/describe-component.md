@@ -91,7 +91,6 @@ component: test/test-component
 deps:
   - catalog/terraform/mixins/test-1
   - catalog/terraform/mixins/test-2
-  - catalog/terraform/services/service-1
   - orgs/cp/_defaults
   - orgs/cp/tenant1/_defaults
   - orgs/cp/tenant1/dev/us-east-2
@@ -124,7 +123,6 @@ settings:
   config:
     is_prod: false
   spacelift:
-    stack_destructor_enabled: true
     stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
     workspace_enabled: true
 sources:
