@@ -37,7 +37,6 @@ and `metadata` component's configuration section.
 
 :::
 
-
 ## Single Inheritance
 
 Single Inheritance is used when an Atmos component inherits from another base Atmos component.
@@ -209,7 +208,7 @@ import:
 components:
   terraform:
     test/test-component-override-3:
-      vars: {}
+      vars: { }
       metadata:
         # `real` is implicit, you don't need to specify it.
         # `abstract` makes the component protected from being deployed.
