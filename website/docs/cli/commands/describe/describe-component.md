@@ -47,26 +47,27 @@ atmos describe component test/test-component-override -s tenant2-ue2-prod
 
 ## Output
 
-The command outputs the final component configuration in YAML format.
+The command outputs the final deep-merged component configuration in YAML format.
 
-The configuration contains the following sections:
+The output contains the following sections:
 
-- `atmos_component` - Atmos component name
-- `atmos_stack` - Atmos stack name
-- `backend` -
-- `backend_type` -
-- `command` -
-- `component` -
-- `deps` -
-- `env` -
-- `inheritance` -
-- `metadata` -
-- `remote_state_backend` -
-- `remote_state_backend_type` -
-- `settings` -
-- `sources` -
-- `vars` -
-- `workspace` -
+- `atmos_component` - [Atmos component](/core-concepts/components) name
+- `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
+- `backend` - Terraform backend configuration
+- `backend_type` - Terraform backend type
+- `command` - binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `helmfile`)
+- `component` - Terraform component which the Atmos component configures
+- `deps` - list of stack dependencies (stack config files where the Atmos component settings are defined, either inline or via imports)
+- `env` - list of ENV variables defined for the Atmos component
+- `inheritance` - component's [inheritance chain](/core-concepts/components/component-inheritance)
+- `metadata` - component's metadata config
+- `remote_state_backend` - Terraform backend config for remote state
+- `remote_state_backend_type` - Terraform backend type for remote state
+- `settings` - component settings (free-form map)
+- `sources` - sources of the component's variables
+- `vars` - the final deep-merged component variables that are provided to Terraform and Helmfile when executing `atmos terraform`
+  and `atmos helmfile` commands
+- `workspace` - Terraform workspace for the Atmos component
 
 <br/>
 
