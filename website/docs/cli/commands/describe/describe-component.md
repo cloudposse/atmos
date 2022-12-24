@@ -303,6 +303,7 @@ sources:
   vars:
     enabled:
       final_value: true
+      name: enabled
       stack_dependencies:
         - dependency_type: import
           stack_file: catalog/terraform/test-component
