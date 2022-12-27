@@ -18,21 +18,23 @@ This example provides a simple filesystem layout that looks like this:
 
 ```console
    │  
-   │   # Centralized components configuration
+   │   # Centralized stacks configuration
    ├── stacks/
    │   │
-   │   └── $stack.yaml
+   │   └── <stack_1>.yaml
+   │   └── <stack_2>.yaml
+   │   └── <stack_3>.yaml
    │  
-   │   # Components are broken down by tool
+   │   # Centralized components configuration. Components are broken down by tool
    ├── components/
    │   │
-   │   ├── terraform/   # root modules in here
+   │   ├── terraform/   # Terraform components (Terraform root modules)
    │   │   ├── infra/
    │   │   ├── mixins/
    │   │   ├── test/test-component/
    │   │   └── top-level-component1/
    │   │
-   │   └── helmfile/  # helmfiles are organized by chart
+   │   └── helmfile/  # Helmfile components are organized by Helm chart
    │       ├── echo-server/
    │       └── infra/infra-server
    │  
