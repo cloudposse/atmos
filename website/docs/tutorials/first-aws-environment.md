@@ -1,6 +1,7 @@
 ---
 title: Your first environment on AWS
 sidebar_label: Your first environment on AWS
+sidebar_position: 2
 description: "Get your first AWS environment deployed using Atmos, Stacks, and Vendoring"
 ---
 
