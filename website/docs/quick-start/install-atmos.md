@@ -13,15 +13,15 @@ always be available for download here.
 
 ## Download Binaries from Releases Page
 
-- Go to the [Releases Page](https://github.com/cloudposse/atmos/releases).
-- Downloading the binary for your operating system and architecture. Replace `${version}` with the desired version.
+- Go to [Releases Page](https://github.com/cloudposse/atmos/releases)
+- Download the binary for your operating system and architecture. Replace `${version}` with the desired version
 
-  - e.g. If you’re on a Mac (M1), download the `atmos_${version}_darwin_arm64` binary.
+  - e.g. If you’re on a Mac (M1), download the `atmos_${version}_darwin_arm64` binary
   - e.g. If you’re on Windows, download `atmos_${version}_windows_amd64.exe`, etc.
 
-- Rename the downloaded file to `atmos` (optional).
-- Add the execution bit to the binary (e.g. on Linux and Mac, run `chmod u+x atmos`).
-- Place the binary somewhere on your `PATH` (e.g. on Linux and Mac: `mv atmos /usr/local/bin/`).
+- Rename the downloaded file to `atmos` (optional)
+- Add the execution bit to the binary (e.g. on Linux and Mac, run `chmod u+x atmos`)
+- Place the binary somewhere on your `PATH` (e.g. on Linux and Mac: `mv atmos /usr/local/bin/`)
 
 ## OSX
 
@@ -51,9 +51,7 @@ apt-get install atmos@="${ATMOS_VERSION}-*"
 ### RedHat/Centos (RPM)
 
 ```shell
-curl -1sLf \
-  'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' \
-  | sudo -E bash
+curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' | sudo -E bash
 
 # Install atmos
 sudo yum install atmos-${ATMOS_VERSION}.x86_64
@@ -65,7 +63,7 @@ On Alpine, use the Cloud Posse package repository:
 
 ```shell
 # Install the Cloud Posse package repository hosted by Cloudsmith
-curl -sSL https://apk.cloudposse.com/install.sh | bash
+curl -sSL 'https://apk.cloudposse.com/install.sh' | bash
 
 # Install atmos
 apk add atmos@cloudposse~=${ATMOS_VERSION}
@@ -82,7 +80,7 @@ go install github.com/cloudposse/atmos
 Get a specific version
 
 ```shell
-go install github.com/cloudposse/atmos@v1.3.9
+go install github.com/cloudposse/atmos@v1.20.0
 ```
 
 <br/>
