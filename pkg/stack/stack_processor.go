@@ -29,11 +29,17 @@ func ProcessYAMLConfigFiles(
 	helmfileComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
-	processComponentDeps bool) ([]string, map[string]any, error) {
+	processComponentDeps bool) (
+	[]string,
+	map[string]any,
+	map[string]map[string]any,
+	error,
+) {
 
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
+	rawStackConfigs := map[string]map[string]any{}
 	var errorResult error
 	var wg sync.WaitGroup
 	wg.Add(count)
@@ -47,7 +53,14 @@ func ProcessYAMLConfigFiles(
 				stackBasePath = path.Dir(p)
 			}
 
-			stackConfig, importsConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
+			stackFileName := strings.TrimSuffix(
+				strings.TrimSuffix(
+					u.TrimBasePathFromPath(stackBasePath+"/", p),
+					cfg.DefaultStackConfigFileExtension),
+				".yml",
+			)
+
+			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
 			if err != nil {
 				errorResult = err
 				return
@@ -61,8 +74,6 @@ func ProcessYAMLConfigFiles(
 			uniqueImports := u.UniqueStrings(imports)
 			sort.Strings(uniqueImports)
 
-			componentStackMap := map[string]map[string][]string{}
-
 			// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
 			// TODO: review it to use the new `atmos.yaml CLI stackConfig
 			//if processStackDeps {
@@ -73,12 +84,14 @@ func ProcessYAMLConfigFiles(
 			//	}
 			//}
 
+			componentStackMap := map[string]map[string][]string{}
+
 			finalConfig, err := ProcessStackConfig(
 				stackBasePath,
 				terraformComponentsBasePath,
 				helmfileComponentsBasePath,
 				p,
-				stackConfig,
+				deepMergedStackConfig,
 				processStackDeps,
 				processComponentDeps,
 				"",
@@ -98,28 +111,24 @@ func ProcessYAMLConfigFiles(
 				return
 			}
 
-			stackName := strings.TrimSuffix(
-				strings.TrimSuffix(
-					u.TrimBasePathFromPath(stackBasePath+"/", p),
-					cfg.DefaultStackConfigFileExtension),
-				".yml",
-			)
-
 			processYAMLConfigFilesLock.Lock()
 			defer processYAMLConfigFilesLock.Unlock()
 
 			listResult[i] = string(yamlConfig)
-			mapResult[stackName] = finalConfig
+			mapResult[stackFileName] = finalConfig
+			rawStackConfigs[stackFileName] = map[string]any{}
+			rawStackConfigs[stackFileName]["stack"] = stackConfig
+			rawStackConfigs[stackFileName]["imports"] = importsConfig
 		}(i, filePath)
 	}
 
 	wg.Wait()
 
 	if errorResult != nil {
-		return nil, nil, errorResult
+		return nil, nil, nil, errorResult
 	}
 
-	return listResult, mapResult, nil
+	return listResult, mapResult, rawStackConfigs, nil
 }
 
 // ProcessYAMLConfigFile takes a path to a YAML stack config file,
@@ -128,27 +137,33 @@ func ProcessYAMLConfigFiles(
 func ProcessYAMLConfigFile(
 	basePath string,
 	filePath string,
-	importsConfig map[string]map[any]any) (map[any]any, map[string]map[any]any, error) {
+	importsConfig map[string]map[any]any,
+) (
+	map[any]any,
+	map[string]map[any]any,
+	map[any]any,
+	error,
+) {
 
-	var configs []map[any]any
+	var stackConfigs []map[any]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	stackYamlConfig, err := getFileContent(filePath)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	stackMapConfig, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
+	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
 		e := fmt.Errorf("invalid YAML file '%s'\n%v", relativeFilePath, err)
-		return nil, nil, e
+		return nil, nil, nil, e
 	}
 
 	// Find and process all imports
-	if importsSection, ok := stackMapConfig["import"]; ok {
+	if importsSection, ok := stackConfigMap["import"]; ok {
 		imports, ok := importsSection.([]any)
 		if !ok {
-			return nil, nil, fmt.Errorf("invalid 'import' section in the file '%s'\nThe 'import' section must be a list of strings", relativeFilePath)
+			return nil, nil, nil, fmt.Errorf("invalid 'import' section in the file '%s'\nThe 'import' section must be a list of strings", relativeFilePath)
 		}
 
 		for _, im := range imports {
@@ -156,10 +171,10 @@ func ProcessYAMLConfigFile(
 
 			if !ok {
 				if im == nil {
-					return nil, nil, fmt.Errorf("invalid import in the file '%s'\nThe import is an empty string",
+					return nil, nil, nil, fmt.Errorf("invalid import in the file '%s'\nThe import is an empty string",
 						relativeFilePath)
 				}
-				return nil, nil, fmt.Errorf("invalid import in the file '%s'\nThe import '%v' is not a valid string",
+				return nil, nil, nil, fmt.Errorf("invalid import in the file '%s'\nThe import '%v' is not a valid string",
 					relativeFilePath,
 					im)
 			}
@@ -178,7 +193,7 @@ func ProcessYAMLConfigFile(
 				errorMessage := fmt.Sprintf("invalid import in the file '%s'\nThe file imports itself in '%s'",
 					relativeFilePath,
 					imp)
-				return nil, nil, errors.New(errorMessage)
+				return nil, nil, nil, errors.New(errorMessage)
 			}
 
 			// Find all import matches in the glob
@@ -192,42 +207,42 @@ func ProcessYAMLConfigFile(
 						imp,
 						relativeFilePath,
 						err)
-					return nil, nil, errors.New(errorMessage)
+					return nil, nil, nil, errors.New(errorMessage)
 				} else if importMatches == nil {
 					errorMessage := fmt.Sprintf("invalid import in the file '%s'\nNo matches found for the import '%s'",
 						relativeFilePath,
 						imp)
-					return nil, nil, errors.New(errorMessage)
+					return nil, nil, nil, errors.New(errorMessage)
 				}
 			}
 
 			for _, importFile := range importMatches {
-				yamlConfig, _, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
+				yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, nil, err
 				}
 
-				configs = append(configs, yamlConfig)
+				stackConfigs = append(stackConfigs, yamlConfig)
 				importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
 				ext2 := filepath.Ext(importRelativePathWithExt)
 				if ext2 == "" {
 					ext2 = cfg.DefaultStackConfigFileExtension
 				}
 				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
-				importsConfig[importRelativePathWithoutExt] = yamlConfig
+				importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
 			}
 		}
 	}
 
-	configs = append(configs, stackMapConfig)
+	stackConfigs = append(stackConfigs, stackConfigMap)
 
 	// Deep-merge the stack config file and all the imports
-	result, err := m.Merge(configs)
+	stackConfigsDeepMerged, err := m.Merge(stackConfigs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return result, importsConfig, nil
+	return stackConfigsDeepMerged, importsConfig, stackConfigMap, nil
 }
 
 // ProcessStackConfig takes a raw stack config, deep-merges all variables, settings, environments and backends,
