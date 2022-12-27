@@ -50,7 +50,7 @@ This example provides a simple filesystem layout that looks like this:
 
 ## Stack Configuration
 
-`atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
+Atmos provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
 In our example, all the code (Terraform and helmfiles) is in
 the [components](https://github.com/cloudposse/atmos/tree/master/examples/complete/components) folder.

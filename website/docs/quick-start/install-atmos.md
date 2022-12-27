@@ -4,7 +4,9 @@ sidebar_label: Install Atmos
 sidebar_position: 2
 ---
 
-There are many ways to install Atmos. The latest version of Atmos might not be available with third party package managers.
+There are many ways to install Atmos.
+
+__NOTE:__ The latest version of Atmos might not be available with third party package managers.
 
 To check what version of Atmos you have installed, just run `atmos version`.
 
