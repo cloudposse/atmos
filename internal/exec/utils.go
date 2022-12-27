@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -186,9 +187,13 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(cliConfig cfg.CliConfiguration) (map[string]any, error) {
+func FindStacksMap(cliConfig cfg.CliConfiguration) (
+	map[string]any,
+	map[string]map[string]any,
+	error,
+) {
 	// Process stack config file(s)
-	_, stacksMap, err := s.ProcessYAMLConfigFiles(
+	_, stacksMap, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
 		cliConfig.StacksBaseAbsolutePath,
 		cliConfig.TerraformDirAbsolutePath,
 		cliConfig.HelmfileDirAbsolutePath,
@@ -197,14 +202,22 @@ func FindStacksMap(cliConfig cfg.CliConfiguration) (map[string]any, error) {
 		true)
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return stacksMap, nil
+	return stacksMap, rawStackConfigs, nil
 }
 
 // ProcessStacks processes stack config
-func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.ConfigAndStacksInfo, checkStack bool) (cfg.ConfigAndStacksInfo, error) {
+func ProcessStacks(
+	cliConfig cfg.CliConfiguration,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	checkStack bool,
+) (
+	cfg.ConfigAndStacksInfo,
+	error,
+) {
+
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
@@ -219,7 +232,7 @@ func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.Confi
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	stacksMap, err := FindStacksMap(cliConfig)
+	stacksMap, rawStackConfigs, err := FindStacksMap(cliConfig)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -258,6 +271,7 @@ func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.Confi
 		}
 
 		configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
+		configAndStacksInfo.StackFile = configAndStacksInfo.Stack
 
 		// Process context
 		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
@@ -315,9 +329,11 @@ func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.Confi
 
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+				configAndStacksInfo.StackFile = stackName
 				foundConfigAndStacksInfo = configAndStacksInfo
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
+
 				u.PrintInfoVerbose(
 					cliConfig.Logs.Verbose,
 					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
@@ -400,10 +416,568 @@ func ProcessStacks(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.Confi
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+	// sources (stack config files where the variables and other settings are defined)
+	sources, err := processConfigSources(configAndStacksInfo, rawStackConfigs)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	configAndStacksInfo.ComponentSection["sources"] = sources
+
 	return configAndStacksInfo, nil
+}
+
+// processConfigSources processes the sources (files) for all variables for a component in a stack
+func processConfigSources(
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+) (
+	map[string]map[string]any,
+	error,
+) {
+	result := map[string]map[string]any{}
+	vars := map[string]any{}
+	result["vars"] = vars
+
+	for varKey, varVal := range configAndStacksInfo.ComponentVarsSection {
+		variable := varKey.(string)
+		varObj := map[string]any{}
+		varObj["name"] = variable
+		varObj["final_value"] = varVal
+		varObj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
+		vars[variable] = varObj
+	}
+
+	return result, nil
+}
+
+func processVariableInStacks(
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) []map[string]any {
+
+	result := []map[string]any{}
+
+	// Process the variable for the component in the stack
+	// Because we want to show the variable dependencies from higher to lower priority,
+	// the order of processing is the reverse order from what Atmos follows when calculating the final variables in the `vars` section
+	processComponentVariableInStack(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	processComponentVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	// Process the variable for all the base components in the stack from the inheritance chain
+	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
+		processComponentVariableInStack(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processComponentVariableInStackImports(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+	}
+
+	processComponentTypeVariableInStack(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	processGlobalVariableInStack(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		rawStackConfigs,
+		variable,
+	)
+
+	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
+		processComponentTypeVariableInStack(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processGlobalVariableInStack(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			rawStackConfigs,
+			variable,
+		)
+	}
+
+	processComponentTypeVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		configAndStacksInfo,
+		rawStackConfigs,
+		variable,
+	)
+
+	processGlobalVariableInStackImports(
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.StackFile,
+		&result,
+		rawStackConfigs,
+		variable,
+	)
+
+	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
+		processComponentTypeVariableInStackImports(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			configAndStacksInfo,
+			rawStackConfigs,
+			variable,
+		)
+
+		processGlobalVariableInStackImports(
+			baseComponent,
+			configAndStacksInfo.StackFile,
+			&result,
+			rawStackConfigs,
+			variable,
+		)
+	}
+
+	return result
+}
+
+// https://medium.com/swlh/golang-tips-why-pointers-to-slices-are-useful-and-how-ignoring-them-can-lead-to-tricky-bugs-cac90f72e77b
+func processComponentVariableInStack(
+	component string,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	rawStackConfig, ok := rawStackConfigs[stackFile]
+	if !ok {
+		return result
+	}
+
+	rawStack, ok := rawStackConfig["stack"]
+	if !ok {
+		return result
+	}
+
+	rawStackMap, ok := rawStack.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackComponentsSection, ok := rawStackMap["components"]
+	if !ok {
+		return result
+	}
+
+	rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackComponentTypeSection, ok := rawStackComponentsSectionMap[configAndStacksInfo.ComponentType]
+	if !ok {
+		return result
+	}
+
+	rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackComponentSection, ok := rawStackComponentTypeSectionMap[component]
+	if !ok {
+		return result
+	}
+
+	rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackVars, ok := rawStackComponentSectionMap["vars"]
+	if !ok {
+		return result
+	}
+
+	rawStackVarsMap, ok := rawStackVars.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackVarVal, ok := rawStackVarsMap[variable]
+	if !ok {
+		return result
+	}
+
+	val := map[string]any{
+		"stack_file":         stackFile,
+		"stack_file_section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
+		"variable_value":     rawStackVarVal,
+		"dependency_type":    "inline",
+	}
+
+	appendVariableDescriptor(result, val)
+
+	return result
+}
+
+func processComponentTypeVariableInStack(
+	component string,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	rawStackConfig, ok := rawStackConfigs[stackFile]
+	if !ok {
+		return result
+	}
+
+	rawStack, ok := rawStackConfig["stack"]
+	if !ok {
+		return result
+	}
+
+	rawStackMap, ok := rawStack.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackComponentTypeSection, ok := rawStackMap[configAndStacksInfo.ComponentType]
+	if !ok {
+		return result
+	}
+
+	rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]
+	if !ok {
+		return result
+	}
+
+	rawStackVarsMap, ok := rawStackVars.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackVarVal, ok := rawStackVarsMap[variable]
+	if !ok {
+		return result
+	}
+
+	val := map[string]any{
+		"stack_file":         stackFile,
+		"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
+		"variable_value":     rawStackVarVal,
+		"dependency_type":    "inline",
+	}
+
+	appendVariableDescriptor(result, val)
+
+	return result
+}
+
+func processGlobalVariableInStack(
+	component string,
+	stackFile string,
+	result *[]map[string]any,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	rawStackConfig, ok := rawStackConfigs[stackFile]
+	if !ok {
+		return result
+	}
+
+	rawStack, ok := rawStackConfig["stack"]
+	if !ok {
+		return result
+	}
+
+	rawStackMap, ok := rawStack.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackVars, ok := rawStackMap["vars"]
+	if !ok {
+		return result
+	}
+
+	rawStackVarsMap, ok := rawStackVars.(map[any]any)
+	if !ok {
+		return result
+	}
+
+	rawStackVarVal, ok := rawStackVarsMap[variable]
+	if !ok {
+		return result
+	}
+
+	val := map[string]any{
+		"stack_file":         stackFile,
+		"stack_file_section": "vars",
+		"variable_value":     rawStackVarVal,
+		"dependency_type":    "inline",
+	}
+
+	appendVariableDescriptor(result, val)
+
+	return result
+}
+
+func processComponentVariableInStackImports(
+	component string,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	rawStackConfig, ok := rawStackConfigs[stackFile]
+	if !ok {
+		return result
+	}
+
+	rawStackImports, ok := rawStackConfig["imports"]
+	if !ok {
+		return result
+	}
+
+	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
+	if !ok {
+		return result
+	}
+
+	for impKey, impVal := range rawStackImportsMap {
+		rawStackComponentsSection, ok := impVal["components"]
+		if !ok {
+			continue
+		}
+
+		rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackComponentTypeSection, ok := rawStackComponentsSectionMap[configAndStacksInfo.ComponentType]
+		if !ok {
+			continue
+		}
+
+		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackComponentSection, ok := rawStackComponentTypeSectionMap[component]
+		if !ok {
+			continue
+		}
+
+		rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackVars, ok := rawStackComponentSectionMap["vars"]
+		if !ok {
+			continue
+		}
+
+		rawStackVarsMap, ok := rawStackVars.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackVarVal, ok := rawStackVarsMap[variable]
+		if !ok {
+			continue
+		}
+
+		val := map[string]any{
+			"stack_file":         impKey,
+			"stack_file_section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
+			"variable_value":     rawStackVarVal,
+			"dependency_type":    "import",
+		}
+
+		appendVariableDescriptor(result, val)
+	}
+
+	return result
+}
+
+func processComponentTypeVariableInStackImports(
+	component string,
+	stackFile string,
+	result *[]map[string]any,
+	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	rawStackConfig, ok := rawStackConfigs[stackFile]
+	if !ok {
+		return result
+	}
+
+	rawStackImports, ok := rawStackConfig["imports"]
+	if !ok {
+		return result
+	}
+
+	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
+	if !ok {
+		return result
+	}
+
+	for impKey, impVal := range rawStackImportsMap {
+		rawStackComponentTypeSection, ok := impVal[configAndStacksInfo.ComponentType]
+		if !ok {
+			continue
+		}
+
+		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]
+		if !ok {
+			continue
+		}
+
+		rawStackVarsMap, ok := rawStackVars.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackVarVal, ok := rawStackVarsMap[variable]
+		if !ok {
+			continue
+		}
+
+		val := map[string]any{
+			"stack_file":         impKey,
+			"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
+			"variable_value":     rawStackVarVal,
+			"dependency_type":    "import",
+		}
+
+		appendVariableDescriptor(result, val)
+	}
+
+	return result
+}
+
+func processGlobalVariableInStackImports(
+	component string,
+	stackFile string,
+	result *[]map[string]any,
+	rawStackConfigs map[string]map[string]any,
+	variable string,
+) *[]map[string]any {
+
+	rawStackConfig, ok := rawStackConfigs[stackFile]
+	if !ok {
+		return result
+	}
+
+	rawStackImports, ok := rawStackConfig["imports"]
+	if !ok {
+		return result
+	}
+
+	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
+	if !ok {
+		return result
+	}
+
+	for impKey, impVal := range rawStackImportsMap {
+		rawStackVars, ok := impVal["vars"]
+		if !ok {
+			continue
+		}
+
+		rawStackVarsMap, ok := rawStackVars.(map[any]any)
+		if !ok {
+			continue
+		}
+
+		rawStackVarVal, ok := rawStackVarsMap[variable]
+		if !ok {
+			continue
+		}
+
+		val := map[string]any{
+			"stack_file":         impKey,
+			"stack_file_section": "vars",
+			"variable_value":     rawStackVarVal,
+			"dependency_type":    "import",
+		}
+
+		appendVariableDescriptor(result, val)
+	}
+
+	return result
+}
+
+func appendVariableDescriptor(result *[]map[string]any, descriptor map[string]any) {
+	for _, item := range *result {
+		if reflect.DeepEqual(item, descriptor) {
+			return
+		}
+	}
+	*result = append(*result, descriptor)
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
