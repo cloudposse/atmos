@@ -13,7 +13,7 @@ Monorepo is a version-controlled repository that stores all the code, configurat
 Monorepo usually improves collaboration, CI build speed, and overall productivity.
 
 Polyrepo architecture consists of several version-controlled repositories for code, configurations and scripts for different parts of the
-infrastructure. For example, depending on various requirements including security, lifecycle management, access control, audit, etc., separate
+infrastructure. For example, depending on various requirements (including security, lifecycle management, access control, audit, etc.), separate
 repositories can be used to manage infrastructure per account (e.g. `dev`, `staging`, `prod`), per service, or per team.
 
 :::
@@ -27,12 +27,12 @@ In this Quick Start guide, we will be using a monorepo to provision the followin
 
 Atmos requires a few common directories and files, which need to be configured in the infrastructure repo:
 
-- `stacks` directory (required)
-- `components` directory (required)
-- `atmos.yaml` CLI config file (required)
+- `stacks` directory (required) - contains centralized stack configurations
+- `components` directory (required) - contains centralized component configurations
+- `atmos.yaml` (required) - CLI config file
 - `Makefile` (optional)
 - `Dockerfile` (optional)
-- `rootfs` directory (optional)
+- `rootfs` directory (optional) - root filesystem for the Docker image (if `Dockerfile` is used)
 
 <br/>
 
@@ -50,9 +50,9 @@ The following example provides the simplest filesystem layout that Atmos can wor
    │   # Centralized stacks configuration
    ├── stacks/
    │   │
-   │   └── <stack_1>.yaml
-   │   └── <stack_2>.yaml
-   │   └── <stack_3>.yaml
+   │   └── <stack_1>
+   │   └── <stack_2>
+   │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
    ├── components/
@@ -71,37 +71,72 @@ The following example provides the simplest filesystem layout that Atmos can wor
    ├── atmos.yaml
 ```
 
+<br/>
+
+## `atmos.yaml` CLI config file location
+
+While placing `atmos.yaml` at the root of the repository will work for Atmos, it will not work
+for [Component Remote State](/core-concepts/components/remote-state) because it uses
+the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider, and the provider gets executed from the
+component's directory (e.g. `components/terraform/infra/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
+
+Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
+which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
+
+This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
+
+:::info
+
+`atmos.yaml` is loaded from the following locations (from lowest to highest priority):
+
+- System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- Home dir (`~/.atmos/atmos.yaml`)
+- Current directory
+- ENV var `ATMOS_CLI_CONFIG_PATH`
+
+:::
+
+<br/>
+
+For this to work for both the Atmos CLI and the Terraform provider, we usually do one of the following:
+
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host
+
+- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`)
+
+- Put `atmos.yaml` at a location in the file system and then set the ENV var `ATMOS_CLI_CONFIG_PATH` to point to that location. The ENV var must
+  point to a folder without the `atmos.yaml` file name. For example, if `atmos.yaml` is at `/atmos/config/atmos.yaml`,
+  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`
+
+- When working in a Docker container, put `atmos.yaml`
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/complete/Dockerfile)
+  by executing the `COPY rootfs/ /` Docker command
+
+<br/>
+
+Taking into account all the above, we'll place `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and use the following filesystem
+layout:
+
 ```console
    │  
    │   # Centralized stacks configuration
    ├── stacks/
    │   │
-   │   └── $stack.yaml
+   │   └── <stack_1>
+   │   └── <stack_2>
+   │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
    ├── components/
    │   │
-   │   ├── terraform/   # Terraform root modules
-   │   │   ├── infra/
-   │   │   ├── mixins/
-   │   │   ├── test/test-component/
-   │   │   └── top-level-component1/
-   │   │
-   │   └── helmfile/  # helmfiles are organized by chart
-   │       ├── echo-server/
-   │       └── infra/infra-server
-   │  
-   │   # Root filesystem for the docker image (see `Dockerfile`)
-   ├── rootfs/
-   │
-   │   # Makefile for building the CLI
-   ├── Makefile
-   │   # Atmos CLI configuration
-   ├── atmos.yaml
-   │  
-   │   # Docker image for shipping the CLI and all dependencies
-   └── Dockerfile (optional)
+   │   └── terraform/   # Terraform components (Terraform root modules)
+   |      ├── infra/
+   │      │  ├── vpc/
+   │      │  ├── vpc-flow-logs-bucket/
 ```
+
+<br/>
 
 ```console
    │  
@@ -113,7 +148,7 @@ The following example provides the simplest filesystem layout that Atmos can wor
    │   # Centralized components configuration. Components are broken down by tool
    ├── components/
    │   │
-   │   ├── terraform/   # Terraform root modules
+   │   ├── terraform/   # Terraform components (Terraform root modules)
    │   │   ├── infra/
    │   │   ├── mixins/
    │   │   ├── test/test-component/
@@ -123,7 +158,7 @@ The following example provides the simplest filesystem layout that Atmos can wor
    │       ├── echo-server/
    │       └── infra/infra-server
    │  
-   │   # Root filesystem for the docker image (see `Dockerfile`)
+   │   # Root filesystem for the Docker image (see `Dockerfile`)
    ├── rootfs/
    │
    │   # Makefile for building the CLI

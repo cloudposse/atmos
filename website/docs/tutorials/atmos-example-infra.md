@@ -38,7 +38,7 @@ This example provides a simple filesystem layout that looks like this:
    │       ├── echo-server/
    │       └── infra/infra-server
    │  
-   │   # Root filesystem for the docker image (see `Dockerfile`)
+   │   # Root filesystem for the Docker image (see `Dockerfile`)
    ├── rootfs/
    │
    │   # Makefile for building the CLI
