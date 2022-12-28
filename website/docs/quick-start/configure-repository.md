@@ -9,15 +9,21 @@ and stacks.
 
 :::info
 
-Monorepo is a version-controlled code repository that stores all the code, configurations, scripts and libraries for the entire infrastructure.
+Monorepo is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure.
 Monorepo usually improves collaboration, CI build speed, and overall productivity.
 
-Polyrepo architecture consists of several version-controlled repositories for code, configurations, scripts and libraries for different parts of the
-infrastructure.
+Polyrepo architecture consists of several version-controlled repositories for code, configurations and scripts for different parts of the
+infrastructure. For example, depending on various requirements including security, lifecycle management, access control, audit, etc., separate
+repositories can be used to manage infrastructure per account (e.g. `dev`, `staging`, `prod`), per service, or per team.
 
 :::
 
 <br/>
+
+In this Quick Start guide, we will be using a monorepo to provision the following resources into multiple AWS accounts and regions:
+
+- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
+- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
 
 Atmos requires a few common directories and files, which need to be configured in the infrastructure repo:
 
