@@ -49,19 +49,16 @@ The following example provides the simplest filesystem layout that Atmos can wor
    │  
    │   # Centralized stacks configuration
    ├── stacks/
-   │   │
    │   └── <stack_1>
    │   └── <stack_2>
    │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
    ├── components/
-   │   │
    │   ├── terraform/   # Terraform components (Terraform root modules)
    │   │   ├── <terraform_component_1>/
    │   │   ├── <terraform_component_2>/
    │   │   ├── <terraform_component_3>/
-   │   │
    │   └── helmfile/  # Helmfile components are organized by Helm chart
    │   │   ├── <helmfile_component_1>/
    │   │   ├── <helmfile_component_2>/
@@ -122,50 +119,22 @@ layout:
    │  
    │   # Centralized stacks configuration
    ├── stacks/
-   │   │
    │   └── <stack_1>
    │   └── <stack_2>
    │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
    ├── components/
-   │   │
    │   └── terraform/   # Terraform components (Terraform root modules)
-   |      ├── infra/
-   │      │  ├── vpc/
-   │      │  ├── vpc-flow-logs-bucket/
+   |       ├── infra/
+   │       │   ├── vpc/
+   │       │   ├── vpc-flow-logs-bucket/
 ```
 
 <br/>
 
-```console
-   │  
-   │   # Centralized stacks configuration
-   ├── stacks/
-   │   │
-   │   └── $stack.yaml
-   │  
-   │   # Centralized components configuration. Components are broken down by tool
-   ├── components/
-   │   │
-   │   ├── terraform/   # Terraform components (Terraform root modules)
-   │   │   ├── infra/
-   │   │   ├── mixins/
-   │   │   ├── test/test-component/
-   │   │   └── top-level-component1/
-   │   │
-   │   └── helmfile/  # helmfiles are organized by chart
-   │       ├── echo-server/
-   │       └── infra/infra-server
-   │  
-   │   # Root filesystem for the Docker image (see `Dockerfile`)
-   ├── rootfs/
-   │
-   │   # Makefile for building the CLI
-   ├── Makefile
-   │   # Atmos CLI configuration
-   ├── atmos.yaml
-   │  
-   │   # Docker image for shipping the CLI and all dependencies
-   └── Dockerfile (optional)
-```
+:::tip
+
+For a complete example, refer to [Atmos example](https://github.com/cloudposse/atmos/tree/master/examples/complete)
+
+:::
