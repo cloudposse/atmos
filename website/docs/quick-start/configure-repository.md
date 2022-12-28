@@ -110,7 +110,7 @@ For this to work for both the Atmos CLI and the Terraform provider, we usually d
   and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/complete/Dockerfile)
   by executing the `COPY rootfs/ /` Docker command
 
-<br/>
+## Final filesystem layout
 
 Taking into account all the above, we'll place `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and use the following filesystem
 layout:
