@@ -10,7 +10,7 @@ and stacks.
 :::info
 
 Monorepo is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure.
-Monorepo usually improves collaboration, CI build speed, and overall productivity.
+Monorepo usually improves collaboration, CI/CD build speed, and overall productivity.
 
 Polyrepo architecture consists of several version-controlled repositories for code, configurations and scripts for different parts of the
 infrastructure. For example, depending on various requirements (including security, lifecycle management, access control, audit, etc.), separate
@@ -20,10 +20,13 @@ repositories can be used to manage infrastructure per account (e.g. `dev`, `stag
 
 <br/>
 
-In this Quick Start guide, we will be using a monorepo to provision the following resources into multiple AWS accounts and regions:
+In this Quick Start guide, we will be using a monorepo to provision the following resources into multiple AWS accounts (`dev`, `staging`, `prod`)
+and regions (`us-east-2` and `us-west-2`):
 
 - [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
 - [vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
+
+## Common directories and files
 
 Atmos requires a few common directories and files, which need to be configured in the infrastructure repo:
 
@@ -72,10 +75,10 @@ The following example provides the simplest filesystem layout that Atmos can wor
 
 ## `atmos.yaml` CLI config file location
 
-While placing `atmos.yaml` at the root of the repository will work for Atmos, it will not work
+While placing `atmos.yaml` at the root of the repository will work for the `atmos` CLI, it will not work
 for [Component Remote State](/core-concepts/components/remote-state) because it uses
-the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider, and the provider gets executed from the
-component's directory (e.g. `components/terraform/infra/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
+the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider. Terraform executes the provider from the
+component's folder (e.g. `components/terraform/infra/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
 
 Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
 which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
@@ -95,7 +98,7 @@ This means that `atmos.yaml` file must be at a location in the file system where
 
 <br/>
 
-For this to work for both the Atmos CLI and the Terraform provider, we usually do one of the following:
+For this to work for both the `atmos` CLI and the Terraform provider, we recommend doing one of the following:
 
 - Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host
 

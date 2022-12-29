@@ -284,7 +284,7 @@ component's directory (e.g. `components/terraform/infra/vpc`), and we don't want
 
 <br/>
 
-For this to work for both the Atmos CLI and the Terraform provider, we usually do one of the following:
+For this to work for both the `atmos` CLI and the Terraform provider, we recommend doing one of the following:
 
 - Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host
 
