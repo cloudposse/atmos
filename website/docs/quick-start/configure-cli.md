@@ -99,9 +99,11 @@ The `atmos.yaml` configuration file has the following sections:
   and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
   with `components.terraform.base_path` to calculate the final path to the Terraform components
 
-- `components.terraform.apply_auto_approve`
+- `components.terraform.apply_auto_approve` - if set to `true`, Atmos automatically adds `-auto-approve` option to instruct Terraform to apply the
+  plan without asking for confirmation when executing `atmos terraform apply` command
 
-- `components.terraform.deploy_run_init`
+- `components.terraform.deploy_run_init` - if set to `true`, Atmos runs `terraform init` before
+  executing [`atmos terraform deploy`](/cli/commands/terraform/deploy) command
 
 - `components.terraform.init_run_reconfigure`
 

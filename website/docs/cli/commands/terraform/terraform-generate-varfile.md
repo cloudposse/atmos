@@ -17,7 +17,7 @@ Execute the `terraform generate varfile` command like this:
 atmos terraform generate varfile <command> <component> -s <stack>
 ```
 
-This command generates a varfile for an `atmos` terraform component in a stack.
+This command generates a varfile for an Atmos terraform component in a stack.
 
 :::tip
 Run `atmos terraform generate varfile --help` to see all the available options
@@ -35,13 +35,13 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
 
 ## Arguments
 
-| Argument     | Description                 | Required |
-|:-------------|:----------------------------|:---------|
-| `component`  | `atmos` terraform component | yes      |
+| Argument    | Description               | Required |
+|:------------|:--------------------------|:---------|
+| `component` | Atmos terraform component | yes      |
 
 ## Flags
 
-| Flag        | Description   | Alias | Required |
-|:------------|:--------------|:------|:---------|
-| `--stack`   | `atmos` stack | `-s`  | yes      |
-| `--dry-run` | Dry-run       |       | no       |
+| Flag        | Description | Alias | Required |
+|:------------|:------------|:------|:---------|
+| `--stack`   | Atmos stack | `-s`  | yes      |
+| `--dry-run` | Dry-run     |       | no       |

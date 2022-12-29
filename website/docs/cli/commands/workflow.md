@@ -19,7 +19,7 @@ atmos workflow <workflow_name> --file <workflow_file> [options]
 
 This command allows sequential execution of `atmos` and `shell` commands defined as workflow steps.
 
-An `atmos` workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is easily executed from the
+An Atmos workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is easily executed from the
 command line by calling `atmos workflow`. Use workflows to orchestrate any number of commands. Workflows can call any `atmos` subcommand, shell
 commands, and has access to the stack configurations.
 
@@ -46,8 +46,8 @@ atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
 
 ## Flags
 
-| Flag         | Description                                                                                     | Alias | Required |
-|:-------------|:------------------------------------------------------------------------------------------------|:------|:---------|
-| `--file`     | File name where the workflow is defined                                                         | `-f`  | yes      |
-| `--stack`    | `atmos` stack<br/>(if provided, will override stacks defined in the workflow or workflow steps) | `-s`  | no       |
-| `--dry-run`  | Dry-run                                                                                         |       | no       |
+| Flag        | Description                                                                                   | Alias | Required |
+|:------------|:----------------------------------------------------------------------------------------------|:------|:---------|
+| `--file`    | File name where the workflow is defined                                                       | `-f`  | yes      |
+| `--stack`   | Atmos stack<br/>(if provided, will override stacks defined in the workflow or workflow steps) | `-s`  | no       |
+| `--dry-run` | Dry-run                                                                                       |       | no       |

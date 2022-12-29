@@ -18,7 +18,7 @@ Execute the `validate component` command like this:
 atmos validate component <component> -s <stack> [options]
 ```
 
-This command validates an `atmos` component in a stack using JSON Schema and OPA policies.
+This command validates an Atmos component in a stack using JSON Schema and OPA policies.
 
 <br/>
 
@@ -36,14 +36,14 @@ atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-inf
 
 ## Arguments
 
-| Argument     | Description        | Required |
-|:-------------|:-------------------|:---------|
-| `component`  | `atmos` component  | yes      |
+| Argument    | Description     | Required |
+|:------------|:----------------|:---------|
+| `component` | Atmos component | yes      |
 
 ## Flags
 
 | Flag            | Description                                                                                                                                                       | Alias | Required |
 |:----------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`       | `atmos` stack                                                                                                                                                     | `-s`  | yes      |
+| `--stack`       | Atmos stack                                                                                                                                                       | `-s`  | yes      |
 | `--schema-path` | Path to the schema file.<br/>Can be an absolute path or a path relative to `schemas.jsonschema.base_path`<br/>and `schemas.opa.base_path` defined in `atmos.yaml` |       | no       |
 | `--schema-type` | Schema type: `jsonschema` or `opa`                                                                                                                                |       | no       |

@@ -8,7 +8,8 @@ description: Use the `atmos.yaml` configuration file to control the behavior of 
 Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI
 :::
 
-Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
+Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
+be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
 # Configuration File (`atmos.yaml`)
 
@@ -24,7 +25,7 @@ Each configuration file discovered is deep-merged with the preceeding configurat
 <br/>
 
 :::tip Pro-Tip
-`atmos` supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
+Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
 names/paths (double-star/globstar `**`)
 :::
 
@@ -51,7 +52,6 @@ base_path: "."
 ## Components
 
 Specify the default behaviors for components.
-
 
 ```yaml
 components:
@@ -93,7 +93,7 @@ components:
 
 ## Stacks
 
-Specify where to find stacks. 
+Specify where to find stacks.
 
 ```yaml
 stacks:
@@ -115,7 +115,6 @@ stacks:
 
 ## Workflows
 
-
 ```yaml
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
@@ -128,13 +127,14 @@ logs:
 
 ```
 
-
 ## Custom CLI Sub-commands
 
 You can extend the Atmos CLI and add as many subcommands as you want. This is a great way to increase DX by exposing a consistent CLI interface to
 developers.
 
-For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and discover all available commands.
+For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly,
+inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and
+discover all available commands.
 
 Here are some examples to play around with to get started.
 
@@ -387,10 +387,10 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH             | components.helmfile.kubeconfig_path             | Path to write the `kubeconfig` file when executing `aws eks update-kubeconfig` command                                                     |
 | ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN    | components.helmfile.helm_aws_profile_pattern    | Pattern for AWS profile to use when executing `atmos helmfile` commands                                                                    |
 | ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_pattern        | Pattern for EKS cluster name to use when executing `atmos helmfile` commands                                                               |
-| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to `atmos` stack configs                                                                                                         |
+| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to Atmos stack configs                                                                                                           |
 | ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack configs                                                                                            |
 | ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           | List of paths to not consider as top-level stacks                                                                                          |
-| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as `atmos` stack names                                                                                           |
-| ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to `atmos` workflows                                                                                                             |
+| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as Atmos stack names                                                                                             |
+| ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                               |
 | ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                         |
 | ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           | Base path to OPA policies for component validation                                                                                         |

@@ -4,6 +4,11 @@ sidebar_label: terraform
 sidebar_class_name: command
 ---
 
+
+
+
+
+
 import DocCardList from '@theme/DocCardList';
 
 :::note Purpose
@@ -23,7 +28,7 @@ atmos terraform <command> <component> --stack <stack> [options]
 <br/>
 
 :::info
-`atmos` supports all `terraform` commands and options described in [Terraform CLI reference](https://www.terraform.io/cli/commands).
+Atmos supports all `terraform` commands and options described in [Terraform CLI reference](https://www.terraform.io/cli/commands).
 
 In addition, the `component` argument and `stack` flag are required to generate variables and backend config for the component in the stack.
 :::
@@ -32,7 +37,7 @@ In addition, the `component` argument and `stack` flag are required to generate 
 
 **Additions and differences from native `terraform`:**
 
-- before executing other `terraform` commands, `atmos` runs `terraform init`
+- before executing other `terraform` commands, Atmos runs `terraform init`
 
 - you can skip over atmos calling `terraform init` if you know your project is already in a good working state by using the `--skip-init` flag like
 so `atmos terraform <command> <component> -s <stack> --skip-init`
@@ -56,15 +61,15 @@ created before, it then runs `terraform workspace new`
 - `atmos terraform import` command searches for `region` in the variables for the specified component and stack, and if it finds it,
 sets `AWS_REGION=<region>` ENV var before executing the command
 
-- `atmos terraform generate backend` command generates a backend config file for an `atmos` component in a stack
+- `atmos terraform generate backend` command generates a backend config file for an Atmos component in a stack
 
-- `atmos terraform generate backends` command generates backend config files for all `atmos` components in all stacks
+- `atmos terraform generate backends` command generates backend config files for all Atmos components in all stacks
 
-- `atmos terraform generate varfile` command generates a varfile for an `atmos` component in a stack
+- `atmos terraform generate varfile` command generates a varfile for an Atmos component in a stack
 
-- `atmos terraform generate varfiles` command generates varfiles for all `atmos` components in all stacks
+- `atmos terraform generate varfiles` command generates varfiles for all Atmos components in all stacks
 
-- `atmos terraform shell` command configures an environment for an `atmos` component in a stack and starts a new shell allowing executing all native
+- `atmos terraform shell` command configures an environment for an Atmos component in a stack and starts a new shell allowing executing all native
 terraform commands inside the shell
 
 <br/>
@@ -88,13 +93,13 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 
 | Argument     | Description                 | Required |
 |:-------------|:----------------------------|:---------|
-| `component`  | `atmos` terraform component | yes      |
+| `component`  | Atmos terraform component   | yes      |
 
 ## Flags
 
 | Flag        | Description   | Alias | Required |
 |:------------|:--------------|:------|:---------|
-| `--stack`   | `atmos` stack | `-s`  | yes      |
+| `--stack`   | Atmos stack   | `-s`  | yes      |
 | `--dry-run` | Dry-run       |       | no       |
 
 <br/>
