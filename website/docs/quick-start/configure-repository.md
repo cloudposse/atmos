@@ -114,23 +114,23 @@ Initial Atmos configuration can be controlled by these ENV vars:
 
 For this to work for both the `atmos` CLI and the Terraform provider, we recommend doing one of the following:
 
-- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the root of the
-  repo absolute path
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root
+  of the repo
 
-- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the root of the
-  repo absolute path
+- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of
+  the repo
 
 - Put `atmos.yaml` at a location in the file system and then set the ENV var `ATMOS_CLI_CONFIG_PATH` to point to that location. The ENV var must
   point to a folder without the `atmos.yaml` file name. For example, if `atmos.yaml` is at `/atmos/config/atmos.yaml`,
-  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the root of the repo absolute path
+  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
 
 - When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
   at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/rootfs/usr/local/etc/atmos/atmos.yaml)
   and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/complete/Dockerfile)
-  by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the root of the repo
-  absolute path. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/complete)
+  by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
+  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/complete)
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
-  var `ATMOS_BASE_PATH` automatically to the root of the repo absolute path on local host
+  var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
 
 ## Final Filesystem Layout
 
