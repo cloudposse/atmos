@@ -86,3 +86,24 @@ integrations: { }
 # Validation schemas (for validating atmos stacks and components)
 schemas: { }
 ```
+
+<br/>
+
+The `atmos.yaml` configuration file has the following sections:
+
+- `base_path` - the base path for components, stacks and workflows configurations. We set it to an empty string because we've decided to use the ENV
+  var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo
+
+- `components.terraform.base_path` - the base path to the Terraform components (Terraform root modules). As we've described in
+  [Configure Repository](/quick-start/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory,
+  and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
+  with `components.terraform.base_path` to calculate the final path to the Terraform components
+
+- `components.terraform.apply_auto_approve`
+
+- `components.terraform.deploy_run_init`
+
+- `components.terraform.init_run_reconfigure`
+
+- `components.terraform.auto_generate_backend_file`
+
