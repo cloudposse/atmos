@@ -1,11 +1,11 @@
 ---
 title: CLI Configuration
 sidebar_position: 1
-description: Use the `atmos.yaml` configuration to control the behavior of the `atmos` CLI.
+description: Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI.
 ---
 
 :::note Purpose
-Use the `atmos.yaml` configuration to control the behavior of the `atmos` CLI.
+Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI
 :::
 
 Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
