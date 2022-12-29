@@ -295,7 +295,7 @@ Initial Atmos configuration can be controlled by these ENV vars:
 
 For this to work for both the `atmos` CLI and the Terraform provider, we recommend doing one of the following:
 
-- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` pointing to the root of the
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the root of the
   repo absolute path
 
 - Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the root of the

@@ -30,12 +30,17 @@ and regions (`us-east-2` and `us-west-2`):
 
 Atmos requires a few common directories and files, which need to be configured in the infrastructure repo:
 
-- `stacks` directory (required) - contains centralized stack configurations
 - `components` directory (required) - contains centralized component configurations
+- `stacks` directory (required) - contains centralized stack configurations
 - `atmos.yaml` (required) - CLI config file
 - `Makefile` (optional)
 - `Dockerfile` (optional)
 - `rootfs` directory (optional) - root filesystem for the Docker image (if `Dockerfile` is used)
+
+Atmos separates code from configuration (separation of concerns). The code is in the `components` directories and the configurations for different
+environments are in the `stacks` directory. This allows the code (Terraform and Helmfile components) to be environment-agnostic, meaning the
+components don't know and don't care how and where they will be provisioned. They can be provisioned into many accounts and regions - the
+configurations for different environments are defined in the `stacks` directory.
 
 <br/>
 
@@ -109,7 +114,7 @@ Initial Atmos configuration can be controlled by these ENV vars:
 
 For this to work for both the `atmos` CLI and the Terraform provider, we recommend doing one of the following:
 
-- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` pointing to the root of the
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the root of the
   repo absolute path
 
 - Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the root of the
