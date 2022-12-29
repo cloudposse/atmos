@@ -282,6 +282,15 @@ component's directory (e.g. `components/terraform/infra/vpc`), and we don't want
 
 :::
 
+:::note
+
+Initial Atmos configuration can be controlled by these ENV vars:
+
+- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Path to a folder where the `atmos.yaml` CLI config file is located
+- `ATMOS_BASE_PATH` - base path to `components` and `stacks` folders
+
+:::
+
 <br/>
 
 For this to work for both the `atmos` CLI and the Terraform provider, we recommend doing one of the following:
