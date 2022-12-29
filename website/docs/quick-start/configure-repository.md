@@ -26,7 +26,7 @@ and regions (`us-east-2` and `us-west-2`):
 - [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
 - [vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
 
-## Common directories and files
+## Common Directories and Files
 
 Atmos requires a few common directories and files, which need to be configured in the infrastructure repo:
 
@@ -73,7 +73,7 @@ The following example provides the simplest filesystem layout that Atmos can wor
 
 <br/>
 
-## `atmos.yaml` CLI config file location
+## `atmos.yaml` CLI Config File Location
 
 While placing `atmos.yaml` at the root of the repository will work for the `atmos` CLI, it will not work
 for [Component Remote State](/core-concepts/components/remote-state) because it uses
@@ -100,22 +100,27 @@ This means that `atmos.yaml` file must be at a location in the file system where
 
 For this to work for both the `atmos` CLI and the Terraform provider, we recommend doing one of the following:
 
-- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` pointing to the root of the
+  repo absolute path
 
-- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`)
+- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the root of the
+  repo absolute path
 
 - Put `atmos.yaml` at a location in the file system and then set the ENV var `ATMOS_CLI_CONFIG_PATH` to point to that location. The ENV var must
   point to a folder without the `atmos.yaml` file name. For example, if `atmos.yaml` is at `/atmos/config/atmos.yaml`,
-  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`
+  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the root of the repo absolute path
 
-- When working in a Docker container, put `atmos.yaml`
+- When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
   at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/rootfs/usr/local/etc/atmos/atmos.yaml)
   and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/complete/Dockerfile)
-  by executing the `COPY rootfs/ /` Docker command
+  by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the root of the repo
+  absolute path. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/complete)
+  uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
+  var `ATMOS_BASE_PATH` automatically to the root of the repo absolute path on local host
 
-## Final filesystem layout
+## Final Filesystem Layout
 
-Taking into account all the above, we'll place `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and use the following filesystem
+Taking into account all the above, we can place `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and use the following filesystem
 layout:
 
 ```console
