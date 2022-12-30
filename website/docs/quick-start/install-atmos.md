@@ -44,7 +44,7 @@ On Debian, use the Cloud Posse package repository:
 ```shell
 # Add the Cloud Posse package repository hosted by Cloudsmith
 apt-get update && apt-get install -y apt-utils curl
-curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' │ bash
 
 # Install atmos
 apt-get install atmos@="${ATMOS_VERSION}-*"
@@ -53,7 +53,7 @@ apt-get install atmos@="${ATMOS_VERSION}-*"
 ### RedHat/Centos (RPM)
 
 ```shell
-curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' | sudo -E bash
+curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' │ sudo -E bash
 
 # Install atmos
 sudo yum install atmos-${ATMOS_VERSION}.x86_64
@@ -65,7 +65,7 @@ On Alpine, use the Cloud Posse package repository:
 
 ```shell
 # Install the Cloud Posse package repository hosted by Cloudsmith
-curl -sSL 'https://apk.cloudposse.com/install.sh' | bash
+curl -sSL 'https://apk.cloudposse.com/install.sh' │ bash
 
 # Install atmos
 apk add atmos@cloudposse~=${ATMOS_VERSION}

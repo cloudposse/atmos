@@ -51,7 +51,7 @@ The filesystem layout should look like this:
    │   # Centralized components configuration. Components are broken down by tool
    ├── components
    │   └── terraform   # Terraform components (Terraform root modules)
-   |       ├── infra
+   │       ├── infra
    │       │   ├── vpc
    │       │   │   ├── component.yaml
    │       │   │   ├── context.tf

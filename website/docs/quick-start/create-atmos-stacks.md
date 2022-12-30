@@ -101,21 +101,21 @@ would look like this:
    │   # Centralized stacks configuration
    ├── stacks
    │   ├── catalog
-   |   │    └── vpc.yaml
-   |   │    └── vpc-flow-logs-bucket.yaml
-   │   └── ue2-dev.yaml
-   │   └── ue2-staging.yaml
-   │   └── ue2-prod.yaml
-   │   └── uw2-dev.yaml
-   │   └── uw2-staging.yaml
+   │   │    ├── vpc.yaml
+   │   │    └── vpc-flow-logs-bucket.yaml
+   │   ├── ue2-dev.yaml
+   │   ├── ue2-staging.yaml
+   │   ├── ue2-prod.yaml
+   │   ├── uw2-dev.yaml
+   │   ├── uw2-staging.yaml
    │   └── uw2-prod.yaml
    │  
    │   # Centralized components configuration. Components are broken down by tool
    ├── components
    │   └── terraform   # Terraform components (Terraform root modules)
-   |       ├── infra
+   │       ├── infra
    │       │   ├── vpc
-   │       │   ├── vpc-flow-logs-bucket
+   │       │   └── vpc-flow-logs-bucket
 ```
 
 <br/>
@@ -127,5 +127,54 @@ hundreds of accounts and regions that you operate in.
 
 ## Create Parent Stacks
 
-Although in this Quick Start guide we use just a few Terraform components which we want to provision into a few AWS accounts in just two AWS regions
-(which could be considered basic), we will use the Hierarchical Layout to show how the Atmos stacks can be configured for complex organizations.
+Although in this Quick Start guide we use just a few Terraform components which we want to provision into three AWS accounts in just two AWS regions
+(which could be considered basic), we will use the Hierarchical Layout to show how the Atmos stacks can be configured for very complex organizations
+and infrastructures.
+
+We will assume we are using just one Organization `acme` and just one AWS Organizational Unit `core`. But as you will notice, the layout
+can be easily extended to support many AWS Organizations and Organizational Units.
+
+Create the following filesystem layout:
+
+```console
+   │  
+   │   # Centralized stacks configuration
+   ├── stacks
+   │   ├── catalog
+   │   │    ├── vpc.yaml
+   │   │    └── vpc-flow-logs-bucket.yaml
+   │   ├── mixins
+   │   │    ├── region
+   │   │    │   ├── us-east-2.yaml
+   │   │    │   └── us-west-2.yaml
+   │   │    ├── stage
+   │   │    │   ├── dev.yaml
+   │   │    │   ├── prod.yaml
+   │   │    │   └── staging.yaml
+   │   ├── orgs
+   │   │    ├── acme
+   │   │    │   ├── _defaults.yaml
+   │   │    │   ├── core
+   │   │    │   │    ├── _defaults.yaml
+   │   │    │   │    ├── dev
+   │   │    │   │    │   ├── _defaults.yaml
+   │   │    │   │    │   ├── us-east-2.yaml
+   │   │    │   │    │   └── us-west-2.yaml
+   │   │    │   │    ├── prod
+   │   │    │   │    │   ├── _defaults.yaml
+   │   │    │   │    │   ├── us-east-2.yaml
+   │   │    │   │    │   └── us-west-2.yaml
+   │   │    │   │    ├── staging
+   │   │    │   │    │   ├── _defaults.yaml
+   │   │    │   │    │   ├── us-east-2.yaml
+   │   │    │   │    │   └── us-west-2.yaml
+   │  
+   │   # Centralized components configuration. Components are broken down by tool
+   ├── components
+   │   └── terraform   # Terraform components (Terraform root modules)
+   │       ├── infra
+   │       │   ├── vpc
+   │       │   └── vpc-flow-logs-bucket
+```
+
+<br/>
