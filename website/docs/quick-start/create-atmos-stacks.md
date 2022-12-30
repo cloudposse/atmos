@@ -131,7 +131,7 @@ Although in this Quick Start guide we use just a few Terraform components which 
 (which could be considered basic), we will use the Hierarchical Layout to show how the Atmos stacks can be configured for very complex organizations
 and infrastructures.
 
-We will assume we are using just one Organization `acme` and just one AWS Organizational Unit `core`. But as you will notice, the layout
+We will assume we are using just one Organization `acme` and just one AWS Organizational Unit (OU) `core`. But as you will notice, the layout
 can be easily extended to support many AWS Organizations and Organizational Units.
 
 Create the following filesystem layout:
@@ -176,5 +176,13 @@ Create the following filesystem layout:
    │       │   ├── vpc
    │       │   └── vpc-flow-logs-bucket
 ```
+
+### Configure Region and Stage Mixins
+
+[Mixins](/core-concepts/stacks/mixins) are a special kind of "[import](/core-concepts/stacks/imports)".
+It's simply a convention we recommend to distribute reusable snippets of configuration that alter the behavior in some deliberate way.
+Mixins are not handled in any special way. They are technically identical to all other imports.
+
+### Configure Parent Stacks
 
 <br/>
