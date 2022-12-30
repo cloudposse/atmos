@@ -99,13 +99,19 @@ The `atmos.yaml` configuration file has the following sections:
   and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
   with `components.terraform.base_path` to calculate the final path to the Terraform components
 
-- `components.terraform.apply_auto_approve` - if set to `true`, Atmos automatically adds `-auto-approve` option to instruct Terraform to apply the
-  plan without asking for confirmation when executing `atmos terraform apply` command
+- `components.terraform.apply_auto_approve` - if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the
+  plan without asking for confirmation when executing `terraform apply` command
 
 - `components.terraform.deploy_run_init` - if set to `true`, Atmos runs `terraform init` before
   executing [`atmos terraform deploy`](/cli/commands/terraform/deploy) command
 
-- `components.terraform.init_run_reconfigure`
+- `components.terraform.init_run_reconfigure` - if set to `true`, Atmos automatically adds the `-reconfigure` option to update the backend
+  configuration when executing `terraform init` command
 
-- `components.terraform.auto_generate_backend_file`
+- `components.terraform.auto_generate_backend_file` - if set to `true`, Atmos automatically generates the Terraform backend file from the component
+  configuration when executing `terraform plan` and `terraform apply` commands
 
+- `stacks.base_path` - the base path to the Atmos stacks. As we've described in
+  [Configure Repository](/quick-start/configure-repository), we've decided to put the stack configurations into the `stacks` directory,
+  and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
+  with `stacks.base_path` to calculate the final path to the stacks
