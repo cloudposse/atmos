@@ -78,13 +78,13 @@ logs:
   verbose: false
 
 # Custom CLI commands
-commands: [ ]
+commands: []
 
 # Integrations
-integrations: { }
+integrations: {}
 
 # Validation schemas (for validating atmos stacks and components)
-schemas: { }
+schemas: {}
 ```
 
 <br/>
@@ -135,3 +135,5 @@ to [CLI Configuration](/cli/configuration).
   defined (inline or via imports)
 
 - `workflows.base_path` - the base path to Atmos [workflows](/core-concepts/workflows)
+
+- `logs.verbose` - set to `true` to increase log verbosity
