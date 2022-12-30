@@ -71,3 +71,16 @@ The filesystem layout should look like this:
    │       │   │   ├── variables.tf
    │       │   │   ├── versions.tf
 ```
+
+<br/>
+
+Each component follows the [Standard Module Structure](https://developer.hashicorp.com/terraform/language/modules/develop/structure) that Terraform
+recommends. There are a few additions:
+
+- `context.tf` - this file contains all the common variables that all Terraform modules and components consume (to make the component's `variables.tf`
+  file DRY). This is a standard file that is copied into each component. The file also defines the context
+  variables (`namespace`, `tenant`, `environment`, `stage`) which are used by Atmos to search for Atmos stacks when executing
+  the [CLI commands](/cli/cheatsheet)
+
+- `remote-state.tf` in the `vpc` component
+
