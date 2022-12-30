@@ -65,7 +65,7 @@ components:
 These default Atmos components will be imported into the parent Atmos stacks. The default variables (in the `vars` sections) will be reused, and can
 also be overridden in the derived Atmos components by using [Atmos Component Inheritance](/core-concepts/components/inheritance).
 
-## Create Parent Stacks
+## Atmos Parent Stacks
 
 When executing the [CLI commands](/cli/cheatsheet), Atmos does not use the stack file names and their filesystem locations to search for the stack
 where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The
@@ -74,20 +74,58 @@ stack config file names cam be anything, and they can be in any folders in any s
 For example, when executing the `atmos terraform apply infra/vpc -s tenant1-ue2-dev`
 command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"`
 (see [Configure CLI](/quick-start/configure-cli)) and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second
-part is `environment`, and the third part is `stage`. Then Atmos searches for the stack configuration file (in the `stacks` directory)
+part is `environment`, and the third part is `stage`. Then Atmos searches for the parent stack configuration file (in the `stacks` directory)
 where `tenant: tenant1`, `environment: ue2` and `stage: dev` are defined (inline or via imports).
+
+Atmos parent stacks can be configured using a Basic Layout or a Hierarchical Layout.
+
+The Basic Layout can be used when you have a very simple configuration using just a few accounts and regions.
+The Hierarchical Layout should be used when you have a very complex organization, for example, with many AWS Organizational Units (which Atmos
+refers to as tenants) and dozens of AWS accounts and region.
 
 ### Basic Layout
 
-A basic form of organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have so
-many environments and stages.
+A basic form of stack organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have
+so many environments and stages.
 
 For example, `$environment` might be `ue2` (for `us-east-2`) and `$stage` might be `prod` which would result in `stacks/ue2-prod.yaml`
 
 Some resources, however, are global in scope. For example, Route53 and IAM might not make sense to tie to a region. These are what we call "global
 resources". You might want to put these into a file like `stacks/global-region.yaml` to connote that they are not tied to any particular region.
 
+In out example, the filesystem layout for the stacks Basic Layout using `dev`, `staging` and `prod` accounts and `us-east-2` and `us-west-2` regions
+would look like this:
+
+```console
+   │  
+   │   # Centralized stacks configuration
+   ├── stacks
+   │   ├── catalog
+   |   │    └── vpc.yaml
+   |   │    └── vpc-flow-logs-bucket.yaml
+   │   └── ue2-dev.yaml
+   │   └── ue2-staging.yaml
+   │   └── ue2-prod.yaml
+   │   └── uw2-dev.yaml
+   │   └── uw2-staging.yaml
+   │   └── uw2-prod.yaml
+   │  
+   │   # Centralized components configuration. Components are broken down by tool
+   ├── components
+   │   └── terraform   # Terraform components (Terraform root modules)
+   |       ├── infra
+   │       │   ├── vpc
+   │       │   ├── vpc-flow-logs-bucket
+```
+
+<br/>
+
 ### Hierarchical Layout
 
 We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens or
-hundreds of accounts and regions that you operate in. Use [Catalogs](/core-concepts/stacks/catalogs) to organize your Stack configurations.
+hundreds of accounts and regions that you operate in.
+
+## Create Parent Stacks
+
+Although in this Quick Start guide we use just a few Terraform components which we want to provision into a few AWS accounts in just two AWS regions
+(which could be considered basic), we will use the Hierarchical Layout to show how the Atmos stacks can be configured for complex organizations.
