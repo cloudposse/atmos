@@ -134,7 +134,7 @@ and infrastructures.
 We will assume we are using just one Organization `acme` and just one AWS Organizational Unit (OU) `core`. But as you will notice, the layout
 can be easily extended to support many AWS Organizations and Organizational Units.
 
-Create the following filesystem layout:
+Create the following filesystem layout (which will be the final layout for this Quick Start guide):
 
 ```console
    │  
@@ -182,6 +182,69 @@ Create the following filesystem layout:
 [Mixins](/core-concepts/stacks/mixins) are a special kind of "[import](/core-concepts/stacks/imports)".
 It's simply a convention we recommend to distribute reusable snippets of configuration that alter the behavior in some deliberate way.
 Mixins are not handled in any special way. They are technically identical to all other imports.
+
+In `stacks/mixins/region/us-east-2.yaml`, add the following config:
+
+```yaml title="stacks/mixins/region/us-east-2.yaml"
+vars:
+  region: us-east-2
+  environment: ue2
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: infra/vpc
+      vars:
+        availability_zones:
+          - us-east-2a
+          - us-east-2b
+          - us-east-2c
+```
+
+In `stacks/mixins/region/us-west-2.yaml`, add the following config:
+
+```yaml title="stacks/mixins/region/us-west-2.yaml"
+vars:
+  region: us-west-2
+  environment: uw2
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: infra/vpc
+      vars:
+        availability_zones:
+          - us-west-2a
+          - us-west-2b
+          - us-west-2c
+```
+
+In `stacks/mixins/stage/dev.yaml`, add the following config:
+
+```yaml title="stacks/mixins/stage/dev.yaml"
+vars:
+  stage: dev
+```
+
+In `stacks/mixins/stage/prod.yaml`, add the following config:
+
+```yaml title="stacks/mixins/stage/prod.yaml"
+vars:
+  stage: prod
+```
+
+In `stacks/mixins/stage/staging.yaml`, add the following config:
+
+```yaml title="stacks/mixins/stage/staging.yaml"
+vars:
+  stage: staging
+```
+
+<br/>
+
+### Configure Defaults for Organization, OU and accounts
 
 ### Configure Parent Stacks
 
