@@ -10,7 +10,7 @@ Next step is to create and configure [Atmos stacks](/core-concepts/stacks).
 
 ## Create Catalog for Components
 
-Atmos uses the "catalog" pattern to configure default settings for Atmos components.
+Atmos uses the [Catalog](/core-concepts/stacks/catalogs) pattern to configure default settings for Atmos components.
 All the common default configs for each Atmos component should be in a separate file in the `stacks/catalog` directory.
 The file then get imported into the parent Atmos stacks.
 This makes the stack configurations DRY by reusing the component's config that is common for all environments.
@@ -76,3 +76,18 @@ command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking a
 (see [Configure CLI](/quick-start/configure-cli)) and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second
 part is `environment`, and the third part is `stage`. Then Atmos searches for the stack configuration file (in the `stacks` directory)
 where `tenant: tenant1`, `environment: ue2` and `stage: dev` are defined (inline or via imports).
+
+### Basic Layout
+
+A basic form of organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have so
+many environments and stages.
+
+For example, `$environment` might be `ue2` (for `us-east-2`) and `$stage` might be `prod` which would result in `stacks/ue2-prod.yaml`
+
+Some resources, however, are global in scope. For example, Route53 and IAM might not make sense to tie to a region. These are what we call "global
+resources". You might want to put these into a file like `stacks/global-region.yaml` to connote that they are not tied to any particular region.
+
+### Hierarchical Layout
+
+We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens or
+hundreds of accounts and regions that you operate in. Use [Catalogs](/core-concepts/stacks/catalogs) to organize your Stack configurations.
