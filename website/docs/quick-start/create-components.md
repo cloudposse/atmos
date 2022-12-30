@@ -77,10 +77,39 @@ The filesystem layout should look like this:
 Each component follows the [Standard Module Structure](https://developer.hashicorp.com/terraform/language/modules/develop/structure) that Terraform
 recommends. There are a few additions:
 
-- `context.tf` - this file contains all the common variables that all Terraform modules and components consume (to make the component's `variables.tf`
+- `context.tf` - this file contains all the common variables that Terraform modules and components consume (to make the component's `variables.tf`
   file DRY). This is a standard file that is copied into each component. The file also defines the context
   variables (`namespace`, `tenant`, `environment`, `stage`) which are used by Atmos to search for Atmos stacks when executing
   the [CLI commands](/cli/cheatsheet)
 
-- `remote-state.tf` in the `vpc` component
+- `remote-state.tf` in the `vpc` component - this file configures the
+  [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
+  for the `vpc-flow-logs-bucket` component. The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
+  configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket
 
+```hcl title="components/terraform/infra/vpc/remote-state.tf"
+module "vpc_flow_logs_bucket" {
+  count = var.vpc_flow_logs_enabled ? 1 : 0
+
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.3.1"
+
+  # Specify the Atmos component name (defined in YAML stack config files) 
+  # for which to get the remote state outputs
+  component = var.vpc_flow_logs_bucket_component_name
+
+  # Override the context variables to point to a different Atmos stack if the 
+  # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region
+  stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
+  tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
+  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
+
+  # `context` input is a way to provide the information about the stack (using the context
+  # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
+  context = module.this.context
+}
+```
+
+<br/>
+
+For a complete description of how Atmos components use remote state, refer to [Component Remote State](/core-concepts/components/remote-state).
