@@ -10,8 +10,8 @@ Next step is to create and configure [Atmos stacks](/core-concepts/stacks).
 
 ## Create Catalog for Components
 
-Atmos uses the [Catalog](/core-concepts/stacks/catalogs) pattern to configure default settings for Atmos components.
-All the common default configs for each Atmos component should be in a separate file in the `stacks/catalog` directory.
+Atmos supports the [Catalog](/core-concepts/stacks/catalogs) pattern to configure default settings for Atmos components.
+All the common default settings for each Atmos component should be in a separate file in the `stacks/catalog` directory.
 The file then get imported into the parent Atmos stacks.
 This makes the stack configurations DRY by reusing the component's config that is common for all environments.
 
