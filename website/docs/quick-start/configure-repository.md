@@ -56,21 +56,21 @@ The following example provides the simplest filesystem layout that Atmos can wor
 ```console
    │  
    │   # Centralized stacks configuration
-   ├── stacks/
+   ├── stacks
    │   └── <stack_1>
    │   └── <stack_2>
    │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   ├── components/
-   │   ├── terraform/   # Terraform components (Terraform root modules)
-   │   │   ├── <terraform_component_1>/
-   │   │   ├── <terraform_component_2>/
-   │   │   ├── <terraform_component_3>/
-   │   └── helmfile/  # Helmfile components are organized by Helm chart
-   │   │   ├── <helmfile_component_1>/
-   │   │   ├── <helmfile_component_2>/
-   │   │   ├── <helmfile_component_3>/
+   ├── components
+   │   ├── terraform   # Terraform components (Terraform root modules)
+   │   │   ├── <terraform_component_1>
+   │   │   ├── <terraform_component_2>
+   │   │   ├── <terraform_component_3>
+   │   └── helmfile  # Helmfile components are organized by Helm chart
+   │   │   ├── <helmfile_component_1>
+   │   │   ├── <helmfile_component_2>
+   │   │   ├── <helmfile_component_3>
    │
    │   # Atmos CLI configuration
    ├── atmos.yaml
@@ -140,17 +140,17 @@ layout:
 ```console
    │  
    │   # Centralized stacks configuration
-   ├── stacks/
+   ├── stacks
    │   └── <stack_1>
    │   └── <stack_2>
    │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   ├── components/
-   │   └── terraform/   # Terraform components (Terraform root modules)
-   |       ├── infra/
-   │       │   ├── vpc/
-   │       │   ├── vpc-flow-logs-bucket/
+   ├── components
+   │   └── terraform   # Terraform components (Terraform root modules)
+   |       ├── infra
+   │       │   ├── vpc
+   │       │   ├── vpc-flow-logs-bucket
 ```
 
 <br/>

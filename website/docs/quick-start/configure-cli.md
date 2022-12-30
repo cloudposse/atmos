@@ -136,4 +136,5 @@ to [CLI Configuration](/cli/configuration).
 
 - `workflows.base_path` - the base path to Atmos [workflows](/core-concepts/workflows)
 
-- `logs.verbose` - set to `true` to increase log verbosity
+- `logs.verbose` - set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and 
+   process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack
