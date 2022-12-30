@@ -4,14 +4,41 @@ sidebar_position: 5
 sidebar_label: Create Components
 ---
 
-In the previous steps, we've decided on the following:
+In the previous steps, we've configured the repository, and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
+components into three AWS accounts (`dev`, `staging`, `prod`) in two AWS regions (`us-east-2` and `us-west-2`). We've also configured the Atmos CLI to
+search for the components in the `components/terraform` directory.
 
-- Use a monorepo to configure and provision two Terraform components into three AWS accounts and two AWS regions
-- The filesystem layout for the infrastructure monorepo
-- To be able to use [Component Remote State](/core-concepts/components/remote-state), we put the `atmos.yaml` CLI config file
-  into `/usr/local/etc/atmos/atmos.yaml` folder and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo
+We'll also put the Terraform components into the `infra` folder under `components/terraform` (note that a component can be in
+the `components/terraform` directory itself, or in any subfolder at any level in the directory).
 
-Next step is to create Terraform components `vpc-flow-logs-bucket` and `vpc`.
+Next step is to create the Terraform components `vpc-flow-logs-bucket` and `vpc`.
+
+There are a few ways to create the Terraform components:
+
+- Copy the `vpc-flow-logs-bucket` component from the Atmos
+  example [components/terraform/infra/vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
+
+- Copy the `vpc` component from the Atmos
+  example [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
+
+or
+
+- Copy the `component.yaml` component vendoring config file from the Atmos
+  example [components/terraform/infra/vpc-flow-logs-bucket/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket/component.yaml)
+  into `components/terraform/infra/vpc-flow-logs-bucket/component.yaml` and then run the Atmos
+  command `atmos vendor pull --component infra/vpc-flow-logs-bucket` from
+  the root of the repo. The command will copy all the component's files from the open-source component
+  repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/vpc-flow-logs-bucket)
+
+- Copy the `component.yaml` component vendoring config file from the Atmos
+  example [components/terraform/infra/vpc/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/components/terraform/infra/vpc/component.yaml)
+  into `components/terraform/infra/vpc/component.yaml` and then run the Atmos command `atmos vendor pull --component infra/vpc` from
+  the root of the repo. The command will copy all the component's files from the open-source component
+  repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/vpc)
+
+The filesystem layout should look like this:
+
+<br/>
 
 ```console
    │  
@@ -26,6 +53,7 @@ Next step is to create Terraform components `vpc-flow-logs-bucket` and `vpc`.
    │   └── terraform   # Terraform components (Terraform root modules)
    |       ├── infra
    │       │   ├── vpc
+   │       │   │   ├── component.yaml
    │       │   │   ├── context.tf
    │       │   │   ├── main.tf
    │       │   │   ├── outputs.tf
@@ -35,6 +63,7 @@ Next step is to create Terraform components `vpc-flow-logs-bucket` and `vpc`.
    │       │   │   ├── versions.tf
    │       │   │   ├── vpc-flow-logs.tf
    │       │   ├── vpc-flow-logs-bucket
+   │       │   │   ├── component.yaml
    │       │   │   ├── context.tf
    │       │   │   ├── main.tf
    │       │   │   ├── outputs.tf
