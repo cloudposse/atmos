@@ -89,12 +89,15 @@ schemas: { }
 
 <br/>
 
-The `atmos.yaml` configuration file has the following sections:
+The `atmos.yaml` configuration file has the following sections.
+
+__NOTE:__ below is the description of the sections relevant to this Quick Start guide. For the description of all the sections, refer
+to [CLI Configuration](/cli/configuration).
 
 - `base_path` - the base path for components, stacks and workflows configurations. We set it to an empty string because we've decided to use the ENV
   var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo
 
-- `components.terraform.base_path` - the base path to the Terraform components (Terraform root modules). As we've described in
+- `components.terraform.base_path` - the base path to the Terraform components (Terraform root modules). As described in
   [Configure Repository](/quick-start/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory,
   and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
   with `components.terraform.base_path` to calculate the final path to the Terraform components
@@ -111,7 +114,24 @@ The `atmos.yaml` configuration file has the following sections:
 - `components.terraform.auto_generate_backend_file` - if set to `true`, Atmos automatically generates the Terraform backend file from the component
   configuration when executing `terraform plan` and `terraform apply` commands
 
-- `stacks.base_path` - the base path to the Atmos stacks. As we've described in
+- `stacks.base_path` - the base path to the Atmos stacks. As described in
   [Configure Repository](/quick-start/configure-repository), we've decided to put the stack configurations into the `stacks` directory,
   and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
   with `stacks.base_path` to calculate the final path to the stacks
+
+- `stacks.included_paths` - list of file paths to the top-level stacks in the `stacks` directory to include in search when Atmos searches for the
+  stack where the component is defined when executing `atmos` commands
+
+- `stacks.excluded_paths` - list of file paths to the top-level stacks in the `stacks` directory to exclude from search when Atmos searches for the
+  stack where the component is defined when executing `atmos` commands
+
+- `stacks.name_pattern` - Atmos stack name pattern. When executing `atmos` commands, Atmos does not use the configuration file names and their
+  filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context
+  variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names cam be anything, and they can be in
+  any folders in any sub-folders in the `stacks` directory. For example, when executing the `atmos terraform apply infra/vpc -s tenant1-ue2-dev`
+  command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"` and processing
+  the tokens, Atmos knows that the first part of the stack name is `tenant`, the second part is `environment`, and the third part is `stage`. Then
+  Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are
+  defined (inline or via imports)
+
+- `workflows.base_path` - the base path to Atmos [workflows](/core-concepts/workflows)
