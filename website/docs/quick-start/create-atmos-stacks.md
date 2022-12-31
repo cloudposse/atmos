@@ -244,6 +244,10 @@ vars:
 
 <br/>
 
+As we can see, in the region and stage mixins, besides some other common variables, we are defining the global context variables `environment`
+and `stage`, which Atmos uses when searching for a component in a stack. These mixins then get imported into the parent Atmos stacks without defining
+the context variables in each parent stack, making the configuration DRY.
+
 ### Configure Defaults for Organization, OU and accounts
 
 ### Configure Parent Stacks
