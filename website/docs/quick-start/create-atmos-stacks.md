@@ -284,8 +284,24 @@ import:
 ```
 
 In the file, we import the mixing for the `dev` account (which defines `stage: dev` variable) and then the defaults for the `core` tenant (which,
-as was described above, imports the defaults for the Organization). After processing all these imports, Atmos 
+as was described above, imports the defaults for the Organization). After processing all these imports, Atmos determines the values for the three
+context variables `namespace`, `tenant` and `stage`, which it then sends to the Terraform components as Terraform variables.
+
+Similar to the `dev` account, add the following configs for the `staging` and `prod` accounts:
+
+```yaml title="stacks/orgs/acme/core/staging/_defaults.yaml"
+import:
+  - mixins/stage/staging
+  - orgs/acme/core/_defaults
+```
+
+```yaml title="stacks/orgs/acme/core/prod/_defaults.yaml"
+import:
+  - mixins/stage/prod
+  - orgs/acme/core/_defaults
+```
+
+<br/>
 
 ### Configure Parent Stacks
 
-<br/>
