@@ -15,13 +15,13 @@ All the common default settings for each Atmos component should be in a separate
 The file then get imported into the parent Atmos stacks.
 This makes the stack configurations DRY by reusing the component's config that is common for all environments.
 
-In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket-defaults` Atmos
+In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
 component:
 
 ```yaml title="stacks/catalog/vpc-flow-logs-bucket.yaml"
 components:
   terraform:
-    vpc-flow-logs-bucket-defaults:
+    vpc-flow-logs-bucket/defaults:
       metadata:
         # `metadata.type: abstract` makes the component `abstract`,
         # explicitly prohibiting the component from being deployed.
@@ -36,12 +36,12 @@ components:
         traffic_type: "ALL"
 ```
 
-In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc-defaults` Atmos component:
+In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc/defaults` Atmos component:
 
 ```yaml title="stacks/catalog/vpc.yaml"
 components:
   terraform:
-    vpc-defaults:
+    vpc/defaults:
       metadata:
         # `metadata.type: abstract` makes the component `abstract`,
         # explicitly prohibiting the component from being deployed.
@@ -305,3 +305,71 @@ import:
 
 ### Configure Parent Stacks
 
+After we've configured the catalog for the components, the mixins for the regions and stages, and the defaults for the Organization, OU and accounts,
+the final step is to configure the Atmos parent (top-level) stacks and the Atmos components in the stacks.
+
+In `stacks/orgs/acme/core/dev/us-east-2.yaml`, add the following config:
+
+```yaml title="stacks/orgs/acme/core/dev/us-east-2.yaml"
+# Import the region mixin, the defaults, and the base component configurations from the `catalog`.
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+# File extensions are optional (if not specified, `.yaml` is used by default).
+import:
+  - mixins/region/us-east-2
+  - orgs/acme/core/dev/_defaults
+  - catalog/vpc
+  - catalog/vpc-flow-logs-bucket
+
+components:
+  terraform:
+
+    vpc-flow-logs-bucket-1:
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: infra/vpc-flow-logs-bucket
+        inherits:
+          # Inherit all settings and variables from the 
+          # `vpc-flow-logs-bucket/defaults` base Atmos component
+          - vpc-flow-logs-bucket/defaults
+      vars:
+        # Define variables that are specific for this component
+        # and are not set in the base component
+        name: vpc-flow-logs-bucket-1
+        # Override the default variables from the base component
+        traffic_type: "REJECT"
+
+    vpc-1:
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: infra/vpc
+        inherits:
+          # Inherit all settings and variables from the `vpc/defaults` base Atmos component
+          - vpc/defaults
+      vars:
+        # Define variables that are specific for this component
+        # and are not set in the base component
+        name: vpc-1
+        ipv4_primary_cidr_block: 10.8.0.0/18
+        # Override the default variables from the base component
+        vpc_flow_logs_enabled: true
+        vpc_flow_logs_traffic_type: "REJECT"
+
+        # Specify the name of the Atmos component that provides configuration
+        # for the `infra/vpc-flow-logs-bucket` Terraform component
+        vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket-1
+
+        # Override the context variables to point to a different Atmos stack if the 
+        # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region.
+
+        # If the bucket is provisioned in a different AWS account, 
+        # set `vpc_flow_logs_bucket_stage_name`
+        # vpc_flow_logs_bucket_stage_name: prod
+
+        # If the bucket is provisioned in a different AWS OU, 
+        # set `vpc_flow_logs_bucket_tenant_name`
+        # vpc_flow_logs_bucket_tenant_name: core
+
+        # If the bucket is provisioned in a different AWS region, 
+        # set `vpc_flow_logs_bucket_environment_name`
+        # vpc_flow_logs_bucket_environment_name: uw2
+```

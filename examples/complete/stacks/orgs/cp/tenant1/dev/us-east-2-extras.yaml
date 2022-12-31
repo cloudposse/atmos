@@ -11,7 +11,7 @@ components:
         spacelift:
           workspace_enabled: false
       vars:
-        cidr_block: 10.12.0.0/18
+        ipv4_primary_cidr_block: 10.12.0.0/18
         enabled: true
         name: "new"
         nat_gateway_enabled: false

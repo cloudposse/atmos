@@ -15,4 +15,4 @@ components:
   terraform:
     "infra/vpc":
       vars:
-        cidr_block: 10.9.0.0/18
+        ipv4_primary_cidr_block: 10.9.0.0/18

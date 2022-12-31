@@ -24,7 +24,7 @@ components:
     "infra/vpc":
       vars:
         name: "co!!,mmon"
-        cidr_block: 10.10.0.0/18
+        ipv4_primary_cidr_block: 10.10.0.0/18
         availability_zones:
           - us-east-2a
           - us-east-2b

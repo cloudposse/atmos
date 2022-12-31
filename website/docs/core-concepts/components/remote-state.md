@@ -60,13 +60,13 @@ the `us-east-2` region by setting `environment = "ue2"`).
 
 ## Configure and Provision `vpc-flow-logs-bucket` Component
 
-In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket-defaults` Atmos
+In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
 component:
 
 ```yaml title="stacks/catalog/vpc-flow-logs-bucket.yaml"
 components:
   terraform:
-    vpc-flow-logs-bucket-defaults:
+    vpc-flow-logs-bucket/defaults:
       metadata:
         # `metadata.type: abstract` makes the component `abstract`,
         # explicitly prohibiting the component from being deployed.
@@ -101,8 +101,8 @@ components:
         component: infra/vpc-flow-logs-bucket
         inherits:
           # Inherit all settings and variables from the 
-          # `vpc-flow-logs-bucket-defaults` base Atmos component
-          - vpc-flow-logs-bucket-defaults
+          # `vpc-flow-logs-bucket/defaults` base Atmos component
+          - vpc-flow-logs-bucket/defaults
       vars:
         # Define variables that are specific for this component
         # and are not set in the base component
@@ -178,12 +178,12 @@ resource "aws_flow_log" "default" {
 }
 ```
 
-In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc-defaults` Atmos component:
+In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc/defaults` Atmos component:
 
 ```yaml title="stacks/catalog/vpc.yaml"
 components:
   terraform:
-    vpc-defaults:
+    vpc/defaults:
       metadata:
         # `metadata.type: abstract` makes the component `abstract`,
         # explicitly prohibiting the component from being deployed.
@@ -220,12 +220,13 @@ components:
         # Point to the Terraform component in `components/terraform` folder
         component: infra/vpc
         inherits:
-          # Inherit all settings and variables from the `vpc-defaults` base Atmos component
-          - vpc-defaults
+          # Inherit all settings and variables from the `vpc/defaults` base Atmos component
+          - vpc/defaults
       vars:
         # Define variables that are specific for this component
         # and are not set in the base component
         name: vpc-1
+        ipv4_primary_cidr_block: 10.8.0.0/18
         # Override the default variables from the base component
         vpc_flow_logs_enabled: true
         vpc_flow_logs_traffic_type: "REJECT"
