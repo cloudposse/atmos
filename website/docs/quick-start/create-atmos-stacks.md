@@ -408,3 +408,12 @@ components:
         name: vpc-1
         ipv4_primary_cidr_block: 10.9.0.0/18
 ```
+
+<br/>
+
+Similar to the `dev` account, create the parent stacks for the `staging` and `prod` accounts for both `us-east-2` and `us-west-2` regions in the files
+`stacks/orgs/acme/core/staging/us-east-2.yaml`, `stacks/orgs/acme/core/staging/us-west-2.yaml` , `stacks/orgs/acme/core/prod/us-east-2.yaml` and
+`stacks/orgs/acme/core/prod/us-west-2.yaml`.
+
+For clarity, we skip these configurations here since they are similar to what we showed for the `dev`
+account except for importing different region mixins and the defaults, and providing different values for components' variables in different stacks.
