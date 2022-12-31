@@ -250,6 +250,42 @@ the context variables in each parent stack, making the configuration DRY.
 
 ### Configure Defaults for Organization, OU and accounts
 
+The `_defaults.yaml` files contain the default settings for the Organization(s), Organizational Unit(s) and AWS accounts.
+
+In `stacks/orgs/acme/_defaults.yaml`, add the following config:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+vars:
+  namespace: acme
+```
+
+The file defines the context variable `namespace` for the entire `acme` Organization.
+
+In `stacks/orgs/acme/core/_defaults.yaml`, add the following config for the `core` OU (tenant):
+
+```yaml title="stacks/orgs/acme/core/_defaults.yaml"
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: core
+```
+
+In the `stacks/orgs/acme/core/_defaults.yaml` file, we import the defaults for the Organization and define the context variable `tenant` (which
+corresponds to the `core` Organizational Unit). When Atmos processes this stack config, it will import and deep-merge all the variables defined in the
+imported files and inline.
+
+In `stacks/orgs/acme/core/dev/_defaults.yaml`, add the following config for the `dev` account:
+
+```yaml title="stacks/orgs/acme/core/dev/_defaults.yaml"
+import:
+  - mixins/stage/dev
+  - orgs/acme/core/_defaults
+```
+
+In the file, we import the mixing for the `dev` account (which defines `stage: dev` variable) and then the defaults for the `core` tenant (which,
+as was described above, imports the defaults for the Organization). After processing all these imports, Atmos 
+
 ### Configure Parent Stacks
 
 <br/>
