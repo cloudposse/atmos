@@ -285,7 +285,8 @@ import:
 
 In the file, we import the mixing for the `dev` account (which defines `stage: dev` variable) and then the defaults for the `core` tenant (which,
 as was described above, imports the defaults for the Organization). After processing all these imports, Atmos determines the values for the three
-context variables `namespace`, `tenant` and `stage`, which it then sends to the Terraform components as Terraform variables.
+context variables `namespace`, `tenant` and `stage`, which it then sends to the Terraform components as Terraform variables. We are using hierarchical
+imports here.
 
 Similar to the `dev` account, add the following configs for the `staging` and `prod` accounts:
 
@@ -372,4 +373,38 @@ components:
         # If the bucket is provisioned in a different AWS region, 
         # set `vpc_flow_logs_bucket_environment_name`
         # vpc_flow_logs_bucket_environment_name: uw2
+```
+
+In the file, we first import the region mixin, the defaults for the Organization, OU and account (using hierarchical imports), and then the base
+component configurations from the catalog. Then we define two Atmos components `vpc-flow-logs-bucket-1` and `vpc-1`, which inherit the base config
+from the default Atmos components in the catalog and define and override some variables specific to the components in the stacks.
+
+Similarly, create the parent Atmos stack for the `dev` account in `us-west-2` region:
+
+```yaml title="stacks/orgs/acme/core/dev/us-west-2.yaml"
+import:
+  - mixins/region/us-west-2
+  - orgs/acme/core/dev/_defaults
+  - catalog/vpc
+  - catalog/vpc-flow-logs-bucket
+
+components:
+  terraform:
+
+    vpc-flow-logs-bucket-1:
+      metadata:
+        component: infra/vpc-flow-logs-bucket
+        inherits:
+          - vpc-flow-logs-bucket/defaults
+      vars:
+        name: vpc-flow-logs-bucket-1
+
+    vpc-1:
+      metadata:
+        component: infra/vpc
+        inherits:
+          - vpc/defaults
+      vars:
+        name: vpc-1
+        ipv4_primary_cidr_block: 10.9.0.0/18
 ```
