@@ -27,14 +27,16 @@ func init() {
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
 	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, false)
-	if err != nil {
+	if err != nil && err != cfg.NotFound {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
 
-	// Add custom commands from the CLI config
-	err = processCustomCommands(cliConfig.Commands, RootCmd, true)
-	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
+	// if CLI configuration was found add its custom commands
+	if err == nil {
+		err = processCustomCommands(cliConfig.Commands, RootCmd, true)
+		if err != nil {
+			u.PrintErrorToStdErrorAndExit(err)
+		}
 	}
 }
 
