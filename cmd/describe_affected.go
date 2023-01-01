@@ -12,7 +12,7 @@ var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
 	Short:              "Execute 'describe affected' command",
 	Long:               `This command produces a list of the affected Atmos components and stacks given two Git commits: atmos describe stacks [options]`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeAffectedCmd(cmd, args)
 		if err != nil {

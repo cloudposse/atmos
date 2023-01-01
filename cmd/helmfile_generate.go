@@ -9,7 +9,7 @@ var helmfileGenerateCmd = &cobra.Command{
 	Use:                "generate",
 	Short:              "Execute 'helmfile generate' commands",
 	Long:               "This command generates configurations for helmfile components",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
 func init() {
