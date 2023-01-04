@@ -49,10 +49,12 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
 
 ## Flags
 
-| Flag        | Description | Alias | Required |
-|:------------|:------------|:------|:---------|
-| `--stack`   | Atmos stack | `-s`  | yes      |
-| `--dry-run` | Dry-run     |       | no       |
+| Flag                | Description                                                                                             | Alias | Required |
+|:--------------------|:--------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--stack`           | Atmos stack                                                                                             | `-s`  | yes      |
+| `--dry-run`         | Dry run                                                                                                 |       | no       |
+| `--deploy-run-init` | Enable/disable running `terraform init` before executing the command                                    |       | no       |
+| `--from-plan`       | If the flag is specified, use the previously generated `planfile` instead of generating a new `varfile` |       | no       |
 
 <br/>
 
