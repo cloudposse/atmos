@@ -58,7 +58,7 @@ the `us-east-2` region by setting `environment = "ue2"`).
 
 <br/>
 
-## Configure and Provision `vpc-flow-logs-bucket` Component
+## Configure and Provision the `vpc-flow-logs-bucket` Component
 
 In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
 component:
