@@ -10,7 +10,7 @@ provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and
 
 :::info
 
-In Atmos, Remote State is implemented by using these modules:
+In Atmos, Terraform Remote State is implemented by using these modules:
 
 - [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) - The Cloud Posse Terraform Provider for various utilities,
   including stack configuration management
