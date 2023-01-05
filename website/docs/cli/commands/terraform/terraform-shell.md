@@ -27,7 +27,7 @@ The command does the following:
 - Processes the stack config files, generates the required variables for the Atmos component in the stack, and writes them to a file in the
   component's folder
 
-- Generates a backend config file for the Atmos component in the stack and writes it to a file in the component's folder
+- Generates a backend config file for the Atmos component in the stack and writes it to a file in the component's folder (or as specified by the atmos configuration setting)
 
 - Creates a `terraform` workspace for the component in the stack
 
