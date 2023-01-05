@@ -11,7 +11,7 @@ Use this command to execute `terraform plan` and then `terraform apply` on an At
 
 ## Usage
 
-Execute the `terraform deploy` command like this:
+Execute the `terraform deploy` subcommand like this:
 
 ```shell
 atmos terraform deploy <component> -s <stack>
