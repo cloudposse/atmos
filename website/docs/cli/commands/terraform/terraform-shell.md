@@ -19,15 +19,16 @@ Execute the `terraform shell` command like this:
 atmos terraform shell <component> -s <stack>
 ```
 
-The command configures the environment for an Atmos component in a stack and starts a new shell suitable for executing all terraform commands natively without going through atmos.
-inside the shell without using atmos-specific arguments and flags.
+The command configures the environment for an Atmos component in a stack and starts a new shell suitable for executing all terraform commands natively
+without going through Atmos.
 
 The command does the following:
 
 - Processes the stack config files, generates the required variables for the Atmos component in the stack, and writes them to a file in the
   component's folder
 
-- Generates a backend config file for the Atmos component in the stack and writes it to a file in the component's folder (or as specified by the atmos configuration setting)
+- Generates a backend config file for the Atmos component in the stack and writes it to a file in the component's folder (or as specified by the
+  [Atmos configuration setting](/cli/configuration))
 
 - Creates a `terraform` workspace for the component in the stack
 
