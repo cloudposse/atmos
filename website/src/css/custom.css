@@ -137,7 +137,7 @@ pre code {
 }
 
 li.menu__list-item.command {
- font-family: var(--ifm-font-family-monospace);
+    font-family: var(--ifm-font-family-monospace);
 }
 
 .aa-Autocomplete > .aa-DetachedSearchButton {
@@ -146,4 +146,8 @@ li.menu__list-item.command {
 
 .aa-Autocomplete {
     min-width: 150px;
+}
+
+.docs-doc-id-cli\/cheatsheet td:nth-of-type(2) {
+    white-space: break-spaces;
 }
