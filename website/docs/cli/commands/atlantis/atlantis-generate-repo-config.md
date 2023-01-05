@@ -7,7 +7,7 @@ description: Use this command to generate repository configuration for Atlantis.
 ---
 
 :::info Purpose
-Use this command to generate repository configuration for Atlantis.
+Use this command to generate a repository configuration for Atlantis.
 :::
 
 <br/>
