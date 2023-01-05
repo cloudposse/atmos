@@ -19,7 +19,7 @@ Execute the `terraform shell` command like this:
 atmos terraform shell <component> -s <stack>
 ```
 
-The command configures an environment for an Atmos component in a stack and starts a new shell allowing executing all native terraform commands
+The command configures the environment for an Atmos component in a stack and starts a new shell suitable for executing all terraform commands natively without going through atmos.
 inside the shell without using atmos-specific arguments and flags.
 
 The command does the following:
