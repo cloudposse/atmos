@@ -32,7 +32,7 @@ state for the component in the stack.
 
 :::info Disambiguation
 
-- **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module)
+- **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) and stored typically in `components/terraform/$name`
   that consists of the resources defined in the `.tf` files in a working directory
   (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc))
 
