@@ -8,7 +8,7 @@ description: This command calculates the `terraform` workspace for an Atmos comp
 
 :::note Purpose
 Use this command to calculate the `terraform` workspace for an Atmos component (from the context variables and stack config), then
-run `terraform init -reconfigure`, then select the workspace by executing the `terraform workspace select` command.
+run `terraform init -reconfigure` and then select the workspace by executing the `terraform workspace select` command.
 :::
 
 ## Usage
