@@ -22,7 +22,7 @@ component. The configuration of a component is stored in a Stack configuration.
   that consists of the resources defined in the `.tf` files in a working directory
   (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc))
 
-- **Atmos Component** provides configuration (variables and other settings) for a Terraform component and is defined in one or more YAML stack config
+- **Atmos Component** provides configuration (variables and other settings) for a type of component (e.g. a Terraform component) and is defined in one or more YAML stack config
   files (which are called [Atmos stacks](/core-concepts/stacks))
 
 :::
