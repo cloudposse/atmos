@@ -1,5 +1,5 @@
 ---
-title: Component Remote State
+title: Terraform Component Remote State
 sidebar_position: 8
 sidebar_label: Remote State
 id: remote-state
