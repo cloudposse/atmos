@@ -5,7 +5,7 @@ sidebar_label: Remote State
 id: remote-state
 ---
 
-Component Remote State is used when we need to get the outputs of an [Atmos component](/core-concepts/components),
+The Terraform Component Remote State is used when we need to get the outputs of an [Terraform component](/core-concepts/components),
 provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and use the outputs as inputs to another Atmos component.
 
 :::info
