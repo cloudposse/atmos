@@ -123,7 +123,7 @@ atmos terraform apply vpc-flow-logs-bucket-1 -s ue2-dev
 
 <br/>
 
-## Configure and Provision `vpc` Component
+## Configure and Provision the `vpc` Component
 
 Having the `vpc-flow-logs-bucket` Terraform component provisioned into the `ue2-dev` stack, we can now configure the `vpc` Terraform component
 to obtain the outputs from the remote state of the `vpc-flow-logs-bucket-1` Atmos component.
