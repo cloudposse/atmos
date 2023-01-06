@@ -44,4 +44,4 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
 | Flag        | Description | Alias | Required |
 |:------------|:------------|:------|:---------|
 | `--stack`   | Atmos stack | `-s`  | yes      |
-| `--dry-run` | Dry-run     |       | no       |
+| `--dry-run` | Dry run     |       | no       |

@@ -44,7 +44,7 @@ atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-p
 | Flag        | Description | Alias | Required |
 |:------------|:------------|:------|:---------|
 | `--stack`   | Atmos stack | `-s`  | yes      |
-| `--dry-run` | Dry-run     |       | no       |
+| `--dry-run` | Dry run     |       | no       |
 
 <br/>
 

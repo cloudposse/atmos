@@ -51,4 +51,4 @@ atmos vendor pull -c infra/account-map --dry-run
 |:--------------|:-------------------------------------------------------------------|:------|:---------|
 | `--component` | Atmos component to pull sources and mixins for                     | `-c`  | yes      |
 | `--type`      | Component type: `terraform` or `helmfile` (`terraform` is default) | `-t`  | no       |
-| `--dry-run`   | Dry-run                                                            |       | no       |
+| `--dry-run`   | Dry run                                                            |       | no       |

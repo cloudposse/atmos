@@ -44,4 +44,4 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 | Flag        | Description | Alias | Required |
 |:------------|:------------|:------|:---------|
 | `--stack`   | Atmos stack | `-s`  | yes      |
-| `--dry-run` | Dry-run     |       | no       |
+| `--dry-run` | Dry run     |       | no       |

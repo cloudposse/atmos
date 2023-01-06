@@ -50,8 +50,7 @@ Refer to [`atmos workflow`](/cli/commands/workflow) for the complete description
 To configure and execute Atmos workflows, follow these steps:
 
 - Configure workflows in [`atmos.yaml` CLI config file](/cli/configuration)
-- Create workflow files
-- Define workflows using workflow schema
+- Create workflow files and define workflows using the workflow schema
 
 ### Configure Workflows in `atmos.yaml`
 
@@ -73,18 +72,20 @@ workflows:
   base_path: "stacks/workflows"
 ```
 
+where:
+
 - `base_path` - the base path for components, stacks and workflows configurations
 
 - `workflows.base_path` - the base path to Atmos workflow files
 
-### Create Workflow Files
+### Create Workflow Files and Define Workflows
 
 In `atmos.yaml`, we set `workflows.base_path` to `stacks/workflows`. The folder is relative to the root of the repository.
 
-Refer to [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml) as an example.
+Refer to [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml) for an example.
 
 We put the workflow files into the folder. The workflow file names can be anything you want, but we recommend naming them according to the functions
-they are performing, e.g. create separate workflow files per environment, account, team, or service.
+they perform, e.g. create separate workflow files per environment, account, team, or service.
 
 For example, you can have a workflow file `stacks/workflows/workflows-eks.yaml` to define all EKS-related workflows.
 
@@ -92,7 +93,7 @@ Or, you can have a workflow file `stacks/workflows/workflows-dev.yaml` to define
 Similarly, you can create a workflow file `stacks/workflows/workflows-prod.yaml` to define all workflows to provision resources into the `prod`
 account.
 
-You can segregate the workflow files even further per account and service. For example, in the workflow
+You can segregate the workflow files even further, e.g. per account and service. For example, in the workflow
 file `stacks/workflows/workflows-dev-eks.yaml` you can define all EKS-related workflows for the `dev` account.
 
 Workflow files must confirm to the following schema:
@@ -109,29 +110,45 @@ workflows:
     steps: [ ]
 ```
 
-Each file must have the `workflows:` top-level section with a map of workflow definitions.
-
-### Workflow Schema
+Each workflow file must have the `workflows:` top-level section with a map of workflow definitions.
 
 Each workflow definition must confirm to the following schema:
 
 ```yaml
-workflows:
-
   workflow-1:
     description: "Description of Workflow #1"
-    steps: [ ]
-
-  workflow-2:
-    description: "Description of Workflow #2"
-    steps: [ ]
+    stack: <Atmos stack (optional)>
+    steps:
+      - command: <Atmos command to execute>
+        type: atmos  # optional
+        stack: <Atmos stack (optional)>
+      - command: <Atmos command to execute>
+        stack: <Atmos stack (optional)>
+      - command: <shell script>
+        type: shell  # required for the steps of type `shell`
 ```
 
-:::note
+where:
 
-A workflow command of type `shell` can be any simple or complex shell command or script
+- `description` - the workflow description
 
-:::
+- `stack` - workflow-level Atmos stack (optional). If specified, all workflow steps of type `atmos` will be executed for this Atmos stack. It can be
+  overridden in
+  each step or on the command line by using the `--stack` flag (`-s` for shorthand)
+
+- `steps` - a list of workflow steps which are executed sequentially in the order they are specified
+
+Each step is configured using the following attributes:
+
+- `command` - the command to execute. Can be either an Atmos [CLI command](/category/commands-1) (without the `atmos` binary name in front of it,
+  e.g. `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute
+
+- `type` - the type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command`
+  is an Atmos [CLI command](/category/commands-1). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
+  Atmos prepends the `atmos` binary name to the provided command before executing it
+
+- `stack` - step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the
+  workflow-level  `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)
 
 ## Workflow Examples
 
@@ -169,3 +186,9 @@ execute the following command:
 ```console
 atmos workflow plan-all -f workflow1 -s tenant1-ue2-dev
 ```
+
+:::note
+
+A workflow command of type `shell` can be any simple or complex shell command or script
+
+:::

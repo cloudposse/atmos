@@ -50,4 +50,4 @@ atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
 |:------------|:----------------------------------------------------------------------------------------------|:------|:---------|
 | `--file`    | File name where the workflow is defined                                                       | `-f`  | yes      |
 | `--stack`   | Atmos stack<br/>(if provided, will override stacks defined in the workflow or workflow steps) | `-s`  | no       |
-| `--dry-run` | Dry-run                                                                                       |       | no       |
+| `--dry-run` | Dry run                                                                                       |       | no       |
