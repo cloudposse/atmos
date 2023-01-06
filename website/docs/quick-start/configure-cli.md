@@ -36,10 +36,10 @@ file.
 # Base path for components, stacks and workflows configurations.
 # Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
 # Supports both absolute and relative paths.
-# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
-# are independent settings (supporting both absolute and relative paths).
-# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
-# are considered paths relative to 'base_path'.
+# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
+# and 'workflows.base_path' are independent settings (supporting both absolute and relative paths).
+# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
+# and 'workflows.base_path' are considered paths relative to 'base_path'.
 base_path: ""
 
 components:
@@ -89,7 +89,7 @@ schemas: {}
 
 <br/>
 
-The `atmos.yaml` configuration file has the following sections.
+The `atmos.yaml` configuration file defines the following sections.
 
 __NOTE:__ below is the description of the sections relevant to this Quick Start guide. For the description of all the sections, refer
 to [CLI Configuration](/cli/configuration).
@@ -134,7 +134,7 @@ to [CLI Configuration](/cli/configuration).
   Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are
   defined (inline or via imports)
 
-- `workflows.base_path` - the base path to Atmos [workflows](/core-concepts/workflows)
+- `workflows.base_path` - the base path to Atmos [workflow](/core-concepts/workflows) files
 
-- `logs.verbose` - set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and 
-   process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack
+- `logs.verbose` - set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and
+  process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack

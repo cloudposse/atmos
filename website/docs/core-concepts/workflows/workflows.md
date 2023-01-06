@@ -8,8 +8,7 @@ Workflows are a way of combining multiple commands into one executable unit of w
 
 ## Simple Example
 
-Here's an example workflow called `eks-up` which runs a few commands that will bring up the cluster.
-The workflow name can be anything you want, and the workflows can also be parameterized.
+Here's an example workflow called `eks-up` which runs a few commands that will bring up the EKS cluster:
 
 ```yaml
 workflows:
@@ -22,34 +21,77 @@ workflows:
       - command: terraform apply eks/alb-controller
 ```
 
-Then run this workflow like this:
+<br/>
+
+:::note
+
+The workflow name can be anything you want, and the workflows can also be parameterized.
+
+:::
+
+<br/>
+
+If you define this workflow in the file `workflow1.yaml`, it can we executed like this:
 
 ```shell
-atmos workflow eks-up --stack tenant1-ue2-dev
+atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
 ```
+
+<br/>
+
+:::tip
+
+Refer to [`atmos workflow`](/cli/commands/workflow) for the complete description of the CLI command
+
+:::
 
 ## Configuration
 
-Workflows can be defined using two different methods:
+To configure and execute Atmos workflows, follow these steps:
 
-- **Stack configurations:** Add the `workflows` section to any Stack configuration.
-- **Standalone files:**  Add reusable `workflows` in a separate file (
-  see [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml)
+- Configure workflows in [`atmos.yaml` CLI config file](/cli/configuration)
+- Create workflow files
+- Define workflows using workflow schema
 
-In the first case, we define workflows in the Stack configuration file (which we specify on the command line).
-To execute the workflows for some stack (e.g. `tenant1-ue2-dev`), run the following commands:
+### Configure Workflows in `atmos.yaml`
 
-```shell
-atmos workflow eks-up -s tenant1-ue2-dev
+```yaml
+# Base path for components, stacks and workflows configurations.
+# Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
+# Supports both absolute and relative paths.
+# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
+# and 'workflows.base_path' are independent settings (supporting both absolute and relative paths).
+# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
+# and 'workflows.base_path' are considered paths relative to 'base_path'.
+base_path: ""
+
+workflows:
+  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
+  # Supports both absolute and relative paths
+  base_path: "stacks/workflows"
 ```
 
-**Note:** Workflows defined in the stack config files can be executed only for the particular stack (environment and stage). It's not possible to
-provision resources for multiple stacks this way.
+<br/>
 
-In the second case (defining workflows in a separate file), a single workflow can be created to provision resources into different stacks. The stacks
-for the workflow steps can be specified in the workflow config.
+The `atmos.yaml` configuration file defines the following sections related to Atmos workflows:
 
-## Using Workflow Files
+- `base_path` - the base path for components, stacks and workflows configurations
+
+- `workflows.base_path` - the base path to Atmos workflow files
+
+### Create Workflow Files
+
+Refer to [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml) as an example.
+
+### Workflow Schema
+
+:::note
+
+A workflow command of type `shell` can be any simple or complex shell command or script
+
+:::
+
+## Workflow Examples
 
 For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile components in the example, execute the following command:
 
