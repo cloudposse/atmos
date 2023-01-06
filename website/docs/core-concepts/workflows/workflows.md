@@ -119,7 +119,7 @@ Each workflow definition must confirm to the following schema:
 workflows:
 
   workflow-1:
-    description: ""
+    description: "Description of Workflow #1"
     steps: [ ]
 
   workflow-2:
