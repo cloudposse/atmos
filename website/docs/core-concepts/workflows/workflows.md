@@ -113,6 +113,20 @@ Each file must have the `workflows:` top-level section with a map of workflow de
 
 ### Workflow Schema
 
+Each workflow definition must confirm to the following schema:
+
+```yaml
+workflows:
+
+  workflow-1:
+    description: ""
+    steps: [ ]
+
+  workflow-2:
+    description: ""
+    steps: [ ]
+```
+
 :::note
 
 A workflow command of type `shell` can be any simple or complex shell command or script
