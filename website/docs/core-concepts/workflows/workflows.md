@@ -105,7 +105,7 @@ workflows:
     steps: [ ]
 
   workflow-2:
-    description: ""
+    description: "Description of Workflow #2"
     steps: [ ]
 ```
 
