@@ -31,7 +31,8 @@ The workflow name can be anything you want, and the workflows can also be parame
 
 <br/>
 
-If you define this workflow in the file `workflow1.yaml`, it can we executed like this:
+If you define this workflow in the file `workflow1.yaml`, it can we executed like this to provision
+the [components](/core-concepts/components) into the `tenant1-ue2-dev` [stack](/core-concepts/stacks):
 
 ```shell
 atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
@@ -133,8 +134,7 @@ where:
 - `description` - the workflow description
 
 - `stack` - workflow-level Atmos stack (optional). If specified, all workflow steps of type `atmos` will be executed for this Atmos stack. It can be
-  overridden in
-  each step or on the command line by using the `--stack` flag (`-s` for shorthand)
+  overridden in each step or on the command line by using the `--stack` flag (`-s` for shorthand)
 
 - `steps` - a list of workflow steps which are executed sequentially in the order they are specified
 
