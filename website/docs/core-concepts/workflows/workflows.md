@@ -55,6 +55,8 @@ To configure and execute Atmos workflows, follow these steps:
 
 ### Configure Workflows in `atmos.yaml`
 
+In `atmos.yaml` CLI config file, add the following sections related to Atmos workflows:
+
 ```yaml
 # Base path for components, stacks and workflows configurations.
 # Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
@@ -71,17 +73,43 @@ workflows:
   base_path: "stacks/workflows"
 ```
 
-<br/>
-
-The `atmos.yaml` configuration file defines the following sections related to Atmos workflows:
-
 - `base_path` - the base path for components, stacks and workflows configurations
 
 - `workflows.base_path` - the base path to Atmos workflow files
 
 ### Create Workflow Files
 
+In `atmos.yaml`, we set `workflows.base_path` to `stacks/workflows`. The folder is relative to the root of the repository.
+
 Refer to [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml) as an example.
+
+We put the workflow files into the folder. The workflow file names can be anything you want, but we recommend naming them according to the functions
+they are performing, e.g. create separate workflow files per environment, account, team, or service.
+
+For example, you can have a workflow file `stacks/workflows/workflows-eks.yaml` to define all EKS-related workflows.
+
+Or, you can have a workflow file `stacks/workflows/workflows-dev.yaml` to define all workflows to provision resources into the `dev` account.
+Similarly, you can create a workflow file `stacks/workflows/workflows-prod.yaml` to define all workflows to provision resources into the `prod`
+account.
+
+You can segregate the workflow files even further per account and service. For example, in the workflow
+file `stacks/workflows/workflows-dev-eks.yaml` you can define all EKS-related workflows for the `dev` account.
+
+Workflow files must confirm to the following schema:
+
+```yaml
+workflows:
+
+  workflow-1:
+    description: ""
+    steps: [ ]
+
+  workflow-2:
+    description: ""
+    steps: [ ]
+```
+
+Each file must have the `workflows:` top-level section with a map of workflow definitions.
 
 ### Workflow Schema
 
