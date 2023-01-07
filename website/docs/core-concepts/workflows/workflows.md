@@ -32,7 +32,8 @@ The workflow name can be anything you want, and the workflows can also be parame
 <br/>
 
 If you define this workflow in the file `workflow1.yaml`, it can we executed like this to provision
-the [components](/core-concepts/components) into the `tenant1-ue2-dev` [stack](/core-concepts/stacks):
+the `vpc`, `eks/cluster` and `eks/alb-controller` [Atmos components](/core-concepts/components) into
+the `tenant1-ue2-dev` [stack](/core-concepts/stacks):
 
 ```shell
 atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
@@ -104,11 +105,11 @@ workflows:
 
   workflow-1:
     description: "Description of Workflow #1"
-    steps: [ ]
+    steps: []
 
   workflow-2:
     description: "Description of Workflow #2"
-    steps: [ ]
+    steps: []
 ```
 
 Each workflow file must have the `workflows:` top-level section with a map of workflow definitions.
