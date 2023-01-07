@@ -3,12 +3,12 @@ title: atmos terraform shell
 sidebar_label: shell
 sidebar_class_name: command
 id: shell
-description: This command starts a new `SHELL` configured with the environment for an `atmos` Component in a Stack so allow executing all native terraform commands inside of the shell without using any atmos-specific arguments and flags.
+description: This command starts a new `SHELL` configured with the environment for an Atmos component in a stack to allow execution of all native terraform commands inside the shell without using any atmos-specific arguments and flags. This may by helpful to debug a component without going through Atmos.
 ---
 
 :::note Purpose
-This command starts a new `SHELL` configured with the environment for an `atmos` Component in a Stack to allow executing all native terraform commands
-inside of the shell without using any atmos-specific arguments and flags.
+This command starts a new `SHELL` configured with the environment for an Atmos component in a Stack to allow executing all native terraform commands
+inside the shell without using any atmos-specific arguments and flags.
 :::
 
 ## Usage
@@ -19,15 +19,16 @@ Execute the `terraform shell` command like this:
 atmos terraform shell <component> -s <stack>
 ```
 
-The command configures an environment for an `atmos` component in a stack and starts a new shell allowing executing all native terraform commands
-inside the shell without using atmos-specific arguments and flags.
+The command configures the environment for an Atmos component in a stack and starts a new shell suitable for executing all terraform commands natively
+without going through Atmos.
 
 The command does the following:
 
-- Processes the stack config files, generates the required variables for the `atmos` component in the stack, and writes them to a file in the
+- Processes the stack config files, generates the required variables for the Atmos component in the stack, and writes them to a file in the
   component's folder
 
-- Generates a backend config file for the `atmos` component in the stack and writes it to a file in the component's folder
+- Generates a backend config file for the Atmos component in the stack and writes it to a file in the component's folder (or as specified by the
+  [Atmos configuration setting](/cli/configuration))
 
 - Creates a `terraform` workspace for the component in the stack
 
@@ -51,13 +52,13 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
 
 ## Arguments
 
-| Argument     | Description        | Required |
-|:-------------|:-------------------|:---------|
-| `component`  | `atmos` component  | yes      |
+| Argument    | Description     | Required |
+|:------------|:----------------|:---------|
+| `component` | Atmos component | yes      |
 
 ## Flags
 
-| Flag        | Description   | Alias | Required |
-|:------------|:--------------|:------|:---------|
-| `--stack`   | `atmos` stack | `-s`  | yes      |
-| `--dry-run` | Dry-run       |       | no       |
+| Flag        | Description | Alias | Required |
+|:------------|:------------|:------|:---------|
+| `--stack`   | Atmos stack | `-s`  | yes      |
+| `--dry-run` | Dry run     |       | no       |

@@ -5,16 +5,31 @@ sidebar_label: Components
 description: Components are opinionated building blocks of infrastructure as code that solve one specific problem or use-case.
 ---
 
-Components are opinionated, self-contained building blocks of Infrastructure-as-Code (IAC) that solve one, specific problem or use-case. Atmos was
+Components are opinionated, self-contained building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case. Atmos was
 written to support any number of tools, but also supports a couple of native integration with tools like `terraform` and `helmfile`. A common use-case
 for Atmos is implementing workflows for `terraform` "root modules".
 
 ## Component Schema
 
-A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that component. The
-configuration of a component is stored in a Stack configuration.
+A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
+component. The configuration of a component is stored in a Stack configuration.
 
-The schema of a Component in a Stack configuration is as follows:
+<br/>
+
+:::info Disambiguation
+
+- **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module)
+  that consists of the resources defined in the `.tf` files in a working directory
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc))
+
+- **Atmos Component** provides configuration (variables and other settings) for a type of component (e.g. a Terraform component) and is defined in one or more YAML stack config
+  files (which are called [Atmos stacks](/core-concepts/stacks))
+
+:::
+
+<br/>
+
+The schema of an Atmos Component in an Atmos Stack is as follows:
 
 ```yaml
 components:
@@ -37,7 +52,7 @@ components:
         # Settings are where we store configuration related to integrations.
         # It's a freeform map; anything can be placed here.
         settings:
-          spacelift: {}
+          spacelift: { }
 
       # Define the terraform variables, which will get deep-merged and exported to a `.tfvars` file by atmos.
       vars:
@@ -132,8 +147,8 @@ Atmos natively supports two types of components, but the convention can be exten
 
 1. **Terraform:**These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
    EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find
-   the [full library of SweetOps Terraform components on GitHub](https://github.com/cloudposse/terraform-aws-components "https://github.com/cloudposse/terraform-aws-components")
-   . By convention, we store components in the `components/terraform/` directory within the infrastructure repository.
+   the [full library of SweetOps Terraform components on GitHub](https://github.com/cloudposse/terraform-aws-components). By convention, we store
+   components in the `components/terraform/` directory within the infrastructure repository.
 
 2. **Helmfiles**: These are stand-alone applications deployed using[`helmfile`](https://github.com/helmfile)to Kubernetes. For example, typical
    helmfiles might deploy the DataDog agent, `cert-manager` controller, `nginx-ingress` controller, etc. Similarly,
@@ -146,8 +161,8 @@ Atmos natively supports two types of components, but the convention can be exten
 One important distinction about components that is worth noting: components should be opinionated terraform "root" modules that typically call other
 child modules. Components are the building blocks of your infrastructure. This is where you define all the business logic for how to provision some
 common piece of infrastructure like ECR repos (with the [ecr](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/ecr)
-component) or EKS clusters (with the [eks/cluster](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/eks/cluster) component). Our
-convention is to stick components in the `components/terraform/` directory.
+component) or EKS clusters (with the [eks/cluster](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/eks/cluster) component).
+Our convention is to stick components in the `components/terraform/` directory.
 
 If your components rely on submodules, our convention is to use a `modules/` subfolder of the component to store them.
 

@@ -12,7 +12,7 @@ spec:
     # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
     uri: github.com/cloudposse/terraform-aws-components.git//modules/account-map?ref={{.Version}}
-    version: 0.196.1
+    version: 1.91.0
     # Only include the files that match the 'included_paths' patterns
     # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
     # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
@@ -37,8 +37,4 @@ spec:
 
   # mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
   # mixins are processed in the order they are declared in the list
-  mixins:
-    # Mixins 'uri' supports the following protocols: local files (absolute and relative paths), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP
-    - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
-      version: 0.196.1
-      filename: introspection.mixin.tf
+  mixins: []

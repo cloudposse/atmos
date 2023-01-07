@@ -11,7 +11,7 @@ Atmos provides many settings that are specific to Terraform.
 
 ## Settings
 
-All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration), but can be overriden at any level of
+All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration), but can be overridden at any level of
 the [Stack](/core-concepts/stacks/#schema) configuration.
 
 ```yaml

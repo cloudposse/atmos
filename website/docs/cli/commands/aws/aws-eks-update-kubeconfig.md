@@ -20,24 +20,24 @@ This command executes `aws eks update-kubeconfig` command to download `kubeconfi
 
 The command can execute `aws eks update-kubeconfig` in three different ways:
 
-1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line, then `atmos` executes the command without
-   requiring the `atmos` CLI config and context.
+1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line, then Atmos executes the command without
+   requiring the `atmos.yaml` CLI config and context.
 
-  For example:
+For example:
 
   ```shell
   atmos aws eks update-kubeconfig --profile=<profile> --name=<cluster_name>
   ```
 
-1. If `component` and `stack` are provided on the command-line, then `atmos` executes the command using the `atmos` CLI config and stack's context by
-   searching for the following settings:
+1. If `component` and `stack` are provided on the command-line, then Atmos executes the command using the `atmos.yaml` CLI config and stack's context
+   by searching for the following settings:
 
-   - `components.helmfile.cluster_name_pattern` in the `atmos.yaml` CLI config (and calculates the `--name` parameter using the pattern)
-   - `components.helmfile.helm_aws_profile_pattern` in the `atmos.yaml` CLI config (and calculates the `--profile` parameter using the pattern)
-   - `components.helmfile.kubeconfig_path` in the `atmos.yaml` CLI config the variables for the component in the provided stack
-   - `region` from the variables for the component in the stack
+- `components.helmfile.cluster_name_pattern` in the `atmos.yaml` CLI config (and calculates the `--name` parameter using the pattern)
+- `components.helmfile.helm_aws_profile_pattern` in the `atmos.yaml` CLI config (and calculates the `--profile` parameter using the pattern)
+- `components.helmfile.kubeconfig_path` in the `atmos.yaml` CLI config the variables for the component in the provided stack
+- `region` from the variables for the component in the stack
 
-  For example:
+For example:
 
   ```shell
   atmos aws eks update-kubeconfig <component> -s <stack>
@@ -45,7 +45,7 @@ The command can execute `aws eks update-kubeconfig` in three different ways:
 
 1. Combination of the above. Provide a component and a stack, and override other parameters on the command line.
 
-  For example:
+For example:
 
   ```shell
   atmos aws eks update-kubeconfig <component> -s <stack> --kubeconfig=<path_to_kubeconfig> --region=us-east-1
@@ -75,15 +75,15 @@ atmos aws eks update-kubeconfig --verbose=true
 
 ## Arguments
 
-| Argument     | Description        | Required |
-|:-------------|:-------------------|:---------|
-| `component`  | `atmos` component  | no       |
+| Argument    | Description     | Required |
+|:------------|:----------------|:---------|
+| `component` | Atmos component | no       |
 
 ## Flags
 
 | Flag           | Description                                                                                 | Alias | Required |
 |:---------------|:--------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`      | `atmos` stack                                                                               | `-s`  | no       |
+| `--stack`      | Atmos stack                                                                                 | `-s`  | no       |
 | `--profile`    | AWS profile to use to authenticate to the EKS cluster                                       |       | no       |
 | `--role-arn`   | AWS IAM role ARN to use to authenticate to the EKS cluster                                  |       | no       |
 | `--name`       | EKS cluster name                                                                            |       | no       |

@@ -121,6 +121,8 @@ const config = {
             prism: {
                 theme: lightCodeTheme,
                 darkTheme: darkCodeTheme,
+                // https://prismjs.com/#supported-languages
+                additionalLanguages: ['hcl', 'bash']
             },
         }),
     plugins: [require.resolve("@cmfcmf/docusaurus-search-local")],

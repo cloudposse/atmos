@@ -1,6 +1,7 @@
 ---
 title: Your first environment on AWS
 sidebar_label: Your first environment on AWS
+sidebar_position: 2
 description: "Get your first AWS environment deployed using Atmos, Stacks, and Vendoring"
 ---
 
@@ -26,7 +27,7 @@ Prior to starting this tutorial, you should be sure that you understand [our var
 
 ## Tutorial
 
-### 1. Clone the tutorials repository + Run the `tutorials` image
+### 1. Clone the Tutorials Repository + Run the `tutorials` Image
 
 As part of this tutorial (and others following in our tutorial series), we will utilize [our tutorials](https://github.com/cloudposse/tutorials) repository](https://github.com/cloudposse/tutorials). This repository includes code and relevant materials for you to use alongside this tutorial walkthrough.
 
@@ -104,7 +105,7 @@ This will provision our S3 bucket + Dynamo DB table for usage as our backend.
 3. Next, let's generate the configuration for that backend:
 
 ```bash
-atmos terraform backend generate component tfstate-backend --stack ue2-root
+atmos terraform generate backend tfstate-backend --stack ue2-root
 ```
 
 This will look at our stack, find the imported `terraform.backend.s3` configuration and build a valid `backend.tf.json` file and put it in our component directory. Then going forward, whenver we `plan` or `apply` against that component it will be properly configured to use that S3 backend.
@@ -139,7 +140,7 @@ Enter "yes" and this will migrate our local state to our S3 backend. Success!
 5. Now that we've migrated our single "chicken or the egg" component, we'll want to generate the `backend.tf.json` file for our other components as well considering we'll want them to use the S3 backend too. Luckily for us, there is only one, simple component as part of this tutorial: `components/terraform/static-site`. Let's go ahead and generate the backend config for that component:
 
 ```bash
-atmos terraform backend generate component static-site --stack uw2-dev
+atmos terraform generate backend static-site --stack uw2-dev
 ```
 
 Exactly the same as for our `tfstate-backend` component, our `atmos` `backend generate` command will put a `backend.tf.json` file in our `components/terraform/static-site/` directory so that component will always utilize the correct backend. If this were a real project that we were working on and practicing proper GitOps, then we'd actually check those files into git so that our backend configuration would persist going forward, but since this is a tutorial we'll skip that step.
