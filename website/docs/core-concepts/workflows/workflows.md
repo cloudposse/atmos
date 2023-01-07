@@ -16,9 +16,9 @@ workflows:
     description: |
       Bring up the EKS cluster.
     steps:
-      - command: terraform apply vpc
-      - command: terraform apply eks/cluster
-      - command: terraform apply eks/alb-controller
+      - command: terraform apply vpc -auto-approve
+      - command: terraform apply eks/cluster -auto-approve
+      - command: terraform apply eks/alb-controller -auto-approve
 ```
 
 <br/>
@@ -150,45 +150,143 @@ Each step is configured using the following attributes:
 - `stack` - step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the
   workflow-level  `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)
 
+<br/>
+
+:::note
+
+A workflow command of type `shell` can be any simple or complex shell command or script.
+You can use [YAML Multiline Strings](https://yaml-multiline.info/) to create complex multi-line shell scripts.
+
+:::
+
 ## Workflow Examples
 
-For example, to run `terraform plan` and `helmfile diff` on all terraform and helmfile components in the example, execute the following command:
+The following workflow defines four steps of type `atmos` (implicit type) without specifying the workflow-level or step-level `stack` attribute.
+Since the workflow does not specify the stack, it's generic and can be executed for any Atmos stack.
+In this case, the stack needs to be provided on the command line.
 
-```console
-atmos workflow plan-all -f workflows
-```
-
-where the command-line option `-f` (`--file` for long version) instructs the `atmos` CLI to look for the `plan-all` workflow in the
-file [workflows](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml).
-
-As we can see, in multi-environment workflows, each workflow job specifies the stack it's operating on:
-
-```yaml
+```yaml title=stacks/workflows/workflow1.yaml
 workflows:
-  plan-all:
+  terraform-plan-all-test-components:
     description: |
       Run 'terraform plan' on 'test/test-component' and all its derived components.
-      The stack must be provided on the command line: atmos workflow terraform-plan-all-test-components -f workflow1 -s <stack>
+      The stack must be provided on the command line: 
+      `atmos workflow terraform-plan-all-test-components -f workflow1 -s <stack>`
     steps:
+      # Inline scripts are also supported
+      # Refer to https://yaml-multiline.info for more details
+      - type: shell
+        command: >-
+          echo "Starting the workflow execution..."
+          read -p "Press any key to continue... " -n1 -s
       - command: terraform plan test/test-component
       - command: terraform plan test/test-component-override
       - command: terraform plan test/test-component-override-2
       - command: terraform plan test/test-component-override-3
+      - type: shell
+        command: >-
+          echo "All done!"
 ```
 
-You can also define a workflow in a separate file without specifying the stack in the workflow's job config.
-In this case, the stack needs to be provided on the command line.
-
-For example, to run the `plan-all` workflow from
-the [workflows](https://github.com/cloudposse/atmos/tree/master/example/stacks/workflows/workflow1.yaml) file for the `tenant1-ue2-dev` stack,
-execute the following command:
+To run this workflow for the `tenant1-ue2-dev` stack, execute the following command:
 
 ```console
-atmos workflow plan-all -f workflow1 -s tenant1-ue2-dev
+atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev
 ```
 
-:::note
+<br/>
 
-A workflow command of type `shell` can be any simple or complex shell command or script
+The following workflow executes `terraform plan` on `test/test-component-override-2` component in all stacks.
+In this case, the stack is specified inline for each workflow command.
 
-:::
+```yaml title=stacks/workflows/workflow1.yaml
+workflows:
+  terraform-plan-test-component-override-2-all-stacks:
+    description: Run 'terraform plan' on 'test/test-component-override-2' component in all stacks
+    steps:
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-dev
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-staging
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-prod
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-dev
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-staging
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-prod
+      - type: shell
+        command: echo "All done!"
+```
+
+To run this workflow, execute the following command:
+
+```console
+atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1
+```
+
+<br/>
+
+The following workflow is similar to the above, but the stack for each command is specified in the step-level `stack` attribute.
+
+```yaml title=stacks/workflows/workflow1.yaml
+workflows:
+  terraform-plan-test-component-override-3-all-stacks:
+    description: Run 'terraform plan' on 'test/test-component-override-3' component in all stacks
+    steps:
+      - command: terraform plan test/test-component-override-3
+        stack: tenant1-ue2-dev
+      - command: terraform plan test/test-component-override-3
+        stack: tenant1-ue2-staging
+      - command: terraform plan test/test-component-override-3
+        stack: tenant1-ue2-prod
+      - command: terraform plan test/test-component-override-3
+        stack: tenant2-ue2-dev
+      - command: terraform plan test/test-component-override-3
+        stack: tenant2-ue2-staging
+      - command: terraform plan test/test-component-override-3
+        stack: tenant2-ue2-prod
+```
+
+To run this workflow, execute the following command:
+
+```console
+atmos workflow terraform-plan-test-component-override-3-all-stacks -f workflow1
+```
+
+<br/>
+
+__Note__ that the stack for the commands of type `atmos` can be specified in four different ways:
+
+- Inline in the command itself
+  ```yaml
+  steps:
+    - command: terraform plan test/test-component-override-2 -s tenant1-ue2-dev
+  ```
+
+- In the workflow-level `stack` attribute
+  ```yaml
+  workflows:
+    my-workflow:
+    stack: tenant1-ue2-dev
+    steps:
+      - command: terraform plan test/test-component
+  ```
+
+- In the step-level `stack` attribute
+  ```yaml
+  steps:
+    - command: terraform plan test/test-component
+      stack: tenant1-ue2-dev
+  ```
+
+- On the command line
+  ```console
+  atmos workflow my-workflow -f workflow1 -s tenant1-ue2-dev
+  ```
+
+<br/>
+
+The stack defined inline in the command itself has the lowest priority, it can and will be overridden by any other stack definition.
+The step-level stack will override the workflow-level stack. The command line `--stack` option will override all other stacks defined in the workflow
+itself. You can also use any combinations of the above (e.g. specify the stack at the workflow level, then override it at the step level for some
+commands, etc.).
+
+While this provides a great flexibility in defining the stack for workflow commands, we recommend creating generic workflows without defining
+stacks in the workflow itself (the stack should be provided on the command line). This way, the workflow can be executed for any stack without any
+modifications and without dealing with multiple workflows that are similar but differ only by the environment where the resources are provisioned.
