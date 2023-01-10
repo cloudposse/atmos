@@ -15,6 +15,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+var NotFound = errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+	"\nYou can download a sample config and adapt it to your requirements from " +
+	"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/complete/atmos.yaml")
+
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
@@ -147,10 +151,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 	}
 
 	if !configFound {
-		return cliConfig,
-			errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
-				"\nYou can download a sample config and adapt it to your requirements from " +
-				"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/complete/atmos.yaml")
+		return cliConfig, NotFound
 	}
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
