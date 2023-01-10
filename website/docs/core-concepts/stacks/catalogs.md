@@ -6,7 +6,10 @@ id: catalogs
 description: Catalogs are how to organize all Stack configurations for easy imports. 
 ---
 
-Catalogs are how to logically organize all of the [Stack](/core-concepts/stacks) configurations for use by [imports](/core-concepts/stacks/imports). There's no "right or wrong" way to do it, and Atmos does not enforce any one convention.  What we've come to realize is there's no "one way" to organize Stack configurations. The best way to organize them will come down to the way an organization wants to model infrastructure.
+Catalogs are how to logically organize all the [Stack](/core-concepts/stacks) configurations for use by [imports](/core-concepts/stacks/imports). 
+There's no "right or wrong" way to do it, and Atmos does not enforce any one convention.  
+What we've come to realize is there's no "one way" to organize Stack configurations. 
+The best way to organize them will come down to the way an organization wants to model infrastructure.
 
 Below is how we implement them at [Cloud Posse](https://cloudposse.com).
 
@@ -51,7 +54,7 @@ Here's an example of how Stack imports might be organized on disk.
 
 ### Mixins
 
-We go into more detail on using [Mixins](/core-concepts/stacks/mixins) to manage snippets of reusable configuration. These Mixins are frequently used along side the other conventions such as Teams and Organizations.
+We go into more detail on using [Mixins](/core-concepts/stacks/mixins) to manage snippets of reusable configuration. These Mixins are frequently used alongside the other conventions such as Teams and Organizations.
 
 ### Teams
 

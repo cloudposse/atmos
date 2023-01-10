@@ -7,7 +7,7 @@ order: 10
 
 ## Usage
 
-`atmos help` shows help for all `atmos` CLI commands.
+`atmos help` shows help for all Atmos CLI commands.
 
 ```shell
 atmos help

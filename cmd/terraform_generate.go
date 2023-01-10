@@ -9,7 +9,7 @@ var terraformGenerateCmd = &cobra.Command{
 	Use:                "generate",
 	Short:              "Execute 'terraform generate' commands",
 	Long:               "This command generates configurations for terraform components",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
 func init() {

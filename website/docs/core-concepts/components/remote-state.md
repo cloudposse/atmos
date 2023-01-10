@@ -1,0 +1,337 @@
+---
+title: Terraform Component Remote State
+sidebar_position: 8
+sidebar_label: Remote State
+id: remote-state
+---
+
+The Terraform Component Remote State is used when we need to get the outputs of an [Terraform component](/core-concepts/components),
+provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and use the outputs as inputs to another Atmos component.
+
+:::info
+
+In Atmos, Terraform Remote State is implemented by using these modules:
+
+- [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) - The Cloud Posse Terraform Provider for various utilities,
+  including stack configuration management
+
+- [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) - Terraform module that loads and processes
+  stack configurations from YAML sources and returns remote state outputs for Terraform components
+
+:::
+
+<br/>
+
+[terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) is implemented in [Go](https://go.dev/) and uses Atmos `Go`
+modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/core-concepts/stacks). The provider processes stack
+configurations to get the final config for an Atmos component in an Atmos stack. The final component config is then used by
+the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote
+state for the component in the stack.
+
+<br/>
+
+:::info Disambiguation
+
+- **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) and stored typically in `components/terraform/$name`
+  that consists of the resources defined in the `.tf` files in a working directory
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc))
+
+- **Atmos Component** provides configuration (variables and other settings) for a component and is defined in one or more YAML stack config
+  files (which are called [Atmos stacks](/core-concepts/stacks))
+
+:::
+
+<br/>
+
+Here is an example.
+
+Suppose that we need to provision two Terraform components:
+
+- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
+- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
+
+The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
+configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket.
+
+We will provision the two Terraform components in the `ue2-dev` Atmos stack (in the `dev` AWS account by setting `stage = "dev"` and in
+the `us-east-2` region by setting `environment = "ue2"`).
+
+<br/>
+
+## Configure and Provision the `vpc-flow-logs-bucket` Component
+
+In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
+component:
+
+```yaml title="stacks/catalog/vpc-flow-logs-bucket.yaml"
+components:
+  terraform:
+    vpc-flow-logs-bucket/defaults:
+      metadata:
+        # `metadata.type: abstract` makes the component `abstract`,
+        # explicitly prohibiting the component from being deployed.
+        # `atmos terraform apply` will fail with an error.
+        # If `metadata.type` attribute is not specified, it defaults to `real`.
+        # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis.
+        type: abstract
+      # Default variables, which will be inherited and can be overridden in the derived components
+      vars:
+        force_destroy: false
+        lifecycle_rule_enabled: false
+        traffic_type: "ALL"
+```
+
+<br/>
+
+In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket-1` Atmos component in the `ue2-dev` Atmos
+stack:
+
+```yaml title="stacks/ue2-dev.yaml"
+# Import the base Atmos component configuration from the `catalog`.
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+# File extensions are optional (if not specified, `.yaml` is used by default).
+import:
+  - catalog/vpc-flow-logs-bucket
+
+components:
+  terraform:
+    vpc-flow-logs-bucket-1:
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: infra/vpc-flow-logs-bucket
+        inherits:
+          # Inherit all settings and variables from the 
+          # `vpc-flow-logs-bucket/defaults` base Atmos component
+          - vpc-flow-logs-bucket/defaults
+      vars:
+        # Define variables that are specific for this component
+        # and are not set in the base component
+        name: vpc-flow-logs-bucket-1
+        # Override the default variables from the base component
+        traffic_type: "REJECT"
+```
+
+<br/>
+
+Having the stacks configured as shown above, we can now provision the `vpc-flow-logs-bucket-1` Atmos component into the `ue2-dev` stack by executing
+the following Atmos commands:
+
+```shell
+atmos terraform plan vpc-flow-logs-bucket-1 -s ue2-dev
+atmos terraform apply vpc-flow-logs-bucket-1 -s ue2-dev
+```
+
+<br/>
+
+## Configure and Provision the `vpc` Component
+
+Having the `vpc-flow-logs-bucket` Terraform component provisioned into the `ue2-dev` stack, we can now configure the `vpc` Terraform component
+to obtain the outputs from the remote state of the `vpc-flow-logs-bucket-1` Atmos component.
+
+In the `components/terraform/infra/vpc/remote-state.tf` file, configure the
+[remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
+for the `vpc-flow-logs-bucket-1` Atmos component:
+
+```hcl title="components/terraform/infra/vpc/remote-state.tf"
+module "vpc_flow_logs_bucket" {
+  count = var.vpc_flow_logs_enabled ? 1 : 0
+
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.3.1"
+
+  # Specify the Atmos component name (defined in YAML stack config files) 
+  # for which to get the remote state outputs
+  component = var.vpc_flow_logs_bucket_component_name
+
+  # Override the context variables to point to a different Atmos stack if the 
+  # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region
+  stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
+  tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
+  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
+
+  # `context` input is a way to provide the information about the stack (using the context
+  # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
+  context = module.this.context
+}
+```
+
+In the `components/terraform/infra/vpc/vpc-flow-logs.tf` file, configure the `aws_flow_log` resource for the `vpc` Terraform component to use the
+remote state output `vpc_flow_logs_bucket_arn` from the `vpc-flow-logs-bucket-1` Atmos component:
+
+```hcl title="components/terraform/infra/vpc/remote-state.tf"
+locals {
+  enabled               = module.this.enabled
+  vpc_flow_logs_enabled = local.enabled && var.vpc_flow_logs_enabled
+}
+
+resource "aws_flow_log" "default" {
+  count = local.vpc_flow_logs_enabled ? 1 : 0
+
+  # Use the remote state output `vpc_flow_logs_bucket_arn` of the `vpc_flow_logs_bucket` component
+  log_destination = module.vpc_flow_logs_bucket[0].outputs.vpc_flow_logs_bucket_arn
+
+  log_destination_type = var.vpc_flow_logs_log_destination_type
+  traffic_type         = var.vpc_flow_logs_traffic_type
+  vpc_id               = module.vpc.vpc_id
+
+  tags = module.this.tags
+}
+```
+
+In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc/defaults` Atmos component:
+
+```yaml title="stacks/catalog/vpc.yaml"
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        # `metadata.type: abstract` makes the component `abstract`,
+        # explicitly prohibiting the component from being deployed.
+        # `atmos terraform apply` will fail with an error.
+        # If `metadata.type` attribute is not specified, it defaults to `real`.
+        # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis.
+        type: abstract
+      # Default variables, which will be inherited and can be overridden in the derived components
+      vars:
+        public_subnets_enabled: false
+        nat_gateway_enabled: false
+        nat_instance_enabled: false
+        max_subnet_count: 3
+        vpc_flow_logs_enabled: false
+        vpc_flow_logs_log_destination_type: s3
+        vpc_flow_logs_traffic_type: "ALL"
+```
+
+<br/>
+
+In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-1` Atmos component in the `ue2-dev` stack:
+
+```yaml title="stacks/ue2-dev.yaml"
+# Import the base component configuration from the `catalog`.
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+# File extensions are optional (if not specified, `.yaml` is used by default).
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc-1:
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: infra/vpc
+        inherits:
+          # Inherit all settings and variables from the `vpc/defaults` base Atmos component
+          - vpc/defaults
+      vars:
+        # Define variables that are specific for this component
+        # and are not set in the base component
+        name: vpc-1
+        ipv4_primary_cidr_block: 10.8.0.0/18
+        # Override the default variables from the base component
+        vpc_flow_logs_enabled: true
+        vpc_flow_logs_traffic_type: "REJECT"
+
+        # Specify the name of the Atmos component that provides configuration
+        # for the `infra/vpc-flow-logs-bucket` Terraform component
+        vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket-1
+
+        # Override the context variables to point to a different Atmos stack if the 
+        # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region.
+
+        # If the bucket is provisioned in a different AWS account, 
+        # set `vpc_flow_logs_bucket_stage_name`
+        # vpc_flow_logs_bucket_stage_name: prod
+
+        # If the bucket is provisioned in a different AWS OU, 
+        # set `vpc_flow_logs_bucket_tenant_name`
+        # vpc_flow_logs_bucket_tenant_name: core
+
+        # If the bucket is provisioned in a different AWS region, 
+        # set `vpc_flow_logs_bucket_environment_name`
+        # vpc_flow_logs_bucket_environment_name: uw2
+```
+
+<br/>
+
+Having the stacks configured as shown above, we can now provision the `vpc-1` Atmos component into the `ue2-dev` stack by
+executing the following Atmos commands:
+
+```shell
+atmos terraform plan vpc-1 -s ue2-dev
+atmos terraform apply vpc-1 -s ue2-dev
+```
+
+## Caveats
+
+Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
+which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
+
+This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
+
+While placing `atmos.yaml` at the root of the repository will work for Atmos, it will not work for
+the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider because the provider gets executed from the
+component's directory (e.g. `components/terraform/infra/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
+
+:::info
+
+`atmos.yaml` is loaded from the following locations (from lowest to highest priority):
+
+- System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- Home dir (`~/.atmos/atmos.yaml`)
+- Current directory
+- ENV var `ATMOS_CLI_CONFIG_PATH`
+
+:::
+
+:::note
+
+Initial Atmos configuration can be controlled by these ENV vars:
+
+- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Path to a folder where the `atmos.yaml` CLI config file is located
+- `ATMOS_BASE_PATH` - base path to `components` and `stacks` folders
+
+:::
+
+<br/>
+
+For this to work for both the `atmos` CLI and the Terraform provider, we recommend doing one of the following:
+
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root
+  of the repo
+
+- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of
+  the repo
+
+- Put `atmos.yaml` at a location in the file system and then set the ENV var `ATMOS_CLI_CONFIG_PATH` to point to that location. The ENV var must
+  point to a folder without the `atmos.yaml` file name. For example, if `atmos.yaml` is at `/atmos/config/atmos.yaml`,
+  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
+
+- When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/complete/Dockerfile)
+  by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
+  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/complete)
+  uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
+  var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
+
+## Summary
+
+- Remote State for an Atmos component in an Atmos stack is obtained by using
+  the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module
+
+- The module calls the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider which processes the stack
+  configs and returns the configuration for the Atmos component in the stack.
+  The [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider utilizes Atmos `Go` modules to parse and
+  process stack configurations
+
+- The [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module accepts the `component` input as
+  the Atmos component name for which to get the remote state outputs
+
+- The module accepts the `context` input as a way to provide the information about the stack (using the context
+  variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
+
+- If the Atmos component (for which we want to get the remote state outputs) is provisioned in a different Atmos stack (in a different AWS OU, or
+  different AWS account, or different AWS region), we can override the context variables `tenant`, `stage` and `environment` to point the module to
+  the correct stack. For example, if the component is provisioned in a different AWS region (let's say `us-west-2`), we can set `environment = "uw2"`,
+  and the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module will get the remote state
+  outputs for the Atmos component provisioned in that region

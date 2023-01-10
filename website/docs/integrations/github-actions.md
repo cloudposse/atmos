@@ -4,7 +4,7 @@ sidebar_position: 10
 sidebar_label: GitHub Actions
 ---
 
-Atmos works anywhere you can [install and run the CLI](/quick-start/install).
+Atmos works anywhere you can [install and run the CLI](/quick-start/install-atmos).
 
 We provide a [GitHub Action](https://github.com/cloudposse/github-action-setup-atmos) to make that easier for CI/CD applications.
 

@@ -3,11 +3,11 @@ title: atmos terraform generate backend
 sidebar_label: generate backend
 sidebar_class_name: command
 id: generate-backend
-description: Use this command to generate a backend config file for an `atmos` terraform component in a stack.
+description: Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
 ---
 
 :::note purpose
-Use this command to generate a backend config file for an `atmos` terraform component in a stack.
+Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
 :::
 
 ## Usage
@@ -18,7 +18,7 @@ Execute the `terraform generate backend` command like this:
 atmos terraform generate backend <command> <component> -s <stack>
 ```
 
-This command generates a backend config file for an `atmos` terraform component in a stack.
+This command generates a backend config file for an Atmos terraform component in a stack.
 
 :::tip
 Run `atmos terraform generate backend --help` to see all the available options
@@ -35,16 +35,16 @@ atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-p
 
 ## Arguments
 
-| Argument     | Description                 | Required |
-|:-------------|:----------------------------|:---------|
-| `component`  | `atmos` terraform component | yes      |
+| Argument    | Description               | Required |
+|:------------|:--------------------------|:---------|
+| `component` | Atmos terraform component | yes      |
 
 ## Flags
 
-| Flag        | Description   | Alias | Required |
-|:------------|:--------------|:------|:---------|
-| `--stack`   | `atmos` stack | `-s`  | yes      |
-| `--dry-run` | Dry-run       |       | no       |
+| Flag        | Description | Alias | Required |
+|:------------|:------------|:------|:---------|
+| `--stack`   | Atmos stack | `-s`  | yes      |
+| `--dry-run` | Dry run     |       | no       |
 
 <br/>
 
