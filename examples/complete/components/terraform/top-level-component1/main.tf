@@ -7,8 +7,6 @@ module "service_1_label" {
   context = module.this.context
 }
 
-
-
 module "service_2_label" {
   source  = "cloudposse/label/null"
   version = "0.25.0"
