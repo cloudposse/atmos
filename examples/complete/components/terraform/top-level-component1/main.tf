@@ -15,4 +15,3 @@ module "service_2_label" {
 
   context = module.this.context
 }
-

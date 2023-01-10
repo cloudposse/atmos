@@ -7,6 +7,7 @@ locals {
   # The usage of specific kubernetes.io/cluster/* resource tags were required before Kubernetes 1.19,
   # but are now deprecated. See https://docs.aws.amazon.com/eks/latest/userguide/network_reqs.html
 
+
   max_subnet_count = (
     var.max_subnet_count > 0 ? var.max_subnet_count : (
       length(var.availability_zone_ids) > 0 ? length(var.availability_zone_ids) : length(var.availability_zones)
