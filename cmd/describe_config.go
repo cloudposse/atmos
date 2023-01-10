@@ -11,7 +11,7 @@ var describeConfigCmd = &cobra.Command{
 	Use:                "config",
 	Short:              "Execute 'describe config' command",
 	Long:               `This command shows the final (deep-merged) CLI configuration: atmos describe config`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeConfigCmd(cmd, args)
 		if err != nil {

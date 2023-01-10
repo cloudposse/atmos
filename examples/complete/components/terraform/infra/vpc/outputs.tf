@@ -57,7 +57,6 @@ output "vpc" {
     id : module.vpc.vpc_id
     cidr : module.vpc.vpc_cidr_block
     subnet_type_tag_key : var.subnet_type_tag_key
-    subnet_type_tag_value_format : var.subnet_type_tag_value_format
   }
   description = "VPC info map"
 }

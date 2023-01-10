@@ -3,11 +3,12 @@ title: atmos terraform workspace
 sidebar_label: workspace
 sidebar_class_name: command
 id: workspace
-description: This command calculates the `terraform` workspace for an `atmos` component (from the context variables and stack config), then runs `terraform init -reconfigure`, then selects the workspace by executing the `terraform workspace select` command.
+description: This command calculates the `terraform` workspace for an Atmos component (from the context variables and stack config). It runs `terraform init -reconfigure` and selects the workspace by executing the `terraform workspace select` command.
 ---
 
 :::note Purpose
-Use this command to calculate the `terraform` workspace for an `atmos` component (from the context variables and stack config), then run `terraform init -reconfigure`, then select the workspace by executing the `terraform workspace select` command.
+Use this command to calculate the `terraform` workspace for an Atmos component (from the context variables and stack config). It will
+run `terraform init -reconfigure` and then select the workspace by executing the `terraform workspace select` command.
 :::
 
 ## Usage
@@ -18,7 +19,7 @@ Execute the `terraform workspace` command like this:
 atmos terraform workspace <component> -s <stack>
 ```
 
-This command calculates the `terraform` workspace for an `atmos` component (from the context variables and stack config), then
+This command calculates the `terraform` workspace for an Atmos component (from the context variables and stack config), then
 runs `terraform init -reconfigure`, then selects the workspace by executing the `terraform workspace select` command.
 
 If the workspace does not exist, the command creates it by executing the `terraform workspace new` command.
@@ -41,13 +42,13 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 
 ## Arguments
 
-| Argument     | Description        | Required |
-|:-------------|:-------------------|:---------|
-| `component`  | `atmos` component  | yes      |
+| Argument    | Description     | Required |
+|:------------|:----------------|:---------|
+| `component` | Atmos component | yes      |
 
 ## Flags
 
-| Flag        | Description   | Alias | Required |
-|:------------|:--------------|:------|:---------|
-| `--stack`   | `atmos` stack | `-s`  | yes      |
-| `--dry-run` | Dry-run       |       | no       |
+| Flag        | Description | Alias | Required |
+|:------------|:------------|:------|:---------|
+| `--stack`   | Atmos stack | `-s`  | yes      |
+| `--dry-run` | Dry run     |       | no       |

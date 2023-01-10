@@ -6,7 +6,8 @@ id: clean
 ---
 
 :::note purpose
-Use this command to delete the `.terraform` folder, the folder that `TF_DATA_DIR` ENV var points to, `.terraform.lock.hcl` file, `varfile` and `planfile` for a
+Use this command to delete the `.terraform` folder, the folder that `TF_DATA_DIR` ENV var points to, `.terraform.lock.hcl` file, `varfile`
+and `planfile` for a
 component in a stack.
 :::
 
@@ -34,13 +35,13 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 
 ## Arguments
 
-| Argument     | Description                 | Required |
-|:-------------|:----------------------------|:---------|
-| `component`  | `atmos` terraform component | yes      |
+| Argument    | Description               | Required |
+|:------------|:--------------------------|:---------|
+| `component` | Atmos terraform component | yes      |
 
 ## Flags
 
-| Flag        | Description   | Alias | Required |
-|:------------|:--------------|:------|:---------|
-| `--stack`   | `atmos` stack | `-s`  | yes      |
-| `--dry-run` | Dry-run       |       | no       |
+| Flag        | Description | Alias | Required |
+|:------------|:------------|:------|:---------|
+| `--stack`   | Atmos stack | `-s`  | yes      |
+| `--dry-run` | Dry run     |       | no       |

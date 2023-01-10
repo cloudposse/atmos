@@ -1,7 +1,8 @@
 ---
-title: "Example #1"
+title: Atmos Example Infrastructure
+sidebar_label: Atmos Example Infrastructure
 sidebar_position: 3
-sidebar_label: Simple Example
+description: "Learn about the Example Infrastructure that Atmos shows how to configure and provision"
 ---
 
 The [example](https://github.com/cloudposse/atmos/tree/master/examples/complete) folder contains a complete solution that shows how to:
@@ -17,25 +18,27 @@ This example provides a simple filesystem layout that looks like this:
 
 ```console
    │  
-   │   # Centralized components configuration
+   │   # Centralized stacks configuration
    ├── stacks/
    │   │
-   │   └── $stack.yaml
+   │   └── <stack_1>.yaml
+   │   └── <stack_2>.yaml
+   │   └── <stack_3>.yaml
    │  
-   │   # Components are broken down by tool
+   │   # Centralized components configuration. Components are broken down by tool
    ├── components/
    │   │
-   │   ├── terraform/   # root modules in here
+   │   ├── terraform/   # Terraform components (Terraform root modules)
    │   │   ├── infra/
    │   │   ├── mixins/
    │   │   ├── test/test-component/
    │   │   └── top-level-component1/
    │   │
-   │   └── helmfile/  # helmfiles are organized by chart
+   │   └── helmfile/  # Helmfile components are organized by Helm chart
    │       ├── echo-server/
    │       └── infra/infra-server
    │  
-   │   # Root filesystem for the docker image (see `Dockerfile`)
+   │   # Root filesystem for the Docker image (see `Dockerfile`)
    ├── rootfs/
    │
    │   # Makefile for building the CLI
@@ -49,7 +52,7 @@ This example provides a simple filesystem layout that looks like this:
 
 ## Stack Configuration
 
-`atmos` provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
+Atmos provides separation of configuration and code, allowing you to provision the same code into different regions, environments and stages.
 
 In our example, all the code (Terraform and helmfiles) is in
 the [components](https://github.com/cloudposse/atmos/tree/master/examples/complete/components) folder.
@@ -79,8 +82,7 @@ In the example, we defined a few config files:
 
 __NOTE:__ The stack configuration structure and the file names described above are just an example of how to name and structure the config files.
 You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire
-solution)
-into a stack config using the `import` directive.
+solution) into a stack config using the `import` directive.
 
 Stack configuration files have a predefined format:
 
@@ -92,10 +94,10 @@ vars:
   stage: dev
 
 terraform:
-  vars: {}
+  vars: { }
 
 helmfile:
-  vars: {}
+  vars: { }
 
 components:
   terraform:
@@ -110,7 +112,7 @@ components:
       backend:
         s3:
           workspace_key_prefix: "eks"
-      vars: {}
+      vars: { }
 
   helmfile:
     nginx-ingress:

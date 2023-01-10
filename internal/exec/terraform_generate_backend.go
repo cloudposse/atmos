@@ -36,7 +36,6 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		u.PrintErrorToStdError(err)
 		return err
 	}
 

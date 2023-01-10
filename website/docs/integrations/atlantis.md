@@ -258,6 +258,7 @@ jobs:
           fi
 
   call-atlantis:
+    if: ${{ always() }}
     needs: generate-atlantis-yaml
     name: Sending data to Atlantis
     runs-on: ubuntu-latest

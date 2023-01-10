@@ -3,14 +3,15 @@ title: atmos describe stacks
 sidebar_label: stacks
 sidebar_class_name: command
 id: stacks
-description: Use this command to show the fully deep-merged configuration for all stacks and their components in the stacks.
+description: Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
 ---
 
 :::note Purpose
-Use this command to show the fully deep-merged configuration for all stacks and their components in the stacks.
+Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
 :::
 
 ## Usage
+
 Execute the `describe stacks` command like this:
 
 ```shell
@@ -49,9 +50,9 @@ Use `jq` to filter the output.
 
 | Flag                | Description                                                                                                                                                                                                                          | Alias | Required |
 |:--------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`           | Filter by a specific stack.<br/>Supports names of the top-level stack config files (including subfolder paths),<br/>and `atmos` stack names (derived from the context vars)                                                          | `-s`  | no       |
+| `--stack`           | Filter by a specific stack.<br/>Supports names of the top-level stack config files (including subfolder paths),<br/>and Atmos stack names (derived from the context vars)                                                            | `-s`  | no       |
 | `--file`            | If specified, write the result to the file                                                                                                                                                                                           |       | no       |
 | `--format`          | Specify the output format: `yaml` or `json` (`yaml` is default)                                                                                                                                                                      |       | no       |
-| `--components`      | Filter by specific `atmos` components<br/>(comma-separated string of component names)                                                                                                                                                |       | no       |
+| `--components`      | Filter by specific Atmos components<br/>(comma-separated string of component names)                                                                                                                                                  |       | no       |
 | `--component-types` | Filter by specific component types: `terraform` or `helmfile`                                                                                                                                                                        |       | no       |
 | `--sections`        | Output only the specified component sections.<br/>Available component sections: `backend`, `backend_type`, `deps`, `env`,<br/>`inheritance`, `metadata`, `remote_state_backend`,<br/>`remote_state_backend_type`, `settings`, `vars` |       | no       |
