@@ -121,6 +121,10 @@ func ExecuteDescribeStacks(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
+						if comp, ok := componentSection["component"].(string); !ok || comp == "" {
+							componentSection["component"] = componentName
+						}
+
 						// Find all derived components of the provided components and include them in the output
 						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
 						if err != nil {
@@ -175,6 +179,10 @@ func ExecuteDescribeStacks(
 						componentSection, ok := compSection.(map[string]any)
 						if !ok {
 							return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackFileName)
+						}
+
+						if comp, ok := componentSection["component"].(string); !ok || comp == "" {
+							componentSection["component"] = componentName
 						}
 
 						// Find all derived components of the provided components and include them in the output

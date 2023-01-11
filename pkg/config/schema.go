@@ -276,7 +276,7 @@ type AtlantisRepoConfig struct {
 type AtlantisProjectConfig struct {
 	Name                      string                        `yaml:"name" json:"name" mapstructure:"name"`
 	Workspace                 string                        `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
-	Workflow                  string                        `yaml:"workflow" json:"workflow" mapstructure:"workflow"`
+	Workflow                  string                        `yaml:"workflow,omitempty" json:"workflow,omitempty" mapstructure:"workflow"`
 	Dir                       string                        `yaml:"dir" json:"dir" mapstructure:"dir"`
 	TerraformVersion          string                        `yaml:"terraform_version" json:"terraform_version" mapstructure:"terraform_version"`
 	DeleteSourceBranchOnMerge bool                          `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
@@ -297,7 +297,7 @@ type AtlantisConfigOutput struct {
 	ParallelApply             bool                    `yaml:"parallel_apply" json:"parallel_apply" mapstructure:"parallel_apply"`
 	AllowedRegexpPrefixes     []string                `yaml:"allowed_regexp_prefixes" json:"allowed_regexp_prefixes" mapstructure:"allowed_regexp_prefixes"`
 	Projects                  []AtlantisProjectConfig `yaml:"projects" json:"projects" mapstructure:"projects"`
-	Workflows                 map[string]any          `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
+	Workflows                 map[string]any          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 }
 
 // Validation schemas
