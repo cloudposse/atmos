@@ -114,10 +114,10 @@ The flag `--workflow-template` is optional because Atlantis workflows can be spe
 <br/>
 
 If you use [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define Atlantis workflows,
-you don't need to specify the `workflow_templates` section in the [Atlantis Integration](/cli/configuration#integrations) in `atmos.yaml`, and
+you don't need to specify the `workflow_templates` section in the [Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml`, and
 you don't have to provide the workflow template using the `--workflow-template` flag when executing an `atmos atmos atlantis generate repo-config`
 command. After you defined the workflows in the server config `workflows` section, you can reference a workflow to be used for each generated Atlantis
-project in [Atlantis Integration](/cli/configuration#integrations) in the `integrations.atlantis.project_templates` section, for example:
+project in the `integrations.atlantis.project_templates` section, for example:
 
 ```yaml title=atmos.yaml
 integrations:
