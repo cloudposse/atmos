@@ -148,7 +148,7 @@ Each step is configured using the following attributes:
   for example `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute
 
 - `name` - step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step`
-  is specified
+  is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `name` and followed by the index of the step.
 
 - `type` - the type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command`
   is an Atmos [CLI command](/category/commands-1). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
