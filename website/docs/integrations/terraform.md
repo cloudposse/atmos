@@ -4,8 +4,8 @@ sidebar_position: 8
 sidebar_label: Terraform
 ---
 
-Atmos natively supports opinionated workflows for terraform. It's compatible with every version of terraform and designed to work with multiple
-different versions of terraform concurrently.
+Atmos natively supports opinionated workflows for Terraform. It's compatible with every version of terraform and designed to work with multiple
+different versions of Terraform concurrently.
 
 Atmos provides many settings that are specific to Terraform.
 
