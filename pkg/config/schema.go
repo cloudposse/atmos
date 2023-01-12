@@ -143,21 +143,26 @@ type ConfigAndStacksInfo struct {
 	AtmosBasePath             string
 }
 
+// Workflows
+
 type WorkflowStep struct {
+	Name    string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	Command string `yaml:"command" json:"command" mapstructure:"command"`
-	Stack   string `yaml:"stack" json:"stack" mapstructure:"stack"`
-	Type    string `yaml:"type" json:"type" mapstructure:"type"`
+	Stack   string `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
+	Type    string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 }
 
 type WorkflowDefinition struct {
-	Description string         `yaml:"description" json:"description" mapstructure:"description"`
+	Description string         `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
 	Steps       []WorkflowStep `yaml:"steps" json:"steps" mapstructure:"steps"`
-	Stack       string         `yaml:"stack" json:"stack" mapstructure:"stack"`
+	Stack       string         `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 }
 
 type WorkflowConfig map[string]WorkflowDefinition
 
 type WorkflowFile map[string]WorkflowConfig
+
+// EKS update-kubeconfig
 
 type AwsEksUpdateKubeconfigContext struct {
 	Component   string
