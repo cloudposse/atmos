@@ -19,19 +19,19 @@ func executeWorkflowSteps(
 ) error {
 	var steps = workflowDefinition.Steps
 
+	if len(steps) == 0 {
+		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
+	}
+
 	// If `--from-step` is specified, skip all the previous steps
 	if fromStep != "" {
-		steps = lo.DropWhile[cfg.WorkflowStep](workflowDefinition.Steps, func(step cfg.WorkflowStep) bool {
+		steps = lo.DropWhile[cfg.WorkflowStep](steps, func(step cfg.WorkflowStep) bool {
 			return step.Name != fromStep
 		})
 
 		if len(steps) == 0 {
 			return fmt.Errorf("invalid '--from-step' flag. Workflow '%s' does not have a step with the name '%s'", workflow, fromStep)
 		}
-	}
-
-	if len(steps) == 0 {
-		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
 	}
 
 	for stepIdx, step := range steps {
