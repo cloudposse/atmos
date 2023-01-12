@@ -99,7 +99,6 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	u.PrintInfo(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
-	fmt.Println()
 
 	err = u.PrintAsYAML(workflowDefinition)
 	if err != nil {
@@ -111,6 +110,5 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println()
 	return nil
 }
