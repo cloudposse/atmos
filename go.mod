@@ -16,6 +16,7 @@ require (
 	github.com/open-policy-agent/opa v0.48.0
 	github.com/otiai10/copy v1.9.0
 	github.com/pkg/errors v0.9.1
+	github.com/samber/lo v1.37.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.1.1
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.14.0
@@ -121,6 +122,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.7.0 // indirect
 	go.opentelemetry.io/otel/trace v1.7.0 // indirect
 	golang.org/x/crypto v0.4.0 // indirect
+	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783 // indirect
 	golang.org/x/sync v0.1.0 // indirect

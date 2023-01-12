@@ -48,6 +48,11 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	fromStep, err := flags.GetString("from-step")
+	if err != nil {
+		return err
+	}
+
 	var workflowPath string
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
@@ -101,7 +106,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = executeWorkflowSteps(workflow, workflowDefinition, dryRun, commandLineStack)
+	err = executeWorkflowSteps(workflow, workflowDefinition, dryRun, commandLineStack, fromStep)
 	if err != nil {
 		return err
 	}

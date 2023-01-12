@@ -6,10 +6,33 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
+
+	"github.com/samber/lo"
 )
 
-func executeWorkflowSteps(workflow string, workflowDefinition cfg.WorkflowDefinition, dryRun bool, commandLineStack string) error {
+func executeWorkflowSteps(
+	workflow string,
+	workflowDefinition cfg.WorkflowDefinition,
+	dryRun bool,
+	commandLineStack string,
+	fromStep string,
+) error {
 	var steps = workflowDefinition.Steps
+
+	// If `--from-step` is specified, skip all the previous steps
+	if fromStep != "" {
+		steps = lo.DropWhile[cfg.WorkflowStep](workflowDefinition.Steps, func(step cfg.WorkflowStep) bool {
+			return step.Name != fromStep
+		})
+
+		if len(steps) == 0 {
+			return fmt.Errorf("invalid '--from-step' flag. Workflow '%s' does not have a step with the name '%s'", workflow, fromStep)
+		}
+	}
+
+	if len(steps) == 0 {
+		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
+	}
 
 	for stepIdx, step := range steps {
 		var command = strings.TrimSpace(step.Command)
