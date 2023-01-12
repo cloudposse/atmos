@@ -202,7 +202,7 @@ This is useful when you want to restart the workflow from a particular step.
 For example:
 
 - You run the workflow first time with the command `atmos workflow test-1 -f workflow1`
-- `step1` and `step2` succeed, but `step3` fail
+- `step1` and `step2` succeed, but `step3` fails
 - You fix the issue with the `step3` command
 - You don't want to execute `step1` and `step2` again (to not spend time on it, or if they are
   not [idempotent](https://en.wikipedia.org/wiki/Idempotence))
