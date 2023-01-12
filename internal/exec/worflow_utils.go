@@ -10,9 +10,11 @@ import (
 	"github.com/samber/lo"
 )
 
-func executeWorkflowSteps(
+// ExecuteWorkflow executes an Atmos workflow
+func ExecuteWorkflow(
 	workflow string,
-	workflowDefinition cfg.WorkflowDefinition,
+	workflowPath string,
+	workflowDefinition *cfg.WorkflowDefinition,
 	dryRun bool,
 	commandLineStack string,
 	fromStep string,
@@ -21,6 +23,28 @@ func executeWorkflowSteps(
 
 	if len(steps) == 0 {
 		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
+	}
+
+	// Check if the steps have the `name` attribute.
+	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
+	// step (the index starts with 1, so the first generated step name would be `step1`)
+	for index, step := range steps {
+		if step.Name == "" {
+			// When iterating through a slice with a range loop, if elements need to be changed,
+			// changing the returned value from the range is not changing the original slice element.
+			// That return value is a copy of the element.
+			// So doing changes to it will not affect the original elements.
+			// We need to access the element with the index returned from the range iterator and change it there.
+			// https://medium.com/@nsspathirana/common-mistakes-with-go-slices-95f2e9b362a9
+			steps[index].Name = fmt.Sprintf("step%d", index+1)
+		}
+	}
+
+	u.PrintInfo(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
+
+	err := u.PrintAsYAML(workflowDefinition)
+	if err != nil {
+		return err
 	}
 
 	// If `--from-step` is specified, skip all the previous steps

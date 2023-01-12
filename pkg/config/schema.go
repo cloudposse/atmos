@@ -146,7 +146,7 @@ type ConfigAndStacksInfo struct {
 // Workflows
 
 type WorkflowStep struct {
-	Name    string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Name    string `yaml:"name" json:"name" mapstructure:"name"`
 	Command string `yaml:"command" json:"command" mapstructure:"command"`
 	Stack   string `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	Type    string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
