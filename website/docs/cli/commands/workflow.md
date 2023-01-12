@@ -33,6 +33,7 @@ Run `atmos workflow --help` to see all the available options
 
 ```shell
 atmos workflow test-1 -f workflow1
+atmos workflow test-1 -f workflow1 --from-step step2
 atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev
 atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1 --dry-run
 atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
@@ -46,8 +47,9 @@ atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
 
 ## Flags
 
-| Flag        | Description                                                                                   | Alias | Required |
-|:------------|:----------------------------------------------------------------------------------------------|:------|:---------|
-| `--file`    | File name where the workflow is defined                                                       | `-f`  | yes      |
-| `--stack`   | Atmos stack<br/>(if provided, will override stacks defined in the workflow or workflow steps) | `-s`  | no       |
-| `--dry-run` | Dry run                                                                                       |       | no       |
+| Flag          | Description                                                                                   | Alias | Required |
+|:--------------|:----------------------------------------------------------------------------------------------|:------|:---------|
+| `--file`      | File name where the workflow is defined                                                       | `-f`  | yes      |
+| `--stack`     | Atmos stack<br/>(if provided, will override stacks defined in the workflow or workflow steps) | `-s`  | no       |
+| `--from-step` | Start the workflow from the named step                                                        |       | no       |
+| `--dry-run`   | Dry run                                                                                       |       | no       |

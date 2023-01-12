@@ -64,10 +64,13 @@ workflows:
     description: Test workflow
     steps:
       - command: echo Command 1
+        name: step1
         type: shell
       - command: echo Command 2
+        name: step2
         type: shell
       - command: echo Command 3
+        name: step3
         type: shell
       - command: echo Command 4
         type: shell
