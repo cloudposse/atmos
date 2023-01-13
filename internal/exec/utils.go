@@ -32,6 +32,7 @@ var (
 		cfg.InitRunReconfigure,
 		cfg.AutoGenerateBackendFileFlag,
 		cfg.FromPlanFlag,
+		cfg.PlanFileFlag,
 		cfg.HelpFlag1,
 		cfg.HelpFlag2,
 		cfg.WorkflowDirFlag,
@@ -160,6 +161,7 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
+	configAndStacksInfo.PlanFile = argsAndFlagsInfo.PlanFile
 	configAndStacksInfo.DryRun = argsAndFlagsInfo.DryRun
 	configAndStacksInfo.SkipInit = argsAndFlagsInfo.SkipInit
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
@@ -1152,6 +1154,21 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.CueDir = cueDirFlagParts[1]
+		}
+
+		if arg == cfg.PlanFileFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PlanFile = inputArgsAndFlags[i+1]
+			info.UseTerraformPlan = true
+		} else if strings.HasPrefix(arg+"=", cfg.PlanFileFlag) {
+			var planFileFlagParts = strings.Split(arg, "=")
+			if len(planFileFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PlanFile = planFileFlagParts[1]
+			info.UseTerraformPlan = true
 		}
 
 		if arg == cfg.FromPlanFlag {

@@ -87,6 +87,7 @@ type ArgsAndFlagsInfo struct {
 	InitRunReconfigure      string
 	AutoGenerateBackendFile string
 	UseTerraformPlan        bool
+	PlanFile                string
 	DryRun                  bool
 	SkipInit                bool
 	NeedHelp                bool
@@ -129,6 +130,7 @@ type ConfigAndStacksInfo struct {
 	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
 	UseTerraformPlan          bool
+	PlanFile                  string
 	DryRun                    bool
 	SkipInit                  bool
 	ComponentInheritanceChain []string
