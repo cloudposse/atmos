@@ -109,6 +109,7 @@ atmos describe affected --ref refs/heads/main --format json
 atmos describe affected --ref refs/tags/v1.16.0 --file affected.yaml --format yaml
 atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
 atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+atmos describe affected --ssh-key <path_to_public_ssh_key>
 ```
 
 ## Flags
@@ -120,6 +121,7 @@ atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 | `--file`    | If specified, write the result to the file                                                                                    | no       |
 | `--format`  | Specify the output format: `json` or `yaml` (`json` is default)                                                               | no       |
 | `--verbose` | Print more detailed output when cloning and checking out the Git repository and processing the result                         | no       |
+| `--ssh-key` | Path to the public SSH key to clone private repos using SSH                                                                   | no       |
 
 ## Output
 

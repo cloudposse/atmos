@@ -11,7 +11,7 @@ import (
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
 	Short:              "Execute 'describe affected' command",
-	Long:               `This command produces a list of the affected Atmos components and stacks given two Git commits: atmos describe stacks [options]`,
+	Long:               `This command produces a list of the affected Atmos components and stacks given two Git commits: atmos describe affected [options]`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeAffectedCmd(cmd, args)
@@ -29,6 +29,7 @@ func init() {
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to the file: atmos describe affected --ref refs/tags/v1.16.0 --file affected.json")
 	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: atmos describe affected --format=json|yaml ('json' is default)")
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Print more detailed output when cloning and checking out the Git repository: atmos describe affected --verbose=true")
+	describeAffectedCmd.PersistentFlags().String("ssh-key", "", "Path to the public SSH key to clone private repos using SSH: atmos describe affected --ssh-key <path_to_public_ssh_key>")
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }
