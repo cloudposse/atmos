@@ -279,7 +279,11 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 		allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 	case "apply":
 		if info.UseTerraformPlan {
-			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
+			if info.PlanFile != "" {
+				allArgsAndFlags = append(allArgsAndFlags, []string{info.PlanFile}...)
+			} else {
+				allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
+			}
 		} else {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 		}
@@ -357,7 +361,7 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Clean up
-	if info.SubCommand != "plan" {
+	if info.SubCommand != "plan" && info.PlanFile == "" {
 		planFilePath := constructTerraformComponentPlanfilePath(cliConfig, info)
 		_ = os.Remove(planFilePath)
 	}
