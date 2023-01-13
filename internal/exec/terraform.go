@@ -120,32 +120,34 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		// Write variables to a file
-		var varFilePath, varFileNameFromArg string
+		// Write variables to a file (only if we are not using the previously generated terraform plan)
+		if !info.UseTerraformPlan {
+			var varFilePath, varFileNameFromArg string
 
-		// Handle `terraform varfile` and `terraform write varfile` legacy commands
-		if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
-			if len(info.AdditionalArgsAndFlags) == 2 {
-				fileFlag := info.AdditionalArgsAndFlags[0]
-				if fileFlag == "-f" || fileFlag == "--file" {
-					varFileNameFromArg = info.AdditionalArgsAndFlags[1]
+			// Handle `terraform varfile` and `terraform write varfile` legacy commands
+			if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
+				if len(info.AdditionalArgsAndFlags) == 2 {
+					fileFlag := info.AdditionalArgsAndFlags[0]
+					if fileFlag == "-f" || fileFlag == "--file" {
+						varFileNameFromArg = info.AdditionalArgsAndFlags[1]
+					}
 				}
 			}
-		}
 
-		if len(varFileNameFromArg) > 0 {
-			varFilePath = varFileNameFromArg
-		} else {
-			varFilePath = constructTerraformComponentVarfilePath(cliConfig, info)
-		}
+			if len(varFileNameFromArg) > 0 {
+				varFilePath = varFileNameFromArg
+			} else {
+				varFilePath = constructTerraformComponentVarfilePath(cliConfig, info)
+			}
 
-		u.PrintInfo("Writing the variables to file:")
-		fmt.Println(varFilePath)
+			u.PrintInfo("Writing the variables to file:")
+			fmt.Println(varFilePath)
 
-		if !info.DryRun {
-			err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
-			if err != nil {
-				return err
+			if !info.DryRun {
+				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -227,16 +229,20 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 	// Print command info
 	u.PrintInfo("\nCommand info:")
 	fmt.Println("Terraform binary: " + info.Command)
+
 	if info.SubCommand2 == "" {
 		fmt.Printf("Terraform command: %s\n", info.SubCommand)
 	} else {
 		fmt.Printf("Terraform command: %s %s\n", info.SubCommand, info.SubCommand2)
 	}
+
 	fmt.Printf("Arguments and flags: %v\n", info.AdditionalArgsAndFlags)
 	fmt.Println("Component: " + info.ComponentFromArg)
+
 	if len(info.BaseComponentPath) > 0 {
 		fmt.Println("Terraform component: " + info.BaseComponentPath)
 	}
+
 	if len(info.ComponentInheritanceChain) > 0 {
 		fmt.Println("Inheritance: " + info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> "))
 	}
@@ -355,6 +361,7 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 		planFilePath := constructTerraformComponentPlanfilePath(cliConfig, info)
 		_ = os.Remove(planFilePath)
 	}
+
 	if info.SubCommand == "apply" {
 		varFilePath := constructTerraformComponentVarfilePath(cliConfig, info)
 		_ = os.Remove(varFilePath)

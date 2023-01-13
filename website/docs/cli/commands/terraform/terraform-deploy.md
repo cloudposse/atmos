@@ -6,7 +6,7 @@ id: deploy
 ---
 
 :::note purpose
-Use this command to execute `terraform plan` and then `terraform apply` on an Atmos component in an Atmos stack.
+Use this command to execute `terraform apply -auto-approve` on an Atmos component in an Atmos stack.
 :::
 
 ## Usage
@@ -20,7 +20,7 @@ atmos terraform deploy <component> -s <stack>
 - `atmos terraform deploy` command supports `--deploy-run-init=true|false` flag to enable/disable running `terraform init` before executing the
   command
 
-- `atmos terraform deploy` command automatically sets `-auto-approve` flag before running `terraform apply`
+- `atmos terraform deploy` command automatically sets `-auto-approve` flag when running `terraform apply`
 
 - `atmos terraform deploy` command supports `--from-plan` flag. If the flag is specified, the command will use the planfile previously generated
   by `atmos terraform plan` command instead of generating a new planfile, e.g. `atmos terraform deploy <component> -s <stack> --from-plan`. Note that
@@ -28,8 +28,8 @@ atmos terraform deploy <component> -s <stack>
 
 - `atmos terraform deploy` command supports `--planfile` flag to specify the path to a planfile. The `--planfile` flag should be used instead of the
   planfile argument in the native `terraform apply <planfile>` command. For example, you can execute the command
-  `atmos terraform plan <component> -s <stack> -out=FILE`, which will save the generated plan to a file on disk,
-  and then execute the command `atmos terraform deploy <component> -s <stack> --planfile FILE` to apply the previously generated planfile
+  `atmos terraform plan <component> -s <stack> -out=<FILE>`, which will save the generated plan to a file on disk,
+  and then execute the command `atmos terraform deploy <component> -s <stack> --planfile <FILE>` to apply the previously generated planfile
 
 See [all flags](#Flags).
 
