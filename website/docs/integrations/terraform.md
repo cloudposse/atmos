@@ -4,8 +4,8 @@ sidebar_position: 8
 sidebar_label: Terraform
 ---
 
-Atmos natively supports opinionated workflows for terraform. It's compatible with every version of terraform and designed to work with multiple
-different versions of terraform concurrently.
+Atmos natively supports opinionated workflows for Terraform. It's compatible with every version of terraform and designed to work with multiple
+different versions of Terraform concurrently.
 
 Atmos provides many settings that are specific to Terraform.
 
@@ -103,7 +103,7 @@ atmos terraform plan eks -s ue2-dev
 atmos terraform apply eks -s ue2-dev
 ```
 
-To execute `plan` and `apply` in one step, use `terraform deploy` command:
+`terraform deploy` command executes `terraform apply -auto-approve` to provision components into stacks without user interaction:
 
 ```console
 atmos terraform deploy eks -s ue2-dev

@@ -265,7 +265,7 @@ workflows:
       # Inline scripts are also supported
       # Refer to https://yaml-multiline.info for more details
       - type: shell
-        command: >-
+        command: |
           echo "Starting the workflow execution..."
           read -p "Press any key to continue... " -n1 -s
       - command: terraform plan test/test-component

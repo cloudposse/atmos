@@ -26,6 +26,7 @@ const (
 	InitRunReconfigure          = "--init-run-reconfigure"
 
 	FromPlanFlag = "--from-plan"
+	PlanFileFlag = "--planfile"
 	DryRunFlag   = "--dry-run"
 	SkipInitFlag = "--skip-init"
 
