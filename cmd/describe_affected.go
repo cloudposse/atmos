@@ -29,7 +29,8 @@ func init() {
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to the file: atmos describe affected --ref refs/tags/v1.16.0 --file affected.json")
 	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: atmos describe affected --format=json|yaml ('json' is default)")
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Print more detailed output when cloning and checking out the Git repository: atmos describe affected --verbose=true")
-	describeAffectedCmd.PersistentFlags().String("ssh-key", "", "Path to the public SSH key to clone private repos using SSH: atmos describe affected --ssh-key <path_to_public_ssh_key>")
+	describeAffectedCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos describe affected --ssh-key <path_to_ssh_key>")
+	describeAffectedCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }

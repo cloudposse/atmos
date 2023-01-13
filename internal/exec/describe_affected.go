@@ -2,17 +2,20 @@ package exec
 
 import (
 	"fmt"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"os"
 	"path"
 	"reflect"
 	"strconv"
 	"time"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeAffectedCmd executes `describe affected` command
@@ -63,7 +66,17 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	affected, err := ExecuteDescribeAffected(cliConfig, ref, sha, verbose)
+	sshKeyPath, err := flags.GetString("ssh-key")
+	if err != nil {
+		return err
+	}
+
+	sshKeyPassword, err := flags.GetString("ssh-key-password")
+	if err != nil {
+		return err
+	}
+
+	affected, err := ExecuteDescribeAffected(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
 	if err != nil {
 		return err
 	}
@@ -83,6 +96,8 @@ func ExecuteDescribeAffected(
 	cliConfig cfg.CliConfiguration,
 	ref string,
 	sha string,
+	sshKeyPath string,
+	sshKeyPassword string,
 	verbose bool,
 ) ([]cfg.Affected, error) {
 
@@ -162,6 +177,23 @@ func ExecuteDescribeAffected(
 
 	if verbose {
 		cloneOptions.Progress = os.Stdout
+	}
+
+	// Clone private repos using SSH
+	// https://gist.github.com/efontan/e8e8818dc0845d3bd7bf1343c984ae7b
+	// https://github.com/src-d/go-git/issues/550
+	if sshKeyPath != "" {
+		sshKeyContent, err := os.ReadFile(sshKeyPath)
+		if err != nil {
+			return nil, err
+		}
+
+		sshPublicKey, err := ssh.NewPublicKeys("git", sshKeyContent, sshKeyPassword)
+		if err != nil {
+			return nil, err
+		}
+
+		cloneOptions.Auth = sshPublicKey
 	}
 
 	remoteRepo, err := git.PlainClone(tempDir, false, &cloneOptions)
