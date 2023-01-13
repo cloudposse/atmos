@@ -181,6 +181,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				if terraformComponent != componentName {
 					context.BaseComponent = terraformComponent
 				}
+
 				workspace, err := BuildTerraformWorkspace(
 					stackConfigFileName,
 					cliConfig.Stacks.NamePattern,

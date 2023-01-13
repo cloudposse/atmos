@@ -6,6 +6,7 @@ import (
 	"path"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -193,7 +194,12 @@ func ExecuteDescribeAffected(
 			return nil, err
 		}
 
+		// Use the SSH key to clone the repo
 		cloneOptions.Auth = sshPublicKey
+
+		// Update the repo URL to SSH format
+		// https://mirrors.edge.kernel.org/pub/software/scm/git/docs/git-clone.html
+		cloneOptions.URL = strings.Replace(repoUrl, "https://", "ssh://", 1)
 	}
 
 	remoteRepo, err := git.PlainClone(tempDir, false, &cloneOptions)
