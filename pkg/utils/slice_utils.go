@@ -34,6 +34,16 @@ func SliceContainsStringStartsWith(s []string, str string) bool {
 	return false
 }
 
+// SliceContainsStringHasPrefix checks if a slice contains a string that begins with the given prefix
+func SliceContainsStringHasPrefix(s []string, prefix string) bool {
+	for _, v := range s {
+		if strings.HasPrefix(v, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // SliceOfStringsToSpaceSeparatedString checks if an int is present in a slice
 func SliceOfStringsToSpaceSeparatedString(s []string) string {
 	return strings.Join(s, " ")
