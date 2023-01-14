@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/pkg/errors"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeAffected processes stack configs and returns a list of the affected Atmos components and stacks given two Git commits

@@ -2,7 +2,9 @@ package exec
 
 import (
 	"fmt"
+	"github.com/samber/lo"
 	"github.com/spf13/cobra"
+	"sort"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -73,7 +75,18 @@ func ExecuteSpaceliftDescribeAffectedCmd(cmd *cobra.Command, args []string) erro
 
 	u.PrintInfoVerbose(verbose && file == "", fmt.Sprintf("\nAffected Spacelift stacks: \n"))
 
-	err = printOrWriteToFile(format, file, affected)
+	// Get the affected Spacelift stacks from the list of objects
+	// https://github.com/samber/lo#filtermap
+	res := lo.FilterMap[cfg.Affected, string](affected, func(item cfg.Affected, _ int) (string, bool) {
+		if item.SpaceliftStack != "" {
+			return item.SpaceliftStack, true
+		}
+		return "", false
+	})
+
+	sort.Strings(res)
+
+	err = printOrWriteToFile(format, file, res)
 	if err != nil {
 		return err
 	}
