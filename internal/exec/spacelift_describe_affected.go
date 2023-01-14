@@ -8,8 +8,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeAffectedCmd executes `describe affected` command
-func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
+// ExecuteSpaceliftDescribeAffectedCmd executes `spacelift describe affected` command
+func ExecuteSpaceliftDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("", cmd, args)
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	u.PrintInfoVerbose(verbose && file == "", fmt.Sprintf("\nAffected components and stacks: \n"))
+	u.PrintInfoVerbose(verbose && file == "", fmt.Sprintf("\nAffected Spacelift stacks: \n"))
 
 	err = printOrWriteToFile(format, file, affected)
 	if err != nil {

@@ -1,6 +1,6 @@
 {
-  "label": "vendor",
-  "position": 8,
+  "label": "spacelift",
+  "position": 5,
   "className": "command",
   "collapsible": true,
   "collapsed": true,
