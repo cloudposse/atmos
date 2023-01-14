@@ -149,7 +149,8 @@ where:
 - `component` - the affected Atmos component in the stack
 - `component_type` - the type of the component (`terraform` or `helmfile`)
 - `stack` - the affected Atmos stack
-- `spacelift_stack` - the affected Spacelift stack
+- `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
+  Atmos stack in the `settings.spacelift.workspace_enabled` config
 - `affected` - shows what was changed for the component. The possible values are:
 
   - `stack.vars` - the `vars` component section in the stack config has been modified
@@ -165,10 +166,10 @@ For example:
 ```json
 [
   {
-    "component": "test/test-component-override-3",
+    "component": "test/test-component-override-2",
     "component_type": "terraform",
     "stack": "tenant1-ue2-dev",
-    "spacelift_stack": "tenant1-ue2-dev-test-test-component-override-3",
+    "spacelift_stack": "tenant1-ue2-dev-new-component",
     "affected": "stack.vars"
   },
   {
@@ -182,7 +183,6 @@ For example:
     "component": "test/test-component-override-3",
     "component_type": "terraform",
     "stack": "tenant1-ue2-prod",
-    "spacelift_stack": "tenant1-ue2-prod-test-test-component-override-3",
     "affected": "stack.env"
   }
 ]
