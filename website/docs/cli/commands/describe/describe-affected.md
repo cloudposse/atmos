@@ -124,9 +124,9 @@ atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password
 | `--sha`              | Git commit SHA with which to compare the current working branch                                                               | no       |
 | `--file`             | If specified, write the result to the file                                                                                    | no       |
 | `--format`           | Specify the output format: `json` or `yaml` (`json` is default)                                                               | no       |
-| `--verbose`          | Print more detailed output when cloning and checking out the Git repository and processing the result                         | no       |
+| `--verbose`          | Print more detailed output when cloning and checking out the Git repository<br/>and processing the result                     | no       |
 | `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                              | no       |
-| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block                        | no       |
+| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                    | no       |
 
 ## Output
 
