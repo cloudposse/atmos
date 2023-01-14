@@ -332,6 +332,9 @@ func findAffected(
 ) []cfg.Affected {
 
 	res := []cfg.Affected{}
+	var metadataSection map[any]any
+	var varSection map[any]any
+	var settingsSection map[any]any
 
 	for stackName, stackSection := range currentStacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
@@ -339,7 +342,7 @@ func findAffected(
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+							if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
 								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
@@ -372,7 +375,7 @@ func findAffected(
 								}
 							}
 							// Check `vars` section
-							if varSection, ok := componentSection["vars"].(map[any]any); ok {
+							if varSection, ok = componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
 									affected := cfg.Affected{
 										ComponentType: "terraform",
@@ -398,7 +401,7 @@ func findAffected(
 								}
 							}
 							// Check `settings` section
-							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
+							if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, "settings") {
 									affected := cfg.Affected{
 										ComponentType: "terraform",
@@ -416,7 +419,7 @@ func findAffected(
 				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+							if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
 								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
@@ -449,7 +452,7 @@ func findAffected(
 								}
 							}
 							// Check `vars` section
-							if varSection, ok := componentSection["vars"].(map[any]any); ok {
+							if varSection, ok = componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
 									affected := cfg.Affected{
 										ComponentType: "helmfile",
@@ -475,7 +478,7 @@ func findAffected(
 								}
 							}
 							// Check `settings` section
-							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
+							if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, "settings") {
 									affected := cfg.Affected{
 										ComponentType: "helmfile",
