@@ -66,21 +66,24 @@ Affected components and stacks:
 
 [
    {
+      "component": "infra/vpc",
+      "component_type": "terraform",
       "stack": "tenant1-ue2-dev",
-      "component_type": "terraform",
-      "component": "infra/vpc",
+      "spacelift_stack": "tenant1-ue2-dev-infra-vpc",
       "affected": "component"
    },
    {
+      "component": "infra/vpc",
+      "component_type": "terraform",
       "stack": "tenant1-ue2-prod",
-      "component_type": "terraform",
-      "component": "infra/vpc",
+      "spacelift_stack": "tenant1-ue2-prod-infra-vpc",
       "affected": "component"
    },
    {
-      "stack": "tenant1-ue2-staging",
-      "component_type": "terraform",
       "component": "infra/vpc",
+      "component_type": "terraform",
+      "stack": "tenant1-ue2-staging",
+      "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
       "affected": "component"
    }
 ]
@@ -133,19 +136,21 @@ Each object has the following schema:
 
 ```json
 {
-  "stack": "....",
-  "component_type": "....",
   "component": "....",
+  "component_type": "....",
+  "stack": "....",
+  "spacelift_stack": ".....",
   "affected": "....."
 }
 ```
 
 where:
 
-- `stack` is the affected Atmos stack
-- `component` is the affected Atmos component in the stack
-- `component_type` is the type of the component (`terraform` or `helmfile`)
-- `affected` shows what was changed for the component. The possible values are:
+- `component` - the affected Atmos component in the stack
+- `component_type` - the type of the component (`terraform` or `helmfile`)
+- `stack` - the affected Atmos stack
+- `spacelift_stack` - the affected Spacelift stack
+- `affected` - shows what was changed for the component. The possible values are:
 
   - `stack.vars` - the `vars` component section in the stack config has been modified
   - `stack.env` - the `env` component section in the stack config has been modified
@@ -160,22 +165,25 @@ For example:
 ```json
 [
   {
-    "stack": "tenant2-ue2-staging",
+    "component": "test/test-component-override-3",
     "component_type": "terraform",
+    "stack": "tenant1-ue2-dev",
+    "spacelift_stack": "tenant1-ue2-dev-test-test-component-override-3",
+    "affected": "stack.vars"
+  },
+  {
     "component": "infra/vpc",
+    "component_type": "terraform",
+    "stack": "tenant2-ue2-staging",
+    "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
     "affected": "component"
   },
   {
+    "component": "test/test-component-override-3",
+    "component_type": "terraform",
     "stack": "tenant1-ue2-prod",
-    "component_type": "terraform",
-    "component": "test/test-component-override-3",
+    "spacelift_stack": "tenant1-ue2-prod-test-test-component-override-3",
     "affected": "stack.env"
-  },
-  {
-    "stack": "tenant1-ue2-dev",
-    "component_type": "terraform",
-    "component": "test/test-component-override-3",
-    "affected": "stack.vars"
   }
 ]
 ```
