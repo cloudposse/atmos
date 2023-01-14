@@ -560,15 +560,18 @@ func appendToAffected(
 			spaceliftSettingsSection = i.(map[any]any)
 		}
 
-		context := cfg.GetContextFromVars(varSection)
-		context.Component = componentName
-		contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
-		if err != nil {
-			return nil, err
-		}
+		if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
+			context := cfg.GetContextFromVars(varSection)
+			context.Component = componentName
 
-		spaceliftStackName, _ := BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
-		affected.SpaceliftStack = spaceliftStackName
+			contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+			if err != nil {
+				return nil, err
+			}
+
+			spaceliftStackName, _ := BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
+			affected.SpaceliftStack = spaceliftStackName
+		}
 	}
 
 	return append(affectedList, affected), nil
