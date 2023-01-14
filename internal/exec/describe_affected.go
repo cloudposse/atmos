@@ -319,7 +319,11 @@ func ExecuteDescribeAffected(
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
-	affected := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
+	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
+	if err != nil {
+		return nil, err
+	}
+
 	return affected, nil
 }
 
@@ -329,12 +333,10 @@ func findAffected(
 	remoteStacks map[string]any,
 	cliConfig cfg.CliConfiguration,
 	changedFiles []string,
-) []cfg.Affected {
+) ([]cfg.Affected, error) {
 
 	res := []cfg.Affected{}
-	var metadataSection map[any]any
-	var varSection map[any]any
-	var settingsSection map[any]any
+	var err error
 
 	for stackName, stackSection := range currentStacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
@@ -342,7 +344,7 @@ func findAffected(
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
 								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
@@ -357,7 +359,10 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
@@ -370,12 +375,15 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
 							// Check `vars` section
-							if varSection, ok = componentSection["vars"].(map[any]any); ok {
+							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
 									affected := cfg.Affected{
 										ComponentType: "terraform",
@@ -383,7 +391,10 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
@@ -396,12 +407,15 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
 							// Check `settings` section
-							if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
+							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, "settings") {
 									affected := cfg.Affected{
 										ComponentType: "terraform",
@@ -409,17 +423,21 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
 						}
 					}
 				}
+
 				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
 								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
@@ -434,7 +452,10 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
@@ -447,12 +468,15 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
 							// Check `vars` section
-							if varSection, ok = componentSection["vars"].(map[any]any); ok {
+							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
 									affected := cfg.Affected{
 										ComponentType: "helmfile",
@@ -460,7 +484,10 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
@@ -473,12 +500,15 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
 							// Check `settings` section
-							if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
+							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, "settings") {
 									affected := cfg.Affected{
 										ComponentType: "helmfile",
@@ -486,7 +516,10 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
-									res = append(res, affected)
+									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									if err != nil {
+										return nil, err
+									}
 									continue
 								}
 							}
@@ -497,7 +530,48 @@ func findAffected(
 		}
 	}
 
-	return res
+	return res, nil
+}
+
+// appendToAffected adds an item to the affected list and adds the Spacelift stack
+func appendToAffected(
+	cliConfig cfg.CliConfiguration,
+	componentName string,
+	stackName string,
+	componentSection map[string]any,
+	affectedList []cfg.Affected,
+	affected cfg.Affected,
+) ([]cfg.Affected, error) {
+
+	var settingsSection map[any]any
+	var spaceliftSettingsSection map[any]any
+	var varSection map[any]any
+
+	if affected.ComponentType == "terraform" {
+		if i, ok2 := componentSection["vars"]; ok2 {
+			varSection = i.(map[any]any)
+		}
+
+		if i, ok2 := componentSection["settings"]; ok2 {
+			settingsSection = i.(map[any]any)
+		}
+
+		if i, ok2 := settingsSection["spacelift"]; ok2 {
+			spaceliftSettingsSection = i.(map[any]any)
+		}
+
+		context := cfg.GetContextFromVars(varSection)
+		context.Component = componentName
+		contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+		if err != nil {
+			return nil, err
+		}
+
+		spaceliftStackName, _ := BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
+		affected.SpaceliftStack = spaceliftStackName
+	}
+
+	return append(affectedList, affected), nil
 }
 
 // isEqual compares a section of a component from the remote stacks with a section of a local component
