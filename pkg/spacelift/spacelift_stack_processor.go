@@ -115,7 +115,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					context.Component = component
-					spaceliftStackName, _ := buildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+					spaceliftStackName, _ := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 					allStackNames = append(allStackNames, strings.Replace(spaceliftStackName, "/", "-", -1))
 				}
 			}
@@ -302,7 +302,7 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Spacelift stack name
-					spaceliftStackName, spaceliftStackNamePattern := buildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+					spaceliftStackName, spaceliftStackNamePattern := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 
 					// Add Spacelift stack config to the final map
 					spaceliftStackNameKey := strings.Replace(spaceliftStackName, "/", "-", -1)
@@ -354,14 +354,4 @@ func buildSpaceliftDependsOnStackName(
 	}
 
 	return spaceliftStackName, nil
-}
-
-// buildSpaceliftStackName build a Spacelift stack name from the provided context and state name pattern
-func buildSpaceliftStackName(spaceliftSettings map[any]any, context cfg.Context, contextPrefix string) (string, string) {
-	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
-		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
-	} else {
-		defaultSpaceliftStackNamePattern := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
-		return strings.Replace(defaultSpaceliftStackNamePattern, "/", "-", -1), contextPrefix
-	}
 }

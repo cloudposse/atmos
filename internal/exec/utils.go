@@ -1225,20 +1225,30 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 		twoWordsCommand := false
 
 		// Handle terraform two-words commands
-		// https://www.terraform.io/cli/commands
+		// https://developer.hashicorp.com/terraform/cli/commands
 		if componentType == "terraform" {
+
 			// Handle the custom legacy command `terraform write varfile` (NOTE: use `terraform generate varfile` instead)
 			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
 				info.SubCommand = "write"
 				info.SubCommand2 = "varfile"
 				twoWordsCommand = true
 			}
+
 			// `terraform workspace` commands
-			// https://www.terraform.io/cli/commands/workspace
+			// https://developer.hashicorp.com/terraform/cli/commands/workspace
 			if additionalArgsAndFlags[0] == "workspace" &&
 				u.SliceContainsString([]string{"list", "select", "new", "delete", "show"}, additionalArgsAndFlags[1]) {
 				info.SubCommand = "workspace"
 				info.SubCommand2 = additionalArgsAndFlags[1]
+				twoWordsCommand = true
+			}
+
+			// `terraform state` commands
+			// https://developer.hashicorp.com/terraform/cli/commands/state
+			if additionalArgsAndFlags[0] == "state" &&
+				u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
+				info.SubCommand = fmt.Sprintf("state %s", additionalArgsAndFlags[1])
 				twoWordsCommand = true
 			}
 		}
