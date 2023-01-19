@@ -32,6 +32,7 @@ var (
 		cfg.InitRunReconfigure,
 		cfg.AutoGenerateBackendFileFlag,
 		cfg.FromPlanFlag,
+		cfg.PlanFileFlag,
 		cfg.HelpFlag1,
 		cfg.HelpFlag2,
 		cfg.WorkflowDirFlag,
@@ -160,6 +161,7 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
+	configAndStacksInfo.PlanFile = argsAndFlagsInfo.PlanFile
 	configAndStacksInfo.DryRun = argsAndFlagsInfo.DryRun
 	configAndStacksInfo.SkipInit = argsAndFlagsInfo.SkipInit
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
@@ -1154,6 +1156,21 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 			info.CueDir = cueDirFlagParts[1]
 		}
 
+		if arg == cfg.PlanFileFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PlanFile = inputArgsAndFlags[i+1]
+			info.UseTerraformPlan = true
+		} else if strings.HasPrefix(arg+"=", cfg.PlanFileFlag) {
+			var planFileFlagParts = strings.Split(arg, "=")
+			if len(planFileFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PlanFile = planFileFlagParts[1]
+			info.UseTerraformPlan = true
+		}
+
 		if arg == cfg.FromPlanFlag {
 			info.UseTerraformPlan = true
 		}
@@ -1208,20 +1225,30 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 		twoWordsCommand := false
 
 		// Handle terraform two-words commands
-		// https://www.terraform.io/cli/commands
+		// https://developer.hashicorp.com/terraform/cli/commands
 		if componentType == "terraform" {
+
 			// Handle the custom legacy command `terraform write varfile` (NOTE: use `terraform generate varfile` instead)
 			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
 				info.SubCommand = "write"
 				info.SubCommand2 = "varfile"
 				twoWordsCommand = true
 			}
+
 			// `terraform workspace` commands
-			// https://www.terraform.io/cli/commands/workspace
+			// https://developer.hashicorp.com/terraform/cli/commands/workspace
 			if additionalArgsAndFlags[0] == "workspace" &&
 				u.SliceContainsString([]string{"list", "select", "new", "delete", "show"}, additionalArgsAndFlags[1]) {
 				info.SubCommand = "workspace"
 				info.SubCommand2 = additionalArgsAndFlags[1]
+				twoWordsCommand = true
+			}
+
+			// `terraform state` commands
+			// https://developer.hashicorp.com/terraform/cli/commands/state
+			if additionalArgsAndFlags[0] == "state" &&
+				u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
+				info.SubCommand = fmt.Sprintf("state %s", additionalArgsAndFlags[1])
 				twoWordsCommand = true
 			}
 		}

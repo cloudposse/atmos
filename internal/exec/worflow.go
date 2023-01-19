@@ -48,6 +48,11 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	fromStep, err := flags.GetString("from-step")
+	if err != nil {
+		return err
+	}
+
 	var workflowPath string
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
@@ -93,19 +98,10 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowDefinition = i
 	}
 
-	u.PrintInfo(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
-	fmt.Println()
-
-	err = u.PrintAsYAML(workflowDefinition)
+	err = ExecuteWorkflow(workflow, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
 	if err != nil {
 		return err
 	}
 
-	err = executeWorkflowSteps(workflow, workflowDefinition, dryRun, commandLineStack)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println()
 	return nil
 }

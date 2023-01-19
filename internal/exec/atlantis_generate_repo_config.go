@@ -95,8 +95,10 @@ func ExecuteAtlantisGenerateRepoConfig(
 		return errors.Errorf("atlantis project template '%s' is not defined in 'integrations.atlantis.project_templates' in atmos.yaml", projectTemplateName)
 	}
 
-	if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[workflowTemplateName]; !ok {
-		return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in atmos.yaml", workflowTemplateName)
+	if workflowTemplateName != "" {
+		if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[workflowTemplateName]; !ok {
+			return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in atmos.yaml", workflowTemplateName)
+		}
 	}
 
 	var atlantisProjects []cfg.AtlantisProjectConfig
@@ -179,6 +181,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				if terraformComponent != componentName {
 					context.BaseComponent = terraformComponent
 				}
+
 				workspace, err := BuildTerraformWorkspace(
 					stackConfigFileName,
 					cliConfig.Stacks.NamePattern,
@@ -219,7 +222,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 					atlantisProject := cfg.AtlantisProjectConfig{
 						Name:                      atlantisProjectName,
 						Workspace:                 cfg.ReplaceContextTokens(context, projectTemplate.Workspace),
-						Workflow:                  workflowTemplateName,
 						Dir:                       cfg.ReplaceContextTokens(context, projectTemplate.Dir),
 						TerraformVersion:          projectTemplate.TerraformVersion,
 						DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
@@ -227,15 +229,18 @@ func ExecuteAtlantisGenerateRepoConfig(
 						ApplyRequirements:         projectTemplate.ApplyRequirements,
 					}
 
+					// If the workflow template name is provided on the command line in the `--workflow-template` flag, use it
+					// Otherwise, if the `workflow` attribute is provided in the project template, use it
+					if workflowTemplateName != "" {
+						atlantisProject.Workflow = workflowTemplateName
+					} else if projectTemplate.Workflow != "" {
+						atlantisProject.Workflow = projectTemplate.Workflow
+					}
+
 					atlantisProjects = append(atlantisProjects, atlantisProject)
 				}
 			}
 		}
-	}
-
-	// Workflows
-	atlantisWorkflows := map[string]any{
-		workflowTemplateName: workflowTemplate,
 	}
 
 	// Final atlantis config
@@ -247,7 +252,16 @@ func ExecuteAtlantisGenerateRepoConfig(
 	atlantisYaml.ParallelApply = configTemplate.ParallelApply
 	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
 	atlantisYaml.Projects = atlantisProjects
-	atlantisYaml.Workflows = atlantisWorkflows
+
+	// Workflows
+	if workflowTemplateName != "" {
+		atlantisWorkflows := map[string]any{
+			workflowTemplateName: workflowTemplate,
+		}
+		atlantisYaml.Workflows = atlantisWorkflows
+	} else {
+		atlantisYaml.Workflows = nil
+	}
 
 	// Write the atlantis config to a file at the specified path
 	// Check the command line argument `--output-path` first

@@ -87,6 +87,7 @@ type ArgsAndFlagsInfo struct {
 	InitRunReconfigure      string
 	AutoGenerateBackendFile string
 	UseTerraformPlan        bool
+	PlanFile                string
 	DryRun                  bool
 	SkipInit                bool
 	NeedHelp                bool
@@ -129,6 +130,7 @@ type ConfigAndStacksInfo struct {
 	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
 	UseTerraformPlan          bool
+	PlanFile                  string
 	DryRun                    bool
 	SkipInit                  bool
 	ComponentInheritanceChain []string
@@ -143,21 +145,26 @@ type ConfigAndStacksInfo struct {
 	AtmosBasePath             string
 }
 
+// Workflows
+
 type WorkflowStep struct {
+	Name    string `yaml:"name" json:"name" mapstructure:"name"`
 	Command string `yaml:"command" json:"command" mapstructure:"command"`
-	Stack   string `yaml:"stack" json:"stack" mapstructure:"stack"`
-	Type    string `yaml:"type" json:"type" mapstructure:"type"`
+	Stack   string `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
+	Type    string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 }
 
 type WorkflowDefinition struct {
-	Description string         `yaml:"description" json:"description" mapstructure:"description"`
+	Description string         `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
 	Steps       []WorkflowStep `yaml:"steps" json:"steps" mapstructure:"steps"`
-	Stack       string         `yaml:"stack" json:"stack" mapstructure:"stack"`
+	Stack       string         `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 }
 
 type WorkflowConfig map[string]WorkflowDefinition
 
 type WorkflowFile map[string]WorkflowConfig
+
+// EKS update-kubeconfig
 
 type AwsEksUpdateKubeconfigContext struct {
 	Component   string
@@ -276,7 +283,7 @@ type AtlantisRepoConfig struct {
 type AtlantisProjectConfig struct {
 	Name                      string                        `yaml:"name" json:"name" mapstructure:"name"`
 	Workspace                 string                        `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
-	Workflow                  string                        `yaml:"workflow" json:"workflow" mapstructure:"workflow"`
+	Workflow                  string                        `yaml:"workflow,omitempty" json:"workflow,omitempty" mapstructure:"workflow"`
 	Dir                       string                        `yaml:"dir" json:"dir" mapstructure:"dir"`
 	TerraformVersion          string                        `yaml:"terraform_version" json:"terraform_version" mapstructure:"terraform_version"`
 	DeleteSourceBranchOnMerge bool                          `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
@@ -297,7 +304,7 @@ type AtlantisConfigOutput struct {
 	ParallelApply             bool                    `yaml:"parallel_apply" json:"parallel_apply" mapstructure:"parallel_apply"`
 	AllowedRegexpPrefixes     []string                `yaml:"allowed_regexp_prefixes" json:"allowed_regexp_prefixes" mapstructure:"allowed_regexp_prefixes"`
 	Projects                  []AtlantisProjectConfig `yaml:"projects" json:"projects" mapstructure:"projects"`
-	Workflows                 map[string]any          `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
+	Workflows                 map[string]any          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 }
 
 // Validation schemas
@@ -332,8 +339,9 @@ type Validation map[string]ValidationItem
 // Affected Atmos components and stacks given two Git commits
 
 type Affected struct {
-	Stack         string `yaml:"stack" json:"stack" mapstructure:"stack"`
-	ComponentType string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
-	Component     string `yaml:"component" json:"component" mapstructure:"component"`
-	Affected      string `yaml:"affected" json:"affected" mapstructure:"affected"`
+	Component      string `yaml:"component" json:"component" mapstructure:"component"`
+	ComponentType  string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
+	Stack          string `yaml:"stack" json:"stack" mapstructure:"stack"`
+	SpaceliftStack string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
+	Affected       string `yaml:"affected" json:"affected" mapstructure:"affected"`
 }

@@ -10,7 +10,7 @@ Workflows are a way of combining multiple commands into one executable unit of w
 
 Here's an example workflow called `eks-up` which runs a few commands that will bring up the EKS cluster:
 
-```yaml
+```yaml title=stacks/workflows/workflow1.yaml
 workflows:
   eks-up:
     description: |
@@ -119,14 +119,17 @@ Each workflow definition must confirm to the following schema:
 ```yaml
   workflow-1:
     description: "Description of Workflow #1"
-    stack: <Atmos stack (optional)>
+    stack: <Atmos stack> # optional
     steps:
       - command: <Atmos command to execute>
+        name: <step name>>  # optional
         type: atmos  # optional
-        stack: <Atmos stack (optional)>
+        stack: <Atmos stack> # optional
       - command: <Atmos command to execute>
-        stack: <Atmos stack (optional)>
+        name: <step name>>  # optional
+        stack: <Atmos stack> # optional
       - command: <shell script>
+        name: <step name>>  # optional
         type: shell  # required for the steps of type `shell`
 ```
 
@@ -142,7 +145,11 @@ where:
 Each step is configured using the following attributes:
 
 - `command` - the command to execute. Can be either an Atmos [CLI command](/category/commands-1) (without the `atmos` binary name in front of it,
-  e.g. `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute
+  for example `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute
+
+- `name` - step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step`
+  is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the index of the
+  step (the index starts with 1, so the first generated step name would be `step1`).
 
 - `type` - the type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command`
   is an Atmos [CLI command](/category/commands-1). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
@@ -159,6 +166,87 @@ A workflow command of type `shell` can be any simple or complex shell command or
 You can use [YAML Multiline Strings](https://yaml-multiline.info/) to create complex multi-line shell scripts.
 
 :::
+
+## Executing Workflow from a Named Step
+
+Each workflow step can be given an arbitrary name (step's identifier) using the `name` attribute. For example:
+
+```yaml title=stacks/workflows/workflow1.yaml
+workflows:
+  test-1:
+    description: "Test workflow"
+    steps:
+      - command: echo Command 1
+        name: step1
+        type: shell
+      - command: echo Command 2
+        name: step2
+        type: shell
+      - command: echo Command 3
+        name: step3
+        type: shell
+      - command: echo Command 4
+        type: shell
+```
+
+The step's name can be used in the `--from-step` command-line flag to start the workflow execution from the step.
+
+For example, the following command will skip the first two steps and will start executing the workflow from `step3`:
+
+```console
+atmos workflow test-1 -f workflow1 --from-step step3
+```
+
+This is useful when you want to restart the workflow from a particular step.
+
+For example:
+
+- You run the workflow first time with the command `atmos workflow test-1 -f workflow1`
+- `step1` and `step2` succeed, but `step3` fails
+- You fix the issue with the `step3` command
+- You don't want to execute `step1` and `step2` again (to not spend time on it, or if they are
+  not [idempotent](https://en.wikipedia.org/wiki/Idempotence))
+- You run the command `atmos workflow test-1 -f workflow1 --from-step step3` to restart the workflow from `step3`
+
+If the `name` attribute in a workflow step is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the
+index of the step. The index starts with 1, so the first generated step name would be `step1`.
+
+The `test-1` workflow defined above does not have the `name` attribute for the last workflow step.
+When we execute the `atmos workflow` commands, Atmos automatically generates the names for the steps where the `name` attribute is omitted.
+In this case, the generated name for the last step will be `step4`.
+
+For example:
+
+```console
+> atmos workflow test-1 -f workflow1 --from-step step4
+
+Executing the workflow 'test-1' from 'examples/complete/stacks/workflows/workflow1.yaml'
+
+description: Test workflow
+steps:
+- name: step1
+  command: echo Command 1
+  type: shell
+- name: step2
+  command: echo Command 2
+  type: shell
+- name: step3
+  command: echo Command 3
+  type: shell
+- name: step4
+  command: echo Command 4
+  type: shell
+
+Executing workflow step: echo Command 4
+
+Executing command: echo Command 4
+Command 4
+
+Executing workflow step: echo Command 5
+
+Executing command: echo Command 5
+Command 5
+```
 
 ## Workflow Examples
 
@@ -177,7 +265,7 @@ workflows:
       # Inline scripts are also supported
       # Refer to https://yaml-multiline.info for more details
       - type: shell
-        command: >-
+        command: |
           echo "Starting the workflow execution..."
           read -p "Press any key to continue... " -n1 -s
       - command: terraform plan test/test-component
@@ -250,9 +338,9 @@ To run this workflow, execute the following command:
 atmos workflow terraform-plan-test-component-override-3-all-stacks -f workflow1
 ```
 
-<br/>
+## Atmos Stacks in Workflows
 
-__Note__ that the stack for the commands of type `atmos` can be specified in four different ways:
+Atmos stack for the workflow commands of type `atmos` can be specified in four different ways:
 
 - Inline in the command itself
   ```yaml

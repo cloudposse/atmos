@@ -52,10 +52,5 @@ func init() {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
 
-	err = atlantisGenerateRepoConfigCmd.MarkPersistentFlagRequired("workflow-template")
-	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
-	}
-
 	atlantisGenerateCmd.AddCommand(atlantisGenerateRepoConfigCmd)
 }

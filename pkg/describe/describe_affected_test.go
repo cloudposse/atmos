@@ -25,7 +25,7 @@ func TestDescribeAffected(t *testing.T) {
 	ref := "refs/heads/master"
 	sha := ""
 
-	affected, err := e.ExecuteDescribeAffected(cliConfig, ref, sha, true)
+	affected, err := e.ExecuteDescribeAffected(cliConfig, ref, sha, "", "", true)
 	assert.Nil(t, err)
 
 	affectedYaml, err := yaml.Marshal(affected)
