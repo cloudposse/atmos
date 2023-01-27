@@ -1,7 +1,7 @@
 ---
-title: Component migrations in yaml
+title: Atmos component migrations in YAML config
 sidebar_label: migration
-description: "Learn how to migrate an Atmos yaml component to a new name or to use the metadata inheritance."
+description: "Learn how to migrate an Atmos component to a new name or to use the `metadata.inheritance`."
 ---
 
 ## Migrate component from using deprecated key `component` to use `metadata.inherits`
@@ -101,7 +101,6 @@ description: "Learn how to migrate an Atmos yaml component to a new name or to u
         vpc/defaults:
           metadata:
             type: abstract
-            component: vpc
           # spacelift can now be enabled in the catalog
           settings:
             spacelift:
