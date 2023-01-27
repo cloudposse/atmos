@@ -15,7 +15,7 @@ Please see the [Contributor Code of Conduct](coc.md) for information on the rule
 - It is required that you clearly describe the steps necessary to reproduce the issue you are running into. Although we would love to help our users
   as much as possible, diagnosing issues without clear reproduction steps is extremely time-consuming and simply not sustainable.
 
-- The issue list of the [atmos](https://github.com/aloudposse/atmos) repository is exclusively for bug reports and feature requests. Non-conforming
+- The issue list of the [atmos](https://github.com/cloudposse/atmos) repository is exclusively for bug reports and feature requests. Non-conforming
   issues will be closed immediately.
 
 - Issues with no clear steps to reproduce will not be triaged. If an issue is labeled with "needs: reply" and receives no further replies from the
