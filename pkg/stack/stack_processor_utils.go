@@ -173,13 +173,13 @@ func processImportSection(stackMap map[any]any) []cfg.StackImport {
 	}
 
 	if stringImports, ok := stackMap[cfg.ImportSectionName].([]any); ok && len(stringImports) > 0 {
-		structImports := lo.Map[any, cfg.StackImport](stringImports, func(x any, _ int) cfg.StackImport {
-			return cfg.StackImport{Path: x.(string)}
+		structImports := lo.Map[any, cfg.StackImport](stringImports, func(item any, _ int) cfg.StackImport {
+			return cfg.StackImport{Path: item.(string)}
 		})
 		return structImports
 	}
 
-	return []cfg.StackImport{}
+	return nil
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
