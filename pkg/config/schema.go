@@ -362,6 +362,6 @@ type BaseComponentConfig struct {
 // Stack imports (`import` section)
 
 type StackImport struct {
-	Path    string
-	Context map[string]any
+	Path    string         `yaml:"path" json:"path" mapstructure:"path"`
+	Context map[string]any `yaml:"context" json:"context" mapstructure:"context"`
 }
