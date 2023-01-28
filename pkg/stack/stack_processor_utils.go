@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/samber/lo"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -109,7 +111,7 @@ func FindComponentDependencies(
 		// Process base component(s)
 		// Only include the imported config file into "deps" if all the following conditions are `true`:
 		// 1. The imported config file has the base component(s) section(s)
-		// 2. The imported config file does not import other config files (which means it defined the base component sections inline)
+		// 2. The imported config file does not import other config files (which means that instead it defined the base component sections inline)
 		// 3. If the imported config file does import other config files, check that the base component sections in them are different by using
 		// `reflect.DeepEqual`. If they are the same, don't include the imported config file since it does not specify anything for the base component
 		for _, baseComponent := range baseComponents {
@@ -119,10 +121,26 @@ func FindComponentDependencies(
 				continue
 			}
 
+			// Process `import` section (a list of strings)
 			importsOfStackImport, ok := stackImportMap[cfg.ImportSectionName].([]any)
 			if !ok || len(importsOfStackImport) == 0 {
-				deps = append(deps, stackImportName)
-				continue
+				// Process `imports` section (a list of `StackImports` structs)
+				importStructsOfStackImport, ok := stackImportMap[cfg.ImportsSectionName].([]cfg.StackImports)
+				if !ok || len(importStructsOfStackImport) == 0 {
+					deps = append(deps, stackImportName)
+					continue
+				}
+				importsOfStackImport = lo.FilterMap[cfg.StackImports, any](importStructsOfStackImport, func(x cfg.StackImports, _ int) (any, bool) {
+					if x.Path != "" {
+						return x.Path, true
+					} else {
+						return "", false
+					}
+				})
+				if len(importsOfStackImport) == 0 {
+					deps = append(deps, stackImportName)
+					continue
+				}
 			}
 
 			for _, importOfStackImport := range importsOfStackImport {
