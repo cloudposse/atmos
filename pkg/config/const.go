@@ -35,6 +35,5 @@ const (
 
 	ComponentConfigFileName = "component.yaml"
 
-	ImportSectionName  = "import"
-	ImportsSectionName = "imports"
+	ImportSectionName = "import"
 )

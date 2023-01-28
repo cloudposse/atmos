@@ -121,11 +121,11 @@ func FindComponentDependencies(
 				continue
 			}
 
-			// Process `import` section (a list of strings)
+			// Process `import` section as a list of strings
 			importsOfStackImport, ok := stackImportMap[cfg.ImportSectionName].([]any)
 			if !ok || len(importsOfStackImport) == 0 {
-				// Process `imports` section (a list of `StackImports` structs)
-				importStructsOfStackImport, ok := stackImportMap[cfg.ImportsSectionName].([]cfg.StackImports)
+				// Process `import` section as a list of `StackImports` structs
+				importStructsOfStackImport, ok := stackImportMap[cfg.ImportSectionName].([]cfg.StackImports)
 				if !ok || len(importStructsOfStackImport) == 0 {
 					deps = append(deps, stackImportName)
 					continue
