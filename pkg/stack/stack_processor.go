@@ -160,7 +160,7 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Find and process all imports
-	if importsSection, ok := stackConfigMap["import"]; ok {
+	if importsSection, ok := stackConfigMap[cfg.ImportSectionName]; ok {
 		imports, ok := importsSection.([]any)
 		if !ok {
 			return nil, nil, nil, fmt.Errorf("invalid 'import' section in the file '%s'\nThe 'import' section must be a list of strings", relativeFilePath)

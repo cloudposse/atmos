@@ -345,3 +345,10 @@ type Affected struct {
 	SpaceliftStack string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	Affected       string `yaml:"affected" json:"affected" mapstructure:"affected"`
 }
+
+// Stack imports (`imports` section)
+
+type StackImports struct {
+	Path    string
+	Context map[string]any
+}

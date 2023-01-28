@@ -119,7 +119,7 @@ func FindComponentDependencies(
 				continue
 			}
 
-			importsOfStackImport, ok := stackImportMap["import"].([]any)
+			importsOfStackImport, ok := stackImportMap[cfg.ImportSectionName].([]any)
 			if !ok || len(importsOfStackImport) == 0 {
 				deps = append(deps, stackImportName)
 				continue
