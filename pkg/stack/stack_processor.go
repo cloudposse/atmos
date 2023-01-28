@@ -60,7 +60,13 @@ func ProcessYAMLConfigFiles(
 				".yml",
 			)
 
-			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
+			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(
+				stackBasePath,
+				p,
+				map[string]map[any]any{},
+				nil,
+			)
+
 			if err != nil {
 				errorResult = err
 				return
@@ -138,6 +144,7 @@ func ProcessYAMLConfigFile(
 	basePath string,
 	filePath string,
 	importsConfig map[string]map[any]any,
+	context map[string]any,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -151,6 +158,14 @@ func ProcessYAMLConfigFile(
 	stackYamlConfig, err := getFileContent(filePath)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+
+	// Process `Go` templates in the stack config file using the provided context
+	if context != nil {
+		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
@@ -210,7 +225,7 @@ func ProcessYAMLConfigFile(
 		}
 
 		for _, importFile := range importMatches {
-			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
+			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig, importStruct.Context)
 			if err != nil {
 				return nil, nil, nil, err
 			}
