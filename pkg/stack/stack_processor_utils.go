@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/samber/lo"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -121,7 +119,10 @@ func FindComponentDependencies(
 				continue
 			}
 
-			importOfStackImportStructs := processImportSection(stackImportMap)
+			importOfStackImportStructs, err := processImportSection(stackImportMap, stack)
+			if err != nil {
+				return nil, err
+			}
 
 			if len(importOfStackImportStructs) == 0 {
 				deps = append(deps, stackImportName)
@@ -167,19 +168,27 @@ func FindComponentDependencies(
 // The `import` section` can be of two different type:
 // 1. list of `StackImport` structs
 // 2. list of strings
-func processImportSection(stackMap map[any]any) []cfg.StackImport {
+func processImportSection(stackMap map[any]any, filePath string) ([]cfg.StackImport, error) {
 	if structImports, ok := stackMap[cfg.ImportSectionName].([]cfg.StackImport); ok {
-		return structImports
+		return structImports, nil
 	}
 
 	if stringImports, ok := stackMap[cfg.ImportSectionName].([]any); ok && len(stringImports) > 0 {
-		structImports := lo.Map[any, cfg.StackImport](stringImports, func(item any, _ int) cfg.StackImport {
-			return cfg.StackImport{Path: item.(string)}
-		})
-		return structImports
+		var structImports []cfg.StackImport
+
+		for _, i := range stringImports {
+			if s, ok := i.(string); ok {
+				structImports = append(structImports, cfg.StackImport{Path: s})
+			} else if i == nil {
+				return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+			} else {
+				return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
+			}
+		}
+		return structImports, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty

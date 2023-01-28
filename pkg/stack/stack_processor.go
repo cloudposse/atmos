@@ -160,77 +160,69 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Find and process all imports
-	if importsSection, ok := stackConfigMap[cfg.ImportSectionName]; ok {
-		imports, ok := importsSection.([]any)
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("invalid 'import' section in the file '%s'\nThe 'import' section must be a list of strings", relativeFilePath)
+	importStructs, err := processImportSection(stackConfigMap, relativeFilePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	for _, importStruct := range importStructs {
+		imp := importStruct.Path
+
+		if imp == "" {
+			return nil, nil, nil, fmt.Errorf("invalid import in the file '%s'", relativeFilePath)
 		}
 
-		for _, im := range imports {
-			imp, ok := im.(string)
+		// If the import file is specified without extension, use `.yaml` as default
+		impWithExt := imp
+		ext := filepath.Ext(imp)
+		if ext == "" {
+			ext = cfg.DefaultStackConfigFileExtension
+			impWithExt = imp + ext
+		}
 
-			if !ok {
-				if im == nil {
-					return nil, nil, nil, fmt.Errorf("invalid import in the file '%s'\nThe import is an empty string",
-						relativeFilePath)
-				}
-				return nil, nil, nil, fmt.Errorf("invalid import in the file '%s'\nThe import '%v' is not a valid string",
+		impWithExtPath := path.Join(basePath, impWithExt)
+
+		if impWithExtPath == filePath {
+			errorMessage := fmt.Sprintf("invalid import in the file '%s'\nThe file imports itself in '%s'",
+				relativeFilePath,
+				imp)
+			return nil, nil, nil, errors.New(errorMessage)
+		}
+
+		// Find all import matches in the glob
+		importMatches, err := u.GetGlobMatches(impWithExtPath)
+		if err != nil || len(importMatches) == 0 {
+			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
+			// TODO: review `doublestar` library
+			importMatches, err = u.GetGlobMatches(impWithExtPath)
+			if err != nil {
+				errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
+					imp,
 					relativeFilePath,
-					im)
-			}
-
-			// If the import file is specified without extension, use `.yaml` as default
-			impWithExt := imp
-			ext := filepath.Ext(imp)
-			if ext == "" {
-				ext = cfg.DefaultStackConfigFileExtension
-				impWithExt = imp + ext
-			}
-
-			impWithExtPath := path.Join(basePath, impWithExt)
-
-			if impWithExtPath == filePath {
-				errorMessage := fmt.Sprintf("invalid import in the file '%s'\nThe file imports itself in '%s'",
+					err)
+				return nil, nil, nil, errors.New(errorMessage)
+			} else if importMatches == nil {
+				errorMessage := fmt.Sprintf("invalid import in the file '%s'\nNo matches found for the import '%s'",
 					relativeFilePath,
 					imp)
 				return nil, nil, nil, errors.New(errorMessage)
 			}
+		}
 
-			// Find all import matches in the glob
-			importMatches, err := u.GetGlobMatches(impWithExtPath)
-			if err != nil || len(importMatches) == 0 {
-				// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
-				// TODO: review `doublestar` library
-				importMatches, err = u.GetGlobMatches(impWithExtPath)
-				if err != nil {
-					errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
-						imp,
-						relativeFilePath,
-						err)
-					return nil, nil, nil, errors.New(errorMessage)
-				} else if importMatches == nil {
-					errorMessage := fmt.Sprintf("invalid import in the file '%s'\nNo matches found for the import '%s'",
-						relativeFilePath,
-						imp)
-					return nil, nil, nil, errors.New(errorMessage)
-				}
+		for _, importFile := range importMatches {
+			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
+			if err != nil {
+				return nil, nil, nil, err
 			}
 
-			for _, importFile := range importMatches {
-				yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-
-				stackConfigs = append(stackConfigs, yamlConfig)
-				importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
-				ext2 := filepath.Ext(importRelativePathWithExt)
-				if ext2 == "" {
-					ext2 = cfg.DefaultStackConfigFileExtension
-				}
-				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
-				importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
+			stackConfigs = append(stackConfigs, yamlConfig)
+			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
+			ext2 := filepath.Ext(importRelativePathWithExt)
+			if ext2 == "" {
+				ext2 = cfg.DefaultStackConfigFileExtension
 			}
+			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
 		}
 	}
 
