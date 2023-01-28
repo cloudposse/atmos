@@ -552,7 +552,7 @@ func ProcessStackConfig(
 				baseComponentBackendSection := map[any]any{}
 				baseComponentRemoteStateBackendType := ""
 				baseComponentRemoteStateBackendSection := map[any]any{}
-				var baseComponentConfig BaseComponentConfig
+				var baseComponentConfig cfg.BaseComponentConfig
 				var componentInheritanceChain []string
 				var baseComponents []string
 
@@ -906,7 +906,7 @@ func ProcessStackConfig(
 				baseComponentEnv := map[any]any{}
 				baseComponentName := ""
 				baseComponentHelmfileCommand := ""
-				var baseComponentConfig BaseComponentConfig
+				var baseComponentConfig cfg.BaseComponentConfig
 				var componentInheritanceChain []string
 				var baseComponents []string
 

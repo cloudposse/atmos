@@ -346,9 +346,22 @@ type Affected struct {
 	Affected       string `yaml:"affected" json:"affected" mapstructure:"affected"`
 }
 
-// Stack imports (`imports` section)
+type BaseComponentConfig struct {
+	BaseComponentVars                      map[any]any
+	BaseComponentSettings                  map[any]any
+	BaseComponentEnv                       map[any]any
+	FinalBaseComponentName                 string
+	BaseComponentCommand                   string
+	BaseComponentBackendType               string
+	BaseComponentBackendSection            map[any]any
+	BaseComponentRemoteStateBackendType    string
+	BaseComponentRemoteStateBackendSection map[any]any
+	ComponentInheritanceChain              []string
+}
 
-type StackImports struct {
+// Stack imports (`import` section)
+
+type StackImport struct {
 	Path    string
 	Context map[string]any
 }

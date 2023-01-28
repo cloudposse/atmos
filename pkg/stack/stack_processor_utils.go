@@ -121,35 +121,15 @@ func FindComponentDependencies(
 				continue
 			}
 
-			// Process `import` section as a list of strings
-			importsOfStackImport, ok := stackImportMap[cfg.ImportSectionName].([]any)
-			if !ok || len(importsOfStackImport) == 0 {
-				// Process `import` section as a list of `StackImports` structs
-				importStructsOfStackImport, ok := stackImportMap[cfg.ImportSectionName].([]cfg.StackImports)
-				if !ok || len(importStructsOfStackImport) == 0 {
-					deps = append(deps, stackImportName)
-					continue
-				}
-				importsOfStackImport = lo.FilterMap[cfg.StackImports, any](importStructsOfStackImport, func(x cfg.StackImports, _ int) (any, bool) {
-					if x.Path != "" {
-						return x.Path, true
-					} else {
-						return "", false
-					}
-				})
-				if len(importsOfStackImport) == 0 {
-					deps = append(deps, stackImportName)
-					continue
-				}
+			importOfStackImportStructs := processImportSection(stackImportMap)
+
+			if len(importOfStackImportStructs) == 0 {
+				deps = append(deps, stackImportName)
+				continue
 			}
 
-			for _, importOfStackImport := range importsOfStackImport {
-				importOfStackImportStr, ok := importOfStackImport.(string)
-				if !ok {
-					continue
-				}
-
-				importOfStackImportMap, ok := stackImports[importOfStackImportStr]
+			for _, importOfStackImportStruct := range importOfStackImportStructs {
+				importOfStackImportMap, ok := stackImports[importOfStackImportStruct.Path]
 				if !ok {
 					continue
 				}
@@ -181,6 +161,25 @@ func FindComponentDependencies(
 	unique := u.UniqueStrings(deps)
 	sort.Strings(unique)
 	return unique, nil
+}
+
+// processImportSection processes the `import` section in stack config files
+// The `import` section` can be of two different type:
+// 1. list of `StackImport` structs
+// 2. list of strings
+func processImportSection(stackMap map[any]any) []cfg.StackImport {
+	if structImports, ok := stackMap[cfg.ImportSectionName].([]cfg.StackImport); ok {
+		return structImports
+	}
+
+	if stringImports, ok := stackMap[cfg.ImportSectionName].([]any); ok && len(stringImports) > 0 {
+		structImports := lo.Map[any, cfg.StackImport](stringImports, func(x any, _ int) cfg.StackImport {
+			return cfg.StackImport{Path: x.(string)}
+		})
+		return structImports
+	}
+
+	return []cfg.StackImport{}
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
@@ -314,22 +313,9 @@ func getFileContent(filePath string) (string, error) {
 	return string(content), nil
 }
 
-type BaseComponentConfig struct {
-	BaseComponentVars                      map[any]any
-	BaseComponentSettings                  map[any]any
-	BaseComponentEnv                       map[any]any
-	FinalBaseComponentName                 string
-	BaseComponentCommand                   string
-	BaseComponentBackendType               string
-	BaseComponentBackendSection            map[any]any
-	BaseComponentRemoteStateBackendType    string
-	BaseComponentRemoteStateBackendSection map[any]any
-	ComponentInheritanceChain              []string
-}
-
 // ProcessBaseComponentConfig processes base component(s) config
 func ProcessBaseComponentConfig(
-	baseComponentConfig *BaseComponentConfig,
+	baseComponentConfig *cfg.BaseComponentConfig,
 	allComponentsMap map[any]any,
 	component string,
 	stack string,
