@@ -15,6 +15,8 @@ All the common default settings for each Atmos component should be in a separate
 The file then get imported into the parent Atmos stacks.
 This makes the stack configurations DRY by reusing the component's config that is common for all environments.
 
+Refer to [Stack Imports](/core-concepts/stacks/imports) for more details on Atmos imports.
+
 In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
 component:
 
