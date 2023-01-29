@@ -166,26 +166,29 @@ func FindComponentDependencies(
 
 // processImportSection processes the `import` section in stack config files
 // The `import` section` can be of two different type:
-// 1. list of `StackImport` structs
-// 2. list of strings
+// 1. list of strings
+// 2. list of `StackImport` structs
 func processImportSection(stackMap map[any]any, filePath string) ([]cfg.StackImport, error) {
-	if structImports, ok := stackMap[cfg.ImportSectionName].([]cfg.StackImport); ok {
-		return structImports, nil
-	}
+	if imports, ok := stackMap[cfg.ImportSectionName]; ok && imports != nil {
+		structImports := []cfg.StackImport{}
 
-	if stringImports, ok := stackMap[cfg.ImportSectionName].([]any); ok && len(stringImports) > 0 {
-		var structImports []cfg.StackImport
+		//err := mapstructure.Decode(imports, &structImports)
+		//if err == nil {
+		//	return structImports, nil
+		//}
 
-		for _, i := range stringImports {
-			if s, ok := i.(string); ok {
-				structImports = append(structImports, cfg.StackImport{Path: s})
-			} else if i == nil {
-				return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
-			} else {
-				return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
+		if stringImports, ok := imports.([]any); ok && len(stringImports) > 0 {
+			for _, i := range stringImports {
+				if s, ok := i.(string); ok {
+					structImports = append(structImports, cfg.StackImport{Path: s})
+				} else if i == nil {
+					return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+				} else {
+					return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
+				}
 			}
+			return structImports, nil
 		}
-		return structImports, nil
 	}
 
 	return nil, nil

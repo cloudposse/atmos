@@ -184,7 +184,7 @@ func ProcessYAMLConfigFile(
 		imp := importStruct.Path
 
 		if imp == "" {
-			return nil, nil, nil, fmt.Errorf("invalid import in the file '%s'", relativeFilePath)
+			return nil, nil, nil, fmt.Errorf("invalid empty import in the file '%s'", relativeFilePath)
 		}
 
 		// If the import file is specified without extension, use `.yaml` as default
