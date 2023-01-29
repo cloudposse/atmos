@@ -79,7 +79,7 @@ The `import` section supports the following two formats:
 where:
 
 - `path` - the path to the imported file
-- `context` - (optional) a map of context variables that are applied as template variables to the imported file (if the imported file is
+- `context` - an optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
   a [Go template](https://pkg.go.dev/text/template))
 
 ## Go Templates in Imported Stacks
