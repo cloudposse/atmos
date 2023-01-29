@@ -29,7 +29,9 @@ func ProcessYAMLConfigFiles(
 	helmfileComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
-	processComponentDeps bool) (
+	processComponentDeps bool,
+	ignoreMissingFiles bool,
+) (
 	[]string,
 	map[string]any,
 	map[string]map[string]any,
@@ -65,6 +67,7 @@ func ProcessYAMLConfigFiles(
 				p,
 				map[string]map[any]any{},
 				nil,
+				ignoreMissingFiles,
 			)
 
 			if err != nil {
@@ -145,6 +148,7 @@ func ProcessYAMLConfigFile(
 	filePath string,
 	importsConfig map[string]map[any]any,
 	context map[string]any,
+	ignoreMissingFiles bool,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -156,7 +160,7 @@ func ProcessYAMLConfigFile(
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	stackYamlConfig, err := getFileContent(filePath)
-	if err != nil {
+	if err != nil && !ignoreMissingFiles {
 		return nil, nil, nil, err
 	}
 
@@ -225,7 +229,7 @@ func ProcessYAMLConfigFile(
 		}
 
 		for _, importFile := range importMatches {
-			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig, importStruct.Context)
+			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig, importStruct.Context, ignoreMissingFiles)
 			if err != nil {
 				return nil, nil, nil, err
 			}

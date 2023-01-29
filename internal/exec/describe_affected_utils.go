@@ -168,7 +168,7 @@ func ExecuteDescribeAffected(
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
-	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
+	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil)
+	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true)
 	if err != nil {
 		return nil, err
 	}

@@ -31,6 +31,7 @@ func CreateSpaceliftStacks(
 			filePaths,
 			processStackDeps,
 			processComponentDeps,
+			false,
 		)
 		if err != nil {
 			u.PrintErrorToStdError(err)
@@ -52,6 +53,7 @@ func CreateSpaceliftStacks(
 			cliConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,
+			false,
 		)
 		if err != nil {
 			u.PrintErrorToStdError(err)
