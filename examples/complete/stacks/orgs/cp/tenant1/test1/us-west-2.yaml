@@ -2,14 +2,14 @@ import:
   - path: mixins/region/us-west-2
   - path: orgs/cp/tenant1/test1/_defaults
 
-  - path: catalog/terraform/eks_tmpl
+  - path: catalog/terraform/eks_cluster_tmpl
     context:
       color: "blue"
       enabled: true
       service_1_name: "blue-service-1"
       service_2_name: "blue-service-2"
 
-  - path: catalog/terraform/eks_tmpl
+  - path: catalog/terraform/eks_cluster_tmpl
     context:
       color: "green"
       enabled: false

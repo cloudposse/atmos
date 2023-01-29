@@ -2,9 +2,9 @@ components:
   terraform:
     "eks/cluster-{{ .color }}":
       metadata:
-        component: test/test-component
+        component: "test/test-component"
       vars:
-        enabled: {{ .enabled }}
+        enabled: "{{ .enabled }}"
         name: "eks-{{ .color }}"
         service_1_name: "{{ .service_1_name }}"
         service_2_name: "{{ .service_2_name }}"
