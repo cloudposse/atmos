@@ -3,6 +3,7 @@ package stack
 import (
 	"errors"
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"os"
 	"path"
 	"path/filepath"
@@ -166,28 +167,28 @@ func FindComponentDependencies(
 
 // processImportSection processes the `import` section in stack config files
 // The `import` section` can be of two different type:
-// 1. list of strings
-// 2. list of `StackImport` structs
+// 1. list of `StackImport` structs
+// 2. list of strings
 func processImportSection(stackMap map[any]any, filePath string) ([]cfg.StackImport, error) {
 	if imports, ok := stackMap[cfg.ImportSectionName]; ok && imports != nil {
-		structImports := []cfg.StackImport{}
-
-		//err := mapstructure.Decode(imports, &structImports)
-		//if err == nil {
-		//	return structImports, nil
-		//}
+		var res1 []cfg.StackImport
+		err := mapstructure.Decode(imports, &res1)
+		if err == nil && len(res1) > 0 {
+			return res1, nil
+		}
 
 		if stringImports, ok := imports.([]any); ok && len(stringImports) > 0 {
+			var res2 []cfg.StackImport
 			for _, i := range stringImports {
 				if s, ok := i.(string); ok {
-					structImports = append(structImports, cfg.StackImport{Path: s})
+					res2 = append(res2, cfg.StackImport{Path: s})
 				} else if i == nil {
 					return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 				} else {
 					return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
 				}
 			}
-			return structImports, nil
+			return res2, nil
 		}
 	}
 
