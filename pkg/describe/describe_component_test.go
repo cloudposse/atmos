@@ -18,3 +18,13 @@ func TestDescribeComponent(t *testing.T) {
 	assert.Nil(t, err)
 	t.Log(string(componentSectionYaml))
 }
+
+func TestDescribeTemplatedComponent(t *testing.T) {
+	componentSection, err := e.ExecuteDescribeComponent("eks/cluster-blue", "tenant1-uw2-test-1")
+	assert.Nil(t, err)
+	assert.Equal(t, "eks-blue", componentSection["vars"].(map[any]any)["name"])
+
+	componentSection, err = e.ExecuteDescribeComponent("eks/cluster-green", "tenant1-uw2-test-1")
+	assert.Nil(t, err)
+	assert.Equal(t, "eks-green", componentSection["vars"].(map[any]any)["name"])
+}
