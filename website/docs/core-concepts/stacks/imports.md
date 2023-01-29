@@ -52,7 +52,8 @@ Use [mixins](/core-concepts/stacks/mixins) for reusable snippets of configuratio
 
 ## Imports Schema
 
-The `import` section supports the following two formats:
+The `import` section supports the following two formats (note that only one format is supported in a stack config file, but different stack
+configs can use one format or the other):
 
 - a list of paths to the imported files, for example:
 
