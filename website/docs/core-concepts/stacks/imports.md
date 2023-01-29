@@ -76,6 +76,123 @@ The `import` section supports the following two formats:
       context: {}
   ```
 
+where:
+
+- `path` - the path to the imported file
+- `context` - (optional) a map of context variables that are applied as template variables to the imported file (if the imported file is
+  a [Go template](https://pkg.go.dev/text/template))
+
+## Go Templates in Imported Stacks
+
+Atmos supports all the functionality of the [Go templates](https://pkg.go.dev/text/template) in imported stack configurations (including
+[functions](https://pkg.go.dev/text/template#hdr-Functions)). Stack configurations can be templatized and then reused with different
+settings provided via the import `context` section.
+
+For example, we can define the following configuration for EKS Atmos components in the `catalog/terraform/eks_cluster_tmpl.yaml` template file:
+
+```yaml title=stacks/catalog/terraform/eks_cluster_tmpl.yaml
+# Imports can also be parameterized using `Go` templates
+import: []
+
+components:
+  terraform:
+    "eks/cluster-{{ .color }}":
+      metadata:
+        component: "test/test-component"
+      vars:
+        enabled: "{{ .enabled }}"
+        name: "eks-{{ .color }}"
+        service_1_name: "{{ .service_1_name }}"
+        service_2_name: "{{ .service_2_name }}"
+        tags:
+          color: "{{ .color }}"
+```
+
+<br/>
+
+:::note
+
+Since `Go` processes templates as text files, we can parameterize the Atmos component name `eks/cluster-{{ .color }}` and any values in any
+sections (`vars`, `settings`, `env`, `backend`, etc.), and even the `import` section in the imported file (if the file imports other configurations).
+
+:::
+
+<br/>
+
+Then we can import the template into a top-level stack multiple times providing different context variables to each import:
+
+```yaml title=stacks/orgs/cp/tenant1/test1/us-west-2.yaml
+import:
+  - path: mixins/region/us-west-2
+  - path: orgs/cp/tenant1/test1/_defaults
+
+  # This import with the provided context will dynamically generate 
+  # a new Atmos component `eks/cluster-blue` in the stack
+  - path: catalog/terraform/eks_cluster_tmpl
+    context:
+      color: "blue"
+      enabled: true
+      service_1_name: "blue-service-1"
+      service_2_name: "blue-service-2"
+
+  # This import with the provided context will dynamically generate 
+  # a new Atmos component `eks/cluster-green` in the stack
+  - path: catalog/terraform/eks_cluster_tmpl
+    context:
+      color: "green"
+      enabled: false
+      service_1_name: "green-service-1"
+      service_2_name: "green-service-2"
+```
+
+Now we can execute the following Atmos commands to describe and provision the dynamically generated EKS components into the stack:
+
+```shell
+atmos describe component eks/cluster-blue -s tenant1-uw2-test-1
+atmos describe component eks/cluster-green -s tenant1-uw2-test-1
+
+atmos terraform apply eks/cluster-blue -s tenant1-uw2-test-1
+atmos terraform apply eks/cluster-green -s tenant1-uw2-test-1
+```
+
+All the parameterized variables will get their values from the `context`:
+
+```yaml title="atmos describe component eks/cluster-blue -s tenant1-uw2-test-1"
+vars:
+  enabled: true
+  environment: uw2
+  name: eks-blue
+  namespace: cp
+  region: us-west-2
+  service_1_name: blue-service-1
+  service_2_name: blue-service-2
+  stage: test-1
+  tags:
+    color: blue
+  tenant: tenant1
+```
+
+```yaml title="atmos describe component eks/cluster-green -s tenant1-uw2-test-1"
+vars:
+  enabled: true
+  environment: uw2
+  name: eks-green
+  namespace: cp
+  region: us-west-2
+  service_1_name: green-service-1
+  service_2_name: green-service-2
+  stage: test-1
+  tags:
+    color: green
+  tenant: tenant1
+```
+
+<br/>
+
+Using imports with context and parameterized config files will help you make the configurations extremely DRY,
+and is very useful when creating stacks and components
+for [EKS blue-green deployment](https://aws.amazon.com/blogs/containers/kubernetes-cluster-upgrade-the-blue-green-deployment-strategy/).
+
 ## Related
 
 - [Configure CLI](/quick-start/configure-cli)
