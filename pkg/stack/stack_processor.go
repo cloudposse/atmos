@@ -231,6 +231,7 @@ func ProcessYAMLConfigFile(
 		// Support `context` in hierarchical imports.
 		// Deep-merge the parent `context` with the current `context` and propagate the result down the imports chain.
 		// The current `context` takes precedence over the parent `context` and will override items with the same keys.
+		// TODO: instead of calling the conversion functions, we need to switch to generics and update everything to support it
 		listOfMaps := []map[any]any{c.MapsOfStringsToMapsOfInterfaces(context), c.MapsOfStringsToMapsOfInterfaces(importStruct.Context)}
 		mergedContext, err := m.Merge(listOfMaps)
 		if err != nil {

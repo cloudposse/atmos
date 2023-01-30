@@ -1,8 +1,10 @@
 components:
   terraform:
+    # Parameterize Atmos component name
     "eks/cluster-{{ .color }}":
       metadata:
         component: "test/test-component"
+      # Parameterize variables
       vars:
         enabled: "{{ .enabled }}"
         name: "eks-{{ .color }}"
