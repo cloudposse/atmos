@@ -30,7 +30,6 @@ import:
   - catalog/file2
 ```
 
-s
 The base path for imports is specified in the [`atmos.yaml`](/cli/configuration) in the `stacks.base_path` section.
 
 If no file extension is used, a `.yaml` extension is automatically appended.
