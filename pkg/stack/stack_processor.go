@@ -160,6 +160,11 @@ func ProcessYAMLConfigFile(
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	stackYamlConfig, err := getFileContent(filePath)
+
+	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
+	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
+	// If we add a new stack config file with some component configurations to the current branch, then the new file will not be present in
+	// the remote branch (with which the current branch is compared), and `atmos` would throw an error.
 	if err != nil && !ignoreMissingFiles {
 		return nil, nil, nil, err
 	}
@@ -261,7 +266,9 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	stackConfigs = append(stackConfigs, stackConfigMap)
+	if len(stackConfigMap) > 0 {
+		stackConfigs = append(stackConfigs, stackConfigMap)
+	}
 
 	// Deep-merge the stack config file and all the imports
 	stackConfigsDeepMerged, err := m.Merge(stackConfigs)
