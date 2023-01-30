@@ -228,8 +228,23 @@ func ProcessYAMLConfigFile(
 			}
 		}
 
+		// Support `context` in hierarchical imports.
+		// Deep-merge the parent `context` with the current `context` and propagate the result down the imports chain.
+		// The current `context` takes precedence over the parent `context` and will override items with the same keys.
+		listOfMaps := []map[any]any{c.MapsOfStringsToMapsOfInterfaces(context), c.MapsOfStringsToMapsOfInterfaces(importStruct.Context)}
+		mergedContext, err := m.Merge(listOfMaps)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
 		for _, importFile := range importMatches {
-			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig, importStruct.Context, ignoreMissingFiles)
+			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(
+				basePath,
+				importFile,
+				importsConfig,
+				c.MapsOfInterfacesToMapsOfStrings(mergedContext),
+				ignoreMissingFiles,
+			)
 			if err != nil {
 				return nil, nil, nil, err
 			}
