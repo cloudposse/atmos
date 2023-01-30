@@ -83,7 +83,7 @@ where:
 - `context` - an optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
   a [Go template](https://pkg.go.dev/text/template))
 
-## Go Templates in Imported Stacks
+## `Go` Templates in Imports
 
 Atmos supports all the functionality of the [Go templates](https://pkg.go.dev/text/template) in imported stack configurations (including
 [functions](https://pkg.go.dev/text/template#hdr-Functions)). Stack configurations can be templatized and then reused with different
@@ -97,23 +97,23 @@ import: []
 
 components:
   terraform:
-    "eks/cluster-{{ .color }}":
+    "eks/cluster-{{ .flavor }}":
       metadata:
         component: "test/test-component"
       vars:
         enabled: "{{ .enabled }}"
-        name: "eks-{{ .color }}"
+        name: "eks-{{ .flavor }}"
         service_1_name: "{{ .service_1_name }}"
         service_2_name: "{{ .service_2_name }}"
         tags:
-          color: "{{ .color }}"
+          flavor: "{{ .flavor }}"
 ```
 
 <br/>
 
 :::note
 
-Since `Go` processes templates as text files, we can parameterize the Atmos component name `eks/cluster-{{ .color }}` and any values in any
+Since `Go` processes templates as text files, we can parameterize the Atmos component name `eks/cluster-{{ .flavor }}` and any values in any
 sections (`vars`, `settings`, `env`, `backend`, etc.), and even the `import` section in the imported file (if the file imports other configurations).
 
 :::
@@ -124,23 +124,23 @@ Then we can import the template into a top-level stack multiple times providing 
 
 ```yaml title=stacks/orgs/cp/tenant1/test1/us-west-2.yaml
 import:
-  - path: mixins/region/us-west-2
-  - path: orgs/cp/tenant1/test1/_defaults
+  - path: "mixins/region/us-west-2"
+  - path: "orgs/cp/tenant1/test1/_defaults"
 
   # This import with the provided context will dynamically generate 
   # a new Atmos component `eks/cluster-blue` in the current stack
-  - path: catalog/terraform/eks_cluster_tmpl
+  - path: "catalog/terraform/eks_cluster_tmpl"
     context:
-      color: "blue"
+      flavor: "blue"
       enabled: true
       service_1_name: "blue-service-1"
       service_2_name: "blue-service-2"
 
   # This import with the provided context will dynamically generate 
   # a new Atmos component `eks/cluster-green` in the current stack
-  - path: catalog/terraform/eks_cluster_tmpl
+  - path: "catalog/terraform/eks_cluster_tmpl"
     context:
-      color: "green"
+      flavor: "green"
       enabled: false
       service_1_name: "green-service-1"
       service_2_name: "green-service-2"
@@ -156,7 +156,7 @@ atmos terraform apply eks/cluster-blue -s tenant1-uw2-test-1
 atmos terraform apply eks/cluster-green -s tenant1-uw2-test-1
 ```
 
-All the parameterized variables will get their values from the `context`:
+All the parameterized variables get their values from the `context`:
 
 ```yaml title="atmos describe component eks/cluster-blue -s tenant1-uw2-test-1"
 vars:
@@ -169,7 +169,7 @@ vars:
   service_2_name: blue-service-2
   stage: test-1
   tags:
-    color: blue
+    flavor: blue
   tenant: tenant1
 ```
 
@@ -184,18 +184,136 @@ vars:
   service_2_name: green-service-2
   stage: test-1
   tags:
-    color: green
+    flavor: green
   tenant: tenant1
 ```
 
 <br/>
 
-## Hierarchical Context in Imports
+## Hierarchical Imports with Context
+
+Atmos supports hierarchical imports with context.
+This will allow you to parameterize the entire chain of stack configurations and dynamically generate components in stacks.
+
+For example, let's create the configuration `stacks/catalog/terraform/eks_cluster_tmpl_hierarchical.yaml` with the following content:
+
+```yaml title=stacks/catalog/terraform/eks_cluster_tmpl_hierarchical.yaml
+import:
+  # Use `region_tmpl` `Go` template and provide `context` for it.
+  # This can also be done by using `Go` templates in the import path itself.
+  # - path: "mixins/region/{{ .region }}"
+  - path: "mixins/region/region_tmpl"
+    # `Go` templates in `context`
+    context:
+      region: "{{ .region }}"
+      environment: "{{ .environment }}"
+
+  # `Go` templates in the import path
+  - path: "orgs/cp/{{ .tenant }}/{{ .stage }}/_defaults"
+
+components:
+  terraform:
+    # Parameterize Atmos component name
+    "eks/cluster-{{ .flavor }}":
+      metadata:
+        component: "test/test-component"
+      vars:
+        # Parameterize variables
+        enabled: "{{ .enabled }}"
+        name: "eks-{{ .flavor }}"
+        service_1_name: "{{ .service_1_name }}"
+        service_2_name: "{{ .service_2_name }}"
+        tags:
+          flavor: "{{ .flavor }}"
+```
 
 <br/>
 
-Using imports with context and parameterized config files will help you make the configurations extremely DRY,
-and is very useful when creating stacks and components
+Then we can import the template into a top-level stack multiple times providing different context variables to each import and to the imports for
+the entire inheritance chain (which `catalog/terraform/eks_cluster_tmpl_hierarchical` imports itself):
+
+```yaml title=stacks/orgs/cp/tenant1/test1/us-west-1.yaml
+import:
+
+  # This import with the provided hierarchical context will dynamically generate
+  # a new Atmos component `eks/cluster-blue` in the `tenant1-uw1-test1` stack
+  - path: "catalog/terraform/eks_cluster_tmpl_hierarchical"
+    context:
+      # Context variables for the EKS component
+      flavor: "blue"
+      enabled: true
+      service_1_name: "blue-service-1"
+      service_2_name: "blue-service-2"
+      # Context variables for the hierarchical imports
+      # `catalog/terraform/eks_cluster_tmpl_hierarchical` imports other parameterized configurations
+      tenant: "tenant1"
+      region: "us-west-1"
+      environment: "uw1"
+      stage: "test1"
+
+  # This import with the provided hierarchical context will dynamically generate
+  # a new Atmos component `eks/cluster-green` in the `tenant1-uw1-test1` stack
+  - path: "catalog/terraform/eks_cluster_tmpl_hierarchical"
+    context:
+      # Context variables for the EKS component
+      flavor: "green"
+      enabled: false
+      service_1_name: "green-service-1"
+      service_2_name: "green-service-2"
+      # Context variables for the hierarchical imports
+      # `catalog/terraform/eks_cluster_tmpl_hierarchical` imports other parameterized configurations
+      tenant: "tenant1"
+      region: "us-west-1"
+      environment: "uw1"
+      stage: "test1"
+```
+
+<br/>
+
+In the case of hierarchical imports, Atmos performs the following steps:
+
+- Processes all the imports in the `import` section in the current configuration in the order they are specified providing the `context` to all
+  imported files
+
+- For each imported file, Atmos deep-merges the parent `context` with the current context. Note that the current `context` (in the current file) takes
+  precedence over the parent `context` and will override items with the same keys. Atmos does this hierarchically for all imports in all files,
+  effectively processing a graph of imports and deep-merging the contexts on all levels
+
+For example, in the `stacks/orgs/cp/tenant1/test1/us-west-1.yaml` configuration above, we first import
+the `catalog/terraform/eks_cluster_tmpl_hierarchical` and provide it with the `context` which includes the context variables for the EKS component
+itself, as well as the context variables for all the hierarchical imports. Then, when processing
+the `stacks/catalog/terraform/eks_cluster_tmpl_hierarchical` configuration, Atmos deep-merges the parent `context` (from
+`stacks/orgs/cp/tenant1/test1/us-west-1.yaml`) with the current `context` and processes the `Go` templates.
+
+We are now able to dynamically generate the components `eks/cluster-blue` and `eks/cluster-green` in the stack `tenant1-uw1-test1` and can
+execute the following Atmos commands to provision the components into the stack:
+
+```shell
+atmos terraform apply eks/cluster-blue -s tenant1-uw1-test-1
+atmos terraform apply eks/cluster-green -s tenant1-uw1-test-1
+```
+
+All the parameterized variables get their values from the all the hierarchical `context` settings:
+
+```yaml title="atmos describe component eks/cluster-blue -s tenant1-uw1-test-1"
+vars:
+  enabled: true
+  environment: uw1
+  name: eks-blue
+  namespace: cp
+  region: us-west-1
+  service_1_name: blue-service-1
+  service_2_name: blue-service-2
+  stage: test-1
+  tags:
+    flavor: blue
+  tenant: tenant1
+```
+
+## Summary
+
+Using imports with context (and hierarchical imports with context) with parameterized config files will help you make the configurations
+extremely DRY. It's very useful in many cases, for example, when creating stacks and components
 for [EKS blue-green deployment](https://aws.amazon.com/blogs/containers/kubernetes-cluster-upgrade-the-blue-green-deployment-strategy/).
 
 ## Related

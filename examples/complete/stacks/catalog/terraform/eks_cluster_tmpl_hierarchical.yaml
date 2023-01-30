@@ -14,14 +14,14 @@ import:
 components:
   terraform:
     # Parameterize Atmos component name
-    "eks/cluster-{{ .color }}":
+    "eks/cluster-{{ .flavor }}":
       metadata:
         component: "test/test-component"
       vars:
         # Parameterize variables
         enabled: "{{ .enabled }}"
-        name: "eks-{{ .color }}"
+        name: "eks-{{ .flavor }}"
         service_1_name: "{{ .service_1_name }}"
         service_2_name: "{{ .service_2_name }}"
         tags:
-          color: "{{ .color }}"
+          flavor: "{{ .flavor }}"

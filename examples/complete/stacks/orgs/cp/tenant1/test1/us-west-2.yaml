@@ -6,7 +6,7 @@ import:
   # a new Atmos component `eks/cluster-blue` in the current stack
   - path: catalog/terraform/eks_cluster_tmpl
     context:
-      color: "blue"
+      flavor: "blue"
       enabled: true
       service_1_name: "blue-service-1"
       service_2_name: "blue-service-2"
@@ -15,7 +15,7 @@ import:
   # a new Atmos component `eks/cluster-green` in the current stack
   - path: catalog/terraform/eks_cluster_tmpl
     context:
-      color: "green"
+      flavor: "green"
       enabled: false
       service_1_name: "green-service-1"
       service_2_name: "green-service-2"

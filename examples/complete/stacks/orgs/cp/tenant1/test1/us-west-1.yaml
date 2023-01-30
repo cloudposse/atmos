@@ -5,7 +5,7 @@ import:
   - path: catalog/terraform/eks_cluster_tmpl_hierarchical
     context:
       # Context variables for the EKS component
-      color: "blue"
+      flavor: "blue"
       enabled: true
       service_1_name: "blue-service-1"
       service_2_name: "blue-service-2"
@@ -21,7 +21,7 @@ import:
   - path: catalog/terraform/eks_cluster_tmpl_hierarchical
     context:
       # Context variables for the EKS component
-      color: "green"
+      flavor: "green"
       enabled: false
       service_1_name: "green-service-1"
       service_2_name: "green-service-2"
