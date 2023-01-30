@@ -128,7 +128,7 @@ import:
   - path: orgs/cp/tenant1/test1/_defaults
 
   # This import with the provided context will dynamically generate 
-  # a new Atmos component `eks/cluster-blue` in the stack
+  # a new Atmos component `eks/cluster-blue` in the current stack
   - path: catalog/terraform/eks_cluster_tmpl
     context:
       color: "blue"
@@ -137,7 +137,7 @@ import:
       service_2_name: "blue-service-2"
 
   # This import with the provided context will dynamically generate 
-  # a new Atmos component `eks/cluster-green` in the stack
+  # a new Atmos component `eks/cluster-green` in the current stack
   - path: catalog/terraform/eks_cluster_tmpl
     context:
       color: "green"
@@ -187,6 +187,10 @@ vars:
     color: green
   tenant: tenant1
 ```
+
+<br/>
+
+## Hierarchical Context in Imports
 
 <br/>
 
