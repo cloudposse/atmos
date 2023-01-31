@@ -3,6 +3,7 @@ package stack
 import (
 	"errors"
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"os"
 	"path"
 	"path/filepath"
@@ -109,7 +110,7 @@ func FindComponentDependencies(
 		// Process base component(s)
 		// Only include the imported config file into "deps" if all the following conditions are `true`:
 		// 1. The imported config file has the base component(s) section(s)
-		// 2. The imported config file does not import other config files (which means it defined the base component sections inline)
+		// 2. The imported config file does not import other config files (which means that instead it defined the base component sections inline)
 		// 3. If the imported config file does import other config files, check that the base component sections in them are different by using
 		// `reflect.DeepEqual`. If they are the same, don't include the imported config file since it does not specify anything for the base component
 		for _, baseComponent := range baseComponents {
@@ -119,19 +120,18 @@ func FindComponentDependencies(
 				continue
 			}
 
-			importsOfStackImport, ok := stackImportMap["import"].([]any)
-			if !ok || len(importsOfStackImport) == 0 {
+			importOfStackImportStructs, err := processImportSection(stackImportMap, stack)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(importOfStackImportStructs) == 0 {
 				deps = append(deps, stackImportName)
 				continue
 			}
 
-			for _, importOfStackImport := range importsOfStackImport {
-				importOfStackImportStr, ok := importOfStackImport.(string)
-				if !ok {
-					continue
-				}
-
-				importOfStackImportMap, ok := stackImports[importOfStackImportStr]
+			for _, importOfStackImportStruct := range importOfStackImportStructs {
+				importOfStackImportMap, ok := stackImports[importOfStackImportStruct.Path]
 				if !ok {
 					continue
 				}
@@ -163,6 +163,36 @@ func FindComponentDependencies(
 	unique := u.UniqueStrings(deps)
 	sort.Strings(unique)
 	return unique, nil
+}
+
+// processImportSection processes the `import` section in stack config files
+// The `import` section` can be of two different type:
+// 1. list of `StackImport` structs
+// 2. list of strings
+func processImportSection(stackMap map[any]any, filePath string) ([]cfg.StackImport, error) {
+	if imports, ok := stackMap[cfg.ImportSectionName]; ok && imports != nil {
+		var res1 []cfg.StackImport
+		err := mapstructure.Decode(imports, &res1)
+		if err == nil && len(res1) > 0 {
+			return res1, nil
+		}
+
+		if stringImports, ok := imports.([]any); ok && len(stringImports) > 0 {
+			var res2 []cfg.StackImport
+			for _, i := range stringImports {
+				if s, ok := i.(string); ok {
+					res2 = append(res2, cfg.StackImport{Path: s})
+				} else if i == nil {
+					return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+				} else {
+					return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
+				}
+			}
+			return res2, nil
+		}
+	}
+
+	return nil, nil
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
@@ -214,7 +244,7 @@ func CreateComponentStackMap(
 			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[any]any{})
+				config, _, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[any]any{}, nil, false)
 				if err != nil {
 					return err
 				}
@@ -296,22 +326,9 @@ func getFileContent(filePath string) (string, error) {
 	return string(content), nil
 }
 
-type BaseComponentConfig struct {
-	BaseComponentVars                      map[any]any
-	BaseComponentSettings                  map[any]any
-	BaseComponentEnv                       map[any]any
-	FinalBaseComponentName                 string
-	BaseComponentCommand                   string
-	BaseComponentBackendType               string
-	BaseComponentBackendSection            map[any]any
-	BaseComponentRemoteStateBackendType    string
-	BaseComponentRemoteStateBackendSection map[any]any
-	ComponentInheritanceChain              []string
-}
-
 // ProcessBaseComponentConfig processes base component(s) config
 func ProcessBaseComponentConfig(
-	baseComponentConfig *BaseComponentConfig,
+	baseComponentConfig *cfg.BaseComponentConfig,
 	allComponentsMap map[any]any,
 	component string,
 	stack string,

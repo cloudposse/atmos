@@ -345,3 +345,23 @@ type Affected struct {
 	SpaceliftStack string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	Affected       string `yaml:"affected" json:"affected" mapstructure:"affected"`
 }
+
+type BaseComponentConfig struct {
+	BaseComponentVars                      map[any]any
+	BaseComponentSettings                  map[any]any
+	BaseComponentEnv                       map[any]any
+	FinalBaseComponentName                 string
+	BaseComponentCommand                   string
+	BaseComponentBackendType               string
+	BaseComponentBackendSection            map[any]any
+	BaseComponentRemoteStateBackendType    string
+	BaseComponentRemoteStateBackendSection map[any]any
+	ComponentInheritanceChain              []string
+}
+
+// Stack imports (`import` section)
+
+type StackImport struct {
+	Path    string         `yaml:"path" json:"path" mapstructure:"path"`
+	Context map[string]any `yaml:"context" json:"context" mapstructure:"context"`
+}

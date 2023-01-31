@@ -1,0 +1,33 @@
+import:
+
+  # This import with the provided hierarchical context will dynamically generate
+  # a new Atmos component `eks-blue/cluster` in the `tenant1-uw1-test1` stack
+  - path: catalog/terraform/eks_cluster_tmpl_hierarchical
+    context:
+      # Context variables for the EKS component
+      flavor: "blue"
+      enabled: true
+      service_1_name: "blue-service-1"
+      service_2_name: "blue-service-2"
+      # Context variables for the hierarchical imports
+      # `catalog/terraform/eks_cluster_tmpl_hierarchical` imports other parameterized configurations
+      tenant: "tenant1"
+      region: "us-west-1"
+      environment: "uw1"
+      stage: "test1"
+
+  # This import with the provided hierarchical context will dynamically generate
+  # a new Atmos component `eks-green/cluster` in the `tenant1-uw1-test1` stack
+  - path: catalog/terraform/eks_cluster_tmpl_hierarchical
+    context:
+      # Context variables for the EKS component
+      flavor: "green"
+      enabled: false
+      service_1_name: "green-service-1"
+      service_2_name: "green-service-2"
+      # Context variables for the hierarchical imports
+      # `catalog/terraform/eks_cluster_tmpl_hierarchical` imports other parameterized configurations
+      tenant: "tenant1"
+      region: "us-west-1"
+      environment: "uw1"
+      stage: "test1"

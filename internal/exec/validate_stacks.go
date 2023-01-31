@@ -41,7 +41,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	var errorMessages []string
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, _, err := s.ProcessYAMLConfigFile(cliConfig.StacksBaseAbsolutePath, filePath, map[string]map[any]any{})
+		stackConfig, importsConfig, _, err := s.ProcessYAMLConfigFile(cliConfig.StacksBaseAbsolutePath, filePath, map[string]map[any]any{}, nil, false)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}

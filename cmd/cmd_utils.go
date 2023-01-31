@@ -1,14 +1,13 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/spf13/cobra"
 	"os"
-	"text/template"
 
+	"github.com/spf13/cobra"
+
+	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -18,15 +17,16 @@ var (
 	// All custom top-level commands will be checked against this map in order to not override `atmos` top-level commands,
 	// but just add subcommands to them
 	existingTopLevelCommands = map[string]*cobra.Command{
-		"atlantis":  atlantisCmd,
-		"aws":       awsCmd,
-		"describe":  describeCmd,
-		"helmfile":  helmfileCmd,
-		"terraform": terraformCmd,
-		"validate":  validateCmd,
-		"vendor":    vendorCmd,
-		"version":   versionCmd,
-		"workflow":  workflowCmd,
+		"atlantis":   atlantisCmd,
+		"aws":        awsCmd,
+		"completion": completionCmd,
+		"describe":   describeCmd,
+		"helmfile":   helmfileCmd,
+		"terraform":  terraformCmd,
+		"validate":   validateCmd,
+		"vendor":     vendorCmd,
+		"version":    versionCmd,
+		"workflow":   workflowCmd,
 	}
 )
 
@@ -105,9 +105,9 @@ func preCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobra.Co
 		u.PrintErrorToStdErrorAndExit(err)
 	}
 
-	// no steps means a sub command should be specified
+	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
-		cmd.Help()
+		_ = cmd.Help()
 		os.Exit(0)
 	}
 }
@@ -147,7 +147,7 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
-			component, err := processTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data)
+			component, err := u.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data)
 			if err != nil {
 				u.PrintErrorToStdErrorAndExit(err)
 			}
@@ -157,7 +157,7 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
-			stack, err := processTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data)
+			stack, err := u.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data)
 			if err != nil {
 				u.PrintErrorToStdErrorAndExit(err)
 			}
@@ -199,7 +199,7 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 				value = res
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = processTmpl(fmt.Sprintf("env-var-%d", i), value, data)
+				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data)
 				if err != nil {
 					u.PrintErrorToStdErrorAndExit(err)
 				}
@@ -221,7 +221,7 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := processTmpl(fmt.Sprintf("step-%d", i), step, data)
+		commandToRun, err := u.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data)
 		if err != nil {
 			u.PrintErrorToStdErrorAndExit(err)
 		}
@@ -248,18 +248,4 @@ func cloneCommand(orig *cfg.Command) (*cfg.Command, error) {
 	}
 
 	return &clone, nil
-}
-
-// processTmpl parses and executes Go templates
-func processTmpl(tmplName string, tmplValue string, tmplData any) (string, error) {
-	t, err := template.New(tmplName).Parse(tmplValue)
-	if err != nil {
-		return "", err
-	}
-	var res bytes.Buffer
-	err = t.Execute(&res, tmplData)
-	if err != nil {
-		return "", err
-	}
-	return res.String(), nil
 }

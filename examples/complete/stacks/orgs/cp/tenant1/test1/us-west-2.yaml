@@ -1,0 +1,21 @@
+import:
+  - path: mixins/region/us-west-2
+  - path: orgs/cp/tenant1/test1/_defaults
+
+  # This import with the provided context will dynamically generate
+  # a new Atmos component `eks-blue/cluster` in the current stack
+  - path: catalog/terraform/eks_cluster_tmpl
+    context:
+      flavor: "blue"
+      enabled: true
+      service_1_name: "blue-service-1"
+      service_2_name: "blue-service-2"
+
+  # This import with the provided context will dynamically generate
+  # a new Atmos component `eks-green/cluster` in the current stack
+  - path: catalog/terraform/eks_cluster_tmpl
+    context:
+      flavor: "green"
+      enabled: false
+      service_1_name: "green-service-1"
+      service_2_name: "green-service-2"
