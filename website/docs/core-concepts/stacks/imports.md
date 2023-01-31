@@ -96,7 +96,7 @@ import: []
 
 components:
   terraform:
-    "eks/cluster-{{ .flavor }}":
+    "eks-{{ .flavor }}/cluster":
       metadata:
         component: "test/test-component"
       vars:
@@ -112,7 +112,7 @@ components:
 
 :::note
 
-Since `Go` processes templates as text files, we can parameterize the Atmos component name `eks/cluster-{{ .flavor }}` and any values in any
+Since `Go` processes templates as text files, we can parameterize the Atmos component name `eks-{{ .flavor }}/cluster` and any values in any
 sections (`vars`, `settings`, `env`, `backend`, etc.), and even the `import` section in the imported file (if the file imports other configurations).
 
 :::
@@ -127,7 +127,7 @@ import:
   - path: "orgs/cp/tenant1/test1/_defaults"
 
   # This import with the provided context will dynamically generate 
-  # a new Atmos component `eks/cluster-blue` in the current stack
+  # a new Atmos component `eks-blue/cluster` in the current stack
   - path: "catalog/terraform/eks_cluster_tmpl"
     context:
       flavor: "blue"
@@ -136,7 +136,7 @@ import:
       service_2_name: "blue-service-2"
 
   # This import with the provided context will dynamically generate 
-  # a new Atmos component `eks/cluster-green` in the current stack
+  # a new Atmos component `eks-green/cluster` in the current stack
   - path: "catalog/terraform/eks_cluster_tmpl"
     context:
       flavor: "green"
@@ -148,16 +148,16 @@ import:
 Now we can execute the following Atmos commands to describe and provision the dynamically generated EKS components into the stack:
 
 ```shell
-atmos describe component eks/cluster-blue -s tenant1-uw2-test-1
-atmos describe component eks/cluster-green -s tenant1-uw2-test-1
+atmos describe component eks-blue/cluster -s tenant1-uw2-test-1
+atmos describe component eks-green/cluster -s tenant1-uw2-test-1
 
-atmos terraform apply eks/cluster-blue -s tenant1-uw2-test-1
-atmos terraform apply eks/cluster-green -s tenant1-uw2-test-1
+atmos terraform apply eks-blue/cluster -s tenant1-uw2-test-1
+atmos terraform apply eks-green/cluster -s tenant1-uw2-test-1
 ```
 
 All the parameterized variables get their values from the `context`:
 
-```yaml title="atmos describe component eks/cluster-blue -s tenant1-uw2-test-1"
+```yaml title="atmos describe component eks-blue/cluster -s tenant1-uw2-test-1"
 vars:
   enabled: true
   environment: uw2
@@ -172,7 +172,7 @@ vars:
   tenant: tenant1
 ```
 
-```yaml title="atmos describe component eks/cluster-green -s tenant1-uw2-test-1"
+```yaml title="atmos describe component eks-green/cluster -s tenant1-uw2-test-1"
 vars:
   enabled: true
   environment: uw2
@@ -213,7 +213,7 @@ import:
 components:
   terraform:
     # Parameterize Atmos component name
-    "eks/cluster-{{ .flavor }}":
+    "eks-{{ .flavor }}/cluster":
       metadata:
         component: "test/test-component"
       vars:
@@ -235,7 +235,7 @@ the entire inheritance chain (which `catalog/terraform/eks_cluster_tmpl_hierarch
 import:
 
   # This import with the provided hierarchical context will dynamically generate
-  # a new Atmos component `eks/cluster-blue` in the `tenant1-uw1-test1` stack
+  # a new Atmos component `eks-blue/cluster` in the `tenant1-uw1-test1` stack
   - path: "catalog/terraform/eks_cluster_tmpl_hierarchical"
     context:
       # Context variables for the EKS component
@@ -251,7 +251,7 @@ import:
       stage: "test1"
 
   # This import with the provided hierarchical context will dynamically generate
-  # a new Atmos component `eks/cluster-green` in the `tenant1-uw1-test1` stack
+  # a new Atmos component `eks-green/cluster` in the `tenant1-uw1-test1` stack
   - path: "catalog/terraform/eks_cluster_tmpl_hierarchical"
     context:
       # Context variables for the EKS component
@@ -284,17 +284,17 @@ itself, as well as the context variables for all the hierarchical imports. Then,
 the `stacks/catalog/terraform/eks_cluster_tmpl_hierarchical` configuration, Atmos deep-merges the parent `context` (from
 `stacks/orgs/cp/tenant1/test1/us-west-1.yaml`) with the current `context` and processes the `Go` templates.
 
-We are now able to dynamically generate the components `eks/cluster-blue` and `eks/cluster-green` in the stack `tenant1-uw1-test1` and can
+We are now able to dynamically generate the components `eks-blue/cluster` and `eks-green/cluster` in the stack `tenant1-uw1-test1` and can
 execute the following Atmos commands to provision the components into the stack:
 
 ```shell
-atmos terraform apply eks/cluster-blue -s tenant1-uw1-test-1
-atmos terraform apply eks/cluster-green -s tenant1-uw1-test-1
+atmos terraform apply eks-blue/cluster -s tenant1-uw1-test-1
+atmos terraform apply eks-green/cluster -s tenant1-uw1-test-1
 ```
 
 All the parameterized variables get their values from the all the hierarchical `context` settings:
 
-```yaml title="atmos describe component eks/cluster-blue -s tenant1-uw1-test-1"
+```yaml title="atmos describe component eks-blue/cluster -s tenant1-uw1-test-1"
 vars:
   enabled: true
   environment: uw1

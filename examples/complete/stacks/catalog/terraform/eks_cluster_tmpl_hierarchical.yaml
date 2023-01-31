@@ -14,7 +14,7 @@ import:
 components:
   terraform:
     # Parameterize Atmos component name
-    "eks/cluster-{{ .flavor }}":
+    "eks-{{ .flavor }}/cluster":
       metadata:
         component: "test/test-component"
       vars:
