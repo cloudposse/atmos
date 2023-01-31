@@ -8,7 +8,7 @@ id: imports
 Imports are how we reduce duplication of configurations by creating reusable baselines. The imports should be thought of almost like blueprints. Once
 a reusable catalog of Stacks exists, robust architectures can be easily created simply by importing those blueprints.
 
-Imports may be used in Stack configuratinos together with [inheritance](/core-concepts/components/inheritance)
+Imports may be used in Stack configurations together with [inheritance](/core-concepts/components/inheritance)
 and [mixins](/core-concepts/stacks/mixins) to produce an exceptionally DRY configuration in a way that is logically organized and easier to maintain
 for your team.
 
