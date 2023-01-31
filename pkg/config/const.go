@@ -34,4 +34,6 @@ const (
 	HelpFlag2 = "--help"
 
 	ComponentConfigFileName = "component.yaml"
+
+	ImportSectionName = "import"
 )

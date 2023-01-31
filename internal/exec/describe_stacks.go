@@ -76,7 +76,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		sections = strings.Split(sectionsCsv, ",")
 	}
 
-	finalStacksMap, err := ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections)
+	finalStacksMap, err := ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections, false)
 	if err != nil {
 		return err
 	}
@@ -96,9 +96,10 @@ func ExecuteDescribeStacks(
 	components []string,
 	componentTypes []string,
 	sections []string,
+	ignoreMissingFiles bool,
 ) (map[string]any, error) {
 
-	stacksMap, _, err := FindStacksMap(cliConfig)
+	stacksMap, _, err := FindStacksMap(cliConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err
 	}

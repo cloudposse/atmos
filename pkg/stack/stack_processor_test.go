@@ -30,6 +30,7 @@ func TestStackProcessor(t *testing.T) {
 		filePaths,
 		processStackDeps,
 		processComponentDeps,
+		false,
 	)
 
 	assert.Nil(t, err)

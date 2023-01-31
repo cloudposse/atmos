@@ -29,7 +29,9 @@ func ProcessYAMLConfigFiles(
 	helmfileComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
-	processComponentDeps bool) (
+	processComponentDeps bool,
+	ignoreMissingFiles bool,
+) (
 	[]string,
 	map[string]any,
 	map[string]map[string]any,
@@ -60,7 +62,14 @@ func ProcessYAMLConfigFiles(
 				".yml",
 			)
 
-			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(stackBasePath, p, map[string]map[any]any{})
+			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(
+				stackBasePath,
+				p,
+				map[string]map[any]any{},
+				nil,
+				ignoreMissingFiles,
+			)
+
 			if err != nil {
 				errorResult = err
 				return
@@ -138,6 +147,8 @@ func ProcessYAMLConfigFile(
 	basePath string,
 	filePath string,
 	importsConfig map[string]map[any]any,
+	context map[string]any,
+	ignoreMissingFiles bool,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -149,8 +160,21 @@ func ProcessYAMLConfigFile(
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	stackYamlConfig, err := getFileContent(filePath)
-	if err != nil {
+
+	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
+	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
+	// If we add a new stack config file with some component configurations to the current branch, then the new file will not be present in
+	// the remote branch (with which the current branch is compared), and `atmos` would throw an error.
+	if err != nil && !ignoreMissingFiles {
 		return nil, nil, nil, err
+	}
+
+	// Process `Go` templates in the stack config file using the provided context
+	if context != nil {
+		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
@@ -160,81 +184,91 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Find and process all imports
-	if importsSection, ok := stackConfigMap["import"]; ok {
-		imports, ok := importsSection.([]any)
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("invalid 'import' section in the file '%s'\nThe 'import' section must be a list of strings", relativeFilePath)
+	importStructs, err := processImportSection(stackConfigMap, relativeFilePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	for _, importStruct := range importStructs {
+		imp := importStruct.Path
+
+		if imp == "" {
+			return nil, nil, nil, fmt.Errorf("invalid empty import in the file '%s'", relativeFilePath)
 		}
 
-		for _, im := range imports {
-			imp, ok := im.(string)
+		// If the import file is specified without extension, use `.yaml` as default
+		impWithExt := imp
+		ext := filepath.Ext(imp)
+		if ext == "" {
+			ext = cfg.DefaultStackConfigFileExtension
+			impWithExt = imp + ext
+		}
 
-			if !ok {
-				if im == nil {
-					return nil, nil, nil, fmt.Errorf("invalid import in the file '%s'\nThe import is an empty string",
-						relativeFilePath)
-				}
-				return nil, nil, nil, fmt.Errorf("invalid import in the file '%s'\nThe import '%v' is not a valid string",
+		impWithExtPath := path.Join(basePath, impWithExt)
+
+		if impWithExtPath == filePath {
+			errorMessage := fmt.Sprintf("invalid import in the file '%s'\nThe file imports itself in '%s'",
+				relativeFilePath,
+				imp)
+			return nil, nil, nil, errors.New(errorMessage)
+		}
+
+		// Find all import matches in the glob
+		importMatches, err := u.GetGlobMatches(impWithExtPath)
+		if err != nil || len(importMatches) == 0 {
+			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
+			// TODO: review `doublestar` library
+			importMatches, err = u.GetGlobMatches(impWithExtPath)
+			if err != nil {
+				errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
+					imp,
 					relativeFilePath,
-					im)
-			}
-
-			// If the import file is specified without extension, use `.yaml` as default
-			impWithExt := imp
-			ext := filepath.Ext(imp)
-			if ext == "" {
-				ext = cfg.DefaultStackConfigFileExtension
-				impWithExt = imp + ext
-			}
-
-			impWithExtPath := path.Join(basePath, impWithExt)
-
-			if impWithExtPath == filePath {
-				errorMessage := fmt.Sprintf("invalid import in the file '%s'\nThe file imports itself in '%s'",
+					err)
+				return nil, nil, nil, errors.New(errorMessage)
+			} else if importMatches == nil {
+				errorMessage := fmt.Sprintf("invalid import in the file '%s'\nNo matches found for the import '%s'",
 					relativeFilePath,
 					imp)
 				return nil, nil, nil, errors.New(errorMessage)
 			}
+		}
 
-			// Find all import matches in the glob
-			importMatches, err := u.GetGlobMatches(impWithExtPath)
-			if err != nil || len(importMatches) == 0 {
-				// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
-				// TODO: review `doublestar` library
-				importMatches, err = u.GetGlobMatches(impWithExtPath)
-				if err != nil {
-					errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
-						imp,
-						relativeFilePath,
-						err)
-					return nil, nil, nil, errors.New(errorMessage)
-				} else if importMatches == nil {
-					errorMessage := fmt.Sprintf("invalid import in the file '%s'\nNo matches found for the import '%s'",
-						relativeFilePath,
-						imp)
-					return nil, nil, nil, errors.New(errorMessage)
-				}
+		// Support `context` in hierarchical imports.
+		// Deep-merge the parent `context` with the current `context` and propagate the result to the entire imports chain.
+		// The current `context` takes precedence over the parent `context` and will override items with the same keys.
+		// TODO: instead of calling the conversion functions, we need to switch to generics and update everything to support it
+		listOfMaps := []map[any]any{c.MapsOfStringsToMapsOfInterfaces(context), c.MapsOfStringsToMapsOfInterfaces(importStruct.Context)}
+		mergedContext, err := m.Merge(listOfMaps)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		for _, importFile := range importMatches {
+			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(
+				basePath,
+				importFile,
+				importsConfig,
+				c.MapsOfInterfacesToMapsOfStrings(mergedContext),
+				ignoreMissingFiles,
+			)
+			if err != nil {
+				return nil, nil, nil, err
 			}
 
-			for _, importFile := range importMatches {
-				yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(basePath, importFile, importsConfig)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-
-				stackConfigs = append(stackConfigs, yamlConfig)
-				importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
-				ext2 := filepath.Ext(importRelativePathWithExt)
-				if ext2 == "" {
-					ext2 = cfg.DefaultStackConfigFileExtension
-				}
-				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
-				importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
+			stackConfigs = append(stackConfigs, yamlConfig)
+			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
+			ext2 := filepath.Ext(importRelativePathWithExt)
+			if ext2 == "" {
+				ext2 = cfg.DefaultStackConfigFileExtension
 			}
+			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
+			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
 		}
 	}
 
-	stackConfigs = append(stackConfigs, stackConfigMap)
+	if len(stackConfigMap) > 0 {
+		stackConfigs = append(stackConfigs, stackConfigMap)
+	}
 
 	// Deep-merge the stack config file and all the imports
 	stackConfigsDeepMerged, err := m.Merge(stackConfigs)
@@ -552,7 +586,7 @@ func ProcessStackConfig(
 				baseComponentBackendSection := map[any]any{}
 				baseComponentRemoteStateBackendType := ""
 				baseComponentRemoteStateBackendSection := map[any]any{}
-				var baseComponentConfig BaseComponentConfig
+				var baseComponentConfig cfg.BaseComponentConfig
 				var componentInheritanceChain []string
 				var baseComponents []string
 
@@ -906,7 +940,7 @@ func ProcessStackConfig(
 				baseComponentEnv := map[any]any{}
 				baseComponentName := ""
 				baseComponentHelmfileCommand := ""
-				var baseComponentConfig BaseComponentConfig
+				var baseComponentConfig cfg.BaseComponentConfig
 				var componentInheritanceChain []string
 				var baseComponents []string
 

@@ -1,0 +1,14 @@
+components:
+  terraform:
+    # Parameterize Atmos component name
+    "eks-{{ .flavor }}/cluster":
+      metadata:
+        component: "test/test-component"
+      # Parameterize variables
+      vars:
+        enabled: "{{ .enabled }}"
+        name: "eks-{{ .flavor }}"
+        service_1_name: "{{ .service_1_name }}"
+        service_2_name: "{{ .service_2_name }}"
+        tags:
+          flavor: "{{ .flavor }}"

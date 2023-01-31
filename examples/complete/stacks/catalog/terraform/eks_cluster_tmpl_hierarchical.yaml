@@ -1,0 +1,27 @@
+import:
+  # Use `region_tmpl` `Go` template and provide `context` for it.
+  # This can also be done by using `Go` templates in the import path itself.
+  # - path: "mixins/region/{{ .region }}"
+  - path: mixins/region/region_tmpl
+    # `Go` templates in `context`
+    context:
+      region: "{{ .region }}"
+      environment: "{{ .environment }}"
+
+  # `Go` templates in the import path
+  - path: "orgs/cp/{{ .tenant }}/{{ .stage }}/_defaults"
+
+components:
+  terraform:
+    # Parameterize Atmos component name
+    "eks-{{ .flavor }}/cluster":
+      metadata:
+        component: "test/test-component"
+      vars:
+        # Parameterize variables
+        enabled: "{{ .enabled }}"
+        name: "eks-{{ .flavor }}"
+        service_1_name: "{{ .service_1_name }}"
+        service_2_name: "{{ .service_2_name }}"
+        tags:
+          flavor: "{{ .flavor }}"
