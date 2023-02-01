@@ -26,8 +26,9 @@ the `--ref` flag and then checkout the Git commit pointed to by the `--sha` flag
 If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA will point
 to the `HEAD` of the branch.
 
-Note that if you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target repository, but
-instead will use the already cloned one to compare the current branch with. In this case, the `--ref` and `--sha` flags are ignored.
+Note that if you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
+repository, but instead will use the already cloned one to compare the current branch with. In this case, the `--ref`, `--sha`, `--ssh-key`
+and `--ssh-key-password` flags are not used and are ignored if specified.
 
 The command works by:
 

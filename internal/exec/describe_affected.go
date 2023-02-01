@@ -71,7 +71,13 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	affected, err := ExecuteDescribeAffected(cliConfig, ref, sha, repoPath, sshKeyPath, sshKeyPassword, verbose)
+	var affected []cfg.Affected
+	if repoPath == "" {
+		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
+	} else {
+		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose)
+	}
+
 	if err != nil {
 		return err
 	}

@@ -18,12 +18,17 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeAffected processes stack configs and returns a list of the affected Atmos components and stacks given two Git commits
-func ExecuteDescribeAffected(
+var (
+	localRepoIsNotGitRepoError  = errors.New("the local repo is not a Git repository. Check that it was initialized and has '.git' folder")
+	remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
+)
+
+// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, processes stack configs
+// and returns a list of the affected Atmos components and stacks given two Git commits
+func ExecuteDescribeAffectedWithTargetRepoClone(
 	cliConfig cfg.CliConfiguration,
 	ref string,
 	sha string,
-	repoPath string,
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,
@@ -37,9 +42,7 @@ func ExecuteDescribeAffected(
 		return nil, err
 	}
 
-	repoIsNotGitRepoError := errors.New("the current repo is not a Git repository. Check that it was initialized and has '.git' folder")
-
-	// Get the Git config of the current remoteRepo
+	// Get the Git config of the local repo
 	localRepoConfig, err := localRepo.Config()
 	if err != nil {
 		return nil, err
@@ -51,18 +54,18 @@ func ExecuteDescribeAffected(
 	}
 
 	if len(keys) == 0 {
-		return nil, repoIsNotGitRepoError
+		return nil, localRepoIsNotGitRepoError
 	}
 
 	// Get the origin URL of the current remoteRepo
 	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
 	if len(remoteUrls) == 0 {
-		return nil, repoIsNotGitRepoError
+		return nil, localRepoIsNotGitRepoError
 	}
 
 	repoUrl := remoteUrls[0]
 	if repoUrl == "" {
-		return nil, repoIsNotGitRepoError
+		return nil, localRepoIsNotGitRepoError
 	}
 
 	localRepoHead, err := localRepo.Head()
@@ -181,6 +184,137 @@ func ExecuteDescribeAffected(
 
 	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath),
+		cliConfig.StackConfigFilesRelativePaths,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true)
+	if err != nil {
+		return nil, err
+	}
+
+	if verbose {
+		u.PrintInfo(fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
+		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
+	}
+
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nGetting current working repo commit object..."))
+
+	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got current working repo commit object"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting current working repo commit tree..."))
+
+	localTree, err := localCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got current working repo commit tree"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit object..."))
+
+	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit object"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit tree..."))
+
+	remoteTree, err := remoteCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit tree"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Finding diff between the current working branch and remote branch ..."))
+
+	// Find a slice of Patch objects with all the changes between the current working and remote trees
+	patch, err := localTree.Patch(remoteTree)
+	if err != nil {
+		return nil, err
+	}
+
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found diff between the current working branch and remote branch"))
+	u.PrintInfoVerbose(verbose, "\nChanged files:")
+
+	var changedFiles []string
+	for _, fileStat := range patch.Stats() {
+		u.PrintMessageVerbose(verbose && fileStat.Name != "", fileStat.Name)
+		changedFiles = append(changedFiles, fileStat.Name)
+	}
+
+	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	return affected, nil
+}
+
+// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, processes stack configs
+// and returns a list of the affected Atmos components and stacks given two Git commits
+func ExecuteDescribeAffectedWithTargetRepoPath(
+	cliConfig cfg.CliConfiguration,
+	repoPath string,
+	verbose bool,
+) ([]cfg.Affected, error) {
+
+	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the Git config of the local repo
+	_, err = localRepo.Config()
+	if err != nil {
+		return nil, localRepoIsNotGitRepoError
+	}
+
+	localRepoHead, err := localRepo.Head()
+	if err != nil {
+		return nil, err
+	}
+
+	remoteRepo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the Git config of the remote target repo
+	_, err = remoteRepo.Config()
+	if err != nil {
+		return nil, remoteRepoIsNotGitRepoError
+	}
+
+	remoteRepoHead, err := remoteRepo.Head()
+	if err != nil {
+		return nil, err
+	}
+
+	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update paths to point to the temp dir
+	cliConfig.StacksBaseAbsolutePath = path.Join(repoPath, cliConfig.BasePath, cliConfig.Stacks.BasePath)
+	cliConfig.TerraformDirAbsolutePath = path.Join(repoPath, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
+	cliConfig.HelmfileDirAbsolutePath = path.Join(repoPath, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
+
+	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
+		path.Join(repoPath, cliConfig.BasePath, cliConfig.Stacks.BasePath),
 		cliConfig.StackConfigFilesRelativePaths,
 	)
 	if err != nil {
