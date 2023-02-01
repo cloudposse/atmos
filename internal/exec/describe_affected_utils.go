@@ -172,6 +172,11 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
+	if verbose {
+		u.PrintInfo(fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
+		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
+	}
+
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
 		return nil, err
@@ -193,11 +198,6 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true)
 	if err != nil {
 		return nil, err
-	}
-
-	if verbose {
-		u.PrintInfo(fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
-		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
 	}
 
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nGetting current working repo commit object..."))
@@ -303,6 +303,13 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, err
 	}
 
+	if verbose {
+		u.PrintInfo(fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
+		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
+	}
+
+	// Process local and remote stacks
+
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
 		return nil, err
@@ -324,11 +331,6 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true)
 	if err != nil {
 		return nil, err
-	}
-
-	if verbose {
-		u.PrintInfo(fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
-		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
 	}
 
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nGetting current working repo commit object..."))
