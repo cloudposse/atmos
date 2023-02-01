@@ -273,29 +273,45 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, err
 	}
 
-	// Get the Git config of the local repo
+	// Check the Git config of the local repo
 	_, err = localRepo.Config()
 	if err != nil {
 		return nil, localRepoIsNotGitRepoError
 	}
 
-	localRepoHead, err := localRepo.Head()
-	if err != nil {
-		return nil, err
-	}
-
 	remoteRepo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{
-		DetectDotGit:          true,
+		DetectDotGit:          false,
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the Git config of the remote target repo
+	// Check the Git config of the remote target repo
 	_, err = remoteRepo.Config()
 	if err != nil {
 		return nil, remoteRepoIsNotGitRepoError
+	}
+
+	affected, err := executeDescribeAffected(cliConfig, repoPath, localRepo, remoteRepo, verbose)
+	if err != nil {
+		return nil, err
+	}
+
+	return affected, nil
+}
+
+func executeDescribeAffected(
+	cliConfig cfg.CliConfiguration,
+	remoteRepoFileSystemPath string,
+	localRepo *git.Repository,
+	remoteRepo *git.Repository,
+	verbose bool,
+) ([]cfg.Affected, error) {
+
+	localRepoHead, err := localRepo.Head()
+	if err != nil {
+		return nil, err
 	}
 
 	remoteRepoHead, err := remoteRepo.Head()
@@ -308,20 +324,18 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
 	}
 
-	// Process local and remote stacks
-
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
 
 	// Update paths to point to the temp dir
-	cliConfig.StacksBaseAbsolutePath = path.Join(repoPath, cliConfig.BasePath, cliConfig.Stacks.BasePath)
-	cliConfig.TerraformDirAbsolutePath = path.Join(repoPath, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
-	cliConfig.HelmfileDirAbsolutePath = path.Join(repoPath, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
+	cliConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Stacks.BasePath)
+	cliConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
+	cliConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
 
 	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
-		path.Join(repoPath, cliConfig.BasePath, cliConfig.Stacks.BasePath),
+		path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Stacks.BasePath),
 		cliConfig.StackConfigFilesRelativePaths,
 	)
 	if err != nil {

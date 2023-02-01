@@ -47,7 +47,7 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 
 	// Point to the same local repository
 	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
-	repoPath := "."
+	repoPath := "../../"
 
 	affected, err := e.ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, true)
 	assert.Nil(t, err)
