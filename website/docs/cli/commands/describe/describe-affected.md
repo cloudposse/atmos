@@ -205,25 +205,31 @@ For example:
 There are a few ways to work with private repositories with which the current local branch is compared to detect the changed files and affected Atmos
 stacks and components:
 
-- Using the `--ssh-key` flag to specify the filesystem path to a PEM-encoded private key to clone private repos using SSH, together with
+- Using the `--ssh-key` flag to specify the filesystem path to a PEM-encoded private key to clone private repos using SSH, and
   the `--ssh-key-password` flag to provide the encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
+
+- Execute the `atmos describe affected` command in a [GitHub Action](https://docs.github.com/en/actions), clone the remote target repository in the
+  action, and use the `--repo-path` flag to specify the path to the already cloned target repository with which to compare the current branch
 
 ## Using with GitHub Actions
 
-- If the `atmos describe affected` command is executed in a [GitHub Action](https://docs.github.com/en/actions), and you don't want to store or
-  generate a long-lived SSH private key on the server, you can do the following:
-  - Create a GitHub
-    [Personal Access Token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
-    with scope permissions to clone private repos
-  - Add the created PAT as a repository or GitHub
-    organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets) with the
-    name [`GITHUB_TOKEN`](https://docs.github.com/en/actions/security-guides/automatic-token-authentication)
-  - In your GitHub action, clone the remote repository using the [checkout](https://github.com/actions/checkout) GitHub action
-  - Execute `atmos describe affected` command with the `--repo-path` flag set to the cloned repository path using
-    the [`GITHUB_WORKSPACE`](https://docs.github.com/en/actions/learn-github-actions/variables) ENV variable (which points to the default working
-    directory on the GitHub runner for steps, and the default location of the repository when using
-    the [checkout](https://github.com/actions/checkout) action). For example:
+If the `atmos describe affected` command is executed in a [GitHub Action](https://docs.github.com/en/actions), and you don't want to store or
+generate a long-lived SSH private key on the server, you can do the following:
 
-      ```shell
-      atmos describe affected --repo-path $GITHUB_WORKSPACE
-      ```
+- Create a GitHub
+  [Personal Access Token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
+  with scope permissions to clone private repos
+
+- Add the created PAT as a repository or GitHub organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets) with the
+  name [`GITHUB_TOKEN`](https://docs.github.com/en/actions/security-guides/automatic-token-authentication)
+
+- In your GitHub action, clone the remote repository using the [checkout](https://github.com/actions/checkout) GitHub action
+
+- Execute `atmos describe affected` command with the `--repo-path` flag set to the cloned repository path using
+  the [`GITHUB_WORKSPACE`](https://docs.github.com/en/actions/learn-github-actions/variables) ENV variable (which points to the default working
+  directory on the GitHub runner for steps, and the default location of the repository when using the [checkout](https://github.com/actions/checkout)
+  action). For example:
+
+    ```shell
+    atmos describe affected --repo-path $GITHUB_WORKSPACE
+    ```
