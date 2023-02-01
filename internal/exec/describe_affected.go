@@ -1,7 +1,9 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
+
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -69,6 +71,10 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	sshKeyPassword, err := flags.GetString("ssh-key-password")
 	if err != nil {
 		return err
+	}
+
+	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
+		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
 
 	var affected []cfg.Affected

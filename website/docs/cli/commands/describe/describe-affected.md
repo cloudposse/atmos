@@ -28,7 +28,8 @@ to the `HEAD` of the branch.
 
 Note that if you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
 repository, but instead will use the already cloned one to compare the current branch with. In this case, the `--ref`, `--sha`, `--ssh-key`
-and `--ssh-key-password` flags are not used and are ignored if specified.
+and `--ssh-key-password` flags are not used, and an error will be thrown if the `--repo-path` flag and any of the `--ref`, `--sha`, `--ssh-key`
+or `--ssh-key-password` flags are provided at the same time.
 
 The command works by:
 
@@ -126,16 +127,16 @@ atmos describe affected --repo-path <path_to_already_cloned_repo>
 
 ## Flags
 
-| Flag                 | Description                                                                                                                   | Required |
-|:---------------------|:------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--ref`              | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch | no       |
-| `--sha`              | Git commit SHA with which to compare the current working branch                                                               | no       |
-| `--file`             | If specified, write the result to the file                                                                                    | no       |
-| `--format`           | Specify the output format: `json` or `yaml` (`json` is default)                                                               | no       |
-| `--verbose`          | Print more detailed output when cloning and checking out the Git repository<br/>and processing the result                     | no       |
-| `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                              | no       |
-| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                    | no       |
-| `--repo-path`        | Filesystem path to the already cloned target repository with which to compare the current branch                              | no       |
+| Flag                 | Description                                                                                                                                                      | Required |
+|:---------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
+| `--ref`              | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                    | no       |
+| `--sha`              | Git commit SHA with which to compare the current working branch                                                                                                  | no       |
+| `--file`             | If specified, write the result to the file                                                                                                                       | no       |
+| `--format`           | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                  | no       |
+| `--verbose`          | Print more detailed output when cloning and checking out the Git repository<br/>and processing the result                                                        | no       |
+| `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                                                                 | no       |
+| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
+| `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
 
 ## Output
 
