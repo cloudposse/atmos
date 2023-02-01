@@ -204,8 +204,8 @@ For example:
 There are a few ways to work with private repositories with which the current local branch is compared to detect the changed files and affected Atmos
 stacks and components:
 
-- Using the `ssh-key` flag to specify the filesystem path to a PEM-encoded private key to clone private repos using SSH, together with
-  the `ssh-key-password` flag to provide the encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
+- Using the `--ssh-key` flag to specify the filesystem path to a PEM-encoded private key to clone private repos using SSH, together with
+  the `--ssh-key-password` flag to provide the encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
 
 - If the `atmos describe affected` command is executed in a [GitHub Action](https://docs.github.com/en/actions), and you don't want to store or
   generate a long-lived SSH private key on the server, you can do the following:
