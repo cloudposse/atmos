@@ -39,15 +39,16 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
 
 	// Get the Git config of the local repo
 	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
 
+	// Get the remotes of the local repo
 	keys := []string{}
 	for k := range localRepoConfig.Remotes {
 		keys = append(keys, k)
@@ -66,11 +67,6 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	repoUrl := remoteUrls[0]
 	if repoUrl == "" {
 		return nil, localRepoIsNotGitRepoError
-	}
-
-	localRepoHead, err := localRepo.Head()
-	if err != nil {
-		return nil, err
 	}
 
 	// Clone the remote repo
@@ -172,84 +168,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
-	if verbose {
-		u.PrintInfo(fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
-		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
-	}
-
-	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update paths to point to the temp dir
-	cliConfig.StacksBaseAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath)
-	cliConfig.TerraformDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
-	cliConfig.HelmfileDirAbsolutePath = path.Join(tempDir, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
-
-	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
-		path.Join(tempDir, cliConfig.BasePath, cliConfig.Stacks.BasePath),
-		cliConfig.StackConfigFilesRelativePaths,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true)
-	if err != nil {
-		return nil, err
-	}
-
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nGetting current working repo commit object..."))
-
-	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
-	if err != nil {
-		return nil, err
-	}
-
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got current working repo commit object"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting current working repo commit tree..."))
-
-	localTree, err := localCommit.Tree()
-	if err != nil {
-		return nil, err
-	}
-
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got current working repo commit tree"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit object..."))
-
-	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
-	if err != nil {
-		return nil, err
-	}
-
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit object"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit tree..."))
-
-	remoteTree, err := remoteCommit.Tree()
-	if err != nil {
-		return nil, err
-	}
-
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit tree"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Finding diff between the current working branch and remote branch ..."))
-
-	// Find a slice of Patch objects with all the changes between the current working and remote trees
-	patch, err := localTree.Patch(remoteTree)
-	if err != nil {
-		return nil, err
-	}
-
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found diff between the current working branch and remote branch"))
-	u.PrintInfoVerbose(verbose, "\nChanged files:")
-
-	var changedFiles []string
-	for _, fileStat := range patch.Stats() {
-		u.PrintMessageVerbose(verbose && fileStat.Name != "", fileStat.Name)
-		changedFiles = append(changedFiles, fileStat.Name)
-	}
-
-	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
+	affected, err := executeDescribeAffected(cliConfig, tempDir, localRepo, remoteRepo, verbose)
 	if err != nil {
 		return nil, err
 	}
@@ -270,13 +189,13 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the local repo
 	_, err = localRepo.Config()
 	if err != nil {
-		return nil, localRepoIsNotGitRepoError
+		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
 
 	remoteRepo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{
@@ -284,13 +203,13 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the remote target repo
 	_, err = remoteRepo.Config()
 	if err != nil {
-		return nil, remoteRepoIsNotGitRepoError
+		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
 	affected, err := executeDescribeAffected(cliConfig, repoPath, localRepo, remoteRepo, verbose)
@@ -379,7 +298,7 @@ func executeDescribeAffected(
 	}
 
 	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit tree"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Finding diff between the current working branch and remote branch ..."))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Finding diff between the current working branch and remote target branch ..."))
 
 	// Find a slice of Patch objects with all the changes between the current working and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -387,7 +306,7 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found diff between the current working branch and remote branch"))
+	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found diff between the current working branch and remote target branch"))
 	u.PrintInfoVerbose(verbose, "\nChanged files:")
 
 	var changedFiles []string
