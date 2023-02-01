@@ -1,7 +1,9 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
+
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -29,6 +31,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	sha, err := flags.GetString("sha")
+	if err != nil {
+		return err
+	}
+
+	repoPath, err := flags.GetString("repo-path")
 	if err != nil {
 		return err
 	}
@@ -66,7 +73,17 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	affected, err := ExecuteDescribeAffected(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
+	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
+		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+	}
+
+	var affected []cfg.Affected
+	if repoPath == "" {
+		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
+	} else {
+		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose)
+	}
+
 	if err != nil {
 		return err
 	}
