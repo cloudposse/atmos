@@ -207,6 +207,8 @@ stacks and components:
 - Using the `--ssh-key` flag to specify the filesystem path to a PEM-encoded private key to clone private repos using SSH, together with
   the `--ssh-key-password` flag to provide the encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
 
+## Using with GitHub Actions
+
 - If the `atmos describe affected` command is executed in a [GitHub Action](https://docs.github.com/en/actions), and you don't want to store or
   generate a long-lived SSH private key on the server, you can do the following:
   - Create a GitHub
