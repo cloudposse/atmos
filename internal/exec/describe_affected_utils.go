@@ -23,6 +23,7 @@ func ExecuteDescribeAffected(
 	cliConfig cfg.CliConfiguration,
 	ref string,
 	sha string,
+	repoPath string,
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,

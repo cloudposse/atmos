@@ -26,9 +26,13 @@ the `--ref` flag and then checkout the Git commit pointed to by the `--sha` flag
 If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA will point
 to the `HEAD` of the branch.
 
+Note that if you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target repository, but
+instead will use the already cloned one to compare the current branch with. In this case, the `--ref` and `--sha` flags are ignored.
+
 The command works by:
 
-- Cloning the branch (`--ref`) or checking out the commit (`--sha`) of the remote target branch
+- Cloning the target branch (`--ref`) or checking out the commit (`--sha`) of the remote target branch, or using the already cloned target repository
+  specified by the `--repo-path` flag
 - Deep merging all stack configurations for both the current working branch and the target branch
 - Looking for changes in the component directories
 - Comparing each section of the stack configuration looking for differences
@@ -114,6 +118,7 @@ atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file af
 atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 atmos describe affected --ssh-key <path_to_ssh_key>
 atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>
+atmos describe affected --repo-path <path_to_already_cloned_repo>
 ```
 
 ## Flags
@@ -127,6 +132,7 @@ atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password
 | `--verbose`          | Print more detailed output when cloning and checking out the Git repository<br/>and processing the result                     | no       |
 | `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                              | no       |
 | `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                    | no       |
+| `--repo-path`        | Filesystem path to the already cloned target repository with which to compare the current branch                              | no       |
 
 ## Output
 

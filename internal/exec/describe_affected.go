@@ -33,6 +33,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	repoPath, err := flags.GetString("repo-path")
+	if err != nil {
+		return err
+	}
+
 	format, err := flags.GetString("format")
 	if err != nil {
 		return err
@@ -66,7 +71,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	affected, err := ExecuteDescribeAffected(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
+	affected, err := ExecuteDescribeAffected(cliConfig, ref, sha, repoPath, sshKeyPath, sshKeyPassword, verbose)
 	if err != nil {
 		return err
 	}
