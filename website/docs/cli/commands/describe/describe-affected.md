@@ -215,7 +215,7 @@ stacks and components:
   - Add the created PAT as a repository or GitHub
     organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets) with the
     name [`GITHUB_TOKEN`](https://docs.github.com/en/actions/security-guides/automatic-token-authentication)
-  - Clone the remote repository using the [checkout](https://github.com/actions/checkout) GitHub action
+  - In your GitHub action, clone the remote repository using the [checkout](https://github.com/actions/checkout) GitHub action
   - Execute `atmos describe affected` command with the `--repo-path` flag set to the cloned repository path using
     the [`GITHUB_WORKSPACE`](https://docs.github.com/en/actions/learn-github-actions/variables) ENV variable (which points to the default working
     directory on the GitHub runner for steps, and the default location of the repository when using
