@@ -78,7 +78,7 @@ Cloud Posse uses this tool extensively for automating cloud infrastructure with 
    - Execute [helm](https://helm.sh/) commands on Kubernetes clusters
    - Executing [kubectl](https://kubernetes.io/docs/reference/kubectl/overview/) commands on Kubernetes clusters
 
-   Here aer some other ways you can extend atmos:
+   Here are some other ways you can extend atmos:
    - Running [AWS CDK](https://aws.amazon.com/cdk/) constructs to define cloud resources
    - Executing commands for the [serverless](https://www.serverless.com/) framework
    - Executing shell commands
