@@ -158,7 +158,7 @@ module "vpc_flow_logs_bucket" {
 In the `components/terraform/infra/vpc/vpc-flow-logs.tf` file, configure the `aws_flow_log` resource for the `vpc` Terraform component to use the
 remote state output `vpc_flow_logs_bucket_arn` from the `vpc-flow-logs-bucket-1` Atmos component:
 
-```hcl title="components/terraform/infra/vpc/remote-state.tf"
+```hcl title="components/terraform/infra/vpc/vpc-flow-logs.tf"
 locals {
   enabled               = module.this.enabled
   vpc_flow_logs_enabled = local.enabled && var.vpc_flow_logs_enabled
