@@ -26,7 +26,8 @@ In Atmos, Terraform Remote State is implemented by using these modules:
 modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/core-concepts/stacks). The provider processes stack
 configurations to get the final config for an Atmos component in an Atmos stack. The final component config is then used by
 the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote
-state for the component in the stack.
+state for the component 
+stack.
 
 <br/>
 
@@ -158,7 +159,7 @@ module "vpc_flow_logs_bucket" {
 In the `components/terraform/infra/vpc/vpc-flow-logs.tf` file, configure the `aws_flow_log` resource for the `vpc` Terraform component to use the
 remote state output `vpc_flow_logs_bucket_arn` from the `vpc-flow-logs-bucket-1` Atmos component:
 
-```hcl title="components/terraform/infra/vpc/remote-state.tf"
+```hcl title="components/terraform/infra/vpc/vpc-flow-logs.tf"
 locals {
   enabled               = module.this.enabled
   vpc_flow_logs_enabled = local.enabled && var.vpc_flow_logs_enabled
