@@ -26,8 +26,7 @@ In Atmos, Terraform Remote State is implemented by using these modules:
 modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/core-concepts/stacks). The provider processes stack
 configurations to get the final config for an Atmos component in an Atmos stack. The final component config is then used by
 the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote
-state for the component 
-stack.
+state for the component in the stack.
 
 <br/>
 
