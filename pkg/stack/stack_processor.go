@@ -170,7 +170,7 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Process `Go` templates in the stack config file using the provided context
-	if context != nil {
+	if len(context) > 0 {
 		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context)
 		if err != nil {
 			return nil, nil, nil, err
