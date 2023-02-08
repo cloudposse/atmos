@@ -19,11 +19,11 @@ To accomplish this tutorial, you'll need the following:
 - [Docker](https://docs.docker.com/get-docker/)
 - An AWS test account and credentials for that account added to [Leapp](https://docs.cloudposse.com/reference/tools#leapp) using the "default" profile so they're ready to be used in Geodesic.
   - We recommend Administrator privileges to make everything easy, but you can likely get away with credentials that only allow S3, CloudFront, and DynamoDB access.
-  - If you haven't set this up before, check out [the Geodesic how-to on authenticating with Leapp](https://docs.cloudposse.com/howto/geodesic/authenticate-with-leapp.md).
+  - If you haven't set this up before, check out [the Geodesic how-to on authenticating with Leapp](https://docs.cloudposse.com/howto/geodesic/authenticate-with-leapp/).
 
 ### Understanding
 
-Prior to starting this tutorial, you should be sure that you understand [our various concepts and terminology](/category/core-concepts/) and have gone through our [Getting started with Geodesic](https://docs.cloudposse.com/tutorials/geodesic-getting-started.md) and [Getting started with Atmos tutorial](/tutorials/atmos-getting-started/) because we'll be building upon the knowledge in both of those tutorials.
+Prior to starting this tutorial, you should be sure that you understand [our various concepts and terminology](/category/core-concepts/) and have gone through our [Getting started with Geodesic](https://docs.cloudposse.com/tutorials/geodesic-getting-started/) and [Getting started with Atmos tutorial](/tutorials/atmos-getting-started/) because we'll be building upon the knowledge in both of those tutorials.
 
 ## Tutorial
 
@@ -66,7 +66,7 @@ be authenticated in Geodesic and see a green "√" at the begining of the comman
 > If you are logged in with a different profile name, configure Geodesic to use it by
 > running `export AWS_PROFILE=profile-name` where "profile-name" is the Named Profile in your
 > Leapp session. If you have the profile names in sync but you see a red "✗" instead of the green "√",
-> review the How-To on [authenticating with Leapp](https://docs.cloudposse.com/howto/geodesic/authenticate-with-leapp.md) and get that working before proceeding further.
+> review the How-To on [authenticating with Leapp](https://docs.cloudposse.com/howto/geodesic/authenticate-with-leapp/) and get that working before proceeding further.
 
 This `03-first-aws-environment/` directory that you're now in should be looking a little bit familiar from our `atmos` tutorial:
 
