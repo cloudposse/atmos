@@ -158,7 +158,7 @@ Let's move on to updating our code and getting a feel for working a bit more han
 
 ### 6. Update our Stack
 
-One of the critical philosophies that SweetOps embodies is a focus on [improving Day 2+ operations](https://docs.cloudposse.com/fundamentals/philosophy.md#optimize-for-day-2-operations) and with that in mind, it's important to know how you would update this stack and utilize `atmos` to make those changes. Luckily, that's as simple as you might think. Let's try it out and update the `stacks/example.yaml` file on our local machines to the following:
+One of the critical philosophies that SweetOps embodies is a focus on [improving Day 2+ operations](https://docs.cloudposse.com/fundamentals/philosophy/#optimize-for-day-2-operations) and with that in mind, it's important to know how you would update this stack and utilize `atmos` to make those changes. Luckily, that's as simple as you might think. Let's try it out and update the `stacks/example.yaml` file on our local machines to the following:
 
 ```yaml
 import: []

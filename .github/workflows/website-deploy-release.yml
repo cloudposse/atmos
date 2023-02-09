@@ -12,6 +12,9 @@ env:
   IAM_ROLE_ARN: arn:aws:iam::557075604627:role/cplive-plat-ue2-prod-atmos-docs-gha
   IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-release
   S3_BUCKET_NAME: cplive-plat-ue2-prod-atmos-docs-origin
+  DEPLOYMENT_HOST: atmos.tools
+  ALGOLIA_INDEX_NAME: atmos.tools
+  ALGOLIA_APP_ID: 32YOERUX83
 
 # These permissions are needed to interact with the GitHub's OIDC Token endpoint
 permissions:
@@ -24,7 +27,7 @@ jobs:
 
     environment:
       name: production
-      url: https://atmos.tools
+      url: https://${{ env.DEPLOYMENT_HOST }}
 
     steps:
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
@@ -58,3 +61,9 @@ jobs:
           aws sts get-caller-identity
           aws s3 sync . s3://${{ env.S3_BUCKET_NAME }} --delete
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }} --recursive --human-readable --summarize
+
+      - name: ReIndex with Algolia
+        env:
+          ALGOLIA_SCRAPER_API_KEY: ${{ secrets.ALGOLIA_SCRAPER_API_KEY }}
+        run: |
+          ./website/algolia/reindex.sh
