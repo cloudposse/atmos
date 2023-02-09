@@ -570,6 +570,15 @@ func appendToAffected(
 		}
 	}
 
+	// Check `component` section and add `ComponentPath` to the output
+	if component, ok := componentSection["component"].(string); ok {
+		if affected.ComponentType == "terraform" {
+			affected.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+		} else if affected.ComponentType == "helmfile" {
+			affected.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
+		}
+	}
+
 	return append(affectedList, affected), nil
 }
 
