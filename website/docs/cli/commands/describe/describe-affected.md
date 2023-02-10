@@ -74,6 +74,7 @@ Affected components and stacks:
    {
       "component": "infra/vpc",
       "component_type": "terraform",
+      "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-dev",
       "spacelift_stack": "tenant1-ue2-dev-infra-vpc",
       "affected": "component"
@@ -81,6 +82,7 @@ Affected components and stacks:
    {
       "component": "infra/vpc",
       "component_type": "terraform",
+      "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-prod",
       "spacelift_stack": "tenant1-ue2-prod-infra-vpc",
       "affected": "component"
@@ -88,6 +90,7 @@ Affected components and stacks:
    {
       "component": "infra/vpc",
       "component_type": "terraform",
+      "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-staging",
       "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
       "affected": "component"
@@ -148,6 +151,7 @@ Each object has the following schema:
 {
   "component": "....",
   "component_type": "....",
+  "component_path": "....",
   "stack": "....",
   "spacelift_stack": ".....",
   "affected": "....."
@@ -158,6 +162,7 @@ where:
 
 - `component` - the affected Atmos component in the stack
 - `component_type` - the type of the component (`terraform` or `helmfile`)
+- `component_type` - the filesystem path to the `terraform` or `helmfile` component
 - `stack` - the affected Atmos stack
 - `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
   Atmos stack in the `settings.spacelift.workspace_enabled` config
@@ -178,6 +183,7 @@ For example:
   {
     "component": "test/test-component-override-2",
     "component_type": "terraform",
+    "component_path": "components/terraform/test/test-component",
     "stack": "tenant1-ue2-dev",
     "spacelift_stack": "tenant1-ue2-dev-new-component",
     "affected": "stack.vars"
@@ -185,6 +191,7 @@ For example:
   {
     "component": "infra/vpc",
     "component_type": "terraform",
+    "component_path": "components/terraform/infra/vpc",
     "stack": "tenant2-ue2-staging",
     "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
     "affected": "component"
@@ -192,6 +199,7 @@ For example:
   {
     "component": "test/test-component-override-3",
     "component_type": "terraform",
+    "component_path": "components/terraform/test/test-component",
     "stack": "tenant1-ue2-prod",
     "affected": "stack.env"
   }
