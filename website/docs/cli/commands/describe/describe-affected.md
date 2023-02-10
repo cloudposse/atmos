@@ -162,7 +162,7 @@ where:
 
 - `component` - the affected Atmos component in the stack
 - `component_type` - the type of the component (`terraform` or `helmfile`)
-- `component_type` - the filesystem path to the `terraform` or `helmfile` component
+- `component_path` - the filesystem path to the `terraform` or `helmfile` component
 - `stack` - the affected Atmos stack
 - `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
   Atmos stack in the `settings.spacelift.workspace_enabled` config
