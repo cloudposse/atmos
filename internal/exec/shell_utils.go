@@ -17,7 +17,14 @@ import (
 )
 
 // ExecuteShellCommand prints and executes the provided command with args and flags
-func ExecuteShellCommand(command string, args []string, dir string, env []string, dryRun bool, verbose bool) error {
+func ExecuteShellCommand(
+	command string,
+	args []string,
+	dir string,
+	env []string,
+	dryRun bool,
+	verbose bool,
+) error {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
