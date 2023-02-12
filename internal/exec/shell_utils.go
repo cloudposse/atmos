@@ -4,17 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"io"
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/syntax"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
-	"syscall"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
 )
 
 // ExecuteShellCommand prints and executes the provided command with args and flags
@@ -36,7 +34,19 @@ func ExecuteShellCommand(
 	if redirectStdError == "" {
 		cmd.Stderr = os.Stderr
 	} else {
-		cmd.Stderr = os.NewFile(uintptr(syscall.Stderr), redirectStdError)
+		f, err := os.OpenFile(redirectStdError, os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			return err
+		}
+
+		defer func(f *os.File) {
+			err = f.Close()
+			if err != nil {
+				u.PrintError(err)
+			}
+		}(f)
+
+		cmd.Stderr = f
 	}
 
 	if verbose {
