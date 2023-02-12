@@ -41,8 +41,8 @@ func init() {
 }
 
 func initConfig() {
-	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr` to. "+
-		"Can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
+	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
+		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
