@@ -4,9 +4,6 @@ sidebar_label: helmfile
 sidebar_class_name: command
 ---
 
-
-
-
 import DocCardList from '@theme/DocCardList';
 
 :::note Purpose
@@ -39,10 +36,10 @@ In addition, the `component` argument and `stack` flag are required to generate 
 - `atmos helmfile generate varfile` command generates a varfile for the component in the stack
 
 - `atmos helmfile` commands support [GLOBAL OPTIONS](https://github.com/roboll/helmfile#cli-reference) using the command-line flag `--global-options`.
-Usage: `atmos helmfile <command> <component> -s <stack> [command options] [arguments] --global-options="--no-color --namespace=test"`
+  Usage: `atmos helmfile <command> <component> -s <stack> [command options] [arguments] --global-options="--no-color --namespace=test"`
 
 - before executing the `helmfile` commands, Atmos runs `aws eks update-kubeconfig` to read kubeconfig from the EKS cluster and use it to
-authenticate with the cluster. This can be disabled in `atmos.yaml` CLI config by setting `components.helmfile.use_eks` to `false`
+  authenticate with the cluster. This can be disabled in `atmos.yaml` CLI config by setting `components.helmfile.use_eks` to `false`
 
 <br/>
 
@@ -54,28 +51,38 @@ Run `atmos helmfile --help` to see all the available options
 
 ```shell
 atmos helmfile diff echo-server -s tenant1-ue2-dev
+atmos helmfile diff echo-server -s tenant1-ue2-dev --redirect-stderr /dev/null
+
 atmos helmfile apply echo-server -s tenant1-ue2-dev
+atmos helmfile apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout
+
 atmos helmfile sync echo-server --stack tenant1-ue2-dev
+atmos helmfile sync echo-server --stack tenant1-ue2-dev --redirect-stderr ./errors.txt
+
 atmos helmfile destroy echo-server --stack=tenant1-ue2-dev
+atmos helmfile destroy echo-server --stack=tenant1-ue2-dev --redirect-stderr /dev/stdout
 ```
 
 ## Arguments
 
-| Argument     | Description        | Required |
-|:-------------|:-------------------|:---------|
-| `component`  | Atmos component    | yes      |
+| Argument    | Description     | Required |
+|:------------|:----------------|:---------|
+| `component` | Atmos component | yes      |
 
 ## Flags
 
-| Flag        | Description   | Alias | Required |
-|:------------|:--------------|:------|:---------|
-| `--stack`   | Atmos stack   | `-s`  | yes      |
-| `--dry-run` | Dry run       |       | no       |
+| Flag                | Description                                                                                                                                   | Alias | Required |
+|:--------------------|:----------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--stack`           | Atmos stack                                                                                                                                   | `-s`  | yes      |
+| `--dry-run`         | Dry run                                                                                                                                       |       | no       |
+| `--redirect-stderr` | File descriptor to redirect `stderr` to.<br/>Errors can be redirected to any file or any standard file descriptor<br/>(including `/dev/null`) |       | no       |
 
 <br/>
 
 :::note
+
 All native `helmfile` flags, command options, and arguments are supported
+
 :::
 
 ## Subcommands
