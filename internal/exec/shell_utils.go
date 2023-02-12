@@ -118,12 +118,37 @@ func shellRunner(command string, name string, dir string, env []string, out io.W
 }
 
 // ExecuteShellCommandAndReturnOutput prints and executes the provided command with args and flags and returns the command output
-func ExecuteShellCommandAndReturnOutput(command string, args []string, dir string, env []string, dryRun bool, verbose bool) (string, error) {
+func ExecuteShellCommandAndReturnOutput(
+	command string,
+	args []string,
+	dir string,
+	env []string,
+	dryRun bool,
+	verbose bool,
+	redirectStdError string,
+) (string, error) {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
-	cmd.Stderr = os.Stderr
+
+	if redirectStdError == "" {
+		cmd.Stderr = os.Stderr
+	} else {
+		f, err := os.OpenFile(redirectStdError, os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			return "", err
+		}
+
+		defer func(f *os.File) {
+			err = f.Close()
+			if err != nil {
+				u.PrintError(err)
+			}
+		}(f)
+
+		cmd.Stderr = f
+	}
 
 	if verbose {
 		u.PrintInfo("\nExecuting command:")
@@ -143,11 +168,18 @@ func ExecuteShellCommandAndReturnOutput(command string, args []string, dir strin
 }
 
 // ExecuteShellCommands sequentially executes the provided list of commands
-func ExecuteShellCommands(commands []string, dir string, env []string, dryRun bool, verbose bool) error {
+func ExecuteShellCommands(
+	commands []string,
+	dir string,
+	env []string,
+	dryRun bool,
+	verbose bool,
+	redirectStdError string,
+) error {
 	for _, command := range commands {
 		args := strings.Fields(command)
 		if len(args) > 0 {
-			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun, verbose, ""); err != nil {
+			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun, verbose, redirectStdError); err != nil {
 				return err
 			}
 		}
