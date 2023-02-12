@@ -99,7 +99,7 @@ func ExecuteWorkflow(
 				u.PrintInfo(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
-			if err := ExecuteShellCommand("atmos", args, ".", []string{}, dryRun, true, ""); err != nil {
+			if err = ExecuteShellCommand("atmos", args, ".", []string{}, dryRun, true, ""); err != nil {
 				return err
 			}
 		} else {
