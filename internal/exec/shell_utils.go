@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"syscall"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"mvdan.cc/sh/v3/expand"
@@ -24,13 +25,19 @@ func ExecuteShellCommand(
 	env []string,
 	dryRun bool,
 	verbose bool,
+	redirectStdError string,
 ) error {
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+
+	if redirectStdError == "" {
+		cmd.Stderr = os.Stderr
+	} else {
+		cmd.Stderr = os.NewFile(uintptr(syscall.Stderr), redirectStdError)
+	}
 
 	if verbose {
 		u.PrintInfo("\nExecuting command:")
@@ -130,7 +137,7 @@ func ExecuteShellCommands(commands []string, dir string, env []string, dryRun bo
 	for _, command := range commands {
 		args := strings.Fields(command)
 		if len(args) > 0 {
-			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun, verbose); err != nil {
+			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun, verbose, ""); err != nil {
 				return err
 			}
 		}

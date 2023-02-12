@@ -39,6 +39,7 @@ var (
 		cfg.JsonSchemaDirFlag,
 		cfg.OpaDirFlag,
 		cfg.CueDirFlag,
+		cfg.RedirectStdErrFlag,
 	}
 )
 
@@ -168,6 +169,7 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.JsonSchemaDir = argsAndFlagsInfo.JsonSchemaDir
 	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
 	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
+	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
@@ -1156,6 +1158,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.CueDir = cueDirFlagParts[1]
+		}
+
+		if arg == cfg.RedirectStdErrFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.RedirectStdErr = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.RedirectStdErrFlag) {
+			var redirectStderrParts = strings.Split(arg, "=")
+			if len(redirectStderrParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.RedirectStdErr = redirectStderrParts[1]
 		}
 
 		if arg == cfg.PlanFileFlag {

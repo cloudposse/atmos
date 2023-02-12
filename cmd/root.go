@@ -31,7 +31,7 @@ func init() {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
 
-	// if CLI configuration was found add its custom commands
+	// If CLI configuration was found, add its custom commands
 	if err == nil {
 		err = processCustomCommands(cliConfig.Commands, RootCmd, true)
 		if err != nil {
