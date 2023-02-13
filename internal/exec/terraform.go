@@ -321,6 +321,12 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 
 	// Run `terraform workspace` before executing other terraform commands
 	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
+		workspaceSelectStdErr := "/dev/stdout"
+
+		if info.RedirectStdErr != "" {
+			workspaceSelectStdErr = info.RedirectStdErr
+		}
+
 		err = ExecuteShellCommand(
 			info.Command,
 			[]string{"workspace", "select", info.TerraformWorkspace},
@@ -328,7 +334,7 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 			info.ComponentEnvList,
 			info.DryRun,
 			true,
-			info.RedirectStdErr,
+			workspaceSelectStdErr,
 		)
 		if err != nil {
 			err = ExecuteShellCommand(
