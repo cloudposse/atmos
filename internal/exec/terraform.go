@@ -207,7 +207,15 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 		if info.SubCommand == "workspace" || cliConfig.Components.Terraform.InitRunReconfigure {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
-		err = ExecuteShellCommand(info.Command, initCommandWithArguments, componentPath, info.ComponentEnvList, info.DryRun, true)
+		err = ExecuteShellCommand(
+			info.Command,
+			initCommandWithArguments,
+			componentPath,
+			info.ComponentEnvList,
+			info.DryRun,
+			true,
+			info.RedirectStdErr,
+		)
 		if err != nil {
 			return err
 		}
@@ -313,9 +321,32 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 
 	// Run `terraform workspace` before executing other terraform commands
 	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		err = ExecuteShellCommand(info.Command, []string{"workspace", "select", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun, true)
+		workspaceSelectRedirectStdErr := "/dev/stdout"
+
+		// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
+		if info.RedirectStdErr != "" {
+			workspaceSelectRedirectStdErr = info.RedirectStdErr
+		}
+
+		err = ExecuteShellCommand(
+			info.Command,
+			[]string{"workspace", "select", info.TerraformWorkspace},
+			componentPath,
+			info.ComponentEnvList,
+			info.DryRun,
+			true,
+			workspaceSelectRedirectStdErr,
+		)
 		if err != nil {
-			err = ExecuteShellCommand(info.Command, []string{"workspace", "new", info.TerraformWorkspace}, componentPath, info.ComponentEnvList, info.DryRun, true)
+			err = ExecuteShellCommand(
+				info.Command,
+				[]string{"workspace", "new", info.TerraformWorkspace},
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				true,
+				info.RedirectStdErr,
+			)
 			if err != nil {
 				return err
 			}
@@ -363,7 +394,15 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 
 	// Execute the provided command (except for `terraform workspace` which was executed above)
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
-		err = ExecuteShellCommand(info.Command, allArgsAndFlags, componentPath, info.ComponentEnvList, info.DryRun, true)
+		err = ExecuteShellCommand(
+			info.Command,
+			allArgsAndFlags,
+			componentPath,
+			info.ComponentEnvList,
+			info.DryRun,
+			true,
+			info.RedirectStdErr,
+		)
 		if err != nil {
 			return err
 		}

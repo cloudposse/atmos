@@ -25,10 +25,11 @@ const (
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
 	InitRunReconfigure          = "--init-run-reconfigure"
 
-	FromPlanFlag = "--from-plan"
-	PlanFileFlag = "--planfile"
-	DryRunFlag   = "--dry-run"
-	SkipInitFlag = "--skip-init"
+	FromPlanFlag       = "--from-plan"
+	PlanFileFlag       = "--planfile"
+	DryRunFlag         = "--dry-run"
+	SkipInitFlag       = "--skip-init"
+	RedirectStdErrFlag = "--redirect-stderr"
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"

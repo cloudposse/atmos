@@ -94,6 +94,7 @@ type ArgsAndFlagsInfo struct {
 	JsonSchemaDir           string
 	OpaDir                  string
 	CueDir                  string
+	RedirectStdErr          string
 }
 
 type ConfigAndStacksInfo struct {
@@ -143,6 +144,7 @@ type ConfigAndStacksInfo struct {
 	CueDir                    string
 	AtmosCliConfigPath        string
 	AtmosBasePath             string
+	RedirectStdErr            string
 }
 
 // Workflows

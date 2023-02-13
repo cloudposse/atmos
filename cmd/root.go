@@ -31,7 +31,7 @@ func init() {
 		u.PrintErrorToStdErrorAndExit(err)
 	}
 
-	// if CLI configuration was found add its custom commands
+	// If CLI configuration was found, add its custom commands
 	if err == nil {
 		err = processCustomCommands(cliConfig.Commands, RootCmd, true)
 		if err != nil {
@@ -41,6 +41,8 @@ func init() {
 }
 
 func initConfig() {
+	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
+		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/

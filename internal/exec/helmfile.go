@@ -123,6 +123,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 			nil,
 			info.DryRun,
 			true,
+			info.RedirectStdErr,
 		)
 		if err != nil {
 			return err
@@ -207,7 +208,15 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 		fmt.Println(v)
 	}
 
-	err = ExecuteShellCommand(info.Command, allArgsAndFlags, componentPath, envVars, info.DryRun, true)
+	err = ExecuteShellCommand(
+		info.Command,
+		allArgsAndFlags,
+		componentPath,
+		envVars,
+		info.DryRun,
+		true,
+		info.RedirectStdErr,
+	)
 	if err != nil {
 		return err
 	}
