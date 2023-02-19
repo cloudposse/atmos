@@ -33,3 +33,8 @@ helmfile:
 components:
   terraform: {}
   helmfile: {}
+
+settings:
+  atlantis:
+    config_template_name: "config-1"
+    project_template_name: "project-1"
