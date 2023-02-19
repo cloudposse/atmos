@@ -48,7 +48,6 @@ func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
 		"/dev/stdout",
 		"config-1",
 		"project-1",
-		"workflow-1",
 		nil,
 		nil,
 	)
@@ -63,7 +62,6 @@ func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
 	err = e.ExecuteAtlantisGenerateRepoConfig(
 		cliConfig,
 		"/dev/stdout",
-		"",
 		"",
 		"",
 		nil,

@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/convert"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -44,11 +45,6 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		return err
 	}
 
-	workflowTemplateName, err := flags.GetString("workflow-template")
-	if err != nil {
-		return err
-	}
-
 	stacksCsv, err := flags.GetString("stacks")
 	if err != nil {
 		return err
@@ -67,7 +63,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		components = strings.Split(componentsCsv, ",")
 	}
 
-	return ExecuteAtlantisGenerateRepoConfig(cliConfig, outputPath, configTemplateName, projectTemplateName, workflowTemplateName, stacks, components)
+	return ExecuteAtlantisGenerateRepoConfig(cliConfig, outputPath, configTemplateName, projectTemplateName, stacks, components)
 }
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
@@ -76,7 +72,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 	outputPath string,
 	configTemplateNameArg string,
 	projectTemplateNameArg string,
-	workflowTemplateNameArg string,
 	stacks []string,
 	components []string) error {
 
@@ -87,7 +82,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 	var configTemplate cfg.AtlantisRepoConfig
 	var projectTemplate cfg.AtlantisProjectConfig
-	var workflowTemplate any
 	var ok bool
 	var atlantisProjects []cfg.AtlantisProjectConfig
 	var componentsSection map[string]any
@@ -257,14 +251,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
 						Autoplan:                  atlantisProjectAutoplanConfig,
 						ApplyRequirements:         projectTemplate.ApplyRequirements,
-					}
-
-					// If the workflow template name is provided on the command line in the '--workflow-template' flag, use it
-					// Otherwise, if the 'workflow' attribute is provided in the project template, use it
-					if workflowTemplateNameArg != "" {
-						atlantisProject.Workflow = workflowTemplateNameArg
-					} else if projectTemplate.Workflow != "" {
-						atlantisProject.Workflow = projectTemplate.Workflow
+						Workflow:                  projectTemplate.Workflow,
 					}
 
 					atlantisProjects = append(atlantisProjects, atlantisProject)
@@ -321,41 +308,16 @@ func ExecuteAtlantisGenerateRepoConfig(
 	atlantisYaml.Projects = atlantisProjects
 
 	// Workflows
-	// If the config template is not passes on the command line, find and process it in the component project template in the 'settings.atlantis' section
-	if workflowTemplateNameArg == "" {
-		if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
-			if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[any]any); ok {
-				// 'settings.atlantis.workflow_template' has higher priority than 'settings.atlantis.workflow_template_name'
-				if settingsAtlantisWorkflowTemplate, ok := settingsAtlantisSection["workflow_template"].(map[any]any); ok {
-					err = mapstructure.Decode(settingsAtlantisWorkflowTemplate, &workflowTemplate)
-					if err != nil {
-						return err
-					}
-				} else if settingsAtlantisWorkflowTemplateName, ok := settingsAtlantisSection["workflow_template_name"].(string); ok && settingsAtlantisWorkflowTemplateName != "" {
-					if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[settingsAtlantisWorkflowTemplateName]; !ok {
-						return errors.Errorf(
-							"atlantis workflow template name '%s' is specified "+
-								"in the 'settings.atlantis.workflow_template_name' section, "+
-								"but this atlantis workflow template is not defined in 'integrations.atlantis.workflow_templates' in 'atmos.yaml'",
-							settingsAtlantisWorkflowTemplateName)
-					}
-				}
+	if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
+		if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[any]any); ok {
+			if settingsAtlantisWorkflowTemplates, ok := settingsAtlantisSection["workflow_templates"].(map[any]any); ok {
+				atlantisYaml.Workflows = c.MapsOfInterfacesToMapsOfStrings(settingsAtlantisWorkflowTemplates)
 			}
-		}
-	} else {
-		if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[workflowTemplateNameArg]; !ok {
-			return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in 'atmos.yaml'", workflowTemplateNameArg)
 		}
 	}
 
-	if !reflect.ValueOf(workflowTemplate).IsZero() {
-		atlantisWorkflows := map[string]any{
-			workflowTemplateNameArg: workflowTemplate,
-		}
-
-		atlantisYaml.Workflows = atlantisWorkflows
-	} else {
-		atlantisYaml.Workflows = nil
+	if reflect.ValueOf(atlantisYaml.Workflows).IsZero() && !reflect.ValueOf(cliConfig.Integrations.Atlantis.WorkflowTemplates).IsZero() {
+		atlantisYaml.Workflows = cliConfig.Integrations.Atlantis.WorkflowTemplates
 	}
 
 	// Write the atlantis config to a file at the specified path

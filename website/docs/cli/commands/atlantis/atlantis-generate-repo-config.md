@@ -27,13 +27,13 @@ Run `atmos atlantis generate repo-config --help` to see all the available option
 ```shell
 atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1 --stacks <stack1, stack2>
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --stacks <stack1, stack2>
 
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1 --components <component1, component2>
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --components <component1, component2>
 
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1 --stacks <stack1> --components <component1, component2>
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --stacks <stack1> --components <component1, component2>
 ```
 
 ## Flags
@@ -42,14 +42,11 @@ atmos atlantis generate repo-config --config-template config-1 --project-templat
 |:----------------------|:--------------------------------------------------------------------------------------|:---------|
 | `--config-template`   | Atlantis config template name                                                         | yes      |
 | `--project-template`  | Atlantis project template name                                                        | yes      |
-| `--workflow-template` | Atlantis workflow template name                                                       | no       |
 | `--output-path`       | Output path to write `atlantis.yaml` file                                             | no       |
 | `--stacks`            | Generate Atlantis projects for the specified stacks only (comma-separated values)     | no       |
 | `--components`        | Generate Atlantis projects for the specified components only (comma-separated values) | no       |
 
 ## Atlantis Workflows
-
-The flag `--workflow-template` is optional because Atlantis workflows can be specified in two different ways:
 
 - In [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) using the `workflows` section and `workflow` attribute
 
@@ -114,10 +111,9 @@ The flag `--workflow-template` is optional because Atlantis workflows can be spe
 <br/>
 
 If you use [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define Atlantis workflows,
-you don't need to specify the `workflow_templates` section in the [Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml`, and
-you don't have to provide the workflow template using the `--workflow-template` flag when executing an `atmos atmos atlantis generate repo-config`
-command. After you defined the workflows in the server config `workflows` section, you can reference a workflow to be used for each generated Atlantis
-project in the `integrations.atlantis.project_templates` section, for example:
+you don't need to specify the `workflow_templates` section in the [Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml`
+when executing an `atmos atlantis generate repo-config`command. After you defined the workflows in the server config `workflows` section, 
+you can reference a workflow to be used for each generated Atlantis project in the `integrations.atlantis.project_templates` section, for example:
 
 ```yaml title=atmos.yaml
 integrations:
@@ -137,13 +133,11 @@ integrations:
 On the other hand, if you define and use workflows
 in [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html),
 you need to provide at least one workflow template in the `workflow_templates` section in [Atlantis Integration](/cli/configuration#integrations).
-Then you select one of the templates by using the `--workflow-template` flag. In this case, the `workflow` attribute will be inserted automatically
-into each generated Atlantis project.
 
 For example, after executing the following command:
 
 ```console
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 ```
 
 the `atlantis.yaml` file would look like this:

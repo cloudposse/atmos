@@ -44,12 +44,13 @@ settings:
       allowed_regexp_prefixes:
         - dev/
 
-    # For this `tenant1-ue2-dev` stack, override the org-wide project template selected in `examples/complete/stacks/orgs/cp/_defaults.yaml`
+    # For this `tenant1-ue2-dev` stack, override the org-wide project template specified in `examples/complete/stacks/orgs/cp/_defaults.yaml`
     # in the `settings.atlantis.project_template_name` section
     project_template:
       # generate a project entry for each component in every stack
       name: "{tenant}-{environment}-{stage}-{component}"
       workspace: "{workspace}"
+      workflow: "workflow-1"
       dir: "{component-path}"
       terraform_version: v1.3
       delete_source_branch_on_merge: false
@@ -60,17 +61,3 @@ settings:
           - "varfiles/$PROJECT_NAME.tfvars.json"
       apply_requirements:
         - "approved"
-
-    # For this `tenant1-ue2-dev` stack, override the org-wide workflow template selected in `examples/complete/stacks/orgs/cp/_defaults.yaml`
-    # in the `settings.atlantis.workflow_template_name` section
-    workflow_template:
-      plan:
-        steps:
-          - run: terraform init
-          # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
-          - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
-          # You must output the plan using '-out $PLANFILE' because Atlantis expects plans to be in a specific location
-          - run: terraform plan -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
-      apply:
-        steps:
-          - run: terraform apply $PLANFILE

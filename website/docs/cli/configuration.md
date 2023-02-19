@@ -324,7 +324,6 @@ integrations:
     # Workflow templates
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
-    # Select a template by using the '--workflow-template <workflow_template>' command-line argument in 'atmos atlantis generate repo-config' command
     workflow_templates:
       workflow-1:
         plan:

@@ -75,7 +75,6 @@ integrations:
     # Workflow templates
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
-    # Select a template by using the `--workflow-template <workflow_template>` command-line argument in `atmos atlantis generate repo-config` command
     workflow_templates:
       workflow-1:
         plan:
@@ -95,7 +94,7 @@ Using the config, project and workflow templates, atmos generates a separate atl
 By running:
 
 ```shell
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 ```
 
 The following Atlantis repo-config would be generated:
@@ -240,7 +239,7 @@ jobs:
         if: github.event.pull_request.state == 'open' || ${{ github.event.issue.pull_request }}
         shell: bash
         run: |
-          atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
+          atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 
       # Commit changes (if any) to the PR branch
       - name: Commit changes to the PR branch
