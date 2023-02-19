@@ -42,15 +42,17 @@ func init() {
 			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --workflow-template <workflow_template> --components <component1>,<component2>",
 	)
 
-	err := atlantisGenerateRepoConfigCmd.MarkPersistentFlagRequired("config-template")
-	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
-	}
+	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool("affected-only", false,
+		"Generate Atlantis projects only for the components changed between two Git commits.\n"+
+			"atmos atlantis generate repo-config --affected-only=true",
+	)
 
-	err = atlantisGenerateRepoConfigCmd.MarkPersistentFlagRequired("project-template")
-	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
-	}
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --repo-path <path_to_already_cloned_repo>")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool("verbose", false, "Print more detailed output when cloning and checking out the Git repository: atmos atlantis generate repo-config --affected-only=true --verbose=true")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key>")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
 
 	atlantisGenerateCmd.AddCommand(atlantisGenerateRepoConfigCmd)
 }
