@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -88,31 +89,18 @@ func ExecuteAtlantisGenerateRepoConfig(
 	var projectTemplate cfg.AtlantisProjectConfig
 	var workflowTemplate any
 	var ok bool
-
-	if configTemplateNameArg != "" {
-		if configTemplate, ok = cliConfig.Integrations.Atlantis.ConfigTemplates[configTemplateNameArg]; !ok {
-			return errors.Errorf("atlantis config template '%s' is not defined in 'integrations.atlantis.config_templates' in 'atmos.yaml'", configTemplateNameArg)
-		}
-	}
-
-	if projectTemplateNameArg != "" {
-		if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[projectTemplateNameArg]; !ok {
-			return errors.Errorf("atlantis project template '%s' is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'", projectTemplateNameArg)
-		}
-	}
-
-	if workflowTemplateNameArg != "" {
-		if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[workflowTemplateNameArg]; !ok {
-			return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in 'atmos.yaml'", workflowTemplateNameArg)
-		}
-	}
-
 	var atlantisProjects []cfg.AtlantisProjectConfig
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
 	var varsSection map[any]any
 	var settingsSection map[any]any
+
+	if projectTemplateNameArg != "" {
+		if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[projectTemplateNameArg]; !ok {
+			return errors.Errorf("atlantis project template '%s' is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'", projectTemplateNameArg)
+		}
+	}
 
 	// Iterate over all components in all stacks and generate atlantis projects
 	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
@@ -171,10 +159,11 @@ func ExecuteAtlantisGenerateRepoConfig(
 								}
 							} else if settingsAtlantisProjectTemplateName, ok := settingsAtlantisSection["project_template_name"].(string); ok && settingsAtlantisProjectTemplateName != "" {
 								if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[settingsAtlantisProjectTemplateName]; !ok {
-									return errors.Errorf("the component '%s' in the stack config file '%s' "+
-										"specifies the atlantis project template name '%s' "+
-										"in the 'settings.atlantis.project_template_name' section, "+
-										"but this atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'",
+									return errors.Errorf(
+										"the component '%s' in the stack config file '%s' "+
+											"specifies the atlantis project template name '%s' "+
+											"in the 'settings.atlantis.project_template_name' section, "+
+											"but this atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'",
 										componentName, stackConfigFileName, settingsAtlantisProjectTemplateName)
 								}
 							}
@@ -182,12 +171,14 @@ func ExecuteAtlantisGenerateRepoConfig(
 					}
 				}
 
-				if projectTemplate.Name == "" {
-					return errors.Errorf("atlantis project template is not specified for the component '%s'. "+
-						"In needs to be defined in any of these places: 'settings.atlantis.project_template_name' stack config section, "+
-						"'settings.atlantis.project_template' stack config section, "+
-						"or passed on the command line using the '--project-template' flag to select a project template from the "+
-						"collection of templates defined in the 'integrations.atlantis.project_templates' section in 'atmos.yaml'",
+				// https://www.golinuxcloud.com/golang-check-if-struct-is-empty/
+				if reflect.ValueOf(projectTemplate).IsZero() {
+					return errors.Errorf(
+						"atlantis project template is not specified for the component '%s'. "+
+							"In needs to be defined in one of these places: 'settings.atlantis.project_template_name' stack config section, "+
+							"'settings.atlantis.project_template' stack config section, "+
+							"or passed on the command line using the '--project-template' flag to select a project template from the "+
+							"collection of templates defined in the 'integrations.atlantis.project_templates' section in 'atmos.yaml'",
 						componentName)
 				}
 
@@ -282,6 +273,42 @@ func ExecuteAtlantisGenerateRepoConfig(
 		}
 	}
 
+	// If the config template is not passes on the command line, find and process it in the component project template in the 'settings.atlantis' section
+	if configTemplateNameArg == "" {
+		if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
+			if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[any]any); ok {
+				// 'settings.atlantis.config_template' has higher priority than 'settings.atlantis.config_template_name'
+				if settingsAtlantisConfigTemplate, ok := settingsAtlantisSection["config_template"].(map[any]any); ok {
+					err = mapstructure.Decode(settingsAtlantisConfigTemplate, &configTemplate)
+					if err != nil {
+						return err
+					}
+				} else if settingsAtlantisConfigTemplateName, ok := settingsAtlantisSection["config_template_name"].(string); ok && settingsAtlantisConfigTemplateName != "" {
+					if configTemplate, ok = cliConfig.Integrations.Atlantis.ConfigTemplates[settingsAtlantisConfigTemplateName]; !ok {
+						return errors.Errorf(
+							"atlantis config template name '%s' is specified "+
+								"in the 'settings.atlantis.config_template_name' section, "+
+								"but this atlantis config template is not defined in 'integrations.atlantis.config_templates' in 'atmos.yaml'",
+							settingsAtlantisConfigTemplateName)
+					}
+				}
+			}
+		}
+	} else {
+		if configTemplate, ok = cliConfig.Integrations.Atlantis.ConfigTemplates[configTemplateNameArg]; !ok {
+			return errors.Errorf("atlantis config template '%s' is not defined in 'integrations.atlantis.config_templates' in 'atmos.yaml'", configTemplateNameArg)
+		}
+	}
+
+	if reflect.ValueOf(configTemplate).IsZero() {
+		return errors.Errorf(
+			"atlantis config template is not specified. " +
+				"In needs to be defined in one of these places: 'settings.atlantis.config_template_name' stack config section, " +
+				"'settings.atlantis.config_template' stack config section, " +
+				"or passed on the command line using the '--config-template' flag to select a config template from the " +
+				"collection of templates defined in the 'integrations.atlantis.config_templates' section in 'atmos.yaml'")
+	}
+
 	// Final atlantis config
 	atlantisYaml := cfg.AtlantisConfigOutput{}
 	atlantisYaml.Version = configTemplate.Version
@@ -290,13 +317,42 @@ func ExecuteAtlantisGenerateRepoConfig(
 	atlantisYaml.ParallelPlan = configTemplate.ParallelPlan
 	atlantisYaml.ParallelApply = configTemplate.ParallelApply
 	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
+
 	atlantisYaml.Projects = atlantisProjects
 
 	// Workflows
-	if workflowTemplateNameArg != "" {
+	// If the config template is not passes on the command line, find and process it in the component project template in the 'settings.atlantis' section
+	if workflowTemplateNameArg == "" {
+		if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
+			if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[any]any); ok {
+				// 'settings.atlantis.workflow_template' has higher priority than 'settings.atlantis.workflow_template_name'
+				if settingsAtlantisWorkflowTemplate, ok := settingsAtlantisSection["workflow_template"].(map[any]any); ok {
+					err = mapstructure.Decode(settingsAtlantisWorkflowTemplate, &workflowTemplate)
+					if err != nil {
+						return err
+					}
+				} else if settingsAtlantisWorkflowTemplateName, ok := settingsAtlantisSection["workflow_template_name"].(string); ok && settingsAtlantisWorkflowTemplateName != "" {
+					if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[settingsAtlantisWorkflowTemplateName]; !ok {
+						return errors.Errorf(
+							"atlantis workflow template name '%s' is specified "+
+								"in the 'settings.atlantis.workflow_template_name' section, "+
+								"but this atlantis workflow template is not defined in 'integrations.atlantis.workflow_templates' in 'atmos.yaml'",
+							settingsAtlantisWorkflowTemplateName)
+					}
+				}
+			}
+		}
+	} else {
+		if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[workflowTemplateNameArg]; !ok {
+			return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in 'atmos.yaml'", workflowTemplateNameArg)
+		}
+	}
+
+	if !reflect.ValueOf(workflowTemplate).IsZero() {
 		atlantisWorkflows := map[string]any{
 			workflowTemplateNameArg: workflowTemplate,
 		}
+
 		atlantisYaml.Workflows = atlantisWorkflows
 	} else {
 		atlantisYaml.Workflows = nil
@@ -308,7 +364,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	fileName := outputPath
 	if fileName == "" {
 		fileName = cliConfig.Integrations.Atlantis.Path
-		u.PrintInfo(fmt.Sprintf("Using 'atlantis.path: %s' from atmos.yaml", fileName))
+		u.PrintInfo(fmt.Sprintf("Using 'atlantis.path: %s' from 'atmos.yaml'", fileName))
 	} else {
 		u.PrintInfo(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
 	}
