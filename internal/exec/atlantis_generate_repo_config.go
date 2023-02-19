@@ -148,6 +148,17 @@ func ExecuteAtlantisGenerateRepoConfig(
 					continue
 				}
 
+				// Component metadata
+				metadataSection := map[any]any{}
+				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+					if componentType, ok := metadataSection["type"].(string); ok {
+						// Don't include abstract components
+						if componentType == "abstract" {
+							continue
+						}
+					}
+				}
+
 				// If the project template is not passes on the command line, find and process it in the component project template in the 'settings.atlantis' section
 				if projectTemplateNameArg == "" {
 					if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
@@ -160,7 +171,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 								}
 							} else if settingsAtlantisProjectTemplateName, ok := settingsAtlantisSection["project_template_name"].(string); ok && settingsAtlantisProjectTemplateName != "" {
 								if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[settingsAtlantisProjectTemplateName]; !ok {
-									return errors.Errorf("component '%s' in the stack config file '%s' "+
+									return errors.Errorf("the component '%s' in the stack config file '%s' "+
 										"specifies the atlantis project template name '%s' "+
 										"in the 'settings.atlantis.project_template_name' section, "+
 										"but this atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'",
@@ -171,15 +182,13 @@ func ExecuteAtlantisGenerateRepoConfig(
 					}
 				}
 
-				// Component metadata
-				metadataSection := map[any]any{}
-				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
-					if componentType, ok := metadataSection["type"].(string); ok {
-						// Don't include abstract components
-						if componentType == "abstract" {
-							continue
-						}
-					}
+				if projectTemplate.Name == "" {
+					return errors.Errorf("atlantis project template is not specified for the component '%s'. "+
+						"In needs to be defined in any of these places: 'settings.atlantis.project_template_name' stack config section, "+
+						"'settings.atlantis.project_template' stack config section, "+
+						"or passed on the command line using the '--project-template' flag to select a project template from the "+
+						"collection of templates defined in the 'integrations.atlantis.project_templates' section in 'atmos.yaml'",
+						componentName)
 				}
 
 				// Find the terraform component
