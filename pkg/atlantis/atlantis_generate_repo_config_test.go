@@ -55,3 +55,20 @@ func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
 
 	assert.Nil(t, err)
 }
+
+func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	err = e.ExecuteAtlantisGenerateRepoConfig(
+		cliConfig,
+		"/dev/stdout",
+		"",
+		"",
+		"",
+		nil,
+		nil,
+	)
+
+	assert.Nil(t, err)
+}

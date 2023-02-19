@@ -36,8 +36,6 @@ components:
 
 settings:
   atlantis:
-    path: "atlantis.yaml"
-
     # Select a config template defined in `atmos.yaml` in the `integrations.atlantis.config_templates` section
     config_template_name: "config-1"
 

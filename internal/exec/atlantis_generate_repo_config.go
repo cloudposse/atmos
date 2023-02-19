@@ -2,17 +2,19 @@ package exec
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtlantisGenerateRepoConfigCmd executes `atlantis generate repo-config` command
+// ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("", cmd, args)
 	if err != nil {
@@ -110,6 +112,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	var terraformSection map[string]any
 	var componentSection map[string]any
 	var varsSection map[any]any
+	var settingsSection map[any]any
 
 	// Iterate over all components in all stacks and generate atlantis projects
 	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
@@ -136,13 +139,36 @@ func ExecuteAtlantisGenerateRepoConfig(
 				continue
 			}
 
-			// Check if `components` filter is provided
+			// Check if 'components' filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
 
 				// Component vars
 				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
 					continue
+				}
+
+				// If the project template is not passes on the command line, find and process it in the component project template in the 'settings.atlantis' section
+				if projectTemplateNameArg == "" {
+					if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
+						if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[any]any); ok {
+							// 'settings.atlantis.project_template' has higher priority than 'settings.atlantis.project_template_name'
+							if settingsAtlantisProjectTemplate, ok := settingsAtlantisSection["project_template"].(map[any]any); ok {
+								err = mapstructure.Decode(settingsAtlantisProjectTemplate, &projectTemplate)
+								if err != nil {
+									return err
+								}
+							} else if settingsAtlantisProjectTemplateName, ok := settingsAtlantisSection["project_template_name"].(string); ok && settingsAtlantisProjectTemplateName != "" {
+								if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[settingsAtlantisProjectTemplateName]; !ok {
+									return errors.Errorf("component '%s' in the stack config file '%s' "+
+										"specifies the atlantis project template name '%s' "+
+										"in the 'settings.atlantis.project_template_name' section, "+
+										"but this atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'",
+										componentName, stackConfigFileName, settingsAtlantisProjectTemplateName)
+								}
+							}
+						}
+					}
 				}
 
 				// Component metadata
@@ -157,8 +183,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 				}
 
 				// Find the terraform component
-				// If `component` attribute is present, it's the terraform component
-				// Otherwise, the YAML component name is the terraform component (by default)
+				// If 'component' attribute is present, it's the terraform component
+				// Otherwise, the Atmos component name is the terraform component (by default)
 				terraformComponent := componentName
 				if componentAttribute, ok := componentSection["component"].(string); ok {
 					terraformComponent = componentAttribute
@@ -198,12 +224,12 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				context.Workspace = workspace
 
-				// Check if `stacks` filter is provided
+				// Check if 'stacks' filter is provided
 				if len(stacks) == 0 ||
-					// `stacks` filter can contain the names of the top-level stack config files:
+					// 'stacks' filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
 					u.SliceContainsString(stacks, stackConfigFileName) ||
-					// `stacks` filter can also contain the logical stack names (derived from the context vars):
+					// 'stacks' filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, contextPrefix) {
 
@@ -233,8 +259,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 						ApplyRequirements:         projectTemplate.ApplyRequirements,
 					}
 
-					// If the workflow template name is provided on the command line in the `--workflow-template` flag, use it
-					// Otherwise, if the `workflow` attribute is provided in the project template, use it
+					// If the workflow template name is provided on the command line in the '--workflow-template' flag, use it
+					// Otherwise, if the 'workflow' attribute is provided in the project template, use it
 					if workflowTemplateNameArg != "" {
 						atlantisProject.Workflow = workflowTemplateNameArg
 					} else if projectTemplate.Workflow != "" {
@@ -268,8 +294,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 	}
 
 	// Write the atlantis config to a file at the specified path
-	// Check the command line argument `--output-path` first
-	// Then check the `atlantis.path` setting in `atmos.yaml`
+	// Check the command line argument '--output-path' first
+	// Then check the 'atlantis.path' setting in 'atmos.yaml'
 	fileName := outputPath
 	if fileName == "" {
 		fileName = cliConfig.Integrations.Atlantis.Path
@@ -278,7 +304,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 		u.PrintInfo(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
 	}
 
-	// If the path is empty, dump to `stdout`
+	// If the path is empty, dump to 'stdout'
 	if fileName != "" {
 		u.PrintInfo(fmt.Sprintf("Writing atlantis repo config file to '%s'", fileName))
 
