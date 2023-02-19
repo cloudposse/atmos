@@ -304,7 +304,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 	atlantisYaml.ParallelPlan = configTemplate.ParallelPlan
 	atlantisYaml.ParallelApply = configTemplate.ParallelApply
 	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
-
 	atlantisYaml.Projects = atlantisProjects
 
 	// Workflows
