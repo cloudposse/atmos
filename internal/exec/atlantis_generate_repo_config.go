@@ -71,9 +71,9 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 func ExecuteAtlantisGenerateRepoConfig(
 	cliConfig cfg.CliConfiguration,
 	outputPath string,
-	configTemplateName string,
-	projectTemplateName string,
-	workflowTemplateName string,
+	configTemplateNameArg string,
+	projectTemplateNameArg string,
+	workflowTemplateNameArg string,
 	stacks []string,
 	components []string) error {
 
@@ -87,17 +87,21 @@ func ExecuteAtlantisGenerateRepoConfig(
 	var workflowTemplate any
 	var ok bool
 
-	if configTemplate, ok = cliConfig.Integrations.Atlantis.ConfigTemplates[configTemplateName]; !ok {
-		return errors.Errorf("atlantis config template '%s' is not defined in 'integrations.atlantis.config_templates' in atmos.yaml", configTemplateName)
+	if configTemplateNameArg != "" {
+		if configTemplate, ok = cliConfig.Integrations.Atlantis.ConfigTemplates[configTemplateNameArg]; !ok {
+			return errors.Errorf("atlantis config template '%s' is not defined in 'integrations.atlantis.config_templates' in 'atmos.yaml'", configTemplateNameArg)
+		}
 	}
 
-	if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[projectTemplateName]; !ok {
-		return errors.Errorf("atlantis project template '%s' is not defined in 'integrations.atlantis.project_templates' in atmos.yaml", projectTemplateName)
+	if projectTemplateNameArg != "" {
+		if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[projectTemplateNameArg]; !ok {
+			return errors.Errorf("atlantis project template '%s' is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'", projectTemplateNameArg)
+		}
 	}
 
-	if workflowTemplateName != "" {
-		if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[workflowTemplateName]; !ok {
-			return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in atmos.yaml", workflowTemplateName)
+	if workflowTemplateNameArg != "" {
+		if workflowTemplate, ok = cliConfig.Integrations.Atlantis.WorkflowTemplates[workflowTemplateNameArg]; !ok {
+			return errors.Errorf("atlantis workflow template '%s' is not defined in 'integrations.atlantis.workflow_templates' in 'atmos.yaml'", workflowTemplateNameArg)
 		}
 	}
 
@@ -231,8 +235,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 					// If the workflow template name is provided on the command line in the `--workflow-template` flag, use it
 					// Otherwise, if the `workflow` attribute is provided in the project template, use it
-					if workflowTemplateName != "" {
-						atlantisProject.Workflow = workflowTemplateName
+					if workflowTemplateNameArg != "" {
+						atlantisProject.Workflow = workflowTemplateNameArg
 					} else if projectTemplate.Workflow != "" {
 						atlantisProject.Workflow = projectTemplate.Workflow
 					}
@@ -254,9 +258,9 @@ func ExecuteAtlantisGenerateRepoConfig(
 	atlantisYaml.Projects = atlantisProjects
 
 	// Workflows
-	if workflowTemplateName != "" {
+	if workflowTemplateNameArg != "" {
 		atlantisWorkflows := map[string]any{
-			workflowTemplateName: workflowTemplate,
+			workflowTemplateNameArg: workflowTemplate,
 		}
 		atlantisYaml.Workflows = atlantisWorkflows
 	} else {

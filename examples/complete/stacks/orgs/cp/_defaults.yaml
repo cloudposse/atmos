@@ -36,5 +36,13 @@ components:
 
 settings:
   atlantis:
+    path: "atlantis.yaml"
+
+    # Select a config template defined in `atmos.yaml` in the `integrations.atlantis.config_templates` section
     config_template_name: "config-1"
+
+    # Select a project template defined in `atmos.yaml` in the `integrations.atlantis.project_templates` section
     project_template_name: "project-1"
+
+    # Select a project template defined in `atmos.yaml` in the `integrations.atlantis.workflow_templates` section
+    workflow_template_name: "workflow-1"
