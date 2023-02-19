@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"os"
 	"path"
 	"reflect"
@@ -13,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -559,7 +559,7 @@ func appendToAffected(
 		}
 
 		context := cfg.GetContextFromVars(varSection)
-		context.Component = componentName
+		context.Component = strings.Replace(componentName, "/", "-", -1)
 
 		// Affected Spacelift stack
 		if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
