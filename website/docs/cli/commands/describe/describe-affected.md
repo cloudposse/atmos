@@ -15,7 +15,7 @@ Use this command to show a list of the affected Atmos components and stacks give
 The command uses two different Git commits to produce a list of affected Atmos components and stacks.
 
 For the first commit, the command assumes that the current repo root is a Git checkout. An error will be thrown if the current repo is not a Git
-repository (`.git` folder does not exist or is configured incorrectly).
+repository (the `.git` folder does not exist or is configured incorrectly).
 
 The second commit is specified on the command line by using
 the `--ref` ([Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References)) or `--sha` (commit SHA) flags.
@@ -35,7 +35,7 @@ The command works by:
 
 - Cloning the target branch (`--ref`) or checking out the commit (`--sha`) of the remote target branch, or using the already cloned target repository
   specified by the `--repo-path` flag
-- Deep merging all stack configurations for both the current working branch and the target branch
+- Deep merging all stack configurations for both the current working branch and the remote target branch
 - Looking for changes in the component directories
 - Comparing each section of the stack configuration looking for differences
 - Output a JSON or YAML document consisting of a list of affected components and stacks and what caused it to be affected
@@ -77,6 +77,7 @@ Affected components and stacks:
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-dev",
       "spacelift_stack": "tenant1-ue2-dev-infra-vpc",
+      "atlantis_project": "tenant1-ue2-dev-infra-vpc",
       "affected": "component"
    },
    {
@@ -85,6 +86,7 @@ Affected components and stacks:
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-prod",
       "spacelift_stack": "tenant1-ue2-prod-infra-vpc",
+      "atlantis_project": "tenant1-ue2-prod-infra-vpc",
       "affected": "component"
    },
    {
@@ -93,6 +95,7 @@ Affected components and stacks:
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-staging",
       "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
+      "atlantis_project": "tenant1-ue2-staging-infra-vpc",
       "affected": "component"
    }
 ]
@@ -154,6 +157,7 @@ Each object has the following schema:
   "component_path": "....",
   "stack": "....",
   "spacelift_stack": ".....",
+  "atlantis_project": ".....",
   "affected": "....."
 }
 ```
@@ -161,11 +165,19 @@ Each object has the following schema:
 where:
 
 - `component` - the affected Atmos component in the stack
+
 - `component_type` - the type of the component (`terraform` or `helmfile`)
+
 - `component_path` - the filesystem path to the `terraform` or `helmfile` component
+
 - `stack` - the affected Atmos stack
+
 - `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
   Atmos stack in the `settings.spacelift.workspace_enabled` config
+
+- `atlantis_project` - the affected Atlantis project name. It will be included only if the Atlantis integration is configured in
+  the `settings.atlantis` section in the component/stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
+
 - `affected` - shows what was changed for the component. The possible values are:
 
   - `stack.vars` - the `vars` component section in the stack config has been modified
@@ -186,6 +198,7 @@ For example:
     "component_path": "components/terraform/test/test-component",
     "stack": "tenant1-ue2-dev",
     "spacelift_stack": "tenant1-ue2-dev-new-component",
+    "atlantis_project": "tenant1-ue2-dev-new-component",
     "affected": "stack.vars"
   },
   {
@@ -194,6 +207,7 @@ For example:
     "component_path": "components/terraform/infra/vpc",
     "stack": "tenant2-ue2-staging",
     "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
+    "atlantis_project": "tenant1-ue2-staging-infra-vpc",
     "affected": "component"
   },
   {
@@ -201,6 +215,7 @@ For example:
     "component_type": "terraform",
     "component_path": "components/terraform/test/test-component",
     "stack": "tenant1-ue2-prod",
+    "atlantis_project": "tenant1-ue2-staging-test-test-component-override-3",
     "affected": "stack.env"
   }
 ]
