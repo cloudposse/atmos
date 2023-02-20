@@ -79,6 +79,8 @@ atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_
 
 ## Atlantis Workflows
 
+Atlantis workflows can be defined in two places:
+
 - In [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) using the `workflows` section and `workflow` attribute
 
   ```yaml title=server.yaml
@@ -141,29 +143,14 @@ atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_
 
 <br/>
 
-If you use [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define Atlantis workflows,
-you don't need to specify the `workflow_templates` section in the [Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml`
-when executing an `atmos atlantis generate repo-config` command. After you defined the workflows in the server config `workflows` section,
-you can reference a workflow to be used for each generated Atlantis project in the `integrations.atlantis.project_templates` section, for example:
+If you use [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define Atlantis workflows, you don't need to define
+workflows in the [CLI Config Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml` or in
+the `settings.atlantis.workflow_templates` section in the stack configurations. When you defined the workflows in the server config `workflows`
+section, you can reference a workflow to be used for each generated Atlantis project in the project templates.
 
-```yaml title=atmos.yaml
-integrations:
-
-  # Atlantis integration
-  atlantis:
-    path: "atlantis.yaml"
-
-    # Project templates
-    # Select a template by using the '--project-template <project_template>' command-line argument in 'atmos atlantis generate repo-config' command
-    project_templates:
-      project-1:
-        name: "{tenant}-{environment}-{stage}-{component}"
-        workflow: custom
-```
-
-On the other hand, if you define and use workflows
-in [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html),
-you need to provide at least one workflow template in the `workflow_templates` section in [Atlantis Integration](/cli/configuration#integrations).
+On the other hand, if you use [Repo Level workflows](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html),
+you need to provide at least one workflow template in the `workflow_templates` section in the [Atlantis Integration](/cli/configuration#integrations)
+or in the `settings.atlantis.workflow_templates` section in the stack configurations.
 
 For example, after executing the following command:
 
@@ -171,7 +158,7 @@ For example, after executing the following command:
 atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 ```
 
-the `atlantis.yaml` file would look like this:
+the generated `atlantis.yaml` file would look like this:
 
 ```yaml
 version: 3
@@ -191,6 +178,14 @@ workflows:
         - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
 ```
+
+<br/>
+
+:::info
+
+Refer to [Atlantis Integration](/integrations/atlantis.md) for more details on the Atlantis integration in Atmos
+
+:::
 
 <br/>
 
