@@ -42,7 +42,7 @@ func init() {
 	)
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool("affected-only", false,
-		"Generate Atlantis projects only for the components changed between two Git commits.\n"+
+		"Generate Atlantis projects only for the Atmos components changed between two Git commits.\n"+
 			"atmos atlantis generate repo-config --affected-only=true",
 	)
 

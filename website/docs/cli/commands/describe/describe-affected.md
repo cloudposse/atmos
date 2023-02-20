@@ -143,10 +143,10 @@ atmos describe affected --repo-path <path_to_already_cloned_repo>
 | `--sha`              | Git commit SHA with which to compare the current working branch                                                                                                  | no       |
 | `--file`             | If specified, write the result to the file                                                                                                                       | no       |
 | `--format`           | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                  | no       |
-| `--verbose`          | Print more detailed output when cloning and checking out the Git repository<br/>and processing the result                                                        | no       |
 | `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                                                                 | no       |
 | `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
 | `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
+| `--verbose`          | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
 
 ## Output
 
@@ -235,8 +235,9 @@ stacks and components:
 - Using the `--ssh-key` flag to specify the filesystem path to a PEM-encoded private key to clone private repos using SSH, and
   the `--ssh-key-password` flag to provide the encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
 
-- Execute the `atmos describe affected` command in a [GitHub Action](https://docs.github.com/en/actions), clone the remote target repository in the
-  action, and use the `--repo-path` flag to specify the path to the already cloned target repository with which to compare the current branch
+- Execute the `atmos describe affected --repo-path <path_to_cloned_target_repo>` command in a [GitHub Action](https://docs.github.com/en/actions).
+  For this to work, clone the remote target repository using the [checkout](https://github.com/actions/checkout) GitHub action. Then use
+  the `--repo-path` flag to specify the path to the already cloned target repository with which to compare the current branch
 
 ## Using with GitHub Actions
 
