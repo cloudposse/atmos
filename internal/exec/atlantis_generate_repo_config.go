@@ -9,6 +9,7 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -63,7 +64,123 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		components = strings.Split(componentsCsv, ",")
 	}
 
-	return ExecuteAtlantisGenerateRepoConfig(cliConfig, outputPath, configTemplateName, projectTemplateName, stacks, components)
+	affectedOnly, err := flags.GetBool("affected-only")
+	if err != nil {
+		return err
+	}
+
+	ref, err := flags.GetString("ref")
+	if err != nil {
+		return err
+	}
+
+	sha, err := flags.GetString("sha")
+	if err != nil {
+		return err
+	}
+
+	repoPath, err := flags.GetString("repo-path")
+	if err != nil {
+		return err
+	}
+
+	sshKeyPath, err := flags.GetString("ssh-key")
+	if err != nil {
+		return err
+	}
+
+	sshKeyPassword, err := flags.GetString("ssh-key-password")
+	if err != nil {
+		return err
+	}
+
+	verbose, err := flags.GetBool("verbose")
+	if err != nil {
+		return err
+	}
+
+	// If the flag `--affected-only=true` is passed, find the affected components and stacks
+	if affectedOnly {
+		return ExecuteAtlantisGenerateRepoConfigAffectedOnly(
+			cliConfig,
+			outputPath,
+			configTemplateName,
+			projectTemplateName,
+			ref,
+			sha,
+			repoPath,
+			sshKeyPath,
+			sshKeyPassword,
+			verbose,
+		)
+	}
+
+	return ExecuteAtlantisGenerateRepoConfig(
+		cliConfig,
+		outputPath,
+		configTemplateName,
+		projectTemplateName,
+		stacks,
+		components,
+	)
+}
+
+// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected compoenents and stacks
+func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
+	cliConfig cfg.CliConfiguration,
+	outputPath string,
+	configTemplateName string,
+	projectTemplateName string,
+	ref string,
+	sha string,
+	repoPath string,
+	sshKeyPath string,
+	sshKeyPassword string,
+	verbose bool,
+) error {
+	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
+		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+	}
+
+	var affected []cfg.Affected
+	var err error
+
+	if repoPath == "" {
+		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
+	} else {
+		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if len(affected) == 0 {
+		return nil
+	}
+
+	affectedComponents := lo.FilterMap[cfg.Affected, string](affected, func(x cfg.Affected, _ int) (string, bool) {
+		if x.ComponentType == "terraform" {
+			return x.Component, true
+		}
+		return "", false
+	})
+
+	affectedStacks := lo.FilterMap[cfg.Affected, string](affected, func(x cfg.Affected, _ int) (string, bool) {
+		if x.ComponentType == "terraform" {
+			return x.Stack, true
+		}
+		return "", false
+	})
+
+	return ExecuteAtlantisGenerateRepoConfig(
+		cliConfig,
+		outputPath,
+		configTemplateName,
+		projectTemplateName,
+		affectedStacks,
+		affectedComponents,
+	)
 }
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
@@ -73,7 +190,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 	configTemplateNameArg string,
 	projectTemplateNameArg string,
 	stacks []string,
-	components []string) error {
+	components []string,
+) error {
 
 	stacksMap, _, err := FindStacksMap(cliConfig, false)
 	if err != nil {
