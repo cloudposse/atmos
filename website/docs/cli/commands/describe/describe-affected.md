@@ -35,10 +35,14 @@ The command works by:
 
 - Cloning the target branch (`--ref`) or checking out the commit (`--sha`) of the remote target branch, or using the already cloned target repository
   specified by the `--repo-path` flag
+
 - Deep merging all stack configurations for both the current working branch and the remote target branch
+
 - Looking for changes in the component directories
+
 - Comparing each section of the stack configuration looking for differences
-- Output a JSON or YAML document consisting of a list of affected components and stacks and what caused it to be affected
+
+- Outputting a JSON or YAML document consisting of a list of affected components and stacks and what caused it to be affected
 
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related components and stacks as
 affected. Atmos will then skip evaluating those stacks for differences since we already know that they are affected.
@@ -176,7 +180,7 @@ where:
   Atmos stack in the `settings.spacelift.workspace_enabled` config
 
 - `atlantis_project` - the affected Atlantis project name. It will be included only if the Atlantis integration is configured in
-  the `settings.atlantis` section in the component/stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
+  the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
 
 - `affected` - shows what was changed for the component. The possible values are:
 
