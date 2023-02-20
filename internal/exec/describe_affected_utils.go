@@ -316,6 +316,8 @@ func executeDescribeAffected(
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
+	u.PrintMessageVerbose(verbose, "")
+
 	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
 	if err != nil {
 		return nil, err
