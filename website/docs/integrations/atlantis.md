@@ -8,9 +8,9 @@ Atmos natively supports [Atlantis](https://runatlantis.io) for Terraform Pull Re
 
 ## How it Works
 
-With `atmos`, all of your configuration is neatly defined in YAML. This makes transformations of that data very easy.
+With Atmos, all of your configuration is neatly defined in YAML. This makes transformations of that data very easy.
 
-The `atmos` tool supports (3) commands that when combined, make it easy to use `atlantis`.
+The `atmos` tool supports (3) commands that, when combined, make it easy to use Atlantis.
 
 1. Generate the `atlantis.yaml` repo configuration: `atmos atlantis generate repo-config`
 2. Generate the backend configuration for all components: `atmos terraform generate backends --format=backend-config|hcl`
@@ -18,12 +18,12 @@ The `atmos` tool supports (3) commands that when combined, make it easy to use `
 
 ## Configuration
 
-To configure Atmos to generate the Atlantis repo configurations, update the `atmos.yaml` configuration.
+To configure Atmos to generate the Atlantis repo configurations, update the `integrations.atlantis` section in `atmos.yaml`.
 
-Here's an example to get you started. As with *everything* in atmos, it supports deep-merging. Anything under the `integrations.atlantis` section can
-be overridden in the `components.terraform._name_.settings.atlantis` section at any level of the inheritance chain.
+Here's an example to get you started. As with *everything* in Atmos, it supports deep-merging. Anything under the `integrations.atlantis` section
+in `atmos.yaml` can be overridden in the stack config section `settings.atlantis` at any level of the inheritance chain.
 
-```yaml
+```yaml title=atmos.yaml
 # atmos.yaml CLI config
 
 # Integrations
@@ -89,7 +89,7 @@ integrations:
             - run: terraform apply $PLANFILE
 ```
 
-Using the config, project and workflow templates, atmos generates a separate atlantis project for each atmos component in every stack.
+Using the config, project and workflow templates, Atmos generates a separate atlantis project for each Atmos component in every stack.
 
 By running:
 
@@ -99,7 +99,7 @@ atmos atlantis generate repo-config --config-template config-1 --project-templat
 
 The following Atlantis repo-config would be generated:
 
-```yaml
+```yaml title=atlantis.yaml
 version: 3
 automerge: true
 delete_source_branch_on_merge: true
@@ -150,7 +150,7 @@ workflows:
 
 ## Next Steps
 
-Generating the Atlantis repo-config is only part of what's needed to use `atmos` with `atlantis`. The rest will depend on your organization's
+Generating the Atlantis repo-config is only part of what's needed to use Atmos with Atlantis. The rest will depend on your organization's
 preferences for generating the Terraform `.tfvars` files and backends.
 
 We suggest using pre-commit hooks and/or GitHub Actions (or similar), to generate the `.tfvars` files and state backend configurations, which are
