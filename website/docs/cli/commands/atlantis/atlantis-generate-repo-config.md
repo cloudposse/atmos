@@ -160,7 +160,7 @@ atmos atlantis generate repo-config --config-template config-1 --project-templat
 
 the generated `atlantis.yaml` file would look like this:
 
-```yaml
+```yaml title=atlantis.yaml
 version: 3
 projects:
   - name: tenant1-ue2-dev-infra-vpc
