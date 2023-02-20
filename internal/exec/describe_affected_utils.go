@@ -588,7 +588,7 @@ func appendToAffected(
 
 			// If Atlantis project template is defined and has a name, replace tokens in the name and add the Atlantis project to the output
 			if !reflect.ValueOf(projectTemplate).IsZero() && projectTemplate.Name != "" {
-				affected.AtlantisProject = cfg.ReplaceContextTokens(context, projectTemplate.Name)
+				affected.AtlantisProject = BuildAtlantisProjectName(context, projectTemplate.Name)
 			}
 		}
 	}

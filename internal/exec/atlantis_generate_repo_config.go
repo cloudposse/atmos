@@ -241,7 +241,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						WhenModified: whenModified,
 					}
 
-					atlantisProjectName := cfg.ReplaceContextTokens(context, projectTemplate.Name)
+					atlantisProjectName := BuildAtlantisProjectName(context, projectTemplate.Name)
 
 					atlantisProject := cfg.AtlantisProjectConfig{
 						Name:                      atlantisProjectName,
