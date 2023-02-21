@@ -170,6 +170,108 @@ change this behavior by using the `settings.atlantis` sections in stack config f
 
 ### Configure Atlantis Integration in `settings.atlantis` sections in stack configs
 
+The `integrations.atlantis.config_templates`, `integrations.atlantis.config_templates` and `integrations.atlantis.config_templates` sections
+in `atmos.yaml` can be overridden in the `settings.atlantis` sections in stack config files. In fact, you don't have to define the sections
+in `atmos.yaml` at all and instead use only the `settings.atlantis` sections in stack configs to configure work with the Atlantis Integration.
+
+Configuring the Atlantis Integration in the `settings.atlantis` sections in the stack configs has the following advantages:
+
+- The `settings` section is a first class section in Atmos (similar to `vars`). It participates in deep-merging and in the inheritance chain. It can
+  be defined and overridden at any level (organization/namespace, OU/tenant, region/environment, account/stage, base component, component). You can
+  define the base settings at the org, tenant or account level, and then override some settings at the component level, making the whole configuration
+  DRY
+
+- When executing the `atmos atlantis generate repo-config` command, you don't need to pass the `--config-template` and `--project-template` flags to
+  specify which config and project templates to use. Instead, Atmos will get this information from the `settings.atlantis` section
+
+- When executing the `atmos describe component <component> -s <stack>` command, you will see the configured Atlantis Integration in the outputs. For
+  example:
+
+  ```yaml title="atmos describe component test/test-component-override -s tenant1-ue2-dev"
+    atmos_component: test/test-component-override
+    atmos_stack: tenant1-ue2-dev
+    component: test/test-component
+    settings:
+      atlantis:
+        config_template:
+          allowed_regexp_prefixes:
+          - dev/
+          automerge: false
+          delete_source_branch_on_merge: false
+          parallel_apply: false
+          parallel_plan: true
+          version: 3
+        config_template_name: config-1
+        project_template:
+          apply_requirements:
+          - approved
+          autoplan:
+            enabled: true
+            when_modified:
+            - '**/*.tf'
+            - varfiles/$PROJECT_NAME.tfvars.json
+          delete_source_branch_on_merge: false
+          dir: '{component-path}'
+          name: '{tenant}-{environment}-{stage}-{component}'
+          terraform_version: v1.3
+          workflow: workflow-1
+          workspace: '{workspace}'
+        project_template_name: project-1
+        workflow_templates:
+          workflow-1:
+            apply:
+              steps:
+              - run: terraform apply $PLANFILE
+            plan:
+              steps:
+              - run: terraform init
+              - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+              - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+      spacelift:
+        protect_from_deletion: true
+        stack_destructor_enabled: false
+        workspace_enabled: true
+    vars:
+      enabled: true
+      environment: ue2
+      namespace: cp
+      region: us-east-2
+      stage: dev
+      tenant: tenant1
+    workspace: test-component-override-workspace-override
+  ```
+
+- If you configure the Atlantis Integration in the `settings.atlantis` sections in the stack configs, then the
+  command [`atmos describe affected`](/cli/commands/describe/affected) will be able to use it and output the
+  affected Atlantis projects in the `atlantis_project` field. For example:
+
+  ```json title="atmos describe affected"
+  [
+     {
+        "component": "infra/vpc",
+        "component_type": "terraform",
+        "component_path": "components/terraform/infra/vpc",
+        "stack": "tenant1-ue2-dev",
+        "spacelift_stack": "tenant1-ue2-dev-infra-vpc",
+        "atlantis_project": "tenant1-ue2-dev-infra-vpc",
+        "affected": "component"
+     },
+     {
+        "component": "infra/vpc",
+        "component_type": "terraform",
+        "component_path": "components/terraform/infra/vpc",
+        "stack": "tenant1-ue2-prod",
+        "spacelift_stack": "tenant1-ue2-prod-infra-vpc",
+        "atlantis_project": "tenant1-ue2-prod-infra-vpc",
+        "affected": "component"
+     }
+  ]
+  ```
+
+<br/>
+
+#### `settings.atlantis.workflow_templates`
+
 ## Atlantis Workflows
 
 Atlantis workflows can be defined in two different ways:
