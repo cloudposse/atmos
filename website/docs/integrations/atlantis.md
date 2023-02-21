@@ -322,7 +322,102 @@ Atmos will use the workflows from the `integration.atlantis.workflow_templates` 
 
 <br/>
 
-#### Configure `settings.atlantis.workflow_templates` section in stack configs
+#### Define config template and project template in `settings.atlantis` section in stack configs
+
+The Atlantis config template and project template can be defined in the `settings.atlantis` section in two different ways:
+
+- Define `config_template_name` and `project_template_name` in the `settings.atlantis` section. These attributes tell Atmos to select a config
+  template and a project template from the `integration.atlantis` section in `atmos.yaml`. For example:
+
+  ```yaml title="atmos.yaml"
+  integrations:
+    atlantis:
+      path: "atlantis.yaml"
+  
+      # Config templates
+      config_templates:
+        config-1:
+          version: 3
+          automerge: true
+          delete_source_branch_on_merge: true
+          parallel_plan: true
+          parallel_apply: true
+          allowed_regexp_prefixes:
+            - dev/
+            - staging/
+            - prod/
+  
+      # Project templates
+      project_templates:
+        project-1:
+          # generate a project entry for each component in every stack
+          name: "{tenant}-{environment}-{stage}-{component}"
+          workspace: "{workspace}"
+          dir: "{component-path}"
+          terraform_version: v1.2
+          delete_source_branch_on_merge: true
+          autoplan:
+            enabled: true
+            when_modified:
+              - "**/*.tf"
+              - "varfiles/$PROJECT_NAME.tfvars.json"
+          apply_requirements:
+            - "approved"
+  ```
+
+  ```yaml title="stacks/orgs/cp/_defaults.yaml"
+  settings:
+    atlantis:
+      # Select a config template defined in `atmos.yaml` in the `integrations.atlantis.config_templates` section
+      config_template_name: "config-1"
+  
+      # Select a project template defined in `atmos.yaml` in the `integrations.atlantis.project_templates` section
+      project_template_name: "project-1"
+  ```
+
+  In this case, the `config_template_name` and `project_template_name` attributes are used instead of specifying the `--config-template`
+  and `--project-template` flags on the command line when executing the command `atmos atlantis generate repo-config`. And the attributes can be
+  defined at any level in the stack configs and they participate in deep-merging and inheritance (meaning they can be overridden per tenant,
+  environment, stage and component).
+
+<br/>
+
+- Define `config_template` and `project_template` in the `settings.atlantis` section. These attributes tell Atmos to use the templates instead of
+  searching for them in the `integration.atlantis` section in `atmos.yaml`. For example:
+
+  ```yaml title="stacks/orgs/cp/tenant1/dev/us-east-2.yaml"
+  settings:
+    atlantis:
+  
+      # For this `tenant1-ue2-dev` stack, override the org-wide config template selected in `stacks/orgs/cp/_defaults.yaml`
+      # in the `settings.atlantis.config_template_name` section
+      config_template:
+        version: 3
+        automerge: false
+        delete_source_branch_on_merge: false
+        parallel_plan: true
+        parallel_apply: false
+        allowed_regexp_prefixes:
+          - dev/
+  
+      # For this `tenant1-ue2-dev` stack, override the org-wide project template specified in `stacks/orgs/cp/_defaults.yaml`
+      # in the `settings.atlantis.project_template_name` section
+      project_template:
+        # generate a project entry for each component in every stack
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        workflow: "workflow-1"
+        dir: "{component-path}"
+        terraform_version: v1.3
+        delete_source_branch_on_merge: false
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/$PROJECT_NAME.tfvars.json"
+        apply_requirements:
+          - "approved"
+  ```
 
 ## Atlantis Workflows
 
