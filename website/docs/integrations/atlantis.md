@@ -368,10 +368,12 @@ The Atlantis config template and project template can be defined in the `setting
   ```yaml title="stacks/orgs/cp/_defaults.yaml"
   settings:
     atlantis:
-      # Select a config template defined in `atmos.yaml` in the `integrations.atlantis.config_templates` section
+      # Select a config template defined in `atmos.yaml` in 
+      # the `integrations.atlantis.config_templates` section
       config_template_name: "config-1"
   
-      # Select a project template defined in `atmos.yaml` in the `integrations.atlantis.project_templates` section
+      # Select a project template defined in `atmos.yaml` in 
+      # the `integrations.atlantis.project_templates` section
       project_template_name: "project-1"
   ```
 
@@ -388,8 +390,9 @@ The Atlantis config template and project template can be defined in the `setting
   ```yaml title="stacks/orgs/cp/tenant1/dev/us-east-2.yaml"
   settings:
     atlantis:
-  
-      # For this `tenant1-ue2-dev` stack, override the org-wide config template selected in `stacks/orgs/cp/_defaults.yaml`
+
+      # For this `tenant1-ue2-dev` stack, override the org-wide config template 
+      # specified in `stacks/orgs/cp/_defaults.yaml`
       # in the `settings.atlantis.config_template_name` section
       config_template:
         version: 3
@@ -399,8 +402,9 @@ The Atlantis config template and project template can be defined in the `setting
         parallel_apply: false
         allowed_regexp_prefixes:
           - dev/
-  
-      # For this `tenant1-ue2-dev` stack, override the org-wide project template specified in `stacks/orgs/cp/_defaults.yaml`
+
+      # For this `tenant1-ue2-dev` stack, override the org-wide project template 
+      # specified in `stacks/orgs/cp/_defaults.yaml`
       # in the `settings.atlantis.project_template_name` section
       project_template:
         # generate a project entry for each component in every stack
@@ -418,6 +422,23 @@ The Atlantis config template and project template can be defined in the `setting
         apply_requirements:
           - "approved"
   ```
+
+<br/>
+
+:::note summary
+
+- Atlantis Integration can be configured in the `integrations.atlantis` section in `atmos.yaml`. If this is the only place where it's configured, then
+  you need to pass the `--config-template` and `--project-template` flags to the `atmos atlantis generate repo-config` command
+
+- Atlantis Integration can also be configured in the `settings.atlantis` section in the stack configs. The `config_template_name`
+  and `project_template_name` attributes can be used to select the config and project templates from the `integrations.atlantis` section
+  in `atmos.yaml` instead of specifying the `--config-template` and `--project-template` flags on the command line
+
+- The `config_template` and `project_template` sections in `settings.atlantis` can be used to define the config and project template for the
+  particular stack or component. If defined, the sections will override all the configurations in the `integrations.atlantis` section in `atmos.yaml`,
+  and will override the `config_template_name` and `project_template_name` attributes in `settings.atlantis`. These sections have the highest priority
+
+:::
 
 ## Atlantis Workflows
 
