@@ -1,0 +1,72 @@
+---
+name: Bug report
+description: Create a report to help us improve
+labels: ["bug"]
+assignees: [""]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Found a bug?
+        
+        Please checkout our [Slack Community](https://slack.cloudposse.com)
+        or visit our [Slack Archive](https://archive.sweetops.com/).
+
+        [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
+
+  - type: textarea
+    id: concise-description
+    attributes:
+      label: Describe the Bug
+      description: A clear and concise description of what the bug is.
+      placeholder: What is the bug about?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected.
+      placeholder: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: How do we reproduce it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots or logs to help explain.
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Anything that will help us triage the bug.
+      placeholder: |
+        - OS: [e.g. Linux, OSX, WSL, etc]
+        - Version [e.g. 10.15]
+        - Module version
+        - Terraform version
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: |
+        Add any other context about the problem here.
+    validations:
+      required: false
