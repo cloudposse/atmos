@@ -8,7 +8,7 @@ Atmos natively supports [Atlantis](https://runatlantis.io) for Terraform Pull Re
 
 ## How it Works
 
-With Atmos, all of your configuration is neatly defined in YAML. This makes transformations of that data very easy.
+With Atmos, all your configurations are neatly defined in YAML. This makes transformations of that data very easy.
 
 Atmos supports three commands that, when combined, make it easy to use Atlantis:
 
