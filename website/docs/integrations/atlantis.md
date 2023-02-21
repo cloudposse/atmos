@@ -164,8 +164,9 @@ workflows:
 <br/>
 
 __NOTE:__ If Atlantis Integration is configured only in the `integrations.atlantis` section in `atmos.yaml`, the command-line
-flags `--config-template` and `--project-template` are required to specify the config template and project template to use from the collection of
-templates defined in `atmos.yaml`. You can change this behavior by using the `settings.atlantis` sections in stack config files.
+flags `--config-template` and `--project-template` are required to specify a config template and a project template from the collection of
+templates defined in the `integrations.atlantis.config_templates` and `integrations.atlantis.project_templates` sections in `atmos.yaml`. You can
+change this behavior by using the `settings.atlantis` sections in stack config files.
 
 ### Configure Atlantis Integration in `settings.atlantis` sections in stack configs
 
@@ -241,8 +242,9 @@ the `settings.atlantis.workflow_templates` section in the stack configurations. 
 section, you can reference a workflow to be used for each generated Atlantis project in the project templates.
 
 On the other hand, if you use [Repo Level workflows](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html),
-you need to provide at least one workflow template in the `workflow_templates` section in the [Atlantis Integration](/cli/configuration#integrations)
-or in the `settings.atlantis.workflow_templates` section in the stack configurations.
+you need to provide at least one workflow template in the `integrations.atlantis.workflow_templates` section in
+the [Atlantis Integration](/cli/configuration#integrations) in `atmos.yaml`, or in the `settings.atlantis.workflow_templates` section in the stack
+configurations.
 
 For example, after executing the following command:
 
