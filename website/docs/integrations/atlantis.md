@@ -267,22 +267,68 @@ workflows:
 
 ## Dynamic Repo Config Generation
 
-If you want to generate the `atlantis.yaml` file before Atlantis can parse it, you can add a run command to `pre_workflow_hooks`. The repo config
+If you want to generate the `atlantis.yaml` file before Atlantis can parse it, you can add a `run` command to `pre_workflow_hooks`. The repo config
 will be generated right before Atlantis can parse it.
 
 ```yaml
 repos:
   - id: /.*/
     pre_workflow_hooks:
-      - run: ./repo-config-generator.sh
-        description: Generating configs
+      - run: "./repo-config-generator.sh"
+        description: "Generating configs"
 ```
+
+See also [Pre Workflow Hooks](https://www.runatlantis.io/docs/pre-workflow-hooks.html)
+and [Post Workflow Hooks](https://www.runatlantis.io/docs/post-workflow-hooks.html) for more information.
 
 To help with dynamic repo config generation, the `atmos atlantis generate repo-config` command accepts the `--affected-only` flag.
 If set to `true`, Atmos will generate Atlantis projects only for the Atmos components changed between two Git commits.
 
-See also [Pre Workflow Hooks](https://www.runatlantis.io/docs/pre-workflow-hooks.html)
-and [Post Workflow Hooks](https://www.runatlantis.io/docs/post-workflow-hooks.html) for more information.
+```yaml
+repos:
+  - id: /.*/
+    pre_workflow_hooks:
+      - run: "atmos atlantis generate repo-config --affected-only=true"
+        description: "Generating configs"
+```
+
+If the `--affected-only=true` flag is passed, Atmos uses two different Git commits to produce a list of affected Atmos components and stacks and then
+generate the `atlantis.yaml` file for the affected Atlantis projects only.
+
+For the first commit, the command assumes that the current repo root is a Git checkout. An error will be thrown if the current repo is not a Git
+repository (the `.git` folder does not exist or is configured incorrectly).
+
+The second commit is specified on the command line by using
+the `--ref` ([Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References)) or `--sha` (commit SHA) flags.
+
+Either `--ref` or `--sha` should be used. If both flags are provided at the same time, the command will first clone the remote branch pointed to by
+the `--ref` flag and then checkout the Git commit pointed to by the `--sha` flag (`--sha` flag overrides `--ref` flag).
+
+If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA will point
+to the `HEAD` of the branch.
+
+Note that if you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
+repository, but instead will use the already cloned one to compare the current branch with. In this case, the `--ref`, `--sha`, `--ssh-key`
+and `--ssh-key-password` flags are not used, and an error will be thrown if the `--repo-path` flag and any of the `--ref`, `--sha`, `--ssh-key`
+or `--ssh-key-password` flags are provided at the same time.
+
+The command works by:
+
+- Cloning the target branch (`--ref`) or checking out the commit (`--sha`) of the remote target branch, or using the already cloned target repository
+  specified by the `--repo-path` flag
+
+- Deep merging all stack configurations for both the current working branch and the remote target branch
+
+- Looking for changes in the component directories
+
+- Comparing each section of the stack configuration looking for differences
+
+- Outputting a JSON or YAML document consisting of a list of affected components and stacks and what caused it to be affected
+
+Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related components and stacks as
+affected. Atmos will then skip evaluating those stacks for differences since we already know that they are affected.
+
+Refer to [`atmos atlantis generate repo-config`](/cli/commands/atlantis/generate-repo-config) for the description of the command and all flags.
 
 ## Working with Private Repositories
 
