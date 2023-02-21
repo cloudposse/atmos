@@ -267,8 +267,9 @@ workflows:
 
 ## Dynamic Repo Config Generation
 
-If you want to generate the `atlantis.yaml` file before Atlantis can parse it, you can add a `run` command to `pre_workflow_hooks`. The repo config
-will be generated right before Atlantis can parse it.
+If you want to generate the `atlantis.yaml` file before Atlantis can parse it, you can use
+the [Dynamic Repo Config Generation](https://www.runatlantis.io/docs/pre-workflow-hooks.html#dynamic-repo-config-generation) feature of Atlantis. You
+can add a `run` command to `pre_workflow_hooks`. The repo config will be generated right before Atlantis can parse it.
 
 ```yaml
 repos:
@@ -298,16 +299,16 @@ generate the `atlantis.yaml` file for the affected Atlantis projects only.
 For the first commit, the command assumes that the current repo root is a Git checkout. An error will be thrown if the current repo is not a Git
 repository (the `.git` folder does not exist or is configured incorrectly).
 
-The second commit is specified on the command line by using
+The second commit can be specified on the command line by using
 the `--ref` ([Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References)) or `--sha` (commit SHA) flags.
 
 Either `--ref` or `--sha` should be used. If both flags are provided at the same time, the command will first clone the remote branch pointed to by
 the `--ref` flag and then checkout the Git commit pointed to by the `--sha` flag (`--sha` flag overrides `--ref` flag).
 
-If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA will point
-to the `HEAD` of the branch.
+__NOTE:__ If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA
+will point to the `HEAD` of the branch.
 
-Note that if you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
+If you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
 repository, but instead will use the already cloned one to compare the current branch with. In this case, the `--ref`, `--sha`, `--ssh-key`
 and `--ssh-key-password` flags are not used, and an error will be thrown if the `--repo-path` flag and any of the `--ref`, `--sha`, `--ssh-key`
 or `--ssh-key-password` flags are provided at the same time.
@@ -323,7 +324,7 @@ The command works by:
 
 - Comparing each section of the stack configuration looking for differences
 
-- Outputting a JSON or YAML document consisting of a list of affected components and stacks and what caused it to be affected
+- Generating the `atlantis.yaml` file with the `projects` sections consisting of a list of the affected Atlantis projects
 
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related components and stacks as
 affected. Atmos will then skip evaluating those stacks for differences since we already know that they are affected.
@@ -333,7 +334,7 @@ Refer to [`atmos atlantis generate repo-config`](/cli/commands/atlantis/generate
 ## Working with Private Repositories
 
 If the flag `--affected-only=true` is passed on the command line (e.g. `atmos atlantis generate repo-config --affected-only=true`), the command
-will clone and checkout the remote target repo (which can be the default `refs/heads` reference, or specified by the command-line
+will clone and checkout the remote target repo (which can be the default `refs/heads<default_branch>` reference, or specified by the command-line
 flags `--ref`, `--sha` or `--repo-path`). If the remote target repo is private, special attention needs to be given to how to work with private
 repositories.
 
@@ -485,16 +486,20 @@ jobs:
 Generating the Atlantis repo-config is only part of what's needed to use Atmos with Atlantis. The rest will depend on your organization's
 preferences for generating the Terraform `.tfvars` files and backends.
 
-We suggest using pre-commit hooks and/or GitHub Actions (or similar), to generate the `.tfvars` files and state backend configurations, which are
-necessarily derived from the atmos stack configuration.
+You can use pre-commit hooks and/or GitHub Actions (or similar) to generate the `.tfvars` files and state backend configurations, which are derived
+from the Atmos stack configuration.
 
 The following commands will generate those files.
 
-1. `atmos terraform generate backends --format=backend-config|hcl`
-2. `atmos terraform generate varfiles`
+- [`atmos terraform generate backends --format=backend-config|hcl`](/cli/commands/terraform/generate-backends)
+- [`atmos terraform generate varfiles`](/cli/commands/terraform/generate-varfiles)
 
-Make sure that the resulting files are committed back to VCS (e.g. `git add -A`) and push'd upstream. That way Atlantis will trigger on the "affected
+You can commit the resulting files back to VCS (e.g. `git add -A`) and push upstream. That way Atlantis will trigger on the "affected
 files" and propose a plan.
+
+Or you can use the [Dynamic Repo Config Generation](#dynamic-repo-config-generation) in the Atlantis pre-workflow hooks and
+the `atmos atlantis generate repo-config` command with the `--affected-only=true` flag to dynamically generate the `atlantis.yaml` file with the
+affected (changed) Atlantis projects.
 
 ## References
 
@@ -507,3 +512,4 @@ For more information, refer to:
 - [Atlantis Custom Workflows](https://www.runatlantis.io/docs/custom-workflows.html)
 - [Pre Workflow Hooks](https://www.runatlantis.io/docs/pre-workflow-hooks.html)
 - [Post Workflow Hooks](https://www.runatlantis.io/docs/post-workflow-hooks.html)
+- [Dynamic Repo Config Generation](https://www.runatlantis.io/docs/pre-workflow-hooks.html#dynamic-repo-config-generation)
