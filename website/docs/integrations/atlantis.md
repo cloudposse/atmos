@@ -161,9 +161,11 @@ workflows:
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
 ```
 
+<br/>
+
 __NOTE:__ If Atlantis Integration is configured only in the `integrations.atlantis` section in `atmos.yaml`, the command-line
-flags `--config-template`and `--project-template` are required to specify the config template and project template to use from the collection of
-templates defined in `atmos.yaml`. You can override this behavior uisng the `settings.atlantis` sections in stack config files.
+flags `--config-template` and `--project-template` are required to specify the config template and project template to use from the collection of
+templates defined in `atmos.yaml`. You can change this behavior by using the `settings.atlantis` sections in stack config files.
 
 ### Configure Atlantis Integration in `settings.atlantis` sections in stack configs
 
