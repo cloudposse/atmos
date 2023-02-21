@@ -12,7 +12,8 @@ With Atmos, all of your configuration is neatly defined in YAML. This makes tran
 
 Atmos supports three commands that, when combined, make it easy to use Atlantis:
 
-1. Generate the `atlantis.yaml` repo configuration: [`atmos atlantis generate repo-config`](/cli/commands/atlantis/generate-repo-config)
+1. Generate the [`atlantis.yaml`](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html) repo-level
+   configuration: [`atmos atlantis generate repo-config`](/cli/commands/atlantis/generate-repo-config)
 
 2. Generate the backend configuration for all
    components: [`atmos terraform generate backends --format=backend-config|hcl`](/cli/commands/terraform/generate-backends)
@@ -487,7 +488,7 @@ Generating the Atlantis repo-config is only part of what's needed to use Atmos w
 preferences for generating the Terraform `.tfvars` files and backends.
 
 You can use pre-commit hooks and/or GitHub Actions (or similar) to generate the `.tfvars` files and state backend configurations, which are derived
-from the Atmos stack configuration.
+from the Atmos stack configurations.
 
 The following commands will generate those files.
 
