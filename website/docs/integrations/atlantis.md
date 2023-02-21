@@ -270,7 +270,59 @@ Configuring the Atlantis Integration in the `settings.atlantis` sections in the 
 
 <br/>
 
-#### `settings.atlantis.workflow_templates`
+#### Configure `settings.atlantis.workflow_templates` section in stack configs
+
+If you are using the [Atlantis Repo Level workflows](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html), you can configure the workflows
+in the `settings.atlantis.workflow_templates` section.
+
+If the `settings.atlantis.workflow_templates` section is configured in stack configs, it's copied to the generated `atlantis.yaml` file verbatim.
+For example, add the `workflow_templates` section at the org level in the config file `stacks/orgs/cp/_defaults.yaml`:
+
+```yaml title="stacks/orgs/cp/_defaults.yaml"
+settings:
+  atlantis:
+    workflow_templates:
+      workflow-1:
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+        plan:
+          steps:
+            - run: terraform init
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+```
+
+then execute the `atmos atlantis generate repo-config` command:
+
+```yaml title="atlantis.yaml"
+version: 3
+workflows:
+  workflow-1:
+    apply:
+      steps:
+        - run: terraform apply $PLANFILE
+    plan:
+      steps:
+        - run: terraform init
+        - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+        - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
+```
+
+<br/>
+
+:::note
+
+The `settings.atlantis.workflow_templates` section in stack configs has higher priority then the `integration.atlantis.workflow_templates`
+section in `atmos.yaml`. If both are defined, Atmos will select the workflows from the `settings.atlantis.workflow_templates` section and copy them
+into the generated `atlantis.yaml` file. On the other hand, if the `settings.atlantis.workflow_templates` section is not defined in stack configs,
+Atmos will use the workflows from the `integration.atlantis.workflow_templates` section from `atmos.yaml`.
+
+:::
+
+<br/>
+
+#### Configure `settings.atlantis.workflow_templates` section in stack configs
 
 ## Atlantis Workflows
 
