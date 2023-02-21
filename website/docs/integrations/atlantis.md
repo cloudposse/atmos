@@ -28,12 +28,13 @@ Atlantis Integration can be configured in two different ways (or a combination o
 - In the `integrations.atlantis` section in `atmos.yaml`
 - In the `settings.atlantis` sections in the stack config files
 
-### Configure Atlantis integration in `integrations.atlantis` section in `atmos.yaml`
+### Configure Atlantis Integration in `integrations.atlantis` section in `atmos.yaml`
 
 To configure Atmos to generate the Atlantis repo configurations, update the `integrations.atlantis` section in `atmos.yaml`.
 
-Here's an example to get you started. As with *everything* in Atmos, it supports deep-merging. Anything under the `integrations.atlantis` section
-in `atmos.yaml` can be overridden in the stack config section `settings.atlantis` at any level of the inheritance chain.
+Here's an example to get you started. As with *everything* in Atmos, it supports deep-merging at all levels. Anything under
+the `integrations.atlantis` section in `atmos.yaml` can be overridden in the stack config sections `settings.atlantis` at any level of the inheritance
+chain.
 
 ```yaml title=atmos.yaml
 # atmos.yaml CLI config
@@ -103,13 +104,13 @@ integrations:
 
 Using the config and project templates, Atmos generates a separate atlantis project for each Atmos component in every stack.
 
-By running:
+For example, by running this command:
 
 ```shell
 atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 ```
 
-The following Atlantis repo-config would be generated:
+the following Atlantis repo-config would be generated:
 
 ```yaml title=atlantis.yaml
 version: 3
@@ -160,7 +161,11 @@ workflows:
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
 ```
 
-<br/>
+__NOTE:__ If Atlantis Integration is configured only in the `integrations.atlantis` section in `atmos.yaml`, the command-line
+flags `--config-template`and `--project-template` are required to specify the config template and project template to use from the collection of
+templates defined in `atmos.yaml`. You can override this behavior uisng the `settings.atlantis` sections in stack config files.
+
+### Configure Atlantis Integration in `settings.atlantis` sections in stack configs
 
 ## Atlantis Workflows
 
