@@ -22,6 +22,16 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	format, err := flags.GetString("format")
+	if err != nil {
+		return err
+	}
+
+	file, err := flags.GetString("file")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	componentSection, err := ExecuteDescribeComponent(component, stack)
@@ -30,7 +40,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println()
-	err = u.PrintAsYAML(componentSection)
+	err = printOrWriteToFile(format, file, componentSection)
 	if err != nil {
 		return err
 	}
