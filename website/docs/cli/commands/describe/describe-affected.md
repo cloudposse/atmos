@@ -177,7 +177,8 @@ where:
 - `stack` - the affected Atmos stack
 
 - `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
-  Atmos stack in the `settings.spacelift.workspace_enabled` config
+  Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled` section
+  or via inheritance) and if the component is not abstract (`metadata.type` is not set to `abstract`)
 
 - `atlantis_project` - the affected Atlantis project name. It will be included only if the Atlantis integration is configured in
   the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
@@ -236,20 +237,24 @@ stacks and components:
   the `--ssh-key-password` flag to provide the encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
 
 - Execute the `atmos describe affected --repo-path <path_to_cloned_target_repo>` command in a [GitHub Action](https://docs.github.com/en/actions).
-  For this to work, clone the remote target repository using the [checkout](https://github.com/actions/checkout) GitHub action. Then use
+  For this to work, clone the remote private repository using the [checkout](https://github.com/actions/checkout) GitHub action. Then use
   the `--repo-path` flag to specify the path to the already cloned target repository with which to compare the current branch
+
+- It should just also work with whatever SSH config/context has been already set up, for example, when
+  using [SSH agents](https://www.ssh.com/academy/ssh/agent). In this case, you don't need to use the `--ssh-key`, `--ssh-key-password`
+  and `--repo-path` flags to clone private repositories
 
 ## Using with GitHub Actions
 
 If the `atmos describe affected` command is executed in a [GitHub Action](https://docs.github.com/en/actions), and you don't want to store or
-generate a long-lived SSH private key on the server, you can do the following:
+generate a long-lived SSH private key on the server, you can do the following (__NOTE:__ This is only required if the action is attempting to clone a
+private repo which is not itself):
 
 - Create a GitHub
   [Personal Access Token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
   with scope permissions to clone private repos
 
-- Add the created PAT as a repository or GitHub organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets) with the
-  name [`GITHUB_TOKEN`](https://docs.github.com/en/actions/security-guides/automatic-token-authentication)
+- Add the created PAT as a repository or GitHub organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
 
 - In your GitHub action, clone the remote repository using the [checkout](https://github.com/actions/checkout) GitHub action
 

@@ -248,7 +248,6 @@ Configuring the Atlantis Integration in the `settings.atlantis` sections in the 
         "component_type": "terraform",
         "component_path": "components/terraform/infra/vpc",
         "stack": "tenant1-ue2-dev",
-        "spacelift_stack": "tenant1-ue2-dev-infra-vpc",
         "atlantis_project": "tenant1-ue2-dev-infra-vpc",
         "affected": "component"
      },
@@ -257,7 +256,6 @@ Configuring the Atlantis Integration in the `settings.atlantis` sections in the 
         "component_type": "terraform",
         "component_path": "components/terraform/infra/vpc",
         "stack": "tenant1-ue2-prod",
-        "spacelift_stack": "tenant1-ue2-prod-infra-vpc",
         "atlantis_project": "tenant1-ue2-prod-infra-vpc",
         "affected": "component"
      }
@@ -432,7 +430,8 @@ The Atlantis config template and project template can be defined in the `setting
 
 - The `config_template` and `project_template` sections in `settings.atlantis` can be used to define the config and project template for the
   particular stack or component. If defined, the sections will override all the configurations in the `integrations.atlantis` section in `atmos.yaml`,
-  and will override the `config_template_name` and `project_template_name` attributes in `settings.atlantis`. These sections have the highest priority.
+  and will override the `config_template_name` and `project_template_name` attributes in `settings.atlantis`. These sections have the highest
+  priority.
 
 :::
 
@@ -477,8 +476,8 @@ Atlantis workflows can be defined in two different ways:
           - apply  
   ```
 
-- In the [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html) using the `workflows` section and the `workflow`
-  attribute in each Atlantis project in `atlantis.yaml`
+- In the [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html) using the `workflows` section and
+  the `workflow` attribute in each Atlantis project in `atlantis.yaml`
 
   ```yaml title=atlantis.yaml
   version: 3
@@ -502,8 +501,8 @@ Atlantis workflows can be defined in two different ways:
 
 <br/>
 
-If you use the [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define the Atlantis workflows, you don't need to define
-workflows in the [CLI Config Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml` or in
+If you use the [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define the Atlantis workflows, you don't need to
+define workflows in the [CLI Config Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml` or in
 the `settings.atlantis.workflow_templates` section in the stack configurations. When you defined the workflows in the server config `workflows`
 section, you can reference a workflow to be used for each generated Atlantis project in the project templates.
 
@@ -625,22 +624,27 @@ stacks and components:
   the [checkout](https://github.com/actions/checkout) GitHub action. Then use the `--repo-path` flag to specify the path to the already cloned
   target repository with which to compare the current branch
 
+- It should just also work with whatever SSH config/context has been already set up, for example, when
+  using [SSH agents](https://www.ssh.com/academy/ssh/agent). In this case, you don't need to use the `--ssh-key`, `--ssh-key-password`
+  and `--repo-path` flags to clone private repositories
+
 ## Using with GitHub Actions
 
 If the `atmos atlantis generate repo-config --affected-only=true` command is executed in a [GitHub Action](https://docs.github.com/en/actions), and
-you don't want to store or generate a long-lived SSH private key on the server, you can do the following:
+you don't want to store or generate a long-lived SSH private key on the server, you can do the following (__NOTE:__ This is only required if the
+action is attempting to clone a private repo which is not itself):
 
 - Create a GitHub
   [Personal Access Token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
   with scope permissions to clone private repos
 
-- Add the created PAT as a repository or GitHub organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets) with the
-  name [`GITHUB_TOKEN`](https://docs.github.com/en/actions/security-guides/automatic-token-authentication)
+- Add the created PAT as a repository or GitHub organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
 
 - In your GitHub Action, clone the remote repository using the [checkout](https://github.com/actions/checkout) GitHub Action
 
 - Execute `atmos atlantis generate repo-config --affected-only=true --repo-path <path_to_cloned_target_repo>` command with the `--repo-path` flag set
-  to the cloned repository path using the [`GITHUB_WORKSPACE`](https://docs.github.com/en/actions/learn-github-actions/variables) `ENV` variable (which
+  to the cloned repository path using the [`GITHUB_WORKSPACE`](https://docs.github.com/en/actions/learn-github-actions/variables) `ENV` variable (
+  which
   points to the default working directory on the GitHub runner for steps, and the default location of the repository when using
   the [checkout](https://github.com/actions/checkout) action). For example:
 
