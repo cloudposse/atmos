@@ -440,7 +440,7 @@ The Atlantis config template and project template can be defined in the `setting
 
 Atlantis workflows can be defined in two different ways:
 
-- In [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) using the `workflows` section and `workflow` attribute
+- In the [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) using the `workflows` section and `workflow` attribute
 
   ```yaml title=server.yaml
   repos:
