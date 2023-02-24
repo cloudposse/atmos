@@ -759,7 +759,7 @@ jobs:
 
 ## Next Steps
 
-Generating the Atlantis repo-config is only part of what's needed to use Atmos with Atlantis. The rest will depend on your organization's
+Generating the Atlantis `repo-config` is only part of what's needed to use Atmos with Atlantis. The rest will depend on your organization's
 preferences for generating the Terraform `.tfvars` files and backends.
 
 You can use pre-commit hooks and/or GitHub Actions (or similar) to generate the `.tfvars` files and state backend configurations, which are derived
