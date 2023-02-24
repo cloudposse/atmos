@@ -10,7 +10,7 @@ then generate the `atlantis.yaml` repo config file:
 
 ```bash
 atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 ```
 
 __NOTE:__ All paths, `--file-template` in the `atmos terraform generate varfiles` command, and in the `atlantis` config in `atmos.yaml`,
@@ -30,7 +30,7 @@ repos:
     pre_workflow_hooks:
       - run: |
           atmos terraform generate varfiles --file-template=varfiles/{tenant}-{environment}-{stage}-{component}.tfvars.json
-          atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
+          atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 ```
 
 Note that the `-file-template` parameter in the `atmos terraform generate varfiles` command must match the following two settings in `atmos.yaml`:
@@ -92,7 +92,6 @@ integrations:
     # Workflow templates
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
-    # Select a template by using the `--workflow-template <workflow_template>` command-line argument in `atmos atlantis generate repo-config` command
     workflow_templates:
       workflow-1:
         plan:

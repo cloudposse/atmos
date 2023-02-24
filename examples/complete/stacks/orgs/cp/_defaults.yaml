@@ -33,3 +33,36 @@ helmfile:
 components:
   terraform: {}
   helmfile: {}
+
+settings:
+  atlantis:
+    # Select a config template defined in `atmos.yaml` in the `integrations.atlantis.config_templates` section
+    config_template_name: "config-1"
+
+    # Select a project template defined in `atmos.yaml` in the `integrations.atlantis.project_templates` section
+    project_template_name: "project-1"
+
+    # Workflow templates
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
+    workflow_templates:
+      workflow-1:
+        plan:
+          steps:
+            - run: terraform init
+            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            # You must output the plan using '-out $PLANFILE' because Atlantis expects plans to be in a specific location
+            - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+      workflow-2:
+        plan:
+          steps:
+            - run: terraform init -reconfigure
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE

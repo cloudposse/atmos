@@ -21,7 +21,7 @@ jobs:
         checks: "syntax,owners,duppatterns"
         owner_checker_allow_unowned_patterns: "false"
         # GitHub access token is required only if the `owners` check is enabled
-        github_access_token: "${{ secrets.PUBLIC_REPO_ACCESS_TOKEN }}"
+        github_access_token: "${{ secrets.REPO_ACCESS_TOKEN }}"
     - uses: mszostok/codeowners-validator@v0.7.1
       if: github.event.pull_request.head.repo.full_name != github.repository
       name: "Syntax check of CODEOWNERS"

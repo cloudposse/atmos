@@ -29,7 +29,15 @@ Run `atmos describe component --help` to see all the available options
 
 ```shell
 atmos describe component infra/vpc -s tenant1-ue2-dev
+
+atmos describe component infra/vpc -s tenant1-ue2-dev --format json
+
+atmos describe component infra/vpc -s tenant1-ue2-dev -f yaml
+
+atmos describe component infra/vpc -s tenant1-ue2-dev --file component.yaml
+
 atmos describe component echo-server -s tenant1-ue2-staging
+
 atmos describe component test/test-component-override -s tenant2-ue2-prod
 ```
 
@@ -41,9 +49,11 @@ atmos describe component test/test-component-override -s tenant2-ue2-prod
 
 ## Flags
 
-| Flag      | Description | Alias | Required |
-|:----------|:------------|:------|:---------|
-| `--stack` | Atmos stack | `-s`  | yes      |
+| Flag       | Description                                         | Alias | Required |
+|:-----------|:----------------------------------------------------|:------|:---------|
+| `--stack`  | Atmos stack                                         | `-s`  | yes      |
+| `--format` | Output format: `yaml` or `json` (`yaml` is default) | `-f`  | no       |
+| `--file`   | If specified, write the result to the file          |       | no       |
 
 ## Output
 

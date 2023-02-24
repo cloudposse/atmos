@@ -48,9 +48,44 @@ func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
 		"/dev/stdout",
 		"config-1",
 		"project-1",
-		"workflow-1",
 		nil,
 		nil,
+	)
+
+	assert.Nil(t, err)
+}
+
+func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	err = e.ExecuteAtlantisGenerateRepoConfig(
+		cliConfig,
+		"/dev/stdout",
+		"",
+		"",
+		nil,
+		nil,
+	)
+
+	assert.Nil(t, err)
+}
+
+func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
+	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	err = e.ExecuteAtlantisGenerateRepoConfigAffectedOnly(
+		cliConfig,
+		"/dev/stdout",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		true,
 	)
 
 	assert.Nil(t, err)

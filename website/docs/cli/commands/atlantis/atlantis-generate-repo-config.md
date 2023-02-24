@@ -25,158 +25,62 @@ Run `atmos atlantis generate repo-config --help` to see all the available option
 ## Examples
 
 ```shell
+atmos atlantis generate repo-config
+
+atmos atlantis generate repo-config --output-path /dev/stdout
+
 atmos atlantis generate repo-config --config-template config-1 --project-template project-1
 
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --stacks <stack1, stack2>
 
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1 --stacks <stack1, stack2>
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --components <component1, component2>
 
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1 --components <component1, component2>
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --stacks <stack1> --components <component1, component2>
 
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1 --stacks <stack1> --components <component1, component2>
+atmos atlantis generate repo-config --affected-only=true
+
+atmos atlantis generate repo-config --affected-only=true --output-path /dev/stdout
+
+atmos atlantis generate repo-config --affected-only=true --verbose=true
+
+atmos atlantis generate repo-config --affected-only=true --output-path /dev/stdout --verbose=true
+
+atmos atlantis generate repo-config --affected-only=true --repo-path <path_to_cloned_target_repo>
+
+atmos atlantis generate repo-config --affected-only=true --ref refs/heads/main
+
+atmos atlantis generate repo-config --affected-only=true --ref refs/tags/v1.1.0
+
+atmos atlantis generate repo-config --affected-only=true --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+
+atmos atlantis generate repo-config --affected-only=true --ref refs/tags/v1.2.0 --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+
+atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key>
+
+atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key> --ssh-key-password <password>
 ```
 
 ## Flags
 
-| Flag                  | Description                                                                           | Required |
-|:----------------------|:--------------------------------------------------------------------------------------|:---------|
-| `--config-template`   | Atlantis config template name                                                         | yes      |
-| `--project-template`  | Atlantis project template name                                                        | yes      |
-| `--workflow-template` | Atlantis workflow template name                                                       | no       |
-| `--output-path`       | Output path to write `atlantis.yaml` file                                             | no       |
-| `--stacks`            | Generate Atlantis projects for the specified stacks only (comma-separated values)     | no       |
-| `--components`        | Generate Atlantis projects for the specified components only (comma-separated values) | no       |
-
-## Atlantis Workflows
-
-The flag `--workflow-template` is optional because Atlantis workflows can be specified in two different ways:
-
-- In [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) using the `workflows` section and `workflow` attribute
-
-  ```yaml title=server.yaml
-  repos:
-    - id: /.*/
-      branch: /.*/
-
-      # 'workflow' sets the workflow for all repos that match.
-      # This workflow must be defined in the workflows section.
-      workflow: custom
-
-      # allowed_overrides specifies which keys can be overridden by this repo in
-      # its atlantis.yaml file.
-      allowed_overrides: [apply_requirements, workflow, delete_source_branch_on_merge, repo_locking]
-
-      # allowed_workflows specifies which workflows the repos that match
-      # are allowed to select.
-      allowed_workflows: [custom]
-
-      # allow_custom_workflows defines whether this repo can define its own
-      # workflows. If false (default), the repo can only use server-side defined
-      # workflows.
-      allow_custom_workflows: true  
-
-  # workflows lists server-side custom workflows
-  workflows:
-    custom:
-      plan:
-        steps:
-          - init
-          - plan
-      apply:
-        steps:
-          - run: echo applying
-          - apply  
-  ```
-
-- In [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html) using the `workflows` section and the `workflow`
-  attribute in each Atlantis project in `atlantis.yaml`
-
-  ```yaml title=atlantis.yaml
-  version: 3
-  projects:
-    - name: my-project-name
-      branch: /main/
-      dir: .
-      workspace: default
-      workflow: myworkflow
-  workflows:
-    myworkflow:
-      plan:
-        steps:
-          - init
-          - plan
-      apply:
-        steps:
-          - run: echo applying
-          - apply
-  ```
-
-<br/>
-
-If you use [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define Atlantis workflows,
-you don't need to specify the `workflow_templates` section in the [Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml`, and
-you don't have to provide the workflow template using the `--workflow-template` flag when executing an `atmos atmos atlantis generate repo-config`
-command. After you defined the workflows in the server config `workflows` section, you can reference a workflow to be used for each generated Atlantis
-project in the `integrations.atlantis.project_templates` section, for example:
-
-```yaml title=atmos.yaml
-integrations:
-
-  # Atlantis integration
-  atlantis:
-    path: "atlantis.yaml"
-
-    # Project templates
-    # Select a template by using the '--project-template <project_template>' command-line argument in 'atmos atlantis generate repo-config' command
-    project_templates:
-      project-1:
-        name: "{tenant}-{environment}-{stage}-{component}"
-        workflow: custom
-```
-
-On the other hand, if you define and use workflows
-in [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html),
-you need to provide at least one workflow template in the `workflow_templates` section in [Atlantis Integration](/cli/configuration#integrations).
-Then you select one of the templates by using the `--workflow-template` flag. In this case, the `workflow` attribute will be inserted automatically
-into each generated Atlantis project.
-
-For example, after executing the following command:
-
-```console
-atmos atlantis generate repo-config --config-template config-1 --project-template project-1 --workflow-template workflow-1
-```
-
-the `atlantis.yaml` file would look like this:
-
-```yaml
-version: 3
-projects:
-  - name: tenant1-ue2-dev-infra-vpc
-    workspace: tenant1-ue2-dev
-    workflow: workflow-1
-
-workflows:
-  workflow-1:
-    apply:
-      steps:
-        - run: terraform apply $PLANFILE
-    plan:
-      steps:
-        - run: terraform init -input=false
-        - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
-        - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
-```
+| Flag                 | Description                                                                                                                                                      | Required |
+|:---------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
+| `--config-template`  | Atlantis config template name                                                                                                                                    | no       |
+| `--project-template` | Atlantis project template name                                                                                                                                   | no       |
+| `--output-path`      | Output path to write `atlantis.yaml` file                                                                                                                        | no       |
+| `--stacks`           | Generate Atlantis projects for the specified stacks only (comma-separated values)                                                                                | no       |
+| `--components`       | Generate Atlantis projects for the specified components only (comma-separated values)                                                                            | no       |
+| `--affected-only`    | Generate Atlantis projects only for the Atmos components changed<br/>between two Git commits                                                                     | no       |
+| `--ref`              | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                    | no       |
+| `--sha`              | Git commit SHA with which to compare the current working branch                                                                                                  | no       |
+| `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                                                                 | no       |
+| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
+| `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
+| `--verbose`          | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
 
 <br/>
 
 :::info
 
-For more information, refer to:
-
-- [Configuring Atlantis](https://www.runatlantis.io/docs/configuring-atlantis.html)
-- [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html)
-- [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html)
-- [Server Configuration](https://www.runatlantis.io/docs/server-configuration.html)
-- [Atlantis Custom Workflows](https://www.runatlantis.io/docs/custom-workflows.html)
+Refer to [Atlantis Integration](/integrations/atlantis.md) for more details on the Atlantis integration in Atmos
 
 :::

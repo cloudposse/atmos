@@ -15,18 +15,18 @@ Use this command to show a list of the affected Atmos components and stacks give
 The command uses two different Git commits to produce a list of affected Atmos components and stacks.
 
 For the first commit, the command assumes that the current repo root is a Git checkout. An error will be thrown if the current repo is not a Git
-repository (`.git` folder does not exist or is configured incorrectly).
+repository (the `.git` folder does not exist or is configured incorrectly).
 
-The second commit is specified on the command line by using
+The second commit can be specified on the command line by using
 the `--ref` ([Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References)) or `--sha` (commit SHA) flags.
 
 Either `--ref` or `--sha` should be used. If both flags are provided at the same time, the command will first clone the remote branch pointed to by
 the `--ref` flag and then checkout the Git commit pointed to by the `--sha` flag (`--sha` flag overrides `--ref` flag).
 
-If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA will point
-to the `HEAD` of the branch.
+__NOTE:__ If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA
+will point to the `HEAD` of the branch.
 
-Note that if you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
+If you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
 repository, but instead will use the already cloned one to compare the current branch with. In this case, the `--ref`, `--sha`, `--ssh-key`
 and `--ssh-key-password` flags are not used, and an error will be thrown if the `--repo-path` flag and any of the `--ref`, `--sha`, `--ssh-key`
 or `--ssh-key-password` flags are provided at the same time.
@@ -35,10 +35,14 @@ The command works by:
 
 - Cloning the target branch (`--ref`) or checking out the commit (`--sha`) of the remote target branch, or using the already cloned target repository
   specified by the `--repo-path` flag
-- Deep merging all stack configurations for both the current working branch and the target branch
+
+- Deep merging all stack configurations for both the current working branch and the remote target branch
+
 - Looking for changes in the component directories
+
 - Comparing each section of the stack configuration looking for differences
-- Output a JSON or YAML document consisting of a list of affected components and stacks and what caused it to be affected
+
+- Outputting a JSON or YAML document consisting of a list of the affected components and stacks and what caused it to be affected
 
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related components and stacks as
 affected. Atmos will then skip evaluating those stacks for differences since we already know that they are affected.
@@ -77,6 +81,7 @@ Affected components and stacks:
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-dev",
       "spacelift_stack": "tenant1-ue2-dev-infra-vpc",
+      "atlantis_project": "tenant1-ue2-dev-infra-vpc",
       "affected": "component"
    },
    {
@@ -85,6 +90,7 @@ Affected components and stacks:
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-prod",
       "spacelift_stack": "tenant1-ue2-prod-infra-vpc",
+      "atlantis_project": "tenant1-ue2-prod-infra-vpc",
       "affected": "component"
    },
    {
@@ -93,6 +99,7 @@ Affected components and stacks:
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-staging",
       "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
+      "atlantis_project": "tenant1-ue2-staging-infra-vpc",
       "affected": "component"
    }
 ]
@@ -136,10 +143,10 @@ atmos describe affected --repo-path <path_to_already_cloned_repo>
 | `--sha`              | Git commit SHA with which to compare the current working branch                                                                                                  | no       |
 | `--file`             | If specified, write the result to the file                                                                                                                       | no       |
 | `--format`           | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                  | no       |
-| `--verbose`          | Print more detailed output when cloning and checking out the Git repository<br/>and processing the result                                                        | no       |
 | `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                                                                 | no       |
 | `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
 | `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
+| `--verbose`          | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
 
 ## Output
 
@@ -154,6 +161,7 @@ Each object has the following schema:
   "component_path": "....",
   "stack": "....",
   "spacelift_stack": ".....",
+  "atlantis_project": ".....",
   "affected": "....."
 }
 ```
@@ -161,11 +169,20 @@ Each object has the following schema:
 where:
 
 - `component` - the affected Atmos component in the stack
+
 - `component_type` - the type of the component (`terraform` or `helmfile`)
+
 - `component_path` - the filesystem path to the `terraform` or `helmfile` component
+
 - `stack` - the affected Atmos stack
+
 - `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
-  Atmos stack in the `settings.spacelift.workspace_enabled` config
+  Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled` section
+  or via inheritance) and if the component is not abstract (`metadata.type` is not set to `abstract`)
+
+- `atlantis_project` - the affected Atlantis project name. It will be included only if the Atlantis integration is configured in
+  the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
+
 - `affected` - shows what was changed for the component. The possible values are:
 
   - `stack.vars` - the `vars` component section in the stack config has been modified
@@ -186,6 +203,7 @@ For example:
     "component_path": "components/terraform/test/test-component",
     "stack": "tenant1-ue2-dev",
     "spacelift_stack": "tenant1-ue2-dev-new-component",
+    "atlantis_project": "tenant1-ue2-dev-new-component",
     "affected": "stack.vars"
   },
   {
@@ -194,6 +212,7 @@ For example:
     "component_path": "components/terraform/infra/vpc",
     "stack": "tenant2-ue2-staging",
     "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
+    "atlantis_project": "tenant1-ue2-staging-infra-vpc",
     "affected": "component"
   },
   {
@@ -201,6 +220,7 @@ For example:
     "component_type": "terraform",
     "component_path": "components/terraform/test/test-component",
     "stack": "tenant1-ue2-prod",
+    "atlantis_project": "tenant1-ue2-staging-test-test-component-override-3",
     "affected": "stack.env"
   }
 ]
@@ -216,20 +236,25 @@ stacks and components:
 - Using the `--ssh-key` flag to specify the filesystem path to a PEM-encoded private key to clone private repos using SSH, and
   the `--ssh-key-password` flag to provide the encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
 
-- Execute the `atmos describe affected` command in a [GitHub Action](https://docs.github.com/en/actions), clone the remote target repository in the
-  action, and use the `--repo-path` flag to specify the path to the already cloned target repository with which to compare the current branch
+- Execute the `atmos describe affected --repo-path <path_to_cloned_target_repo>` command in a [GitHub Action](https://docs.github.com/en/actions).
+  For this to work, clone the remote private repository using the [checkout](https://github.com/actions/checkout) GitHub action. Then use
+  the `--repo-path` flag to specify the path to the already cloned target repository with which to compare the current branch
+
+- It should just also work with whatever SSH config/context has been already set up, for example, when
+  using [SSH agents](https://www.ssh.com/academy/ssh/agent). In this case, you don't need to use the `--ssh-key`, `--ssh-key-password`
+  and `--repo-path` flags to clone private repositories
 
 ## Using with GitHub Actions
 
 If the `atmos describe affected` command is executed in a [GitHub Action](https://docs.github.com/en/actions), and you don't want to store or
-generate a long-lived SSH private key on the server, you can do the following:
+generate a long-lived SSH private key on the server, you can do the following (__NOTE:__ This is only required if the action is attempting to clone a
+private repo which is not itself):
 
 - Create a GitHub
   [Personal Access Token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
   with scope permissions to clone private repos
 
-- Add the created PAT as a repository or GitHub organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets) with the
-  name [`GITHUB_TOKEN`](https://docs.github.com/en/actions/security-guides/automatic-token-authentication)
+- Add the created PAT as a repository or GitHub organization [secret](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
 
 - In your GitHub action, clone the remote repository using the [checkout](https://github.com/actions/checkout) GitHub action
 

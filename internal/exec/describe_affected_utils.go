@@ -12,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -315,6 +316,8 @@ func executeDescribeAffected(
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
+	u.PrintMessageVerbose(verbose, "")
+
 	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
 	if err != nil {
 		return nil, err
@@ -529,7 +532,7 @@ func findAffected(
 	return res, nil
 }
 
-// appendToAffected adds an item to the affected list and adds the Spacelift stack
+// appendToAffected adds an item to the affected list, and adds the Spacelift stack and Atlantis project (if configured)
 func appendToAffected(
 	cliConfig cfg.CliConfiguration,
 	componentName string,
@@ -539,9 +542,10 @@ func appendToAffected(
 	affected cfg.Affected,
 ) ([]cfg.Affected, error) {
 
-	var settingsSection map[any]any
-	var spaceliftSettingsSection map[any]any
-	var varSection map[any]any
+	varSection := map[any]any{}
+	settingsSection := map[any]any{}
+	spaceliftSettingsSection := map[any]any{}
+	var projectTemplate cfg.AtlantisProjectConfig
 
 	if affected.ComponentType == "terraform" {
 		if i, ok2 := componentSection["vars"]; ok2 {
@@ -556,10 +560,11 @@ func appendToAffected(
 			spaceliftSettingsSection = i.(map[any]any)
 		}
 
-		if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
-			context := cfg.GetContextFromVars(varSection)
-			context.Component = componentName
+		context := cfg.GetContextFromVars(varSection)
+		context.Component = strings.Replace(componentName, "/", "-", -1)
 
+		// Affected Spacelift stack
+		if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
 			contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
 			if err != nil {
 				return nil, err
@@ -567,6 +572,26 @@ func appendToAffected(
 
 			spaceliftStackName, _ := BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
 			affected.SpaceliftStack = spaceliftStackName
+		}
+
+		// Affected Atlantis project
+		if atlantisSettingsSection, ok := settingsSection["atlantis"].(map[any]any); ok {
+			// 'settings.atlantis.project_template' has higher priority than 'settings.atlantis.project_template_name'
+			if atlantisSettingsProjectTemplate, ok := atlantisSettingsSection["project_template"].(map[any]any); ok {
+				err := mapstructure.Decode(atlantisSettingsProjectTemplate, &projectTemplate)
+				if err != nil {
+					return nil, err
+				}
+			} else if atlantisSettingsProjectTemplateName, ok := atlantisSettingsSection["project_template_name"].(string); ok && atlantisSettingsProjectTemplateName != "" {
+				if pt, ok := cliConfig.Integrations.Atlantis.ProjectTemplates[atlantisSettingsProjectTemplateName]; ok {
+					projectTemplate = pt
+				}
+			}
+
+			// If Atlantis project template is defined and has a name, replace tokens in the name and add the Atlantis project to the output
+			if !reflect.ValueOf(projectTemplate).IsZero() && projectTemplate.Name != "" {
+				affected.AtlantisProject = BuildAtlantisProjectName(context, projectTemplate.Name)
+			}
 		}
 	}
 
