@@ -432,7 +432,7 @@ The Atlantis config template and project template can be defined in the `setting
 
 - The `config_template` and `project_template` sections in `settings.atlantis` can be used to define the config and project template for the
   particular stack or component. If defined, the sections will override all the configurations in the `integrations.atlantis` section in `atmos.yaml`,
-  and will override the `config_template_name` and `project_template_name` attributes in `settings.atlantis`. These sections have the highest priority
+  and will override the `config_template_name` and `project_template_name` attributes in `settings.atlantis`. These sections have the highest priority.
 
 :::
 
