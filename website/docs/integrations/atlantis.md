@@ -227,10 +227,6 @@ Configuring the Atlantis Integration in the `settings.atlantis` sections in the 
               - run: terraform init
               - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
               - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
-      spacelift:
-        protect_from_deletion: true
-        stack_destructor_enabled: false
-        workspace_enabled: true
     vars:
       enabled: true
       environment: ue2
