@@ -477,7 +477,7 @@ Atlantis workflows can be defined in two different ways:
           - apply  
   ```
 
-- In [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html) using the `workflows` section and the `workflow`
+- In the [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html) using the `workflows` section and the `workflow`
   attribute in each Atlantis project in `atlantis.yaml`
 
   ```yaml title=atlantis.yaml
