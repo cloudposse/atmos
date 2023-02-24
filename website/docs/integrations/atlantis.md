@@ -502,7 +502,7 @@ Atlantis workflows can be defined in two different ways:
 
 <br/>
 
-If you use [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define Atlantis workflows, you don't need to define
+If you use the [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define the Atlantis workflows, you don't need to define
 workflows in the [CLI Config Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml` or in
 the `settings.atlantis.workflow_templates` section in the stack configurations. When you defined the workflows in the server config `workflows`
 section, you can reference a workflow to be used for each generated Atlantis project in the project templates.
