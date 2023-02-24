@@ -775,7 +775,7 @@ files" and propose a plan.
 
 Or you can use the [Dynamic Repo Config Generation](#dynamic-repo-config-generation) in the Atlantis pre-workflow hooks and
 the `atmos atlantis generate repo-config` command with the `--affected-only=true` flag to dynamically generate the `atlantis.yaml` file with the
-affected (changed) Atlantis projects.
+affected (changed) Atlantis projects to avoid the need of committing those files to VCS.
 
 ## References
 
