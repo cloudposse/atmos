@@ -426,7 +426,7 @@ The Atlantis config template and project template can be defined in the `setting
 - Atlantis integration can be configured in the `integrations.atlantis` section in `atmos.yaml`. If this is the only place where it's configured, then
   you need to pass the `--config-template` and `--project-template` flags to the `atmos atlantis generate repo-config` command
 
-- Atlantis Integration can also be configured in the `settings.atlantis` section in the stack configs. The `config_template_name`
+- Atlantis integration can also be configured in the `settings.atlantis` section in the stack configs. The `config_template_name`
   and `project_template_name` attributes can be used to select the config and project templates from the `integrations.atlantis` section
   in `atmos.yaml` instead of specifying the `--config-template` and `--project-template` flags on the command line
 
