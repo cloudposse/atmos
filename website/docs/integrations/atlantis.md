@@ -640,7 +640,7 @@ you don't want to store or generate a long-lived SSH private key on the server, 
 - In your GitHub Action, clone the remote repository using the [checkout](https://github.com/actions/checkout) GitHub Action
 
 - Execute `atmos atlantis generate repo-config --affected-only=true --repo-path <path_to_cloned_target_repo>` command with the `--repo-path` flag set
-  to the cloned repository path using the [`GITHUB_WORKSPACE`](https://docs.github.com/en/actions/learn-github-actions/variables) ENV variable (which
+  to the cloned repository path using the [`GITHUB_WORKSPACE`](https://docs.github.com/en/actions/learn-github-actions/variables) `ENV` variable (which
   points to the default working directory on the GitHub runner for steps, and the default location of the repository when using
   the [checkout](https://github.com/actions/checkout) action). For example:
 
