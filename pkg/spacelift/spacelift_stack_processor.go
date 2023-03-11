@@ -285,7 +285,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					for _, v := range spaceliftDependsOn {
-						spaceliftStackNameDependsOn, err := buildSpaceliftDependsOnStackName(
+						spaceliftStackNameDependsOn, err := e.BuildDependantStackNameFromDependsOn(
 							v.(string),
 							allStackNames,
 							contextPrefix,
@@ -330,30 +330,4 @@ func TransformStackConfigToSpaceliftStacks(
 	}
 
 	return res, nil
-}
-
-func buildSpaceliftDependsOnStackName(
-	dependsOn string,
-	allStackNames []string,
-	currentStackName string,
-	componentNamesInCurrentStack []string,
-	currentComponentName string,
-) (string, error) {
-	var spaceliftStackName string
-
-	if u.SliceContainsString(allStackNames, dependsOn) {
-		spaceliftStackName = dependsOn
-	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
-		spaceliftStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
-	} else {
-		errorMessage := fmt.Errorf("component '%[1]s' in stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
-			"but '%[3]s' is not a stack and not a terraform component in '%[2]s' stack",
-			currentComponentName,
-			currentStackName,
-			dependsOn)
-
-		return "", errorMessage
-	}
-
-	return spaceliftStackName, nil
 }

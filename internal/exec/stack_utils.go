@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -78,4 +79,31 @@ func ProcessComponentMetadata(
 	}
 
 	return componentMetadata, baseComponentName, componentIsAbstract
+}
+
+// BuildDependantStackNameFromDependsOn builds the dependant stack name from "depends_on" attribute
+func BuildDependantStackNameFromDependsOn(
+	dependsOn string,
+	allStackNames []string,
+	currentStackName string,
+	componentNamesInCurrentStack []string,
+	currentComponentName string,
+) (string, error) {
+	var dependantStackName string
+
+	if u.SliceContainsString(allStackNames, dependsOn) {
+		dependantStackName = dependsOn
+	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
+		dependantStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
+	} else {
+		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
+			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
+			currentComponentName,
+			currentStackName,
+			dependsOn)
+
+		return "", errorMessage
+	}
+
+	return dependantStackName, nil
 }
