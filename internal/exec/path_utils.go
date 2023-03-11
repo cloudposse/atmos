@@ -20,10 +20,10 @@ func constructTerraformComponentWorkingDir(cliConfig cfg.CliConfiguration, info 
 // constructTerraformComponentPlanfileName constructs the planfile name for a terraform component in a stack
 func constructTerraformComponentPlanfileName(info cfg.ConfigAndStacksInfo) string {
 	var planFile string
-	if len(info.ComponentFolderPrefix) == 0 {
+	if len(info.ComponentFolderPrefixReplaced) == 0 {
 		planFile = fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
 	} else {
-		planFile = fmt.Sprintf("%s-%s-%s.planfile", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
+		planFile = fmt.Sprintf("%s-%s-%s.planfile", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
 	}
 
 	return planFile
@@ -32,10 +32,10 @@ func constructTerraformComponentPlanfileName(info cfg.ConfigAndStacksInfo) strin
 // constructTerraformComponentVarfileName constructs the varfile name for a terraform component in a stack
 func constructTerraformComponentVarfileName(info cfg.ConfigAndStacksInfo) string {
 	var varFile string
-	if len(info.ComponentFolderPrefix) == 0 {
+	if len(info.ComponentFolderPrefixReplaced) == 0 {
 		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
 	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
+		varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
 	}
 
 	return varFile
@@ -70,10 +70,10 @@ func constructHelmfileComponentWorkingDir(cliConfig cfg.CliConfiguration, info c
 // constructHelmfileComponentVarfileName constructs the varfile name for a helmfile component in a stack
 func constructHelmfileComponentVarfileName(info cfg.ConfigAndStacksInfo) string {
 	var varFile string
-	if len(info.ComponentFolderPrefix) == 0 {
+	if len(info.ComponentFolderPrefixReplaced) == 0 {
 		varFile = fmt.Sprintf("%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.Component)
 	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefix, info.Component)
+		varFile = fmt.Sprintf("%s-%s-%s.helmfile.vars.yaml", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
 	}
 	return varFile
 }

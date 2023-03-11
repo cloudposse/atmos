@@ -390,6 +390,7 @@ func ProcessStacks(
 	} else {
 		configAndStacksInfo.Component = configAndStacksInfo.ComponentFromArg
 	}
+	configAndStacksInfo.ComponentFolderPrefixReplaced = strings.Replace(configAndStacksInfo.ComponentFolderPrefix, "/", "-", -1)
 
 	// Process base component path and name
 	if len(configAndStacksInfo.BaseComponentPath) > 0 {
@@ -403,6 +404,7 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentFolderPrefix = ""
 			configAndStacksInfo.BaseComponent = configAndStacksInfo.BaseComponentPath
 		}
+		configAndStacksInfo.ComponentFolderPrefixReplaced = strings.Replace(configAndStacksInfo.ComponentFolderPrefix, "/", "-", -1)
 	}
 
 	// Get the final component

@@ -5,7 +5,7 @@ components:
         spacelift:
           workspace_enabled: false
       metadata:
-        component: "test/test-component"
+        component: "test/test2/test-component-2"
       vars:
         enabled: true
         service_1_name: "test-test2-test-component-2-service-1"

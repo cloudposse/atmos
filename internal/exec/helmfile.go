@@ -13,13 +13,18 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteHelmfileCmd executes helmfile commands
+// ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands
 func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("helmfile", cmd, args)
 	if err != nil {
 		return err
 	}
 
+	return ExecuteHelmfile(info)
+}
+
+// ExecuteHelmfile executes helmfile commands
+func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
