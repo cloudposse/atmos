@@ -73,55 +73,10 @@ func TransformStackConfigToSpaceliftStacks(
 
 	var err error
 	res := map[string]any{}
-	var allStackNames []string
 
-	for stackName, stackConfig := range stacks {
-		config := stackConfig.(map[any]any)
-
-		if i, ok := config["components"]; ok {
-			componentsSection := i.(map[string]any)
-
-			if terraformComponents, ok := componentsSection["terraform"]; ok {
-				terraformComponentsMap := terraformComponents.(map[string]any)
-
-				for component, v := range terraformComponentsMap {
-					componentMap := v.(map[string]any)
-					componentVars := map[any]any{}
-					spaceliftSettings := map[any]any{}
-
-					if i, ok2 := componentMap["vars"]; ok2 {
-						componentVars = i.(map[any]any)
-					}
-
-					componentSettings := map[any]any{}
-					if i, ok2 := componentMap["settings"]; ok2 {
-						componentSettings = i.(map[any]any)
-					}
-
-					if i, ok2 := componentSettings["spacelift"]; ok2 {
-						spaceliftSettings = i.(map[any]any)
-					}
-
-					context := cfg.GetContextFromVars(componentVars)
-
-					var contextPrefix string
-
-					if stackNamePattern != "" {
-						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
-						if err != nil {
-							u.PrintErrorToStdError(err)
-							return nil, err
-						}
-					} else {
-						contextPrefix = strings.Replace(stackName, "/", "-", -1)
-					}
-
-					context.Component = component
-					spaceliftStackName, _ := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
-					allStackNames = append(allStackNames, strings.Replace(spaceliftStackName, "/", "-", -1))
-				}
-			}
-		}
+	allStackNames, err := e.BuildSpaceliftStackNames(stacks, stackNamePattern)
+	if err != nil {
+		return nil, err
 	}
 
 	for stackName, stackConfig := range stacks {

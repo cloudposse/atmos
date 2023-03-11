@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -17,4 +18,61 @@ func BuildSpaceliftStackName(spaceliftSettings map[any]any, context cfg.Context,
 		defaultSpaceliftStackNamePattern := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
 		return strings.Replace(defaultSpaceliftStackNamePattern, "/", "-", -1), contextPrefix
 	}
+}
+
+// BuildSpaceliftStackNames builds Spacelift stack names
+func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([]string, error) {
+	var allStackNames []string
+
+	for stackName, stackConfig := range stacks {
+		config := stackConfig.(map[any]any)
+
+		if i, ok := config["components"]; ok {
+			componentsSection := i.(map[string]any)
+
+			if terraformComponents, ok := componentsSection["terraform"]; ok {
+				terraformComponentsMap := terraformComponents.(map[string]any)
+
+				for component, v := range terraformComponentsMap {
+					componentMap := v.(map[string]any)
+					componentVars := map[any]any{}
+					spaceliftSettings := map[any]any{}
+
+					if i, ok2 := componentMap["vars"]; ok2 {
+						componentVars = i.(map[any]any)
+					}
+
+					componentSettings := map[any]any{}
+					if i, ok2 := componentMap["settings"]; ok2 {
+						componentSettings = i.(map[any]any)
+					}
+
+					if i, ok2 := componentSettings["spacelift"]; ok2 {
+						spaceliftSettings = i.(map[any]any)
+					}
+
+					context := cfg.GetContextFromVars(componentVars)
+
+					var contextPrefix string
+					var err error
+
+					if stackNamePattern != "" {
+						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
+						if err != nil {
+							u.PrintErrorToStdError(err)
+							return nil, err
+						}
+					} else {
+						contextPrefix = strings.Replace(stackName, "/", "-", -1)
+					}
+
+					context.Component = component
+					spaceliftStackName, _ := BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+					allStackNames = append(allStackNames, strings.Replace(spaceliftStackName, "/", "-", -1))
+				}
+			}
+		}
+	}
+
+	return allStackNames, nil
 }
