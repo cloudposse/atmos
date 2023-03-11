@@ -11,6 +11,7 @@ import:
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
   - catalog/terraform/test-component-2
+  - catalog/terraform/top-level-component2
 
 components:
   terraform:

@@ -12,5 +12,8 @@ components:
       settings:
         spacelift:
           workspace_enabled: true
+        dependencies:
+          depends_on:
+            - "test/test-component"
       vars:
         enabled: true

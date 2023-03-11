@@ -1,0 +1,17 @@
+import:
+  - catalog/terraform/services/top-level-service-?.*
+
+components:
+  terraform:
+    top-level-component2:
+      metadata:
+        component: "top-level-component1"
+      settings:
+        spacelift:
+          workspace_enabled: false
+        dependencies:
+          depends_on:
+            - "test/test-component"
+            - "test/test2/test-component-2"
+      vars:
+        enabled: true
