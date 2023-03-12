@@ -67,12 +67,14 @@ func ExecuteDescribeDependants(
 	stack string,
 ) ([]cfg.Dependant, error) {
 
-	var dependants []cfg.Dependant
+	dependants := []cfg.Dependant{}
 	var currentComponentVarsSection map[any]any
 	var currentComponentVars cfg.Context
+	var stackComponentsSection map[string]any
+	var stackComponentTypeSectionMap map[string]any
 	var stackComponentSettingsSection map[any]any
 	var stackComponentSettings cfg.Settings
-	var stackComponentsMap map[string]any
+	var stackSectionMap map[string]any
 	var stackComponentMap map[string]any
 	var ok bool
 
@@ -92,49 +94,70 @@ func ExecuteDescribeDependants(
 		return dependants, nil
 	}
 
-	// Convert the `vars` section to the `Context` structure
+	// Convert the current component `vars` section to the `Context` structure
 	err = mapstructure.Decode(currentComponentVarsSection, &currentComponentVars)
 	if err != nil {
 		return nil, err
 	}
 
 	// Iterate over all stacks and all components in the stacks
-	for stackName, stackComponents := range stacks {
-		if stackComponentsMap, ok = stackComponents.(map[string]any); !ok {
+	for stackName, stackSection := range stacks {
+		if stackSectionMap, ok = stackSection.(map[string]any); !ok {
 			continue
 		}
 
-		for stackComponentName, stackComponent := range stackComponentsMap {
-			if stackComponentMap, ok = stackComponent.(map[string]any); !ok {
+		// Get the stack `components` section
+		if stackComponentsSection, ok = stackSectionMap["components"].(map[string]any); !ok {
+			continue
+		}
+
+		for stackComponentType, stackComponentTypeSection := range stackComponentsSection {
+			if stackComponentTypeSectionMap, ok = stackComponentTypeSection.(map[string]any); !ok {
 				continue
 			}
 
-			// Get the stack component `settings`
-			if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[any]any); !ok {
-				continue
-			}
+			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
+				// Skip the current component
+				if stackComponentName == component {
+					continue
+				}
 
-			// Convert the `settings` section to the `Settings` structure
-			err = mapstructure.Decode(stackComponentSettingsSection, &stackComponentSettings)
-			if err != nil {
-				return nil, err
-			}
+				if stackComponentMap, ok = stackComponent.(map[string]any); !ok {
+					continue
+				}
 
-			// Skip if the stack component has an empty `settings.dependencies.depends_on` section
-			if reflect.ValueOf(stackComponentSettings).IsZero() ||
-				reflect.ValueOf(stackComponentSettings.Dependencies).IsZero() ||
-				reflect.ValueOf(stackComponentSettings.Dependencies.DependsOn).IsZero() {
-				continue
-			}
+				// Get the stack component `settings`
+				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[any]any); !ok {
+					continue
+				}
 
-			// Check if the stack component is a dependant of the current component
-			for _, context := range stackComponentSettings.Dependencies.DependsOn {
-				if context.Component == stackComponentName {
-					dependant := cfg.Dependant{
-						Component: stackComponentName,
-						Stack:     stackName,
+				// Convert the `settings` section to the `Settings` structure
+				err = mapstructure.Decode(stackComponentSettingsSection, &stackComponentSettings)
+				if err != nil {
+					return nil, err
+				}
+
+				// Skip if the stack component has an empty `settings.dependencies.depends_on` section
+				if reflect.ValueOf(stackComponentSettings).IsZero() ||
+					reflect.ValueOf(stackComponentSettings.Dependencies).IsZero() ||
+					reflect.ValueOf(stackComponentSettings.Dependencies.DependsOn).IsZero() {
+					continue
+				}
+
+				// Check if the stack component is a dependant of the current component
+				for _, context := range stackComponentSettings.Dependencies.DependsOn {
+					if context.Component == stackComponentName {
+						dependant := cfg.Dependant{
+							Component:     stackComponentName,
+							ComponentType: stackComponentType,
+							Stack:         stackName,
+							Namespace:     currentComponentVars.Namespace,
+							Tenant:        currentComponentVars.Tenant,
+							Environment:   currentComponentVars.Environment,
+							Stage:         currentComponentVars.Stage,
+						}
+						dependants = append(dependants, dependant)
 					}
-					dependants = append(dependants, dependant)
 				}
 			}
 		}
