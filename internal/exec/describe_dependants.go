@@ -111,23 +111,32 @@ func ExecuteDescribeDependants(
 			}
 
 			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
-				// Skip the current component
-				if stackComponentName == component {
-					continue
-				}
-
 				var stackComponentMap map[string]any
 				if stackComponentMap, ok = stackComponent.(map[string]any); !ok {
 					continue
 				}
 
-				// Get the current component `vars`
+				// Skip the stack component if it's the same as the current component
+				if stackComponentName == component {
+					continue
+				}
+
+				// Skip abstract components
+				if metadataSection, ok := stackComponentMap["metadata"].(map[any]any); ok {
+					if metadataType, ok := metadataSection["type"].(string); ok {
+						if metadataType == "abstract" {
+							continue
+						}
+					}
+				}
+
+				// Get the stack component `vars`
 				var stackComponentVarsSection map[any]any
 				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[any]any); !ok {
 					return dependants, nil
 				}
 
-				// Convert the current component `vars` section to the `Context` structure
+				// Convert the stack component `vars` section to the `Context` structure
 				var stackComponentVars cfg.Context
 				err = mapstructure.Decode(stackComponentVarsSection, &stackComponentVars)
 				if err != nil {

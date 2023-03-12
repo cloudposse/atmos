@@ -345,6 +345,10 @@ type Affected struct {
 	Component       string `yaml:"component" json:"component" mapstructure:"component"`
 	ComponentType   string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
 	ComponentPath   string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Namespace       string `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
+	Tenant          string `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
+	Environment     string `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Stage           string `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
 	Stack           string `yaml:"stack" json:"stack" mapstructure:"stack"`
 	SpaceliftStack  string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject string `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
@@ -383,10 +387,10 @@ type Dependant struct {
 	Component       string `yaml:"component" json:"component" mapstructure:"component"`
 	ComponentType   string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
 	ComponentPath   string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
-	Namespace       string `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
-	Tenant          string `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
-	Environment     string `yaml:"environment" json:"environment" mapstructure:"environment"`
-	Stage           string `yaml:"stage" json:"stage" mapstructure:"stage"`
+	Namespace       string `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
+	Tenant          string `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
+	Environment     string `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Stage           string `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
 	Stack           string `yaml:"stack" json:"stack" mapstructure:"stack"`
 	SpaceliftStack  string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject string `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
