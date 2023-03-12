@@ -14,12 +14,12 @@ components:
           workspace_enabled: true
         dependencies:
           depends_on:
-            "test/test-component":
+            "test/test-component-override":
               # If the `context` (namespace, tenant, environment, stage) is not provided, the `component` is from the same stack as this component
-              component: "test/test-component"
-            "dev-test/test-component":
+              component: "test/test-component-override"
+            "test-1-test/test-component":
               # This component depends on `test/test-component` from the `dev` stage
               component: "test/test-component"
-              stage: dev
+              stage: "test-1"
       vars:
         enabled: true

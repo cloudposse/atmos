@@ -125,6 +125,19 @@ func ExecuteDescribeDependants(
 					continue
 				}
 
+				// Get the current component `vars`
+				var stackComponentVarsSection map[any]any
+				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[any]any); !ok {
+					return dependants, nil
+				}
+
+				// Convert the current component `vars` section to the `Context` structure
+				var stackComponentVars cfg.Context
+				err = mapstructure.Decode(stackComponentVarsSection, &stackComponentVars)
+				if err != nil {
+					return nil, err
+				}
+
 				// Get the stack component `settings`
 				var stackComponentSettingsSection map[any]any
 				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[any]any); !ok {
@@ -148,19 +161,23 @@ func ExecuteDescribeDependants(
 				// Check if the stack component is a dependant of the current component
 				for _, stackComponentSettingsContext := range stackComponentSettings.Dependencies.DependsOn {
 					if stackComponentSettingsContext.Component == component &&
+						// If `namespace` is not specified in `depends_on` or it's equal to the stack component `namespace`
 						(stackComponentSettingsContext.Namespace == "" || stackComponentSettingsContext.Namespace == currentComponentVars.Namespace) &&
+						// If `tenant` is not specified in `depends_on` or it's equal to the stack component `tenant`
 						(stackComponentSettingsContext.Tenant == "" || stackComponentSettingsContext.Tenant == currentComponentVars.Tenant) &&
+						// If `environment` is not specified in `depends_on` or it's equal to the stack component `environment`
 						(stackComponentSettingsContext.Environment == "" || stackComponentSettingsContext.Environment == currentComponentVars.Environment) &&
+						// If `stage` is not specified in `depends_on` or it's equal to the stack component `stage`
 						(stackComponentSettingsContext.Stage == "" || stackComponentSettingsContext.Stage == currentComponentVars.Stage) {
 
 						dependant := cfg.Dependant{
 							Component:     stackComponentName,
 							ComponentType: stackComponentType,
 							Stack:         stackName,
-							Namespace:     currentComponentVars.Namespace,
-							Tenant:        currentComponentVars.Tenant,
-							Environment:   currentComponentVars.Environment,
-							Stage:         currentComponentVars.Stage,
+							Namespace:     stackComponentVars.Namespace,
+							Tenant:        stackComponentVars.Tenant,
+							Environment:   stackComponentVars.Environment,
+							Stage:         stackComponentVars.Stage,
 						}
 
 						// Check `component` section and add `ComponentPath` to the output
