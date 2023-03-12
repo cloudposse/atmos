@@ -160,37 +160,70 @@ func ExecuteDescribeDependants(
 
 				// Check if the stack component is a dependant of the current component
 				for _, stackComponentSettingsContext := range stackComponentSettings.Dependencies.DependsOn {
-					if stackComponentSettingsContext.Component == component &&
-						// If `namespace` is not specified in `depends_on` or it's equal to the stack component `namespace`
-						(stackComponentSettingsContext.Namespace == "" || stackComponentSettingsContext.Namespace == stackComponentVars.Namespace) &&
-						// If `tenant` is not specified in `depends_on` or it's equal to the stack component `tenant`
-						(stackComponentSettingsContext.Tenant == "" || stackComponentSettingsContext.Tenant == stackComponentVars.Tenant) &&
-						// If `environment` is not specified in `depends_on` or it's equal to the stack component `environment`
-						(stackComponentSettingsContext.Environment == "" || stackComponentSettingsContext.Environment == stackComponentVars.Environment) &&
-						// If `stage` is not specified in `depends_on` or it's equal to the stack component `stage`
-						(stackComponentSettingsContext.Stage == "" || stackComponentSettingsContext.Stage == stackComponentVars.Stage) {
-
-						dependant := cfg.Dependant{
-							Component:     stackComponentName,
-							ComponentType: stackComponentType,
-							Stack:         stackName,
-							Namespace:     stackComponentVars.Namespace,
-							Tenant:        stackComponentVars.Tenant,
-							Environment:   stackComponentVars.Environment,
-							Stage:         stackComponentVars.Stage,
-						}
-
-						// Check `component` section and add `ComponentPath` (phusical path to the component) to the output
-						if stackComponentSection, ok := stackComponentMap["component"].(string); ok {
-							if stackComponentType == "terraform" {
-								dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
-							} else if stackComponentType == "helmfile" {
-								dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
-							}
-						}
-
-						dependants = append(dependants, dependant)
+					if stackComponentSettingsContext.Component != component {
+						continue
 					}
+
+					if stackComponentSettingsContext.Namespace != "" {
+						if stackComponentSettingsContext.Namespace != currentComponentVars.Namespace {
+							continue
+						}
+					} else {
+						if currentComponentVars.Namespace != stackComponentVars.Namespace {
+							continue
+						}
+					}
+
+					if stackComponentSettingsContext.Tenant != "" {
+						if stackComponentSettingsContext.Tenant != currentComponentVars.Tenant {
+							continue
+						}
+					} else {
+						if currentComponentVars.Tenant != stackComponentVars.Tenant {
+							continue
+						}
+					}
+
+					if stackComponentSettingsContext.Environment != "" {
+						if stackComponentSettingsContext.Environment != currentComponentVars.Environment {
+							continue
+						}
+					} else {
+						if currentComponentVars.Environment != stackComponentVars.Environment {
+							continue
+						}
+					}
+
+					if stackComponentSettingsContext.Stage != "" {
+						if stackComponentSettingsContext.Stage != currentComponentVars.Stage {
+							continue
+						}
+					} else {
+						if currentComponentVars.Stage != stackComponentVars.Stage {
+							continue
+						}
+					}
+
+					dependant := cfg.Dependant{
+						Component:     stackComponentName,
+						ComponentType: stackComponentType,
+						Stack:         stackName,
+						Namespace:     stackComponentVars.Namespace,
+						Tenant:        stackComponentVars.Tenant,
+						Environment:   stackComponentVars.Environment,
+						Stage:         stackComponentVars.Stage,
+					}
+
+					// Check `component` section and add `ComponentPath` (physical path to the component) to the output
+					if stackComponentSection, ok := stackComponentMap["component"].(string); ok {
+						if stackComponentType == "terraform" {
+							dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
+						} else if stackComponentType == "helmfile" {
+							dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
+						}
+					}
+
+					dependants = append(dependants, dependant)
 				}
 			}
 		}
