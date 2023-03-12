@@ -178,7 +178,7 @@ where:
 
 - `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
   Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled` section
-  or via inheritance) and if the component is not abstract (`metadata.type` is not set to `abstract`)
+  or via inheritance)
 
 - `atlantis_project` - the affected Atlantis project name. It will be included only if the Atlantis integration is configured in
   the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
@@ -193,7 +193,18 @@ where:
 
 <br/>
 
-For example:
+:::note
+
+Abstract Atmos components (`metadata.type` is set to `abstract`) are not included in the output since they serve as blueprints for other
+Atmos components and are not meant to be provisioned.
+
+:::
+
+## Output Example
+
+```shell
+atmos describe affected
+```
 
 ```json
 [
