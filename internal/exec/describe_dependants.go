@@ -162,13 +162,13 @@ func ExecuteDescribeDependants(
 				for _, stackComponentSettingsContext := range stackComponentSettings.Dependencies.DependsOn {
 					if stackComponentSettingsContext.Component == component &&
 						// If `namespace` is not specified in `depends_on` or it's equal to the stack component `namespace`
-						(stackComponentSettingsContext.Namespace == "" || stackComponentSettingsContext.Namespace == currentComponentVars.Namespace) &&
+						(stackComponentSettingsContext.Namespace == "" || stackComponentSettingsContext.Namespace == stackComponentVars.Namespace) &&
 						// If `tenant` is not specified in `depends_on` or it's equal to the stack component `tenant`
-						(stackComponentSettingsContext.Tenant == "" || stackComponentSettingsContext.Tenant == currentComponentVars.Tenant) &&
+						(stackComponentSettingsContext.Tenant == "" || stackComponentSettingsContext.Tenant == stackComponentVars.Tenant) &&
 						// If `environment` is not specified in `depends_on` or it's equal to the stack component `environment`
-						(stackComponentSettingsContext.Environment == "" || stackComponentSettingsContext.Environment == currentComponentVars.Environment) &&
+						(stackComponentSettingsContext.Environment == "" || stackComponentSettingsContext.Environment == stackComponentVars.Environment) &&
 						// If `stage` is not specified in `depends_on` or it's equal to the stack component `stage`
-						(stackComponentSettingsContext.Stage == "" || stackComponentSettingsContext.Stage == currentComponentVars.Stage) {
+						(stackComponentSettingsContext.Stage == "" || stackComponentSettingsContext.Stage == stackComponentVars.Stage) {
 
 						dependant := cfg.Dependant{
 							Component:     stackComponentName,
@@ -180,7 +180,7 @@ func ExecuteDescribeDependants(
 							Stage:         stackComponentVars.Stage,
 						}
 
-						// Check `component` section and add `ComponentPath` to the output
+						// Check `component` section and add `ComponentPath` (phusical path to the component) to the output
 						if stackComponentSection, ok := stackComponentMap["component"].(string); ok {
 							if stackComponentType == "terraform" {
 								dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
