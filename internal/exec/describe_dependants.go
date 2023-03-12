@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"path"
 	"reflect"
 
 	"github.com/mitchellh/mapstructure"
@@ -68,14 +69,6 @@ func ExecuteDescribeDependants(
 ) ([]cfg.Dependant, error) {
 
 	dependants := []cfg.Dependant{}
-	var currentComponentVarsSection map[any]any
-	var currentComponentVars cfg.Context
-	var stackComponentsSection map[string]any
-	var stackComponentTypeSectionMap map[string]any
-	var stackComponentSettingsSection map[any]any
-	var stackComponentSettings cfg.Settings
-	var stackSectionMap map[string]any
-	var stackComponentMap map[string]any
 	var ok bool
 
 	// Get all stacks with all components
@@ -90,11 +83,13 @@ func ExecuteDescribeDependants(
 	}
 
 	// Get the current component `vars`
+	var currentComponentVarsSection map[any]any
 	if currentComponentVarsSection, ok = currentComponentSection["vars"].(map[any]any); !ok {
 		return dependants, nil
 	}
 
 	// Convert the current component `vars` section to the `Context` structure
+	var currentComponentVars cfg.Context
 	err = mapstructure.Decode(currentComponentVarsSection, &currentComponentVars)
 	if err != nil {
 		return nil, err
@@ -102,16 +97,19 @@ func ExecuteDescribeDependants(
 
 	// Iterate over all stacks and all components in the stacks
 	for stackName, stackSection := range stacks {
+		var stackSectionMap map[string]any
 		if stackSectionMap, ok = stackSection.(map[string]any); !ok {
 			continue
 		}
 
 		// Get the stack `components` section
+		var stackComponentsSection map[string]any
 		if stackComponentsSection, ok = stackSectionMap["components"].(map[string]any); !ok {
 			continue
 		}
 
 		for stackComponentType, stackComponentTypeSection := range stackComponentsSection {
+			var stackComponentTypeSectionMap map[string]any
 			if stackComponentTypeSectionMap, ok = stackComponentTypeSection.(map[string]any); !ok {
 				continue
 			}
@@ -122,16 +120,19 @@ func ExecuteDescribeDependants(
 					continue
 				}
 
+				var stackComponentMap map[string]any
 				if stackComponentMap, ok = stackComponent.(map[string]any); !ok {
 					continue
 				}
 
 				// Get the stack component `settings`
+				var stackComponentSettingsSection map[any]any
 				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[any]any); !ok {
 					continue
 				}
 
 				// Convert the `settings` section to the `Settings` structure
+				var stackComponentSettings cfg.Settings
 				err = mapstructure.Decode(stackComponentSettingsSection, &stackComponentSettings)
 				if err != nil {
 					return nil, err
@@ -145,8 +146,13 @@ func ExecuteDescribeDependants(
 				}
 
 				// Check if the stack component is a dependant of the current component
-				for _, context := range stackComponentSettings.Dependencies.DependsOn {
-					if context.Component == stackComponentName {
+				for _, stackComponentSettingsContext := range stackComponentSettings.Dependencies.DependsOn {
+					if stackComponentSettingsContext.Component == component &&
+						(stackComponentSettingsContext.Namespace == "" || stackComponentSettingsContext.Namespace == currentComponentVars.Namespace) &&
+						(stackComponentSettingsContext.Tenant == "" || stackComponentSettingsContext.Tenant == currentComponentVars.Tenant) &&
+						(stackComponentSettingsContext.Environment == "" || stackComponentSettingsContext.Environment == currentComponentVars.Environment) &&
+						(stackComponentSettingsContext.Stage == "" || stackComponentSettingsContext.Stage == currentComponentVars.Stage) {
+
 						dependant := cfg.Dependant{
 							Component:     stackComponentName,
 							ComponentType: stackComponentType,
@@ -156,6 +162,16 @@ func ExecuteDescribeDependants(
 							Environment:   currentComponentVars.Environment,
 							Stage:         currentComponentVars.Stage,
 						}
+
+						// Check `component` section and add `ComponentPath` to the output
+						if stackComponentSection, ok := stackComponentMap["component"].(string); ok {
+							if stackComponentType == "terraform" {
+								dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
+							} else if stackComponentType == "helmfile" {
+								dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
+							}
+						}
+
 						dependants = append(dependants, dependant)
 					}
 				}
