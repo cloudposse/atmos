@@ -110,7 +110,12 @@ func BuildDependantStackNameFromDependsOn(
 }
 
 // BuildComponentPath builds component path (path to the component's physical location on disk)
-func BuildComponentPath(cliConfig cfg.CliConfiguration, componentSectionMap map[string]any, componentType string) string {
+func BuildComponentPath(
+	cliConfig cfg.CliConfiguration,
+	componentSectionMap map[string]any,
+	componentType string,
+) string {
+
 	var componentPath string
 
 	if stackComponentSection, ok := componentSectionMap["component"].(string); ok {
