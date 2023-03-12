@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"path"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -106,4 +107,19 @@ func BuildDependantStackNameFromDependsOn(
 	}
 
 	return dependantStackName, nil
+}
+
+// BuildComponentPath builds component path (path to the component's physical location on disk)
+func BuildComponentPath(cliConfig cfg.CliConfiguration, componentSectionMap map[string]any, componentType string) string {
+	var componentPath string
+
+	if stackComponentSection, ok := componentSectionMap["component"].(string); ok {
+		if componentType == "terraform" {
+			componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
+		} else if componentType == "helmfile" {
+			componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
+		}
+	}
+
+	return componentPath
 }

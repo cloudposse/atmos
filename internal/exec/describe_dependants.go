@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"path"
 	"reflect"
 	"strings"
 
@@ -197,21 +196,13 @@ func ExecuteDescribeDependants(
 
 					dependant := cfg.Dependant{
 						Component:     stackComponentName,
+						ComponentPath: BuildComponentPath(cliConfig, stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
 						Namespace:     stackComponentVars.Namespace,
 						Tenant:        stackComponentVars.Tenant,
 						Environment:   stackComponentVars.Environment,
 						Stage:         stackComponentVars.Stage,
-					}
-
-					// Check `component` section and add `ComponentPath` (physical path to the component) to the output
-					if stackComponentSection, ok := stackComponentMap["component"].(string); ok {
-						if stackComponentType == "terraform" {
-							dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
-						} else if stackComponentType == "helmfile" {
-							dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
-						}
 					}
 
 					// Add Spacelift stack and Atlantis project if they are configured for the stack component
