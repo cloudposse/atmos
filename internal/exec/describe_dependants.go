@@ -3,6 +3,7 @@ package exec
 import (
 	"path"
 	"reflect"
+	"strings"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -210,6 +211,50 @@ func ExecuteDescribeDependants(
 							dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
 						} else if stackComponentType == "helmfile" {
 							dependant.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
+						}
+					}
+
+					// Add Spacelift stack and Atlantis project if they are configured for the stack component
+					if stackComponentType == "terraform" {
+						var atlantisProjectTemplate cfg.AtlantisProjectConfig
+						var spaceliftSettingsSection map[any]any
+
+						if i, ok2 := stackComponentSettingsSection["spacelift"]; ok2 {
+							spaceliftSettingsSection = i.(map[any]any)
+						}
+
+						context := cfg.GetContextFromVars(stackComponentVarsSection)
+						context.Component = strings.Replace(stackComponentName, "/", "-", -1)
+
+						// Spacelift stack
+						if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
+							contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+							if err != nil {
+								return nil, err
+							}
+
+							spaceliftStackName, _ := BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
+							dependant.SpaceliftStack = spaceliftStackName
+						}
+
+						// Atlantis project
+						if atlantisSettingsSection, ok := stackComponentSettingsSection["atlantis"].(map[any]any); ok {
+							// 'settings.atlantis.project_template' has higher priority than 'settings.atlantis.project_template_name'
+							if atlantisSettingsProjectTemplate, ok := atlantisSettingsSection["project_template"].(map[any]any); ok {
+								err := mapstructure.Decode(atlantisSettingsProjectTemplate, &atlantisProjectTemplate)
+								if err != nil {
+									return nil, err
+								}
+							} else if atlantisSettingsProjectTemplateName, ok := atlantisSettingsSection["project_template_name"].(string); ok && atlantisSettingsProjectTemplateName != "" {
+								if pt, ok := cliConfig.Integrations.Atlantis.ProjectTemplates[atlantisSettingsProjectTemplateName]; ok {
+									atlantisProjectTemplate = pt
+								}
+							}
+
+							// If Atlantis project template is defined and has a name, replace tokens in the name and add the Atlantis project to the output
+							if !reflect.ValueOf(atlantisProjectTemplate).IsZero() && atlantisProjectTemplate.Name != "" {
+								dependant.AtlantisProject = BuildAtlantisProjectName(context, atlantisProjectTemplate.Name)
+							}
 						}
 					}
 
