@@ -21,9 +21,11 @@ var vendorDiffCmd = &cobra.Command{
 }
 
 func init() {
-	vendorCmd.AddCommand(vendorDiffCmd)
 	vendorDiffCmd.PersistentFlags().StringP("component", "c", "", "atmos vendor diff --component <component>")
 	vendorDiffCmd.PersistentFlags().StringP("stack", "s", "", "atmos vendor diff --stack <stack>")
 	vendorDiffCmd.PersistentFlags().StringP("type", "t", "terraform", "atmos vendor diff --component <component> --type (terraform|helmfile)")
 	vendorDiffCmd.PersistentFlags().Bool("dry-run", false, "atmos vendor diff --component <component> --dry-run")
+
+	// Since this command is not implemented yet, exclude it from `atmos help`
+	// vendorCmd.AddCommand(vendorDiffCmd)
 }

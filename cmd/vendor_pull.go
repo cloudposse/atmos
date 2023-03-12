@@ -21,9 +21,10 @@ var vendorPullCmd = &cobra.Command{
 }
 
 func init() {
-	vendorCmd.AddCommand(vendorPullCmd)
 	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "atmos vendor pull --component <component>")
 	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "atmos vendor pull --stack <stack>")
 	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "atmos vendor pull --component <component> --type=terraform|helmfile")
 	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "atmos vendor pull --component <component> --dry-run")
+
+	vendorCmd.AddCommand(vendorPullCmd)
 }
