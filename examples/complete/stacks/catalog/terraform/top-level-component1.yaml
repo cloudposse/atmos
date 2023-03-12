@@ -17,9 +17,9 @@ components:
             "test/test-component-override":
               # If the `context` (namespace, tenant, environment, stage) is not provided, the `component` is from the same stack as this component
               component: "test/test-component-override"
-            "test-1-test/test-component":
-              # This component depends on `test/test-component` from the `test-1` stage only
+            "dev-test/test-component":
+              # This component (in any stage) depends on `test/test-component` from the `dev` stage only
               component: "test/test-component"
-              stage: "test-1"
+              stage: "dev"
       vars:
         enabled: true

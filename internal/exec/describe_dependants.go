@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"fmt"
 	"path"
 	"reflect"
 
@@ -52,7 +51,6 @@ func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println()
 	err = printOrWriteToFile(format, file, dependants)
 	if err != nil {
 		return err
@@ -165,43 +163,35 @@ func ExecuteDescribeDependants(
 					}
 
 					if stackComponentSettingsContext.Namespace != "" {
-						if stackComponentSettingsContext.Namespace != currentComponentVars.Namespace {
+						if stackComponentSettingsContext.Namespace != stackComponentVars.Namespace {
 							continue
 						}
-					} else {
-						if currentComponentVars.Namespace != stackComponentVars.Namespace {
-							continue
-						}
+					} else if currentComponentVars.Namespace != stackComponentVars.Namespace {
+						continue
 					}
 
 					if stackComponentSettingsContext.Tenant != "" {
-						if stackComponentSettingsContext.Tenant != currentComponentVars.Tenant {
+						if stackComponentSettingsContext.Tenant != stackComponentVars.Tenant {
 							continue
 						}
-					} else {
-						if currentComponentVars.Tenant != stackComponentVars.Tenant {
-							continue
-						}
+					} else if currentComponentVars.Tenant != stackComponentVars.Tenant {
+						continue
 					}
 
 					if stackComponentSettingsContext.Environment != "" {
-						if stackComponentSettingsContext.Environment != currentComponentVars.Environment {
+						if stackComponentSettingsContext.Environment != stackComponentVars.Environment {
 							continue
 						}
-					} else {
-						if currentComponentVars.Environment != stackComponentVars.Environment {
-							continue
-						}
+					} else if currentComponentVars.Environment != stackComponentVars.Environment {
+						continue
 					}
 
 					if stackComponentSettingsContext.Stage != "" {
-						if stackComponentSettingsContext.Stage != currentComponentVars.Stage {
+						if stackComponentSettingsContext.Stage != stackComponentVars.Stage {
 							continue
 						}
-					} else {
-						if currentComponentVars.Stage != stackComponentVars.Stage {
-							continue
-						}
+					} else if currentComponentVars.Stage != stackComponentVars.Stage {
+						continue
 					}
 
 					dependant := cfg.Dependant{
