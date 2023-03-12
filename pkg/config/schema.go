@@ -59,16 +59,16 @@ type Logs struct {
 }
 
 type Context struct {
-	Namespace     string
-	Tenant        string
-	Environment   string
-	Stage         string
-	Region        string
-	Component     string
-	BaseComponent string
-	ComponentPath string
-	Workspace     string
-	Attributes    []string
+	Namespace     string   `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
+	Tenant        string   `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
+	Environment   string   `yaml:"environment" json:"environment" mapstructure:"environment"`
+	Stage         string   `yaml:"stage" json:"stage" mapstructure:"stage"`
+	Region        string   `yaml:"region" json:"region" mapstructure:"region"`
+	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
+	BaseComponent string   `yaml:"base_component" json:"base_component" mapstructure:"base_component"`
+	ComponentPath string   `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Workspace     string   `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
+	Attributes    []string `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
 }
 
 type ArgsAndFlagsInfo struct {
@@ -369,4 +369,18 @@ type BaseComponentConfig struct {
 type StackImport struct {
 	Path    string         `yaml:"path" json:"path" mapstructure:"path"`
 	Context map[string]any `yaml:"context" json:"context" mapstructure:"context"`
+}
+
+// Dependencies
+
+type DependsOn map[string]Context
+
+type Dependencies struct {
+	DependsOn DependsOn `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
+}
+
+// Settings
+
+type Settings struct {
+	Dependencies Dependencies `yaml:"dependencies" json:"dependencies" mapstructure:"dependencies"`
 }
