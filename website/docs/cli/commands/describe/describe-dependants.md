@@ -44,8 +44,8 @@ For example, you can specify:
 - `namespace` if the `component` is from a different Organization
 - `tenant` if the `component` is from a different Organizational Unit
 - `environment` if the `component` is from a different region
-- `stage` if the `component` is from a different stage
-- `tenant`, `environment` and `stage` if the component if from a different Atmos stack (e.g. `tenant1-ue2-dev`)
+- `stage` if the `component` is from a different account
+- `tenant`, `environment` and `stage` if the component is from a different Atmos stack (e.g. `tenant1-ue2-dev`)
 
 <br/>
 
@@ -111,7 +111,31 @@ components:
 <br/>
 
 Having the `top-level-component` and `top-level-component2` components configured as shown above, we can now execute the following Atmos command
-to show all the components and stacks that are dependants of the `test/test-component` component in the `tenant1-ue2-test-1` stack:
+to show all the components and stacks that are dependants of the `test/test-component` component in the `tenant1-ue2-dev` stack:
+
+```shell
+atmos describe dependants test/test-component -s tenant1-ue2-dev
+```
+
+```json
+[
+  {
+    "component": "top-level-component1",
+    "component_type": "terraform",
+    "component_path": "examples/complete/components/terraform/top-level-component1",
+    "namespace": "cp",
+    "tenant": "tenant1",
+    "environment": "ue2",
+    "stage": "dev",
+    "stack": "tenant1-ue2-dev",
+    "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
+    "atlantis_project": "tenant1-ue2-dev-top-level-component1"
+  }
+]
+```
+
+Similarly, the following Atmos command shows all the components and stacks that are dependants of the `test/test-component` component in
+the `tenant1-ue2-test-1` stack:
 
 ```shell
 atmos describe dependants test/test-component -s tenant1-ue2-test-1
@@ -145,31 +169,19 @@ atmos describe dependants test/test-component -s tenant1-ue2-test-1
 ]
 ```
 
-Similarly, the following Atmos command shows all the components and stacks that are dependants of the `test/test-component` component in
-the `tenant1-ue2-dev` stack:
-
-```shell
-atmos describe dependants test/test-component -s tenant1-ue2-dev
-```
-
-```json
-[
-  {
-    "component": "top-level-component1",
-    "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/top-level-component1",
-    "namespace": "cp",
-    "tenant": "tenant1",
-    "environment": "ue2",
-    "stage": "dev",
-    "stack": "tenant1-ue2-dev",
-    "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
-    "atlantis_project": "tenant1-ue2-dev-top-level-component1"
-  }
-]
-```
-
 <br/>
+
+After the `test/test-component` has been provisioned, you can use the outputs to perform the following actions:
+
+- Provision the dependent components by executing the Atmos commands `atmos terraform apply top-level-component1 -s tenant1-ue2-test-1` and
+  `atmos terraform apply top-level-component2 -s tenant1-ue2-test-1` (on the command line or from a GitHub Action)
+
+- Trigger the dependent Spacelift stack (from a GitHub Action by using the [spacectl](https://github.com/spacelift-io/spacectl) CLI, or by using an
+  OPA [Trigger](https://docs.spacelift.io/concepts/policy/trigger-policy)
+  policy, or by using
+  the [spacelift_stack_dependency](https://registry.terraform.io/providers/spacelift-io/spacelift/latest/docs/resources/stack_dependency) resource)
+
+- Trigger the dependent Atlantis project
 
 ## Usage
 
