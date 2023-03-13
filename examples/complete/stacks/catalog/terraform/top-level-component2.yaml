@@ -12,10 +12,12 @@ components:
         dependencies:
           depends_on:
             "test/test-component":
-              # If the `context` (namespace, tenant, environment, stage) is not provided, the `component` is from the same stack as this component
+              # If the `context` (namespace, tenant, environment, stage) is not provided,
+              # the `component` is from the same stack as this component
               component: "test/test-component"
             "test/test2/test-component-2":
-              # If the `context` (namespace, tenant, environment, stage) is not provided, the `component` is from the same stack as this component
+              # If the `context` (namespace, tenant, environment, stage) is not provided,
+              # the `component` is from the same stack as this component
               component: "test/test2/test-component-2"
       vars:
         enabled: true
