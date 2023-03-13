@@ -12,6 +12,67 @@ Use this command to show a list of Atmos components in Atmos stacks that depend 
 
 ## Description
 
+In Atmos, you can define stack and component dependencies by using the `settings.dependencies` section.
+
+The `settings.dependencies.depends_on` subsection is used to define all the Atmos components (in the same or different stacks) that the current
+component depends on.
+
+:::note
+
+The `depends_on` subsection is used to define Atmos component dependencies instead of the `settings.dependencies` section because
+the `settings.dependencies` section is a parent section for all types of stack and component dependencies. In the future we could add other
+functionality to define various types of component and stack dependencies by using different subsections in the `settings.dependencies` section.
+
+:::
+
+<br/>
+
+In the following example we specify that the `top-level-component1` Atmos component depends on the following:
+
+- The `test/test-component-override` component in the same Atmos stack
+- The `test/test-component` component in an Atmos stack identified by the `dev` stage
+
+```yaml title="examples/complete/stacks/catalog/terraform/top-level-component1.yaml"
+components:
+  terraform:
+    top-level-component1:
+      settings:
+        dependencies:
+          depends_on:
+            "test/test-component-override":
+              # If the `context` (namespace, tenant, environment, stage) is not provided, the `component` is from the same stack as this component
+              component: "test/test-component-override"
+            "dev-test/test-component":
+              # This component (in any stage) always depends on `test/test-component` from the `dev` stage
+              component: "test/test-component"
+              stage: "dev"
+      vars:
+        enabled: true
+```
+
+In the following example we specify that the `top-level-component2` Atmos component depends on the following:
+
+- The `test/test-component` component in the same Atmos stack
+- The `test/test2/test-component-2` in the same Atmos stack
+
+```yaml title="examples/complete/stacks/catalog/terraform/top-level-component2.yaml"
+components:
+  terraform:
+    top-level-component2:
+      metadata:
+        component: "top-level-component1"
+      settings:
+        dependencies:
+          depends_on:
+            "test/test-component":
+              # If the `context` (namespace, tenant, environment, stage) is not provided, the `component` is from the same stack as this component
+              component: "test/test-component"
+            "test/test2/test-component-2":
+              # If the `context` (namespace, tenant, environment, stage) is not provided, the `component` is from the same stack as this component
+              component: "test/test2/test-component-2"
+      vars:
+        enabled: true
+```
 
 ## Usage
 
