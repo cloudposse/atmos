@@ -120,6 +120,18 @@ atmos describe dependants test/test-component -s tenant1-ue2-test-1
 ```json
 [
   {
+    "component": "top-level-component1",
+    "component_type": "terraform",
+    "component_path": "examples/complete/components/terraform/top-level-component1",
+    "namespace": "cp",
+    "tenant": "tenant1",
+    "environment": "ue2",
+    "stage": "test-1",
+    "stack": "tenant1-ue2-test-1",
+    "spacelift_stack": "tenant1-ue2-test-1-top-level-component1",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component1"
+  },
+  {
     "component": "top-level-component2",
     "component_type": "terraform",
     "component_path": "examples/complete/components/terraform/top-level-component1",
@@ -127,17 +139,8 @@ atmos describe dependants test/test-component -s tenant1-ue2-test-1
     "tenant": "tenant1",
     "environment": "ue2",
     "stage": "test-1",
-    "stack": "tenant1-ue2-test-1"
-  },
-  {
-    "component": "top-level-component1",
-    "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/top-level-component1",
-    "namespace": "cp",
-    "tenant": "tenant1",
-    "environment": "ue2",
-    "stage": "dev",
-    "stack": "tenant1-ue2-dev"
+    "stack": "tenant1-ue2-test-1",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component2"
   }
 ]
 ```
@@ -159,7 +162,9 @@ atmos describe dependants test/test-component -s tenant1-ue2-dev
     "tenant": "tenant1",
     "environment": "ue2",
     "stage": "dev",
-    "stack": "tenant1-ue2-dev"
+    "stack": "tenant1-ue2-dev",
+    "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
+    "atlantis_project": "tenant1-ue2-dev-top-level-component1"
   }
 ]
 ```
