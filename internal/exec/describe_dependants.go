@@ -158,13 +158,12 @@ func ExecuteDescribeDependants(
 
 				// Skip if the stack component has an empty `settings.dependencies.depends_on` section
 				if reflect.ValueOf(stackComponentSettings).IsZero() ||
-					reflect.ValueOf(stackComponentSettings.Dependencies).IsZero() ||
-					reflect.ValueOf(stackComponentSettings.Dependencies.DependsOn).IsZero() {
+					reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
 					continue
 				}
 
 				// Check if the stack component is a dependant of the current component
-				for _, stackComponentSettingsContext := range stackComponentSettings.Dependencies.DependsOn {
+				for _, stackComponentSettingsContext := range stackComponentSettings.DependsOn {
 					if stackComponentSettingsContext.Component != component {
 						continue
 					}

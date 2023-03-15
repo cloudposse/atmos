@@ -19,8 +19,9 @@ func TestDescribeDependants(t *testing.T) {
 
 	dependants, err := e.ExecuteDescribeDependants(cliConfig, component, stack)
 	assert.Nil(t, err)
+	assert.Equal(t, 2, len(dependants))
 
-	componentSectionYaml, err := yaml.Marshal(dependants)
+	dependantsYaml, err := yaml.Marshal(dependants)
 	assert.Nil(t, err)
-	t.Log(string(componentSectionYaml))
+	t.Log(string(dependantsYaml))
 }

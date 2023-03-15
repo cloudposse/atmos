@@ -379,10 +379,6 @@ type StackImport struct {
 
 type DependsOn map[string]Context
 
-type Dependencies struct {
-	DependsOn DependsOn `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
-}
-
 type Dependant struct {
 	Component       string `yaml:"component" json:"component" mapstructure:"component"`
 	ComponentType   string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
@@ -399,5 +395,5 @@ type Dependant struct {
 // Settings
 
 type Settings struct {
-	Dependencies Dependencies `yaml:"dependencies" json:"dependencies" mapstructure:"dependencies"`
+	DependsOn DependsOn `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
 }
