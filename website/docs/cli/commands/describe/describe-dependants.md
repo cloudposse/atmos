@@ -51,16 +51,16 @@ components:
     top-level-component1:
       settings:
         depends_on:
-          "1":
+          1:
             # If the `context` (namespace, tenant, environment, stage) is not provided, 
             # the `component` is from the same Atmos stack as this component
             component: "test/test-component-override"
-          "2":
+          2:
             # This component (in any stage) depends on `test/test-component` 
             # from the `dev` stage (in any `environment` and any `tenant`)
             component: "test/test-component"
             stage: "dev"
-          "3":
+          3:
             # This component depends on `my-component` 
             # from the `tenant1-ue2-staging` Atmos stack
             component: "my-component"
@@ -85,11 +85,11 @@ components:
         component: "top-level-component1"
       settings:
         depends_on:
-          "1":
+          1:
             # If the `context` (namespace, tenant, environment, stage) is not provided, 
             # the `component` is from the same Atmos stack as this component
             component: "test/test-component"
-          "2":
+          2:
             # If the `context` (namespace, tenant, environment, stage) is not provided, 
             # the `component` is from the same Atmos stack as this component
             component: "test/test2/test-component-2"
