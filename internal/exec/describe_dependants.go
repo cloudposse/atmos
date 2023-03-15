@@ -1,10 +1,13 @@
 package exec
 
 import (
+	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"reflect"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 )
@@ -205,6 +208,7 @@ func ExecuteDescribeDependants(
 						ComponentPath: BuildComponentPath(cliConfig, stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
+						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.Replace(stackComponentName, "/", "-", -1)),
 						Namespace:     stackComponentVars.Namespace,
 						Tenant:        stackComponentVars.Tenant,
 						Environment:   stackComponentVars.Environment,

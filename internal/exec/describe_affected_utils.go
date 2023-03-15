@@ -585,6 +585,7 @@ func appendToAffected(
 
 	// Check `component` section and add `ComponentPath` to the output
 	affected.ComponentPath = BuildComponentPath(cliConfig, componentSection, affected.ComponentType)
+	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.Replace(componentName, "/", "-", -1))
 
 	return append(affectedList, affected), nil
 }

@@ -117,6 +117,7 @@ atmos describe dependants test/test-component -s tenant1-ue2-dev
     "environment": "ue2",
     "stage": "dev",
     "stack": "tenant1-ue2-dev",
+    "stack_slug": "tenant1-ue2-dev-top-level-component1",
     "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
     "atlantis_project": "tenant1-ue2-dev-top-level-component1"
   }
@@ -141,6 +142,7 @@ atmos describe dependants test/test-component -s tenant1-ue2-test-1
     "environment": "ue2",
     "stage": "test-1",
     "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-dev-top-level-component1",
     "spacelift_stack": "tenant1-ue2-test-1-top-level-component1",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component1"
   },
@@ -153,6 +155,7 @@ atmos describe dependants test/test-component -s tenant1-ue2-test-1
     "environment": "ue2",
     "stage": "test-1",
     "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component2",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component2"
   }
 ]
@@ -224,6 +227,7 @@ Each object has the following schema:
   "environment": "....",
   "stage": "....",
   "stack": "....",
+  "stack_slug": "",
   "spacelift_stack": ".....",
   "atlantis_project": "....."
 }
@@ -246,6 +250,8 @@ where:
 - `stage` - the `stage` where the dependant Atmos component is provisioned
 
 - `stack` - the Atmos stack where the dependant Atmos component is provisioned
+
+- `stack_slug` - the Atmos stack slug (concatenation of the Atmos stack and Atmos component)
 
 - `spacelift_stack` - the dependant Spacelift stack. It will be included only if the Spacelift workspace is enabled for the dependant Atmos component
   in the Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled`
@@ -280,6 +286,7 @@ atmos describe dependants test/test-component -s tenant1-ue2-test-1
     "environment": "ue2",
     "stage": "test-1",
     "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-dev-top-level-component2",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component2"
   },
   {
@@ -291,6 +298,7 @@ atmos describe dependants test/test-component -s tenant1-ue2-test-1
     "environment": "ue2",
     "stage": "dev",
     "stack": "tenant1-ue2-dev",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component1",
     "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
     "atlantis_project": "tenant1-ue2-dev-top-level-component1"
   }

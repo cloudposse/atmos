@@ -80,6 +80,7 @@ Affected components and stacks:
       "component_type": "terraform",
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-dev",
+      "stack_slug": "tenant1-ue2-dev-infra-vpc",
       "spacelift_stack": "tenant1-ue2-dev-infra-vpc",
       "atlantis_project": "tenant1-ue2-dev-infra-vpc",
       "affected": "component"
@@ -89,6 +90,7 @@ Affected components and stacks:
       "component_type": "terraform",
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-prod",
+      "stack_slug": "tenant1-ue2-prod-infra-vpc",
       "spacelift_stack": "tenant1-ue2-prod-infra-vpc",
       "atlantis_project": "tenant1-ue2-prod-infra-vpc",
       "affected": "component"
@@ -98,6 +100,7 @@ Affected components and stacks:
       "component_type": "terraform",
       "component_path": "components/terraform/infra/vpc",
       "stack": "tenant1-ue2-staging",
+      "stack_slug": "tenant1-ue2-staging-infra-vpc",
       "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
       "atlantis_project": "tenant1-ue2-staging-infra-vpc",
       "affected": "component"
@@ -160,6 +163,7 @@ Each object has the following schema:
   "component_type": "....",
   "component_path": "....",
   "stack": "....",
+  "stack_slug": "....",
   "spacelift_stack": ".....",
   "atlantis_project": ".....",
   "affected": "....."
@@ -168,13 +172,15 @@ Each object has the following schema:
 
 where:
 
-- `component` - the affected Atmos component in the stack
+- `component` - the affected Atmos component
 
 - `component_type` - the type of the component (`terraform` or `helmfile`)
 
 - `component_path` - the filesystem path to the `terraform` or `helmfile` component
 
 - `stack` - the affected Atmos stack
+
+- `stack_slug` - the Atmos stack slug (concatenation of the Atmos stack and Atmos component)
 
 - `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
   Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled` section
@@ -213,6 +219,7 @@ atmos describe affected
     "component_type": "terraform",
     "component_path": "components/terraform/test/test-component",
     "stack": "tenant1-ue2-dev",
+    "stack_slug": "tenant1-ue2-dev-test-test-component-override-2",
     "spacelift_stack": "tenant1-ue2-dev-new-component",
     "atlantis_project": "tenant1-ue2-dev-new-component",
     "affected": "stack.vars"
@@ -222,6 +229,7 @@ atmos describe affected
     "component_type": "terraform",
     "component_path": "components/terraform/infra/vpc",
     "stack": "tenant2-ue2-staging",
+    "stack_slug": "tenant1-ue2-staging-infra-vpc",
     "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
     "atlantis_project": "tenant1-ue2-staging-infra-vpc",
     "affected": "component"
@@ -231,7 +239,8 @@ atmos describe affected
     "component_type": "terraform",
     "component_path": "components/terraform/test/test-component",
     "stack": "tenant1-ue2-prod",
-    "atlantis_project": "tenant1-ue2-staging-test-test-component-override-3",
+    "stack_slug": "tenant1-ue2-prod-test-test-component-override-3",
+    "atlantis_project": "tenant1-ue2-prod-test-test-component-override-3",
     "affected": "stack.env"
   }
 ]

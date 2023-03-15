@@ -350,6 +350,7 @@ type Affected struct {
 	Environment     string `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
 	Stage           string `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
 	Stack           string `yaml:"stack" json:"stack" mapstructure:"stack"`
+	StackSlug       string `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
 	SpaceliftStack  string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject string `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
 	Affected        string `yaml:"affected" json:"affected" mapstructure:"affected"`
@@ -388,6 +389,7 @@ type Dependant struct {
 	Environment     string `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
 	Stage           string `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
 	Stack           string `yaml:"stack" json:"stack" mapstructure:"stack"`
+	StackSlug       string `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
 	SpaceliftStack  string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject string `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
 }
