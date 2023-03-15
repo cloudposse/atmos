@@ -9,15 +9,14 @@ components:
       settings:
         spacelift:
           workspace_enabled: false
-        dependencies:
-          depends_on:
-            "test/test-component":
-              # If the `context` (namespace, tenant, environment, stage) is not provided,
-              # the `component` is from the same stack as this component
-              component: "test/test-component"
-            "test/test2/test-component-2":
-              # If the `context` (namespace, tenant, environment, stage) is not provided,
-              # the `component` is from the same stack as this component
-              component: "test/test2/test-component-2"
+        depends_on:
+          "1":
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test-component"
+          "2":
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test2/test-component-2"
       vars:
         enabled: true

@@ -12,23 +12,13 @@ Use this command to show a list of Atmos components in Atmos stacks that depend 
 
 ## Description
 
-In Atmos, you can define stack and component dependencies by using the `settings.dependencies` section.
+In Atmos, you can define component dependencies by using the `settings.depends_on` section. The section used to define all the Atmos components (in
+the same or different stacks) that the current component depends on.
 
-The `settings.dependencies.depends_on` subsection is used to define all the Atmos components (in the same or different stacks) that the current
-component depends on.
+The `settings.depends_on` section is a map of objects. The map keys are just the descriptions of dependencies and can be strings or numbers.
+Provide meaningful descriptions so that people can understand what the dependencies are about.
 
-:::note
-
-The `depends_on` subsection is used to define Atmos component dependencies instead of the `settings.dependencies` section because
-the `settings.dependencies` section is a parent section for all types of stack and component dependencies. In the future, we could add other
-functionality to define various types of component and stack dependencies by using different subsections in the `settings.dependencies` section.
-
-:::
-
-<br/>
-
-The `settings.dependencies.depends_on` section is a map of objects. The map keys are just the descriptions of dependencies and can be anything
-(provide meaningful descriptions so that people can understand what the dependencies are about). Each object has the following schema:
+Each object in the `settings.depends_on` section has the following schema:
 
 - `component` (required) - an Atmos component that the current component depends on
 - `namespace` (optional) - the `namespace` where the Atmos component is provisioned
@@ -49,10 +39,10 @@ For example, you can specify:
 
 <br/>
 
-In the following example, we define that the `top-level-component1` Atmos component depends on the following:
+In the following example, we define that the `top-level-component1` component depends on the following:
 
 - The `test/test-component-override` component in the same Atmos stack
-- The `test/test-component` component in an Atmos stack identified by the `dev` stage
+- The `test/test-component` component in Atmos stacks identified by the `dev` stage
 - The `my-component` component from the `tenant1-ue2-staging` Atmos stack
 
 ```yaml title="examples/complete/stacks/catalog/terraform/top-level-component1.yaml"
@@ -60,50 +50,49 @@ components:
   terraform:
     top-level-component1:
       settings:
-        dependencies:
-          depends_on:
-            "test/test-component-override":
-              # If the `context` (namespace, tenant, environment, stage) is not provided, 
-              # the `component` is from the same stack as this component
-              component: "test/test-component-override"
-            "dev-test/test-component":
-              # This component (in any stage) depends on `test/test-component` 
-              # from the `dev` stage (in any `environment` and any `tenant`)
-              component: "test/test-component"
-              stage: "dev"
-            "tenant1-ue2-staging-test/test-component":
-              # This component depends on `my-component` 
-              # from the `tenant1-ue2-staging` Atmos stack
-              component: "my-component"
-              tenant: "tenant1"
-              environment: "ue2"
-              stage: "staging"
+        depends_on:
+          "1":
+            # If the `context` (namespace, tenant, environment, stage) is not provided, 
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test-component-override"
+          "2":
+            # This component (in any stage) depends on `test/test-component` 
+            # from the `dev` stage (in any `environment` and any `tenant`)
+            component: "test/test-component"
+            stage: "dev"
+          "3":
+            # This component depends on `my-component` 
+            # from the `tenant1-ue2-staging` Atmos stack
+            component: "my-component"
+            tenant: "tenant1"
+            environment: "ue2"
+            stage: "staging"
       vars:
         enabled: true
 ```
 
-In the following example, we specify that the `top-level-component2` Atmos component depends on the following:
+In the following example, we specify that the `top-level-component2` component depends on the following:
 
 - The `test/test-component` component in the same Atmos stack
-- The `test/test2/test-component-2` in the same Atmos stack
+- The `test/test2/test-component-2` component in the same Atmos stack
 
 ```yaml title="examples/complete/stacks/catalog/terraform/top-level-component2.yaml"
 components:
   terraform:
     top-level-component2:
       metadata:
+        # Point to Terraform component
         component: "top-level-component1"
       settings:
-        dependencies:
-          depends_on:
-            "test/test-component":
-              # If the `context` (namespace, tenant, environment, stage) is not provided, 
-              # the `component` is from the same stack as this component
-              component: "test/test-component"
-            "test/test2/test-component-2":
-              # If the `context` (namespace, tenant, environment, stage) is not provided, 
-              # the `component` is from the same stack as this component
-              component: "test/test2/test-component-2"
+        depends_on:
+          "1":
+            # If the `context` (namespace, tenant, environment, stage) is not provided, 
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test-component"
+          "2":
+            # If the `context` (namespace, tenant, environment, stage) is not provided, 
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test2/test-component-2"
       vars:
         enabled: true
 ```
@@ -111,7 +100,7 @@ components:
 <br/>
 
 Having the `top-level-component` and `top-level-component2` components configured as shown above, we can now execute the following Atmos command
-to show all the components and stacks that are dependants of the `test/test-component` component in the `tenant1-ue2-dev` stack:
+to show all the components that depend on the `test/test-component` component in the `tenant1-ue2-dev` stack:
 
 ```shell
 atmos describe dependants test/test-component -s tenant1-ue2-dev
@@ -134,7 +123,7 @@ atmos describe dependants test/test-component -s tenant1-ue2-dev
 ]
 ```
 
-Similarly, the following Atmos command shows all the components and stacks that are dependants of the `test/test-component` component in
+Similarly, the following Atmos command shows all the components that depend on the `test/test-component` component in
 the `tenant1-ue2-test-1` stack:
 
 ```shell
@@ -242,7 +231,7 @@ Each object has the following schema:
 
 where:
 
-- `component` - the dependant Atmos component in the stack
+- `component` - the dependant Atmos component
 
 - `component_type` - the type of the dependant component (`terraform` or `helmfile`)
 
