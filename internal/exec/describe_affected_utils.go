@@ -12,7 +12,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
-	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -542,12 +541,10 @@ func appendToAffected(
 	affected cfg.Affected,
 ) ([]cfg.Affected, error) {
 
-	varSection := map[any]any{}
-	settingsSection := map[any]any{}
-	spaceliftSettingsSection := map[any]any{}
-	var projectTemplate cfg.AtlantisProjectConfig
-
 	if affected.ComponentType == "terraform" {
+		varSection := map[any]any{}
+		settingsSection := map[any]any{}
+
 		if i, ok2 := componentSection["vars"]; ok2 {
 			varSection = i.(map[any]any)
 		}
@@ -556,53 +553,39 @@ func appendToAffected(
 			settingsSection = i.(map[any]any)
 		}
 
-		if i, ok2 := settingsSection["spacelift"]; ok2 {
-			spaceliftSettingsSection = i.(map[any]any)
-		}
-
-		context := cfg.GetContextFromVars(varSection)
-		context.Component = strings.Replace(componentName, "/", "-", -1)
-
 		// Affected Spacelift stack
-		if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
-			contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
-			if err != nil {
-				return nil, err
-			}
+		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
+			cliConfig,
+			componentName,
+			stackName,
+			settingsSection,
+			varSection,
+		)
 
-			spaceliftStackName, _ := BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
-			affected.SpaceliftStack = spaceliftStackName
+		if err != nil {
+			return nil, err
 		}
+
+		affected.SpaceliftStack = spaceliftStackName
 
 		// Affected Atlantis project
-		if atlantisSettingsSection, ok := settingsSection["atlantis"].(map[any]any); ok {
-			// 'settings.atlantis.project_template' has higher priority than 'settings.atlantis.project_template_name'
-			if atlantisSettingsProjectTemplate, ok := atlantisSettingsSection["project_template"].(map[any]any); ok {
-				err := mapstructure.Decode(atlantisSettingsProjectTemplate, &projectTemplate)
-				if err != nil {
-					return nil, err
-				}
-			} else if atlantisSettingsProjectTemplateName, ok := atlantisSettingsSection["project_template_name"].(string); ok && atlantisSettingsProjectTemplateName != "" {
-				if pt, ok := cliConfig.Integrations.Atlantis.ProjectTemplates[atlantisSettingsProjectTemplateName]; ok {
-					projectTemplate = pt
-				}
-			}
+		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
+			cliConfig,
+			componentName,
+			settingsSection,
+			varSection,
+		)
 
-			// If Atlantis project template is defined and has a name, replace tokens in the name and add the Atlantis project to the output
-			if !reflect.ValueOf(projectTemplate).IsZero() && projectTemplate.Name != "" {
-				affected.AtlantisProject = BuildAtlantisProjectName(context, projectTemplate.Name)
-			}
+		if err != nil {
+			return nil, err
 		}
+
+		affected.AtlantisProject = atlantisProjectName
 	}
 
 	// Check `component` section and add `ComponentPath` to the output
-	if component, ok := componentSection["component"].(string); ok {
-		if affected.ComponentType == "terraform" {
-			affected.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
-		} else if affected.ComponentType == "helmfile" {
-			affected.ComponentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
-		}
-	}
+	affected.ComponentPath = BuildComponentPath(cliConfig, componentSection, affected.ComponentType)
+	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.Replace(componentName, "/", "-", -1))
 
 	return append(affectedList, affected), nil
 }

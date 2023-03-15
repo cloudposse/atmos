@@ -2,6 +2,7 @@ import:
   - mixins/region/us-east-2
   - orgs/cp/tenant1/test1/_defaults
   - catalog/terraform/top-level-component1
+  - catalog/terraform/top-level-component2
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
   - catalog/terraform/test-component-override-2
@@ -10,6 +11,7 @@ import:
   - catalog/helmfile/echo-server
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
+  - catalog/terraform/test-component-2
 
 components:
   terraform:

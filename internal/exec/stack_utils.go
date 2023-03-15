@@ -2,6 +2,8 @@ package exec
 
 import (
 	"fmt"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"path"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -78,4 +80,51 @@ func ProcessComponentMetadata(
 	}
 
 	return componentMetadata, baseComponentName, componentIsAbstract
+}
+
+// BuildDependantStackNameFromDependsOn builds the dependant stack name from "depends_on" attribute
+func BuildDependantStackNameFromDependsOn(
+	dependsOn string,
+	allStackNames []string,
+	currentStackName string,
+	componentNamesInCurrentStack []string,
+	currentComponentName string,
+) (string, error) {
+	var dependantStackName string
+
+	if u.SliceContainsString(allStackNames, dependsOn) {
+		dependantStackName = dependsOn
+	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
+		dependantStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
+	} else {
+		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
+			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
+			currentComponentName,
+			currentStackName,
+			dependsOn)
+
+		return "", errorMessage
+	}
+
+	return dependantStackName, nil
+}
+
+// BuildComponentPath builds component path (path to the component's physical location on disk)
+func BuildComponentPath(
+	cliConfig cfg.CliConfiguration,
+	componentSectionMap map[string]any,
+	componentType string,
+) string {
+
+	var componentPath string
+
+	if stackComponentSection, ok := componentSectionMap["component"].(string); ok {
+		if componentType == "terraform" {
+			componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
+		} else if componentType == "helmfile" {
+			componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
+		}
+	}
+
+	return componentPath
 }

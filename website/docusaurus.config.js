@@ -130,7 +130,13 @@ const config = {
                 indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
                 contextualSearch: false
             },
-        })
+        }),
+
+    markdown: {
+        mermaid: true,
+    },
+
+    themes: ['@docusaurus/theme-mermaid']
 };
 
 module.exports = config;

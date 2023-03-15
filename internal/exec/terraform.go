@@ -18,13 +18,18 @@ const (
 	varFileFlag     = "-var-file"
 )
 
-// ExecuteTerraformCmd executes terraform commands
+// ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
 func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("terraform", cmd, args)
 	if err != nil {
 		return err
 	}
 
+	return ExecuteTerraform(info)
+}
+
+// ExecuteTerraform executes terraform commands
+func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err

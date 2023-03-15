@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"fmt"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -39,7 +38,6 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println()
 	err = printOrWriteToFile(format, file, componentSection)
 	if err != nil {
 		return err

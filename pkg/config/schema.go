@@ -59,16 +59,16 @@ type Logs struct {
 }
 
 type Context struct {
-	Namespace     string
-	Tenant        string
-	Environment   string
-	Stage         string
-	Region        string
-	Component     string
-	BaseComponent string
-	ComponentPath string
-	Workspace     string
-	Attributes    []string
+	Namespace     string   `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
+	Tenant        string   `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
+	Environment   string   `yaml:"environment" json:"environment" mapstructure:"environment"`
+	Stage         string   `yaml:"stage" json:"stage" mapstructure:"stage"`
+	Region        string   `yaml:"region" json:"region" mapstructure:"region"`
+	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
+	BaseComponent string   `yaml:"base_component" json:"base_component" mapstructure:"base_component"`
+	ComponentPath string   `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Workspace     string   `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
+	Attributes    []string `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
 }
 
 type ArgsAndFlagsInfo struct {
@@ -98,53 +98,54 @@ type ArgsAndFlagsInfo struct {
 }
 
 type ConfigAndStacksInfo struct {
-	StackFromArg              string
-	Stack                     string
-	StackFile                 string
-	ComponentType             string
-	ComponentFromArg          string
-	Component                 string
-	ComponentFolderPrefix     string
-	BaseComponentPath         string
-	BaseComponent             string
-	FinalComponent            string
-	Command                   string
-	SubCommand                string
-	SubCommand2               string
-	ComponentSection          map[string]any
-	ComponentVarsSection      map[any]any
-	ComponentEnvSection       map[any]any
-	ComponentEnvList          []string
-	ComponentBackendSection   map[any]any
-	ComponentBackendType      string
-	AdditionalArgsAndFlags    []string
-	GlobalOptions             []string
-	BasePath                  string
-	TerraformDir              string
-	HelmfileDir               string
-	ConfigDir                 string
-	StacksDir                 string
-	WorkflowsDir              string
-	Context                   Context
-	ContextPrefix             string
-	DeployRunInit             string
-	InitRunReconfigure        string
-	AutoGenerateBackendFile   string
-	UseTerraformPlan          bool
-	PlanFile                  string
-	DryRun                    bool
-	SkipInit                  bool
-	ComponentInheritanceChain []string
-	NeedHelp                  bool
-	ComponentIsAbstract       bool
-	ComponentMetadataSection  map[any]any
-	TerraformWorkspace        string
-	JsonSchemaDir             string
-	OpaDir                    string
-	CueDir                    string
-	AtmosCliConfigPath        string
-	AtmosBasePath             string
-	RedirectStdErr            string
+	StackFromArg                  string
+	Stack                         string
+	StackFile                     string
+	ComponentType                 string
+	ComponentFromArg              string
+	Component                     string
+	ComponentFolderPrefix         string
+	ComponentFolderPrefixReplaced string
+	BaseComponentPath             string
+	BaseComponent                 string
+	FinalComponent                string
+	Command                       string
+	SubCommand                    string
+	SubCommand2                   string
+	ComponentSection              map[string]any
+	ComponentVarsSection          map[any]any
+	ComponentEnvSection           map[any]any
+	ComponentEnvList              []string
+	ComponentBackendSection       map[any]any
+	ComponentBackendType          string
+	AdditionalArgsAndFlags        []string
+	GlobalOptions                 []string
+	BasePath                      string
+	TerraformDir                  string
+	HelmfileDir                   string
+	ConfigDir                     string
+	StacksDir                     string
+	WorkflowsDir                  string
+	Context                       Context
+	ContextPrefix                 string
+	DeployRunInit                 string
+	InitRunReconfigure            string
+	AutoGenerateBackendFile       string
+	UseTerraformPlan              bool
+	PlanFile                      string
+	DryRun                        bool
+	SkipInit                      bool
+	ComponentInheritanceChain     []string
+	NeedHelp                      bool
+	ComponentIsAbstract           bool
+	ComponentMetadataSection      map[any]any
+	TerraformWorkspace            string
+	JsonSchemaDir                 string
+	OpaDir                        string
+	CueDir                        string
+	AtmosCliConfigPath            string
+	AtmosBasePath                 string
+	RedirectStdErr                string
 }
 
 // Workflows
@@ -344,7 +345,12 @@ type Affected struct {
 	Component       string `yaml:"component" json:"component" mapstructure:"component"`
 	ComponentType   string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
 	ComponentPath   string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Namespace       string `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
+	Tenant          string `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
+	Environment     string `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Stage           string `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
 	Stack           string `yaml:"stack" json:"stack" mapstructure:"stack"`
+	StackSlug       string `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
 	SpaceliftStack  string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject string `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
 	Affected        string `yaml:"affected" json:"affected" mapstructure:"affected"`
@@ -368,4 +374,28 @@ type BaseComponentConfig struct {
 type StackImport struct {
 	Path    string         `yaml:"path" json:"path" mapstructure:"path"`
 	Context map[string]any `yaml:"context" json:"context" mapstructure:"context"`
+}
+
+// Dependencies
+
+type DependsOn map[any]Context
+
+type Dependant struct {
+	Component       string `yaml:"component" json:"component" mapstructure:"component"`
+	ComponentType   string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
+	ComponentPath   string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Namespace       string `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
+	Tenant          string `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
+	Environment     string `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Stage           string `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
+	Stack           string `yaml:"stack" json:"stack" mapstructure:"stack"`
+	StackSlug       string `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
+	SpaceliftStack  string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
+	AtlantisProject string `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
+}
+
+// Settings
+
+type Settings struct {
+	DependsOn DependsOn `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
 }
