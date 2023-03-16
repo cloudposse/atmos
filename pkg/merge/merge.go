@@ -35,7 +35,12 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		}
 
 		var opts []func(*mergo.Config)
-		opts = append(opts, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue, mergo.WithTypeCheck)
+		opts = append(opts, mergo.WithOverride, mergo.WithTypeCheck)
+
+		// This was fixed/broken in https://github.com/imdario/mergo/pull/231/files
+		// It was released in https://github.com/imdario/mergo/releases/tag/v0.3.14
+		// It was not working before in `github.com/imdario/mergo` so we need to disable it in our code
+		// opts = append(opts, mergo.WithOverwriteWithEmptyValue)
 
 		if appendSlice {
 			opts = append(opts, mergo.WithAppendSlice)
