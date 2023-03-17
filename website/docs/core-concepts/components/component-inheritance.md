@@ -329,17 +329,22 @@ the variables which are sent to the Terraform component `test/test-component` th
 
 ## Multilevel Inheritance
 
-Multiple Inheritance is used when an Atmos component inherits from more than one Atmos component.
+Multilevel Inheritance is used when an Atmos component inherits from a base Atmos component, which in turn inherits from another base Atmos component.
 
-In the diagram below, `ComponentA` and `ComponentB` are the base components. `ComponentC` is a derived components, it inherits all the
-configurations (`vars`, `settings`, `env` and other sections) from `ComponentA` and `ComponentB`, and can override the default values
-from `ComponentA` and `ComponentB`.
+In the diagram below, `ComponentC` inherits from `ComponentB`.
+`ComponentB` inherits from `ComponentA`.
+
+After this Multilevel Inheritance chain gets processed by Atmos, `ComponentC` will inherit all the configurations (`vars`, `settings`, `env` and other
+sections) from both `ComponentB` and `ComponentA`.
+
+Note that `ComponentB` overrides the values from `ComponentA`.
+`ComponentC` overrides the values from both `ComponentB` and `ComponentA`.
 
 <br/>
 
 ```mermaid
 classDiagram
-      ComponentA --> ComponentC
+      ComponentA --> ComponentB
       ComponentB --> ComponentC
       ComponentA : vars
       ComponentA : settings
@@ -348,6 +353,9 @@ classDiagram
           vars
           settings
           env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
       }
       class ComponentC{
           vars
@@ -355,12 +363,10 @@ classDiagram
           env
           metadata:
           &nbsp;&nbsp;inherits:
-          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
       }
 ```
 
-<br/>
 <br/>
 
 ## Hierarchical Inheritance
