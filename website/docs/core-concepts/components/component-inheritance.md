@@ -53,7 +53,7 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
-      class ComponentB{
+      class ComponentB {
           vars
           settings
           env
@@ -61,7 +61,7 @@ classDiagram
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
       }
-      class ComponentC{
+      class ComponentC {
           vars
           settings
           env
@@ -194,12 +194,12 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
-      class ComponentB{
+      class ComponentB {
           vars
           settings
           env
       }
-      class ComponentC{
+      class ComponentC {
           vars
           settings
           env
@@ -331,8 +331,8 @@ the variables which are sent to the Terraform component `test/test-component` th
 
 Multilevel Inheritance is used when an Atmos component inherits from a base Atmos component, which in turn inherits from another base Atmos component.
 
-In the diagram below, `ComponentC` inherits from `ComponentB`.
-`ComponentB` inherits from `ComponentA`.
+In the diagram below, `ComponentC` directly inherits from `ComponentB`.
+`ComponentB` directly inherits from `ComponentA`.
 
 After this Multilevel Inheritance chain gets processed by Atmos, `ComponentC` will inherit all the configurations (`vars`, `settings`, `env` and other
 sections) from both `ComponentB` and `ComponentA`.
@@ -349,7 +349,7 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
-      class ComponentB{
+      class ComponentB {
           vars
           settings
           env
@@ -357,7 +357,7 @@ classDiagram
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
       }
-      class ComponentC{
+      class ComponentC {
           vars
           settings
           env
@@ -371,36 +371,97 @@ classDiagram
 
 ## Hierarchical Inheritance
 
-Multiple Inheritance is used when an Atmos component inherits from more than one Atmos component.
+Hierarchical Inheritance is a combination of Multiple Inheritance and Multilevel Inheritance.
 
-In the diagram below, `ComponentA` and `ComponentB` are the base components. `ComponentC` is a derived components, it inherits all the
-configurations (`vars`, `settings`, `env` and other sections) from `ComponentA` and `ComponentB`, and can override the default values
-from `ComponentA` and `ComponentB`.
+In Hierarchical Inheritance, every component can act as a base component for one or more child (derived) components, and each child component can
+inherit from one of more base components.
 
 <br/>
 
 ```mermaid
 classDiagram
+      ComponentA --> ComponentB
       ComponentA --> ComponentC
-      ComponentB --> ComponentC
+      ComponentB --> ComponentD
+      ComponentB --> ComponentE
+      ComponentC --> ComponentF
+      ComponentC --> ComponentG
+      ComponentH --> ComponentE
+      ComponentI --> ComponentG
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
-      class ComponentB{
-          vars
-          settings
-          env
-      }
-      class ComponentC{
+      class ComponentB {
           vars
           settings
           env
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
+      }
+      class ComponentC {
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
+      }
+      class ComponentD {
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
+      }
+      class ComponentE {
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentH&nbsp;&nbsp;
+      }
+      class ComponentF {
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentC&nbsp;&nbsp;
+      }
+      class ComponentG {
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentI&nbsp;&nbsp;
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentC&nbsp;&nbsp;
+      }
+      class ComponentH {
+          vars
+          settings
+          env
+      }
+      class ComponentI {
+          vars
+          settings
+          env
       }
 ```
 
 <br/>
-<br/>
+
+In the diagram above:
+
+- `ComponentA` is the base component of the whole hierarchy
+
+- `ComponentB` and `ComponentC` inherit from `ComponentA`
+
+- `ComponentD` inherits from `ComponentB` directly, and from `ComponentA` via the Multilevel Inheritance
+
+- `ComponentE` is an example of using both the Multiple Inheritance and Multilevel Inheritance.
+  It inherits from `ComponentB` and `ComponentH` directly, and from `ComponentA` via the Multilevel Inheritance
