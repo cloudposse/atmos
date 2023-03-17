@@ -41,6 +41,39 @@ and `metadata` component's configuration section.
 
 Single Inheritance is used when an Atmos component inherits from another base Atmos component.
 
+In the diagram below, `ComponentA` is the base component. `ComponentB` and `ComponentC` are derived components, they inherit all the
+configurations (`vars`, `settings`, `env` and other sections) from `ComponentA`, and can override the default values from `ComponentA`.
+
+<br/>
+
+```mermaid
+classDiagram
+      ComponentA --> ComponentB
+      ComponentA --> ComponentC
+      ComponentA : vars
+      ComponentA : settings
+      ComponentA : env
+      class ComponentB{
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
+      }
+      class ComponentC{
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
+      }
+```
+
+<br/>
+<br/>
+
 Let's say we want to provision two VPCs with different settings into the same AWS account.
 
 In the `stacks/catalog/vpc.yaml` file, add the following config for the VPC component:
@@ -147,6 +180,38 @@ environment-agnostic). And the configurations are extremely DRY and reusable.
 ## Multiple Inheritance
 
 Multiple Inheritance is used when an Atmos component inherits from more than one Atmos component.
+
+In the diagram below, `ComponentA` and `ComponentB` are the base components. `ComponentC` is a derived components, it inherits all the
+configurations (`vars`, `settings`, `env` and other sections) from `ComponentA` and `ComponentB`, and can override the default values
+from `ComponentA` and `ComponentB`.
+
+<br/>
+
+```mermaid
+classDiagram
+      ComponentA --> ComponentC
+      ComponentB --> ComponentC
+      ComponentA : vars
+      ComponentA : settings
+      ComponentA : env
+      class ComponentB{
+          vars
+          settings
+          env
+      }
+      class ComponentC{
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
+      }
+```
+
+<br/>
+<br/>
 
 Multiple Inheritance allows a component to inherit from many base components or mixins, each base component having its own inheritance chain,
 effectively making it an inheritance matrix. It uses a method similar to Method Resolution Order (MRO) using
@@ -261,3 +326,75 @@ Inheritance: test/test-component-override-3 -> mixin/test-2 -> mixin/test-1 ->
 
 The `Inheritance` output shows the multiple inheritance steps that Atmos performed and deep-merged into the final configuration, including
 the variables which are sent to the Terraform component `test/test-component` that is being provisioned.
+
+## Multilevel Inheritance
+
+Multiple Inheritance is used when an Atmos component inherits from more than one Atmos component.
+
+In the diagram below, `ComponentA` and `ComponentB` are the base components. `ComponentC` is a derived components, it inherits all the
+configurations (`vars`, `settings`, `env` and other sections) from `ComponentA` and `ComponentB`, and can override the default values
+from `ComponentA` and `ComponentB`.
+
+<br/>
+
+```mermaid
+classDiagram
+      ComponentA --> ComponentC
+      ComponentB --> ComponentC
+      ComponentA : vars
+      ComponentA : settings
+      ComponentA : env
+      class ComponentB{
+          vars
+          settings
+          env
+      }
+      class ComponentC{
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
+      }
+```
+
+<br/>
+<br/>
+
+## Hierarchical Inheritance
+
+Multiple Inheritance is used when an Atmos component inherits from more than one Atmos component.
+
+In the diagram below, `ComponentA` and `ComponentB` are the base components. `ComponentC` is a derived components, it inherits all the
+configurations (`vars`, `settings`, `env` and other sections) from `ComponentA` and `ComponentB`, and can override the default values
+from `ComponentA` and `ComponentB`.
+
+<br/>
+
+```mermaid
+classDiagram
+      ComponentA --> ComponentC
+      ComponentB --> ComponentC
+      ComponentA : vars
+      ComponentA : settings
+      ComponentA : env
+      class ComponentB{
+          vars
+          settings
+          env
+      }
+      class ComponentC{
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
+          &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
+      }
+```
+
+<br/>
+<br/>
