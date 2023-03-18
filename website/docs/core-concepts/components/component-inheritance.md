@@ -461,7 +461,29 @@ In the diagram above:
 
 - `ComponentB` and `ComponentC` inherit from `ComponentA`
 
-- `ComponentD` inherits from `ComponentB` directly, and from `ComponentA` via the Multilevel Inheritance
+- `ComponentD` inherits from `ComponentB` directly, and from `ComponentA` via Multilevel Inheritance
 
-- `ComponentE` is an example of using both the Multiple Inheritance and Multilevel Inheritance.
-  It inherits from `ComponentB` and `ComponentH` directly, and from `ComponentA` via the Multilevel Inheritance
+- `ComponentE` is an example of using both Multiple Inheritance and Multilevel Inheritance.
+  It inherits from `ComponentB` and `ComponentH` directly, and from `ComponentA` via Multilevel Inheritance
+
+<br/>
+
+For `ComponentE`, the inherited components are processed and deep-merged in the order they are specified in the `inherits` list:
+
+- `ComponentB` overrides the configuration from `ComponentA`
+
+- `ComponentH` overrides the configuration from `ComponentB` and `ComponentA` (since it's defined after `ComponentB` in the `inherits` section)
+
+- And finally, `ComponentE` overrides `ComponentH`, `ComponentB` and `ComponentA`
+
+<br/>
+
+For `ComponentG`:
+
+- `ComponentI` is processed first (since it's the first item in the `inherits` list)
+
+- Then `ComponentA` is processed (since it's the base component for `ComponentC` which is the second item in the `inherits` list)
+
+- Then `ComponentC` is processed, and it overrides the configuration from `ComponentA` and `ComponentI`
+
+- And finally, `ComponentG` is processed, and it overrides `ComponentC`, `ComponentA` and `ComponentI`
