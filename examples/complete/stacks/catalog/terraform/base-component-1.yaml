@@ -10,3 +10,4 @@ components:
         enabled: false
         service_1_name: "base-component-1-service-1"
         service_2_name: "base-component-1-service-2"
+        hierarchical_inheritance_test: "base-component-1"

@@ -8,3 +8,4 @@ components:
           workspace_enabled: false
       vars:
         enabled: false
+        hierarchical_inheritance_test: "base-component-2"

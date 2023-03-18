@@ -174,6 +174,10 @@ func TestComponentProcessorHierarchicalInheritance(t *testing.T) {
 	componentMap, err := ProcessComponentFromContext(component, namespace, tenant, environment, stage, "", "")
 	assert.Nil(t, err)
 
+	componentVars := componentMap["vars"].(map[any]any)
+	componentHierarchicalInheritanceTestVar := componentVars["hierarchical_inheritance_test"].(string)
+	assert.Equal(t, "base-component-1", componentHierarchicalInheritanceTestVar)
+
 	yamlConfig, err = yaml.Marshal(componentMap)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
