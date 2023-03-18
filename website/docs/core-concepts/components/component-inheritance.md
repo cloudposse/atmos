@@ -537,32 +537,36 @@ This configuration can be represented by the following diagram:
 ```mermaid
 classDiagram
       `base-component-1` --> `derived-component-1`
-      `base-component-1` : vars
-      `base-component-1` : settings
-      `base-component-1` : env
       `derived-component-1` --> `derived-component-2`
       `base-component-2` --> `derived-component-2`
-      class `derived-component-1` {
-          vars
+      class `base-component-1` {
           settings
           env
+          vars:
+          &nbsp;&nbsp;hierarchical_inheritance_test: base-component-1
+      }
+      class `base-component-2` {
+          settings
+          env
+          vars:
+          &nbsp;&nbsp;hierarchical_inheritance_test: base-component-2
+      }
+      class `derived-component-1` {
+          settings
+          env
+          vars
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- base-component-1&nbsp;&nbsp;
       }
       class `derived-component-2` {
-          vars
           settings
           env
+          vars
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- base-component-2&nbsp;&nbsp;
           &nbsp;&nbsp;&nbsp;&nbsp;- derived-component-1&nbsp;&nbsp;
-      }
-      class `base-component-2` {
-          vars
-          settings
-          env
       }
 ```
 
@@ -577,7 +581,8 @@ All the base components of the `base-component-2` component are processed and de
 
 - `base-component-2` is processed first (since it's the first item in the `inherits` list)
 
-- Then `base-component-1` is processed (since it's the base component for `derived-component-1` which is the second item in the `inherits` list)
+- Then `base-component-1` is processed (since it's the base component for `derived-component-1` which is the second item in the `inherits` list), and
+  it overrides the configuration from `base-component-2`
 
 - Then `derived-component-1` is processed, and it overrides the configuration from `base-component-2` and `base-component-1`
 
@@ -604,10 +609,48 @@ tenant: tenant1
 Command info:
 Terraform binary: terraform
 Terraform command: plan
-Arguments and flags: []
 Component: derived-component-2
 Terraform component: test/test-component
 Inheritance: derived-component-2 -> derived-component-1 -> base-component-1 -> base-component-2
 ```
 
-Note that the `hierarchical_inheritance_test` variable was inherited from `base-component-1`.
+Note that the `hierarchical_inheritance_test` variable was inherited from `base-component-1` because it overrode the configuration
+from `base-component-2`.
+
+<br/>
+
+If we change the order of the components in the `inherits` list for `derived-component-2`:
+
+```yaml
+components:
+  terraform:
+
+    derived-component-2:
+      metadata:
+        component: "test/test-component"
+        inherits:
+          - derived-component-1
+          - base-component-2
+      vars: { }
+```
+
+`base-component-2` will be processed last (after `base-component-1` and `derived-component-1`), and the `hierarchical_inheritance_test` variable
+will be inherited from the `base-component-2` component:
+
+```console
+Variables for the component 'derived-component-2' in the stack 'tenant1-ue2-test-1':
+enabled: true
+environment: ue2
+hierarchical_inheritance_test: base-component-2
+namespace: cp
+region: us-east-2
+stage: test-1
+tenant: tenant1
+
+Command info:
+Terraform binary: terraform
+Terraform command: plan
+Component: derived-component-2
+Terraform component: test/test-component
+Inheritance: derived-component-2 -> base-component-2 -> derived-component-1 -> base-component-1
+```
