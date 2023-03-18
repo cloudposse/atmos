@@ -633,7 +633,7 @@ components:
       vars: {}
 ```
 
-`base-component-2` will be processed last (after `base-component-1` and `derived-component-1`), and the `hierarchical_inheritance_test` variable
+`base-component-2` will be processed after `base-component-1` and `derived-component-1`, and the `hierarchical_inheritance_test` variable
 will be inherited from `base-component-2`:
 
 ```console
