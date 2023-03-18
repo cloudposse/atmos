@@ -276,7 +276,7 @@ import:
 components:
   terraform:
     test/test-component-override-3:
-      vars: { }
+      vars: {}
       metadata:
         # `real` is implicit, you don't need to specify it.
         # `abstract` makes the component protected from being deployed.
@@ -517,7 +517,7 @@ components:
         component: "test/test-component"
         inherits:
           - base-component-1
-      vars: { }
+      vars: {}
 
     derived-component-2:
       metadata:
@@ -525,7 +525,7 @@ components:
         inherits:
           - base-component-2
           - derived-component-1
-      vars: { }
+      vars: {}
 ```
 
 <br/>
@@ -631,7 +631,7 @@ components:
         inherits:
           - derived-component-1
           - base-component-2
-      vars: { }
+      vars: {}
 ```
 
 `base-component-2` will be processed last (after `base-component-1` and `derived-component-1`), and the `hierarchical_inheritance_test` variable
