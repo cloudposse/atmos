@@ -334,7 +334,9 @@ func ProcessBaseComponentConfig(
 	stack string,
 	baseComponent string,
 	componentBasePath string,
-	checkBaseComponentExists bool) error {
+	checkBaseComponentExists bool,
+	baseComponents *[]string,
+) error {
 
 	if component == baseComponent {
 		return nil
@@ -351,6 +353,8 @@ func ProcessBaseComponentConfig(
 	var baseComponentMap map[any]any
 	var ok bool
 
+	*baseComponents = append(*baseComponents, baseComponent)
+
 	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
 		baseComponentMap, ok = baseComponentSection.(map[any]any)
 		if !ok {
@@ -364,7 +368,7 @@ func ProcessBaseComponentConfig(
 			baseComponentMap = c.MapsOfStringsToMapsOfInterfaces(baseComponentMapOfStrings)
 		}
 
-		// First, process the base component of this base component
+		// First, process the base component(s) of this base component
 		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
 			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
 			if !ok {
@@ -380,6 +384,7 @@ func ProcessBaseComponentConfig(
 				baseComponentOfBaseComponentString,
 				componentBasePath,
 				checkBaseComponentExists,
+				baseComponents,
 			)
 
 			if err != nil {

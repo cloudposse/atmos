@@ -606,6 +606,7 @@ func ProcessStackConfig(
 						baseComponentName,
 						terraformComponentsBasePath,
 						checkBaseComponentExists,
+						&baseComponents,
 					)
 					if err != nil {
 						return nil, err
@@ -641,7 +642,7 @@ func ProcessStackConfig(
 					}
 				}
 
-				baseComponents = append(baseComponents, baseComponentName)
+				// baseComponents = append(baseComponents, baseComponentName)
 
 				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
 					for _, v := range inheritList {
@@ -662,7 +663,7 @@ func ProcessStackConfig(
 							}
 						}
 
-						baseComponents = append(baseComponents, baseComponentFromInheritList)
+						// baseComponents = append(baseComponents, baseComponentFromInheritList)
 
 						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
 						err = ProcessBaseComponentConfig(
@@ -673,6 +674,7 @@ func ProcessStackConfig(
 							baseComponentFromInheritList,
 							terraformComponentsBasePath,
 							checkBaseComponentExists,
+							&baseComponents,
 						)
 						if err != nil {
 							return nil, err
@@ -960,6 +962,7 @@ func ProcessStackConfig(
 						baseComponentName,
 						helmfileComponentsBasePath,
 						checkBaseComponentExists,
+						&baseComponents,
 					)
 					if err != nil {
 						return nil, err
@@ -991,7 +994,7 @@ func ProcessStackConfig(
 					}
 				}
 
-				baseComponents = append(baseComponents, baseComponentName)
+				// baseComponents = append(baseComponents, baseComponentName)
 
 				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
 					for _, v := range inheritList {
@@ -1012,7 +1015,7 @@ func ProcessStackConfig(
 							}
 						}
 
-						baseComponents = append(baseComponents, baseComponentFromInheritList)
+						// baseComponents = append(baseComponents, baseComponentFromInheritList)
 
 						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
 						err = ProcessBaseComponentConfig(
@@ -1023,6 +1026,7 @@ func ProcessStackConfig(
 							baseComponentFromInheritList,
 							helmfileComponentsBasePath,
 							checkBaseComponentExists,
+							&baseComponents,
 						)
 						if err != nil {
 							return nil, err
