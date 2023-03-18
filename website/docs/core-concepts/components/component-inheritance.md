@@ -72,7 +72,8 @@ classDiagram
 ```
 
 <br/>
-<br/>
+
+## Single Inheritance Example
 
 Let's say we want to provision two VPCs with different settings into the same AWS account.
 
@@ -257,6 +258,8 @@ statement or by explicitly defining them in the Stack configuration. The `metada
 :::
 
 <br/>
+
+## Multiple Inheritance Example
 
 Here is a concrete example:
 
@@ -487,3 +490,5 @@ For `ComponentG`:
 - Then `ComponentC` is processed, and it overrides the configuration from `ComponentA` and `ComponentI`
 
 - And finally, `ComponentG` is processed, and it overrides `ComponentC`, `ComponentA` and `ComponentI`
+
+## Hierarchical Inheritance Example
