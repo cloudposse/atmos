@@ -276,7 +276,7 @@ import:
 components:
   terraform:
     test/test-component-override-3:
-      vars: {}
+      vars: { }
       metadata:
         # `real` is implicit, you don't need to specify it.
         # `abstract` makes the component protected from being deployed.
@@ -492,3 +492,120 @@ For `ComponentG`:
 - And finally, `ComponentG` is processed, and it overrides `ComponentC`, `ComponentA` and `ComponentI`
 
 ## Hierarchical Inheritance Example
+
+Let's consider the following configuration for Atmos components `base-component-1`, `base-component-2`, `derived-component-1`
+and `derived-component-2`:
+
+```yaml
+components:
+  terraform:
+
+    base-component-1:
+      metadata:
+        type: abstract
+      vars:
+        hierarchical_inheritance_test: "base-component-1"
+
+    base-component-2:
+      metadata:
+        type: abstract
+      vars:
+        hierarchical_inheritance_test: "base-component-2"
+
+    derived-component-1:
+      metadata:
+        component: "test/test-component"
+        inherits:
+          - base-component-1
+      vars: { }
+
+    derived-component-2:
+      metadata:
+        component: "test/test-component"
+        inherits:
+          - base-component-2
+          - derived-component-1
+      vars: { }
+```
+
+<br/>
+
+This configuration can be represented by the following diagram:
+
+<br/>
+
+```mermaid
+classDiagram
+      `base-component-1` --> `derived-component-1`
+      `base-component-1` : vars
+      `base-component-1` : settings
+      `base-component-1` : env
+      `derived-component-1` --> `derived-component-2`
+      `base-component-2` --> `derived-component-2`
+      class `derived-component-1` {
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- base-component-1&nbsp;&nbsp;
+      }
+      class `derived-component-2` {
+          vars
+          settings
+          env
+          metadata:
+          &nbsp;&nbsp;inherits:
+          &nbsp;&nbsp;&nbsp;&nbsp;- base-component-2&nbsp;&nbsp;
+          &nbsp;&nbsp;&nbsp;&nbsp;- derived-component-1&nbsp;&nbsp;
+      }
+      class `base-component-2` {
+          vars
+          settings
+          env
+      }
+```
+
+<br/>
+
+In the configuration above, the `derived-component-1` component inherits from `base-component-1`.
+
+The `derived-component-2` component inherits from `base-component-2` and `derived-component-1` via Multiple Inheritance, and from `base-component-1` via Multilevel
+Inheritance.
+
+All the base components of the `base-component-2` component are processed and deep-merged in the order they are specified in the `inherits` list:
+
+- `base-component-2` is processed first (since it's the first item in the `inherits` list)
+
+- Then `base-component-1` is processed (since it's the base component for `derived-component-1` which is the second item in the `inherits` list)
+
+- Then `derived-component-1` is processed, and it overrides the configuration from `base-component-2` and `base-component-1`
+
+- And finally, `derived-component-2` is processed, and it overrides `derived-component-1`, `base-component-1` and `base-component-2`
+
+When we run the following command to provision the `derived-component-2` component:
+
+```shell
+atmos terraform plan derived-component-2 -s tenant1-ue2-test-1
+```
+
+Atmos will process all the configurations for the component and all the base components and will show the following console output:
+
+```console
+Variables for the component 'derived-component-2' in the stack 'tenant1-ue2-test-1':
+enabled: true
+environment: ue2
+hierarchical_inheritance_test: base-component-1
+namespace: cp
+region: us-east-2
+stage: test-1
+tenant: tenant1
+
+Command info:
+Terraform binary: terraform
+Terraform command: plan
+Arguments and flags: []
+Component: derived-component-2
+Terraform component: test/test-component
+Inheritance: derived-component-2 -> derived-component-1 -> base-component-1 -> base-component-2
+```
