@@ -577,7 +577,7 @@ In the configuration above, `derived-component-1` inherits from `base-component-
 `derived-component-2` inherits from `base-component-2` and `derived-component-1` via Multiple Inheritance, and from `base-component-1` via Multilevel
 Inheritance.
 
-All the base components of the `base-component-2` component are processed and deep-merged in the order they are specified in the `inherits` list:
+The `derived-component-2` component is processed in the following order:
 
 - `base-component-2` is processed first (since it's the first item in the `inherits` list)
 
@@ -598,7 +598,6 @@ Atmos will show the following output:
 
 ```console
 Variables for the component 'derived-component-2' in the stack 'tenant1-ue2-test-1':
-enabled: true
 environment: ue2
 hierarchical_inheritance_test: base-component-1
 namespace: cp
@@ -635,11 +634,10 @@ components:
 ```
 
 `base-component-2` will be processed last (after `base-component-1` and `derived-component-1`), and the `hierarchical_inheritance_test` variable
-will be inherited from the `base-component-2` component:
+will be inherited from `base-component-2`:
 
 ```console
 Variables for the component 'derived-component-2' in the stack 'tenant1-ue2-test-1':
-enabled: true
 environment: ue2
 hierarchical_inheritance_test: base-component-2
 namespace: cp
