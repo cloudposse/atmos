@@ -392,6 +392,52 @@ func ProcessBaseComponentConfig(
 			}
 		}
 
+		// Base component metadata.
+		// This is per component, not deep-merged and not inherited from base components and globals.
+		componentMetadata := map[any]any{}
+		if i, ok := baseComponentMap["metadata"]; ok {
+			componentMetadata, ok = i.(map[any]any)
+			if !ok {
+				return fmt.Errorf("invalid '%s.metadata' section in the stack '%s'", component, stack)
+			}
+
+			if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
+				for _, v := range inheritList {
+					baseComponentFromInheritList, ok := v.(string)
+					if !ok {
+						return fmt.Errorf("invalid '%s.metadata.inherits' section in the stack '%s'", component, stack)
+					}
+
+					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
+						if checkBaseComponentExists {
+							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
+								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
+								component,
+								stack,
+								baseComponentFromInheritList,
+							)
+							return errors.New(errorMessage)
+						}
+					}
+
+					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
+					err := ProcessBaseComponentConfig(
+						baseComponentConfig,
+						allComponentsMap,
+						component,
+						stack,
+						baseComponentFromInheritList,
+						componentBasePath,
+						checkBaseComponentExists,
+						baseComponents,
+					)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+
 		if baseComponentVarsSection, baseComponentVarsSectionExist := baseComponentMap["vars"]; baseComponentVarsSectionExist {
 			baseComponentVars, ok = baseComponentVarsSection.(map[any]any)
 			if !ok {
