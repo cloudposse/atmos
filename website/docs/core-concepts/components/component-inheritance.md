@@ -568,9 +568,9 @@ classDiagram
 
 <br/>
 
-In the configuration above, the `derived-component-1` component inherits from `base-component-1`.
+In the configuration above, `derived-component-1` inherits from `base-component-1`.
 
-The `derived-component-2` component inherits from `base-component-2` and `derived-component-1` via Multiple Inheritance, and from `base-component-1` via Multilevel
+`derived-component-2` inherits from `base-component-2` and `derived-component-1` via Multiple Inheritance, and from `base-component-1` via Multilevel
 Inheritance.
 
 All the base components of the `base-component-2` component are processed and deep-merged in the order they are specified in the `inherits` list:
@@ -589,7 +589,7 @@ When we run the following command to provision the `derived-component-2` compone
 atmos terraform plan derived-component-2 -s tenant1-ue2-test-1
 ```
 
-Atmos will process all the configurations for the component and all the base components and will show the following console output:
+Atmos will show the following output:
 
 ```console
 Variables for the component 'derived-component-2' in the stack 'tenant1-ue2-test-1':
@@ -609,3 +609,5 @@ Component: derived-component-2
 Terraform component: test/test-component
 Inheritance: derived-component-2 -> derived-component-1 -> base-component-1 -> base-component-2
 ```
+
+Note that the `hierarchical_inheritance_test` variable was inherited from `base-component-1`.
