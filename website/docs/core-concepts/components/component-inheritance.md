@@ -273,7 +273,7 @@ import:
 components:
   terraform:
     test/test-component-override-3:
-      vars: { }
+      vars: {}
       metadata:
         # `real` is implicit, you don't need to specify it.
         # `abstract` makes the component protected from being deployed.
