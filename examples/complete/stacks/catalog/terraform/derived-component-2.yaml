@@ -4,8 +4,8 @@ components:
       metadata:
         component: "test/test-component"
         inherits:
-          - derived-component-1
           - base-component-2
+          - derived-component-1
       vars:
         enabled: true
         service_1_name: "derived-component-2-service-1"
