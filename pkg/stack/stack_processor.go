@@ -21,7 +21,7 @@ var (
 	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
-// ProcessYAMLConfigFiles takes a list of paths to YAML config files, processes and deep-merges all imports,
+// ProcessYAMLConfigFiles takes a list of paths to stack config files, processes and deep-merges all imports,
 // and returns a list of stack configs
 func ProcessYAMLConfigFiles(
 	stacksBasePath string,
@@ -179,7 +179,7 @@ func ProcessYAMLConfigFile(
 
 	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
-		e := fmt.Errorf("invalid YAML file '%s'\n%v", relativeFilePath, err)
+		e := fmt.Errorf("invalid stack config file '%s'\n%v", relativeFilePath, err)
 		return nil, nil, nil, e
 	}
 
@@ -653,7 +653,7 @@ func ProcessStackConfig(
 						if _, ok := allTerraformComponentsMap[baseComponentFromInheritList]; !ok {
 							if checkBaseComponentExists {
 								errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
-									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the YAML config files for the stack '%[2]s'",
+									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
 									component,
 									stackName,
 									baseComponentFromInheritList,
@@ -1003,7 +1003,7 @@ func ProcessStackConfig(
 						if _, ok := allHelmfileComponentsMap[baseComponentFromInheritList]; !ok {
 							if checkBaseComponentExists {
 								errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
-									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the YAML config files for the stack '%[2]s'",
+									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
 									component,
 									stackName,
 									baseComponentFromInheritList,

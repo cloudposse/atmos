@@ -162,3 +162,19 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "orgs/cp/tenant1/_defaults", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[14])
 	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[15])
 }
+
+func TestComponentProcessorHierarchicalInheritance(t *testing.T) {
+	var yamlConfig []byte
+	namespace := ""
+	component := "derived-component-2"
+	tenant := "tenant1"
+	environment := "ue2"
+	stage := "test-1"
+
+	componentMap, err := ProcessComponentFromContext(component, namespace, tenant, environment, stage, "", "")
+	assert.Nil(t, err)
+
+	yamlConfig, err = yaml.Marshal(componentMap)
+	assert.Nil(t, err)
+	t.Log(string(yamlConfig))
+}
