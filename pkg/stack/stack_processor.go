@@ -642,7 +642,7 @@ func ProcessStackConfig(
 					}
 				}
 
-				// baseComponents = append(baseComponents, baseComponentName)
+				baseComponents = append(baseComponents, baseComponentName)
 
 				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
 					for _, v := range inheritList {
@@ -662,8 +662,6 @@ func ProcessStackConfig(
 								return nil, errors.New(errorMessage)
 							}
 						}
-
-						// baseComponents = append(baseComponents, baseComponentFromInheritList)
 
 						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
 						err = ProcessBaseComponentConfig(
@@ -994,7 +992,7 @@ func ProcessStackConfig(
 					}
 				}
 
-				// baseComponents = append(baseComponents, baseComponentName)
+				baseComponents = append(baseComponents, baseComponentName)
 
 				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
 					for _, v := range inheritList {
@@ -1014,8 +1012,6 @@ func ProcessStackConfig(
 								return nil, errors.New(errorMessage)
 							}
 						}
-
-						// baseComponents = append(baseComponents, baseComponentFromInheritList)
 
 						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
 						err = ProcessBaseComponentConfig(
