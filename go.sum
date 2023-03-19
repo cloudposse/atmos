@@ -521,8 +521,8 @@ github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjY
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
-github.com/open-policy-agent/opa v0.50.0 h1:CBRj7lJ9DFDHvlx2SRP6uFOCD9ooxDdNW9fYK2IIW+0=
-github.com/open-policy-agent/opa v0.50.0/go.mod h1:9jKfDk0L5b9rnhH4M0nq10cGHbYOxqygxzTT3dsvhec=
+github.com/open-policy-agent/opa v0.50.1 h1:ZQOqmzTUjcdX7Bu6gnmWZ6ghFTAQI0rI1fR7AqaOW70=
+github.com/open-policy-agent/opa v0.50.1/go.mod h1:9jKfDk0L5b9rnhH4M0nq10cGHbYOxqygxzTT3dsvhec=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.0-rc2 h1:2zx/Stx4Wc5pIPDvIxHXvXtQFW/7XWJGmnM7r3wg034=
