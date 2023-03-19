@@ -62,7 +62,7 @@ jobs:
         fi
 
     - name: Auto Test
-      uses: cloudposse/actions/github/repository-dispatch@0.22.0
+      uses: cloudposse/actions/github/repository-dispatch@0.33.0
       # match users by ID because logins (user names) are inconsistent,
       # for example in the REST API Renovate Bot is `renovate[bot]` but
       # in GraphQL it is just `renovate`, plus there is a non-bot
