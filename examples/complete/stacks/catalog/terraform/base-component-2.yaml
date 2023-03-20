@@ -1,0 +1,11 @@
+components:
+  terraform:
+    base-component-2:
+      metadata:
+        type: abstract
+      settings:
+        spacelift:
+          workspace_enabled: false
+      vars:
+        enabled: false
+        hierarchical_inheritance_test: "base-component-2"

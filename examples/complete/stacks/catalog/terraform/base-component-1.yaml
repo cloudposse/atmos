@@ -1,0 +1,13 @@
+components:
+  terraform:
+    base-component-1:
+      metadata:
+        type: abstract
+      settings:
+        spacelift:
+          workspace_enabled: false
+      vars:
+        enabled: false
+        service_1_name: "base-component-1-service-1"
+        service_2_name: "base-component-1-service-2"
+        hierarchical_inheritance_test: "base-component-1"
