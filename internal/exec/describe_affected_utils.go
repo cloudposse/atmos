@@ -264,7 +264,6 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	// Update paths to point to the temp dir
 	localRepoFileSystemPathAbs, err := filepath.Abs(localRepoFileSystemPath)
 	if err != nil {
 		return nil, err
@@ -272,8 +271,10 @@ func executeDescribeAffected(
 
 	basePath := cliConfig.BasePath
 
-	// If atmos base path is absolute, find the relative path between the local repo path and atmos base path
-	// This is used below to join the remote (cloned) repo path with the relative atmos base path
+	// Handle `atmos` absolute base path.
+	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
+	// If the `atmos` base path is absolute, find the relative path between the local repo path and the `atmos` base path.
+	// This relative path (the difference) is then used below to join with the remote (cloned) repo path.
 	if path.IsAbs(basePath) {
 		basePath, err = filepath.Rel(localRepoFileSystemPathAbs, basePath)
 		if err != nil {
@@ -281,6 +282,7 @@ func executeDescribeAffected(
 		}
 	}
 
+	// Update paths to point to the cloned remote repo dir
 	cliConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath)
 	cliConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Terraform.BasePath)
 	cliConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Helmfile.BasePath)
