@@ -16,7 +16,7 @@ require (
 	github.com/open-policy-agent/opa v0.50.1
 	github.com/otiai10/copy v1.9.0
 	github.com/pkg/errors v0.9.1
-	github.com/samber/lo v1.37.0
+	github.com/samber/lo v1.38.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.2.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.15.0

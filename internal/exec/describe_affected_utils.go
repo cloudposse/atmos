@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -47,6 +48,13 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	if err != nil {
 		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
+
+	localRepoWorktree, err := localRepo.Worktree()
+	if err != nil {
+		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+	}
+
+	localRepoPath := localRepoWorktree.Filesystem.Root()
 
 	// Get the remotes of the local repo
 	keys := []string{}
@@ -168,7 +176,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, tempDir, localRepo, remoteRepo, verbose)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose)
 	if err != nil {
 		return nil, err
 	}
@@ -198,6 +206,13 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
 
+	localRepoWorktree, err := localRepo.Worktree()
+	if err != nil {
+		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+	}
+
+	localRepoPath := localRepoWorktree.Filesystem.Root()
+
 	remoteRepo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{
 		DetectDotGit:          false,
 		EnableDotGitCommonDir: false,
@@ -212,7 +227,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, repoPath, localRepo, remoteRepo, verbose)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, repoPath, localRepo, remoteRepo, verbose)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +237,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 
 func executeDescribeAffected(
 	cliConfig cfg.CliConfiguration,
+	localRepoFileSystemPath string,
 	remoteRepoFileSystemPath string,
 	localRepo *git.Repository,
 	remoteRepo *git.Repository,
@@ -249,12 +265,28 @@ func executeDescribeAffected(
 	}
 
 	// Update paths to point to the temp dir
-	cliConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Stacks.BasePath)
-	cliConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
-	cliConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
+	localRepoFileSystemPathAbs, err := filepath.Abs(localRepoFileSystemPath)
+	if err != nil {
+		return nil, err
+	}
+
+	basePath := cliConfig.BasePath
+
+	// If atmos base path is absolute, find the relative path between the local repo path and atmos base path
+	// This is used below to join the remote (cloned) repo path with the relative atmos base path
+	if path.IsAbs(basePath) {
+		basePath, err = filepath.Rel(localRepoFileSystemPathAbs, basePath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cliConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath)
+	cliConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Terraform.BasePath)
+	cliConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Helmfile.BasePath)
 
 	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
-		path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Stacks.BasePath),
+		path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath),
 		cliConfig.StackConfigFilesRelativePaths,
 	)
 	if err != nil {
