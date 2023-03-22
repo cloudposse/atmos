@@ -151,3 +151,12 @@ li.menu__list-item.command {
 .docs-doc-id-cli\/cheatsheet td:nth-of-type(2) {
     white-space: break-spaces;
 }
+
+.navbar-cta-button {
+    color: var(--ifm-button-color);
+    font-weight: bolder;
+}
+
+.navbar-cta-button:hover {
+    color: var(--ifm-button-color);
+}

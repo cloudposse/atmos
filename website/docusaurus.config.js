@@ -103,13 +103,9 @@ const config = {
                     {
                         to: 'https://cloudposse.com/services/',
                         label: 'Get Help',
-                        position: 'right'
+                        position: 'right',
+                        className: 'button button--primary navbar-cta-button'
                     },
-                    // {
-                    //     to: '/blog',
-                    //     label: 'Blog',
-                    //     position: 'left'
-                    // },
                     {
                         href: 'https://github.com/cloudposse/atmos',
                         position: 'right',
