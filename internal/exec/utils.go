@@ -1278,7 +1278,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 			} else {
 				return info, fmt.Errorf("command \"%s\" requires an argument", info.SubCommand)
 			}
-			if len(additionalArgsAndFlags) > 4 {
+			if len(additionalArgsAndFlags) > 3 {
 				info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
 			}
 		} else {
