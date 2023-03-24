@@ -124,6 +124,7 @@ const config = {
                 appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',
                 apiKey: process.env.ALGOLIA_SEARCH_API_KEY || '557985309adf0e4df9dcf3cb29c61928', // this is SEARCH ONLY API key and is not sensitive information
                 indexName: process.env.ALGOLIA_INDEX_NAME || 'docs.cloudposse.com',
+                externalUrlRegex: 'docs\\.cloudposse\\.com',
                 contextualSearch: false
             },
         }),
