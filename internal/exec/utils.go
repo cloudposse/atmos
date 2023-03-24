@@ -1273,12 +1273,20 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 		}
 
 		if twoWordsCommand {
-			info.ComponentFromArg = additionalArgsAndFlags[2]
-			info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
+			if len(additionalArgsAndFlags) > 2 {
+				info.ComponentFromArg = additionalArgsAndFlags[2]
+			} else {
+				return info, fmt.Errorf("command \"%s\" requires an argument", info.SubCommand)
+			}
+			if len(additionalArgsAndFlags) > 3 {
+				info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
+			}
 		} else {
 			info.SubCommand = additionalArgsAndFlags[0]
 			info.ComponentFromArg = additionalArgsAndFlags[1]
-			info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+			if len(additionalArgsAndFlags) > 2 {
+				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+			}
 		}
 	}
 
