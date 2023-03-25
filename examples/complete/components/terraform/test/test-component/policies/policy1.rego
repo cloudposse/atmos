@@ -1,0 +1,5 @@
+package atmos
+
+allow {
+  true
+}

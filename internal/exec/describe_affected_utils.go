@@ -658,17 +658,20 @@ func isComponentFolderChanged(
 	changedFiles []string,
 ) bool {
 
-	var pathPrefix string
+	var componentPath string
 
 	switch componentType {
 	case "terraform":
-		pathPrefix = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
 	case "helmfile":
-		pathPrefix = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
+		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
 	}
 
-	if u.SliceOfPathsContainsPath(changedFiles, pathPrefix) {
-		return true
+	for _, v := range changedFiles {
+		dir := path.Dir(v)
+		if dir == componentPath {
+			return true
+		}
 	}
 	return false
 }
