@@ -660,7 +660,7 @@ func isEqual(
 	return false
 }
 
-// isComponentFolderChanged checks if a component folder changed (has changed files in it)
+// isComponentFolderChanged checks if a component folder changed (has changed files in the folder or its sub-folders)
 func isComponentFolderChanged(
 	component string,
 	componentType string,
