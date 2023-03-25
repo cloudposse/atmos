@@ -400,7 +400,12 @@ func findAffected(
 							}
 							// Check if any files in the component's folder have changed
 							if component, ok := componentSection["component"].(string); ok && component != "" {
-								if isComponentFolderChanged(component, "terraform", cliConfig, changedFiles) {
+								changed, err := isComponentFolderChanged(component, "terraform", cliConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
 									affected := cfg.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
@@ -493,7 +498,12 @@ func findAffected(
 							}
 							// Check if any files in the component's folder have changed
 							if component, ok := componentSection["component"].(string); ok && component != "" {
-								if isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles) {
+								changed, err := isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
 									affected := cfg.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
@@ -656,7 +666,7 @@ func isComponentFolderChanged(
 	componentType string,
 	cliConfig cfg.CliConfiguration,
 	changedFiles []string,
-) bool {
+) (bool, error) {
 
 	var componentPath string
 
@@ -667,11 +677,27 @@ func isComponentFolderChanged(
 		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
 	}
 
-	for _, v := range changedFiles {
-		dir := path.Dir(v)
-		if dir == componentPath {
-			return true
+	componentPathAbs, err := filepath.Abs(componentPath)
+	if err != nil {
+		return false, err
+	}
+
+	componentPathPattern := componentPathAbs + "/**"
+
+	for _, changedFile := range changedFiles {
+		changedFileAbs, err := filepath.Abs(changedFile)
+		if err != nil {
+			return false, err
+		}
+
+		match, err := u.PathMatch(componentPathPattern, changedFileAbs)
+		if err != nil {
+			return false, err
+		}
+
+		if match {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
