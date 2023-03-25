@@ -400,7 +400,12 @@ func findAffected(
 							}
 							// Check if any files in the component's folder have changed
 							if component, ok := componentSection["component"].(string); ok && component != "" {
-								if isComponentFolderChanged(component, "terraform", cliConfig, changedFiles) {
+								changed, err := isComponentFolderChanged(component, "terraform", cliConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
 									affected := cfg.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
@@ -493,7 +498,12 @@ func findAffected(
 							}
 							// Check if any files in the component's folder have changed
 							if component, ok := componentSection["component"].(string); ok && component != "" {
-								if isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles) {
+								changed, err := isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
 									affected := cfg.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
@@ -650,25 +660,44 @@ func isEqual(
 	return false
 }
 
-// isComponentFolderChanged checks if a component folder changed (has changed files in it)
+// isComponentFolderChanged checks if a component folder changed (has changed files in the folder or its sub-folders)
 func isComponentFolderChanged(
 	component string,
 	componentType string,
 	cliConfig cfg.CliConfiguration,
 	changedFiles []string,
-) bool {
+) (bool, error) {
 
-	var pathPrefix string
+	var componentPath string
 
 	switch componentType {
 	case "terraform":
-		pathPrefix = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
 	case "helmfile":
-		pathPrefix = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
+		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
 	}
 
-	if u.SliceOfPathsContainsPath(changedFiles, pathPrefix) {
-		return true
+	componentPathAbs, err := filepath.Abs(componentPath)
+	if err != nil {
+		return false, err
 	}
-	return false
+
+	componentPathPattern := componentPathAbs + "/**"
+
+	for _, changedFile := range changedFiles {
+		changedFileAbs, err := filepath.Abs(changedFile)
+		if err != nil {
+			return false, err
+		}
+
+		match, err := u.PathMatch(componentPathPattern, changedFileAbs)
+		if err != nil {
+			return false, err
+		}
+
+		if match {
+			return true, nil
+		}
+	}
+	return false, nil
 }
