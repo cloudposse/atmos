@@ -60,9 +60,11 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	// Check if the `backend` section has `workspace_key_prefix`
-	if _, ok := info.ComponentBackendSection["workspace_key_prefix"].(string); !ok {
-		return fmt.Errorf("\nBackend config for the '%s' component is missing 'workspace_key_prefix'\n", component)
+	// Check if the `backend` section has `workspace_key_prefix` when `backend_type` is `s3`
+	if info.ComponentBackendType == "s3" {
+		if _, ok := info.ComponentBackendSection["workspace_key_prefix"].(string); !ok {
+			return fmt.Errorf("backend config for the '%s' component is missing 'workspace_key_prefix'", component)
+		}
 	}
 
 	// Write backend config to file
