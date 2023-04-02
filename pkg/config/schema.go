@@ -54,8 +54,9 @@ type Workflows struct {
 }
 
 type Logs struct {
-	Verbose bool `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
-	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
+	Verbose bool   `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
+	Colors  bool   `yaml:"colors" json:"colors" mapstructure:"colors"`
+	File    string `yaml:"file" json:"file" mapstructure:"file"`
 }
 
 type Context struct {
