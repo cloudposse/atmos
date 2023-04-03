@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"os"
 	"strings"
@@ -13,7 +12,7 @@ func PrintAsJSON(data any) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(j)
+	PrintMessage(j)
 	return nil
 }
 

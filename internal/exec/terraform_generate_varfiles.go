@@ -69,8 +69,6 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 		return err
 	}
 
-	fmt.Println()
-
 	var ok bool
 	var componentsSection map[string]any
 	var terraformSection map[string]any
@@ -183,7 +181,6 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 					u.PrintMessage(fmt.Sprintf("atmos component: %s", componentName))
 					u.PrintMessage(fmt.Sprintf("atmos stack: %s", contextPrefix))
 					u.PrintMessage(fmt.Sprintf("stack config file: %s", stackFileName))
-					fmt.Println()
 				}
 			}
 		}

@@ -474,7 +474,5 @@ func ExecuteAtlantisGenerateRepoConfig(
 		}
 	}
 
-	fmt.Println()
-
 	return nil
 }

@@ -52,8 +52,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 
 	if printVerbose {
 		u.PrintInfo("\nSearching, processing and merging atmos CLI configurations (atmos.yaml) in the following order:")
-		fmt.Println("system dir, home dir, current dir, ENV vars, command-line arguments")
-		fmt.Println()
+		u.PrintMessage("system dir, home dir, current dir, ENV vars, command-line arguments\n")
 	}
 
 	configFound := false

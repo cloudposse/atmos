@@ -20,9 +20,9 @@ func PrintErrorToStdError(err error) {
 		red := color.New(color.FgRed)
 		_, err2 := red.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
-			fmt.Println("Error sending the error message to std.Error:")
+			PrintMessage("Error sending the error message to std.Error:")
 			PrintError(err2)
-			fmt.Println("Original error message:")
+			PrintMessage("Original error message:")
 			PrintError(err)
 		}
 	}

@@ -67,7 +67,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 
 	// Write the variables to file
 	u.PrintInfo("Writing the variables to file:")
-	fmt.Println(varFilePath)
+	u.PrintMessage(varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
@@ -76,6 +76,5 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 		}
 	}
 
-	fmt.Println()
 	return nil
 }

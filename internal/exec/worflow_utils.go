@@ -105,8 +105,6 @@ func ExecuteWorkflow(
 		} else {
 			return fmt.Errorf("invalid workflow step type '%s'. Supported types are 'atmos' and 'shell'", commandType)
 		}
-
-		fmt.Println()
 	}
 
 	return nil

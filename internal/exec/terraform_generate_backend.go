@@ -76,8 +76,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		"backend.tf.json",
 	)
 
-	fmt.Println()
-	u.PrintInfo("Writing the backend config to file:")
+	u.PrintInfo("\nWriting the backend config to file:")
 	u.PrintMessage(backendFilePath)
 
 	if !info.DryRun {
@@ -87,6 +86,5 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		}
 	}
 
-	fmt.Println()
 	return nil
 }

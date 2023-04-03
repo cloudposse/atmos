@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"gopkg.in/yaml.v2"
 	"os"
 )
@@ -12,7 +11,7 @@ func PrintAsYAML(data any) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(y)
+	PrintMessage(y)
 	return nil
 }
 
