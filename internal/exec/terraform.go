@@ -243,12 +243,12 @@ func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
 	u.PrintMessage("Terraform binary: " + info.Command)
 
 	if info.SubCommand2 == "" {
-		u.PrintMessage(fmt.Sprintf("Terraform command: %s\n", info.SubCommand))
+		u.PrintMessage(fmt.Sprintf("Terraform command: %s", info.SubCommand))
 	} else {
-		u.PrintMessage(fmt.Sprintf("Terraform command: %s %s\n", info.SubCommand, info.SubCommand2))
+		u.PrintMessage(fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
 	}
 
-	u.PrintMessage(fmt.Sprintf("Arguments and flags: %v\n", info.AdditionalArgsAndFlags))
+	u.PrintMessage(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
 	u.PrintMessage("Component: " + info.ComponentFromArg)
 
 	if len(info.BaseComponentPath) > 0 {
