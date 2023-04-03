@@ -20,7 +20,7 @@ func LogErrorToStdError(err error) {
 		red := color.New(color.FgRed)
 		_, err2 := red.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
-			LogMessage("Error sending the error message to std.Error:")
+			LogMessage("Error logging the error message to std.Error:")
 			LogError(err2)
 			LogMessage("Original error message:")
 			LogError(err)
