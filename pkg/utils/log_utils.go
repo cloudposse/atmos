@@ -28,14 +28,14 @@ func LogErrorToStdError(err error) {
 	}
 }
 
-// LogError logs errors to std.Output
+// LogError logs errors
 func LogError(err error) {
 	if err != nil {
 		color.Red("%s\n", err)
 	}
 }
 
-// LogErrorVerbose checks the log level and logs errors to std.Output
+// LogErrorVerbose checks the log level and logs errors
 func LogErrorVerbose(verbose bool, err error) {
 	if verbose {
 		LogError(err)
