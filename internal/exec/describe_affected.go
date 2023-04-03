@@ -88,7 +88,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	u.PrintInfoVerbose(verbose && file == "", fmt.Sprintf("\nAffected components and stacks: \n"))
+	u.LogInfoVerbose(verbose && file == "", fmt.Sprintf("\nAffected components and stacks: \n"))
 
 	err = printOrWriteToFile(format, file, affected)
 	if err != nil {

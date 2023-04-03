@@ -59,7 +59,7 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 					if stackNamePattern != "" {
 						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
-							u.PrintErrorToStdError(err)
+							u.LogErrorToStdError(err)
 							return nil, err
 						}
 					} else {

@@ -15,7 +15,7 @@ var workflowCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 	},
 }
@@ -29,7 +29,7 @@ func init() {
 
 	err := workflowCmd.MarkPersistentFlagRequired("file")
 	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
+		u.LogErrorToStdErrorAndExit(err)
 	}
 
 	RootCmd.AddCommand(workflowCmd)

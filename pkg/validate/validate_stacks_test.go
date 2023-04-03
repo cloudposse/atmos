@@ -9,6 +9,6 @@ import (
 
 func TestValidateStacksCommand(t *testing.T) {
 	err := e.ExecuteValidateStacksCmd(nil, nil)
-	u.PrintError(err)
+	u.LogError(err)
 	assert.NotNil(t, err)
 }

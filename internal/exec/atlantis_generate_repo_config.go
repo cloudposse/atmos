@@ -443,14 +443,14 @@ func ExecuteAtlantisGenerateRepoConfig(
 	fileName := outputPath
 	if fileName == "" {
 		fileName = cliConfig.Integrations.Atlantis.Path
-		u.PrintInfo(fmt.Sprintf("Using 'atlantis.path: %s' from 'atmos.yaml'", fileName))
+		u.LogInfo(fmt.Sprintf("Using 'atlantis.path: %s' from 'atmos.yaml'", fileName))
 	} else {
-		u.PrintInfo(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
+		u.LogInfo(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
 	}
 
 	// If the path is empty, dump to 'stdout'
 	if fileName != "" {
-		u.PrintInfo(fmt.Sprintf("Writing atlantis repo config file to '%s'\n", fileName))
+		u.LogInfo(fmt.Sprintf("Writing atlantis repo config file to '%s'\n", fileName))
 
 		fileAbsolutePath, err := filepath.Abs(fileName)
 		if err != nil {

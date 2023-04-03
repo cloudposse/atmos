@@ -15,7 +15,7 @@ var describeStacksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeStacksCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 	},
 }

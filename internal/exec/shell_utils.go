@@ -42,7 +42,7 @@ func ExecuteShellCommand(
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.PrintError(err)
+				u.LogError(err)
 			}
 		}(f)
 
@@ -50,8 +50,8 @@ func ExecuteShellCommand(
 	}
 
 	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		u.PrintMessage(cmd.String())
+		u.LogInfo("\nExecuting command:")
+		u.LogMessage(cmd.String())
 	}
 
 	if dryRun {
@@ -64,8 +64,8 @@ func ExecuteShellCommand(
 // ExecuteShell runs a shell script
 func ExecuteShell(command string, name string, dir string, env []string, dryRun bool, verbose bool) error {
 	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		u.PrintMessage(command)
+		u.LogInfo("\nExecuting command:")
+		u.LogMessage(command)
 	}
 
 	if dryRun {
@@ -80,8 +80,8 @@ func ExecuteShellAndReturnOutput(command string, name string, dir string, env []
 	var b bytes.Buffer
 
 	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		u.PrintMessage(command)
+		u.LogInfo("\nExecuting command:")
+		u.LogMessage(command)
 	}
 
 	if dryRun {
@@ -143,7 +143,7 @@ func ExecuteShellCommandAndReturnOutput(
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.PrintError(err)
+				u.LogError(err)
 			}
 		}(f)
 
@@ -151,8 +151,8 @@ func ExecuteShellCommandAndReturnOutput(
 	}
 
 	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		u.PrintMessage(cmd.String())
+		u.LogInfo("\nExecuting command:")
+		u.LogMessage(cmd.String())
 	}
 
 	if dryRun {
@@ -204,14 +204,14 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
 
-	u.PrintInfo("\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
-	u.PrintMessage(fmt.Sprintf("Component: %s\n", component))
-	u.PrintMessage(fmt.Sprintf("Stack: %s\n", stack))
-	u.PrintMessage(fmt.Sprintf("Working directory: %s\n", workingDir))
-	u.PrintMessage(fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
-	u.PrintInfo("\nSetting the ENV vars in the shell:\n")
+	u.LogInfo("\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
+	u.LogMessage(fmt.Sprintf("Component: %s\n", component))
+	u.LogMessage(fmt.Sprintf("Stack: %s\n", stack))
+	u.LogMessage(fmt.Sprintf("Working directory: %s\n", workingDir))
+	u.LogMessage(fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
+	u.LogInfo("\nSetting the ENV vars in the shell:\n")
 	for _, v := range componentEnvList {
-		u.PrintInfo(v)
+		u.LogInfo(v)
 	}
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
@@ -239,7 +239,7 @@ func execTerraformShellCommand(
 		shellCommand = shellCommand + " -l"
 	}
 
-	u.PrintMessage(fmt.Sprintf("Starting process: %s\n", shellCommand))
+	u.LogMessage(fmt.Sprintf("Starting process: %s\n", shellCommand))
 
 	args := strings.Fields(shellCommand)
 
@@ -254,6 +254,6 @@ func execTerraformShellCommand(
 		return err
 	}
 
-	u.PrintMessage(fmt.Sprintf("Exited shell: %s\n", state.String()))
+	u.LogMessage(fmt.Sprintf("Exited shell: %s\n", state.String()))
 	return nil
 }

@@ -11,7 +11,7 @@ func PrintAsYAML(data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
+	LogMessage(y)
 	return nil
 }
 

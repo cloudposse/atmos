@@ -66,7 +66,7 @@ func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 	}
 
 	// Print component variables
-	u.PrintInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
+	u.LogInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
 	err = u.PrintAsYAML(info.ComponentVarsSection)
 	if err != nil {
 		return err
@@ -85,8 +85,8 @@ func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 	varFile := constructHelmfileComponentVarfileName(info)
 	varFilePath := constructHelmfileComponentVarfilePath(cliConfig, info)
 
-	u.PrintInfo("Writing the variables to file:")
-	u.PrintMessage(varFilePath)
+	u.LogInfo("Writing the variables to file:")
+	u.LogMessage(varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
@@ -107,12 +107,12 @@ func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 	if cliConfig.Components.Helmfile.UseEKS {
 		// Prepare AWS profile
 		helmAwsProfile := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.HelmAwsProfilePattern)
-		u.PrintInfo(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
+		u.LogInfo(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
 
 		// Download kubeconfig by running `aws eks update-kubeconfig`
 		kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", cliConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
 		clusterName := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
-		u.PrintInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
+		u.LogInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
 		err = ExecuteShellCommand("aws",
 			[]string{
@@ -141,33 +141,33 @@ func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 	}
 
 	// Print command info
-	u.PrintInfo("\nCommand info:")
-	u.PrintMessage("Helmfile binary: " + info.Command)
-	u.PrintMessage("Helmfile command: " + info.SubCommand)
+	u.LogInfo("\nCommand info:")
+	u.LogMessage("Helmfile binary: " + info.Command)
+	u.LogMessage("Helmfile command: " + info.SubCommand)
 
 	// https://github.com/roboll/helmfile#cli-reference
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
-	u.PrintMessage(fmt.Sprintf("Global options: %v\n", info.GlobalOptions))
+	u.LogMessage(fmt.Sprintf("Global options: %v\n", info.GlobalOptions))
 
-	u.PrintMessage(fmt.Sprintf("Arguments and flags: %v\n", info.AdditionalArgsAndFlags))
-	u.PrintMessage("Component: " + info.ComponentFromArg)
+	u.LogMessage(fmt.Sprintf("Arguments and flags: %v\n", info.AdditionalArgsAndFlags))
+	u.LogMessage("Component: " + info.ComponentFromArg)
 
 	if len(info.BaseComponent) > 0 {
-		u.PrintMessage("Helmfile component: " + info.BaseComponent)
+		u.LogMessage("Helmfile component: " + info.BaseComponent)
 	}
 
 	if info.Stack == info.StackFromArg {
-		u.PrintMessage("Stack: " + info.StackFromArg)
+		u.LogMessage("Stack: " + info.StackFromArg)
 	} else {
-		u.PrintMessage("Stack: " + info.StackFromArg)
-		u.PrintMessage("Stack path: " + path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
+		u.LogMessage("Stack: " + info.StackFromArg)
+		u.LogMessage("Stack path: " + path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
 	}
 
 	workingDir := constructHelmfileComponentWorkingDir(cliConfig, info)
-	u.PrintMessage(fmt.Sprintf("Working dir: %s\n\n", workingDir))
+	u.LogMessage(fmt.Sprintf("Working dir: %s\n\n", workingDir))
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}
@@ -208,9 +208,9 @@ func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 		envVars = append(envVars, envVarsEKS...)
 	}
 
-	u.PrintInfo("Using ENV vars:")
+	u.LogInfo("Using ENV vars:")
 	for _, v := range envVars {
-		u.PrintMessage(v)
+		u.LogMessage(v)
 	}
 
 	err = ExecuteShellCommand(

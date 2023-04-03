@@ -15,7 +15,7 @@ var helmfileCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteHelmfileCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 	},
 }

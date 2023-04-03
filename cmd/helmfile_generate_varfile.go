@@ -15,7 +15,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 	},
 }
@@ -27,7 +27,7 @@ func init() {
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
+		u.LogErrorToStdErrorAndExit(err)
 	}
 
 	helmfileGenerateCmd.AddCommand(helmfileGenerateVarfileCmd)

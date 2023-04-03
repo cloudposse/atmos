@@ -29,7 +29,7 @@ var completionCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 	},
 }

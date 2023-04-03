@@ -42,7 +42,7 @@ func WriteToFileAsHcl(filePath string, data any, fileMode os.FileMode) error {
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			PrintError(err)
+			LogError(err)
 		}
 	}(f)
 
@@ -118,7 +118,7 @@ func WriteTerraformBackendConfigToFileAsHcl(filePath string, backendType string,
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			PrintError(err)
+			LogError(err)
 		}
 	}(f)
 

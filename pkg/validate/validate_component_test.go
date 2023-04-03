@@ -16,7 +16,7 @@ func TestValidateComponent(t *testing.T) {
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(cliConfig, info, "infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
-	u.PrintError(err)
+	u.LogError(err)
 	assert.Error(t, err)
 }
 
@@ -27,7 +27,7 @@ func TestValidateComponent2(t *testing.T) {
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(cliConfig, info, "infra/vpc", "tenant1-ue2-prod", "", "")
-	u.PrintError(err)
+	u.LogError(err)
 	assert.Error(t, err)
 }
 
@@ -38,6 +38,6 @@ func TestValidateComponent3(t *testing.T) {
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(cliConfig, info, "infra/vpc", "tenant1-ue2-staging", "", "")
-	u.PrintError(err)
+	u.LogError(err)
 	assert.Error(t, err)
 }

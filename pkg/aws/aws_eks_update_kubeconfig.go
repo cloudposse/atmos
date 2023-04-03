@@ -12,7 +12,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext cfg.AwsEksUpdateKubeconfigC
 	err := e.ExecuteAwsEksUpdateKubeconfig(kubeconfigContext)
 
 	if err != nil {
-		u.PrintErrorToStdError(err)
+		u.LogErrorToStdError(err)
 		return err
 	}
 

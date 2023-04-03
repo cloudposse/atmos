@@ -15,7 +15,7 @@ var validateComponentCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 	},
 }
@@ -29,7 +29,7 @@ func init() {
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
+		u.LogErrorToStdErrorAndExit(err)
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)

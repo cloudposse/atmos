@@ -229,7 +229,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext cfg.AwsEksUpdateKubeconfigC
 
 	if kubeconfigPath != "" {
 		message := fmt.Sprintf("\n'kubeconfig' has been downloaded to '%s'\nYou can set 'KUBECONFIG' ENV var to use in other scripts\n", kubeconfigPath)
-		u.PrintInfo(message)
+		u.LogInfo(message)
 	}
 
 	return nil

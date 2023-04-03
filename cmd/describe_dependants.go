@@ -16,7 +16,7 @@ var describeDependantsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeDependantsCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 	},
 }
@@ -30,7 +30,7 @@ func init() {
 
 	err := describeDependantsCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
+		u.LogErrorToStdErrorAndExit(err)
 	}
 
 	describeCmd.AddCommand(describeDependantsCmd)

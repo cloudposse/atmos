@@ -40,7 +40,7 @@ func ExecuteWorkflow(
 		}
 	}
 
-	u.PrintInfo(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
+	u.LogInfo(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
 	err := u.PrintAsYAML(workflowDefinition)
 	if err != nil {
@@ -62,7 +62,7 @@ func ExecuteWorkflow(
 		var command = strings.TrimSpace(step.Command)
 		var commandType = strings.TrimSpace(step.Type)
 
-		u.PrintInfo(fmt.Sprintf("Executing workflow step: %s", command))
+		u.LogInfo(fmt.Sprintf("Executing workflow step: %s", command))
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -96,7 +96,7 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				u.PrintInfo(fmt.Sprintf("Stack: %s", finalStack))
+				u.LogInfo(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
 			if err = ExecuteShellCommand("atmos", args, ".", []string{}, dryRun, true, ""); err != nil {

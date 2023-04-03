@@ -102,7 +102,7 @@ func preCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobra.Co
 
 	if len(args) != len(commandConfig.Arguments) {
 		err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(commandConfig.Arguments))
-		u.PrintErrorToStdErrorAndExit(err)
+		u.LogErrorToStdErrorAndExit(err)
 	}
 
 	// no "steps" means a sub command should be specified
@@ -131,7 +131,7 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
 				if err != nil {
-					u.PrintErrorToStdErrorAndExit(err)
+					u.LogErrorToStdErrorAndExit(err)
 				}
 				flagsData[fl.Name] = providedFlag
 			}
@@ -149,27 +149,27 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 			// Process Go templates in the command's 'component_config.component'
 			component, err := u.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data)
 			if err != nil {
-				u.PrintErrorToStdErrorAndExit(err)
+				u.LogErrorToStdErrorAndExit(err)
 			}
 			if component == "" || component == "<no value>" {
-				u.PrintErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+				u.LogErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
 					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := u.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data)
 			if err != nil {
-				u.PrintErrorToStdErrorAndExit(err)
+				u.LogErrorToStdErrorAndExit(err)
 			}
 			if stack == "" || stack == "<no value>" {
-				u.PrintErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+				u.LogErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName))
 			}
 
 			// Get the config for the component in the stack
 			componentConfig, err := e.ExecuteDescribeComponent(component, stack)
 			if err != nil {
-				u.PrintErrorToStdErrorAndExit(err)
+				u.LogErrorToStdErrorAndExit(err)
 			}
 			data["ComponentConfig"] = componentConfig
 		}
@@ -186,7 +186,7 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				u.PrintErrorToStdErrorAndExit(err)
+				u.LogErrorToStdErrorAndExit(err)
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
@@ -194,28 +194,28 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := e.ExecuteShellAndReturnOutput(valCommand, valCommandName, ".", nil, false, commandConfig.Verbose)
 				if err != nil {
-					u.PrintErrorToStdErrorAndExit(err)
+					u.LogErrorToStdErrorAndExit(err)
 				}
 				value = res
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data)
 				if err != nil {
-					u.PrintErrorToStdErrorAndExit(err)
+					u.LogErrorToStdErrorAndExit(err)
 				}
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
 			err = os.Setenv(key, value)
 			if err != nil {
-				u.PrintErrorToStdErrorAndExit(err)
+				u.LogErrorToStdErrorAndExit(err)
 			}
 		}
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
-			u.PrintInfo("\nUsing ENV vars:")
+			u.LogInfo("\nUsing ENV vars:")
 			for _, v := range envVarsList {
-				u.PrintMessage(v)
+				u.LogMessage(v)
 			}
 		}
 
@@ -223,14 +223,14 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := u.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 		err = e.ExecuteShell(commandToRun, commandName, ".", envVarsList, false, commandConfig.Verbose)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorToStdErrorAndExit(err)
 		}
 	}
 }

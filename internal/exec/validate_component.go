@@ -63,7 +63,7 @@ func ExecuteValidateComponent(cliConfig cfg.CliConfiguration, configAndStacksInf
 	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err := ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
-		u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
+		u.LogErrorVerbose(cliConfig.Logs.Verbose, err)
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
@@ -82,7 +82,7 @@ func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, com
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
-		u.PrintInfo(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+		u.LogInfo(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
 		ok, err = validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)
 		if err != nil {
@@ -102,9 +102,9 @@ func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, com
 			schemaPath = v.SchemaPath
 			schemaType = v.SchemaType
 
-			u.PrintInfo(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+			u.LogInfo(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 			if v.Description != "" {
-				u.PrintMessage(v.Description)
+				u.LogMessage(v.Description)
 			}
 
 			ok2, err := validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)

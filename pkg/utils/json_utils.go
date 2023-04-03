@@ -12,7 +12,7 @@ func PrintAsJSON(data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(j)
+	LogMessage(j)
 	return nil
 }
 
