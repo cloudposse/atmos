@@ -10,6 +10,7 @@ import (
 	"path"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -24,7 +25,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteHelmfile executes helmfile commands
-func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
+func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
@@ -114,7 +115,9 @@ func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 		clusterName := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
 		u.LogInfo(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
-		err = ExecuteShellCommand("aws",
+		err = ExecuteShellCommand(
+			cliConfig,
+			"aws",
 			[]string{
 				"--profile",
 				helmAwsProfile,
@@ -214,6 +217,7 @@ func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 	}
 
 	err = ExecuteShellCommand(
+		cliConfig,
 		info.Command,
 		allArgsAndFlags,
 		componentPath,
@@ -232,7 +236,7 @@ func ExecuteHelmfile(info cfg.ConfigAndStacksInfo) error {
 	return nil
 }
 
-func checkHelmfileConfig(cliConfig cfg.CliConfiguration) error {
+func checkHelmfileConfig(cliConfig schema.CliConfiguration) error {
 	if len(cliConfig.Components.Helmfile.BasePath) < 1 {
 		return errors.New("Base path to helmfile components must be provided in 'components.helmfile.base_path' config or " +
 			"'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV variable")

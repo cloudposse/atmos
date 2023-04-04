@@ -2,11 +2,13 @@ package spacelift
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -40,7 +42,7 @@ func CreateSpaceliftStacks(
 
 		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports)
 	} else {
-		cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+		cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
 			u.LogErrorToStdError(err)
 			return nil, err

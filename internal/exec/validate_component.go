@@ -9,6 +9,7 @@ import (
 	"path"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -56,14 +57,14 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponent(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.ConfigAndStacksInfo, componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
+func ExecuteValidateComponent(cliConfig schema.CliConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo, componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
 	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err := ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
-		u.LogErrorVerbose(cliConfig.Logs.Verbose, err)
+		u.LogError(cliConfig, err)
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
@@ -77,7 +78,7 @@ func ExecuteValidateComponent(cliConfig cfg.CliConfiguration, configAndStacksInf
 }
 
 // ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
-func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, componentSection any, schemaPath string, schemaType string) (bool, error) {
+func ValidateComponent(cliConfig schema.CliConfiguration, componentName string, componentSection any, schemaPath string, schemaType string) (bool, error) {
 	ok := true
 	var err error
 
@@ -120,7 +121,7 @@ func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, com
 	return ok, nil
 }
 
-func validateComponentInternal(cliConfig cfg.CliConfiguration, componentSection any, schemaPath string, schemaType string) (bool, error) {
+func validateComponentInternal(cliConfig schema.CliConfiguration, componentSection any, schemaPath string, schemaType string) (bool, error) {
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
 		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
 	}
@@ -187,7 +188,7 @@ func validateComponentInternal(cliConfig cfg.CliConfiguration, componentSection 
 }
 
 // FindValidationSection finds 'validation' section in the component config
-func FindValidationSection(componentSection map[string]any) (cfg.Validation, error) {
+func FindValidationSection(componentSection map[string]any) (schema.Validation, error) {
 	validationSection := map[any]any{}
 
 	if i, ok := componentSection["settings"].(map[any]any); ok {
@@ -196,7 +197,7 @@ func FindValidationSection(componentSection map[string]any) (cfg.Validation, err
 		}
 	}
 
-	var result cfg.Validation
+	var result schema.Validation
 
 	err := mapstructure.Decode(validationSection, &result)
 	if err != nil {

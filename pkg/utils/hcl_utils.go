@@ -1,15 +1,17 @@
 package utils
 
 import (
-	"github.com/cloudposse/atmos/pkg/convert"
+	"os"
+	"strings"
+
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
-	"os"
-	"strings"
+	"github.com/cloudposse/atmos/pkg/convert"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console
@@ -42,7 +44,7 @@ func WriteToFileAsHcl(filePath string, data any, fileMode os.FileMode) error {
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogError(err)
+			LogError(schema.CliConfiguration{}, err)
 		}
 	}(f)
 
@@ -118,7 +120,7 @@ func WriteTerraformBackendConfigToFileAsHcl(filePath string, backendType string,
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogError(err)
+			LogError(schema.CliConfiguration{}, err)
 		}
 	}(f)
 

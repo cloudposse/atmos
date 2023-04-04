@@ -15,7 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/pkg/errors"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -27,13 +27,13 @@ var (
 // ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoClone(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	ref string,
 	sha string,
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,
-) ([]cfg.Affected, error) {
+) ([]schema.Affected, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
 		DetectDotGit:          true,
@@ -92,7 +92,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 		return nil, err
 	}
 
-	defer removeTempDir(tempDir)
+	defer removeTempDir(cliConfig, tempDir)
 
 	u.LogInfoVerbose(verbose, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", repoUrl, tempDir))
 
@@ -187,10 +187,10 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoPath(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	repoPath string,
 	verbose bool,
-) ([]cfg.Affected, error) {
+) ([]schema.Affected, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
 		DetectDotGit:          true,
@@ -236,13 +236,13 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 }
 
 func executeDescribeAffected(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	localRepoFileSystemPath string,
 	remoteRepoFileSystemPath string,
 	localRepo *git.Repository,
 	remoteRepo *git.Repository,
 	verbose bool,
-) ([]cfg.Affected, error) {
+) ([]schema.Affected, error) {
 
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -363,11 +363,11 @@ func executeDescribeAffected(
 func findAffected(
 	currentStacks map[string]any,
 	remoteStacks map[string]any,
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	changedFiles []string,
-) ([]cfg.Affected, error) {
+) ([]schema.Affected, error) {
 
-	res := []cfg.Affected{}
+	res := []schema.Affected{}
 	var err error
 
 	for stackName, stackSection := range currentStacks {
@@ -385,7 +385,7 @@ func findAffected(
 								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, metadataSection, "metadata") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
@@ -406,7 +406,7 @@ func findAffected(
 								}
 
 								if changed {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
@@ -422,7 +422,7 @@ func findAffected(
 							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
@@ -438,7 +438,7 @@ func findAffected(
 							// Check `env` section
 							if envSection, ok := componentSection["env"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, envSection, "env") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
@@ -454,7 +454,7 @@ func findAffected(
 							// Check `settings` section
 							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, "settings") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
@@ -483,7 +483,7 @@ func findAffected(
 								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, metadataSection, "metadata") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
@@ -504,7 +504,7 @@ func findAffected(
 								}
 
 								if changed {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
@@ -520,7 +520,7 @@ func findAffected(
 							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
@@ -536,7 +536,7 @@ func findAffected(
 							// Check `env` section
 							if envSection, ok := componentSection["env"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, envSection, "env") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
@@ -552,7 +552,7 @@ func findAffected(
 							// Check `settings` section
 							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, "settings") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
@@ -577,13 +577,13 @@ func findAffected(
 
 // appendToAffected adds an item to the affected list, and adds the Spacelift stack and Atlantis project (if configured)
 func appendToAffected(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	componentName string,
 	stackName string,
 	componentSection map[string]any,
-	affectedList []cfg.Affected,
-	affected cfg.Affected,
-) ([]cfg.Affected, error) {
+	affectedList []schema.Affected,
+	affected schema.Affected,
+) ([]schema.Affected, error) {
 
 	if affected.ComponentType == "terraform" {
 		varSection := map[any]any{}
@@ -664,7 +664,7 @@ func isEqual(
 func isComponentFolderChanged(
 	component string,
 	componentType string,
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	changedFiles []string,
 ) (bool, error) {
 

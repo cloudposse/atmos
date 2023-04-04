@@ -9,6 +9,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -31,7 +32,12 @@ var (
 )
 
 // processCustomCommands processes and executes custom commands
-func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command, topLevel bool) error {
+func processCustomCommands(
+	cliConfig schema.CliConfiguration,
+	commands []schema.Command,
+	parentCommand *cobra.Command,
+	topLevel bool,
+) error {
 	var command *cobra.Command
 
 	for _, commandCfg := range commands {
@@ -54,7 +60,7 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 					preCustomCommand(cmd, args, parentCommand, commandConfig)
 				},
 				Run: func(cmd *cobra.Command, args []string) {
-					executeCustomCommand(cmd, args, parentCommand, commandConfig)
+					executeCustomCommand(cliConfig, cmd, args, parentCommand, commandConfig)
 				},
 			}
 
@@ -87,7 +93,7 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 			command = customCommand
 		}
 
-		err = processCustomCommands(commandConfig.Commands, command, false)
+		err = processCustomCommands(cliConfig, commandConfig.Commands, command, false)
 		if err != nil {
 			return err
 		}
@@ -97,7 +103,12 @@ func processCustomCommands(commands []cfg.Command, parentCommand *cobra.Command,
 }
 
 // preCustomCommand is run before a custom command is executed
-func preCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobra.Command, commandConfig *cfg.Command) {
+func preCustomCommand(
+	cmd *cobra.Command,
+	args []string,
+	parentCommand *cobra.Command,
+	commandConfig *schema.Command,
+) {
 	var err error
 
 	if len(args) != len(commandConfig.Arguments) {
@@ -113,7 +124,13 @@ func preCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobra.Co
 }
 
 // executeCustomCommand executes a custom command
-func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobra.Command, commandConfig *cfg.Command) {
+func executeCustomCommand(
+	cliConfig schema.CliConfiguration,
+	cmd *cobra.Command,
+	args []string,
+	parentCommand *cobra.Command,
+	commandConfig *schema.Command,
+) {
 	var err error
 
 	// Execute custom command's steps
@@ -228,7 +245,7 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(commandToRun, commandName, ".", envVarsList, false, commandConfig.Verbose)
+		err = e.ExecuteShell(cliConfig, commandToRun, commandName, ".", envVarsList, false, commandConfig.Verbose)
 		if err != nil {
 			u.LogErrorToStdErrorAndExit(err)
 		}
@@ -236,13 +253,13 @@ func executeCustomCommand(cmd *cobra.Command, args []string, parentCommand *cobr
 }
 
 // cloneCommand clones a custom command config into a new struct
-func cloneCommand(orig *cfg.Command) (*cfg.Command, error) {
+func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	origJSON, err := json.Marshal(orig)
 	if err != nil {
 		return nil, err
 	}
 
-	clone := cfg.Command{}
+	clone := schema.Command{}
 	if err = json.Unmarshal(origJSON, &clone); err != nil {
 		return nil, err
 	}

@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -48,7 +49,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 
 // ExecuteDescribeComponent describes component config
 func ExecuteDescribeComponent(component string, stack string) (map[string]any, error) {
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
+	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 
@@ -60,7 +61,7 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
-		u.LogErrorVerbose(cliConfig.Logs.Verbose, err)
+		u.LogError(cliConfig, err)
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {

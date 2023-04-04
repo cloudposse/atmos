@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -29,7 +30,7 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteTerraform executes terraform commands
-func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
+func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
@@ -77,7 +78,7 @@ func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
 		u.LogMessage("Deleting '.terraform' folder")
 		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
 		if err != nil {
-			u.LogError(err)
+			u.LogError(cliConfig, err)
 		}
 
 		u.LogMessage("Deleting '.terraform.lock.hcl' file")
@@ -109,7 +110,7 @@ func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
 				u.LogMessage(fmt.Sprintf("Deleting folder '%s'\n", tfDataDir))
 				err = os.RemoveAll(path.Join(componentPath, tfDataDir))
 				if err != nil {
-					u.LogError(err)
+					u.LogError(cliConfig, err)
 				}
 			}
 		}
@@ -210,6 +211,7 @@ func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
 		err = ExecuteShellCommand(
+			cliConfig,
 			info.Command,
 			initCommandWithArguments,
 			componentPath,
@@ -330,6 +332,7 @@ func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
 		}
 
 		err = ExecuteShellCommand(
+			cliConfig,
 			info.Command,
 			[]string{"workspace", "select", info.TerraformWorkspace},
 			componentPath,
@@ -340,6 +343,7 @@ func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
 		)
 		if err != nil {
 			err = ExecuteShellCommand(
+				cliConfig,
 				info.Command,
 				[]string{"workspace", "new", info.TerraformWorkspace},
 				componentPath,
@@ -396,6 +400,7 @@ func ExecuteTerraform(info cfg.ConfigAndStacksInfo) error {
 	// Execute the provided command (except for `terraform workspace` which was executed above)
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
 		err = ExecuteShellCommand(
+			cliConfig,
 			info.Command,
 			allArgsAndFlags,
 			componentPath,

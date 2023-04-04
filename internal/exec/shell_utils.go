@@ -4,19 +4,23 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"io"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteShellCommand prints and executes the provided command with args and flags
 func ExecuteShellCommand(
+	cliConfig schema.CliConfiguration,
 	command string,
 	args []string,
 	dir string,
@@ -42,7 +46,7 @@ func ExecuteShellCommand(
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.LogError(err)
+				u.LogError(cliConfig, err)
 			}
 		}(f)
 
@@ -62,7 +66,15 @@ func ExecuteShellCommand(
 }
 
 // ExecuteShell runs a shell script
-func ExecuteShell(command string, name string, dir string, env []string, dryRun bool, verbose bool) error {
+func ExecuteShell(
+	cliConfig schema.CliConfiguration,
+	command string,
+	name string,
+	dir string,
+	env []string,
+	dryRun bool,
+	verbose bool,
+) error {
 	if verbose {
 		u.LogInfo("\nExecuting command:")
 		u.LogMessage(command)
@@ -119,6 +131,7 @@ func shellRunner(command string, name string, dir string, env []string, out io.W
 
 // ExecuteShellCommandAndReturnOutput prints and executes the provided command with args and flags and returns the command output
 func ExecuteShellCommandAndReturnOutput(
+	cliConfig schema.CliConfiguration,
 	command string,
 	args []string,
 	dir string,
@@ -143,7 +156,7 @@ func ExecuteShellCommandAndReturnOutput(
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.LogError(err)
+				u.LogError(cliConfig, err)
 			}
 		}(f)
 
@@ -169,6 +182,7 @@ func ExecuteShellCommandAndReturnOutput(
 
 // ExecuteShellCommands sequentially executes the provided list of commands
 func ExecuteShellCommands(
+	cliConfig schema.CliConfiguration,
 	commands []string,
 	dir string,
 	env []string,
@@ -179,7 +193,7 @@ func ExecuteShellCommands(
 	for _, command := range commands {
 		args := strings.Fields(command)
 		if len(args) > 0 {
-			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun, verbose, redirectStdError); err != nil {
+			if err := ExecuteShellCommand(cliConfig, args[0], args[1:], dir, env, dryRun, verbose, redirectStdError); err != nil {
 				return err
 			}
 		}

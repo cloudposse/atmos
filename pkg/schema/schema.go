@@ -1,4 +1,4 @@
-package config
+package schema
 
 // CliConfiguration structure represents schema for `atmos.yaml` CLI config
 type CliConfiguration struct {

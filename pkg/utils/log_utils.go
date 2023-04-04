@@ -2,8 +2,11 @@ package utils
 
 import (
 	"fmt"
-	"github.com/fatih/color"
 	"os"
+
+	"github.com/fatih/color"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // LogErrorToStdErrorAndExit logs errors to std.Error and exits with an error code
@@ -29,16 +32,9 @@ func LogErrorToStdError(err error) {
 }
 
 // LogError logs errors
-func LogError(err error) {
+func LogError(cliConfig schema.CliConfiguration, err error) {
 	if err != nil {
 		color.Red("%s\n", err)
-	}
-}
-
-// LogErrorVerbose checks the log level and logs errors
-func LogErrorVerbose(verbose bool, err error) {
-	if verbose {
-		LogError(err)
 	}
 }
 

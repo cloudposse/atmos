@@ -5,6 +5,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -16,7 +17,7 @@ func ProcessComponentInStack(
 	atmosBasePath string,
 ) (map[string]any, error) {
 
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
+	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
@@ -53,7 +54,7 @@ func ProcessComponentFromContext(
 	atmosBasePath string,
 ) (map[string]any, error) {
 
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
+	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath

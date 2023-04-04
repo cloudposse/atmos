@@ -4,17 +4,18 @@ import (
 	"fmt"
 	"strings"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
-
 	"github.com/samber/lo"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteWorkflow executes an Atmos workflow
 func ExecuteWorkflow(
+	cliConfig schema.CliConfiguration,
 	workflow string,
 	workflowPath string,
-	workflowDefinition *cfg.WorkflowDefinition,
+	workflowDefinition *schema.WorkflowDefinition,
 	dryRun bool,
 	commandLineStack string,
 	fromStep string,
@@ -49,7 +50,7 @@ func ExecuteWorkflow(
 
 	// If `--from-step` is specified, skip all the previous steps
 	if fromStep != "" {
-		steps = lo.DropWhile[cfg.WorkflowStep](steps, func(step cfg.WorkflowStep) bool {
+		steps = lo.DropWhile[schema.WorkflowStep](steps, func(step schema.WorkflowStep) bool {
 			return step.Name != fromStep
 		})
 
@@ -70,7 +71,7 @@ func ExecuteWorkflow(
 
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			if err := ExecuteShell(command, commandName, ".", []string{}, dryRun, true); err != nil {
+			if err := ExecuteShell(cliConfig, command, commandName, ".", []string{}, dryRun, true); err != nil {
 				return err
 			}
 		} else if commandType == "atmos" {
@@ -99,7 +100,7 @@ func ExecuteWorkflow(
 				u.LogInfo(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
-			if err = ExecuteShellCommand("atmos", args, ".", []string{}, dryRun, true, ""); err != nil {
+			if err = ExecuteShellCommand(cliConfig, "atmos", args, ".", []string{}, dryRun, true, ""); err != nil {
 				return err
 			}
 		} else {

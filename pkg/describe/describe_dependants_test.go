@@ -1,15 +1,18 @@
 package describe
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v2"
-	"testing"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDescribeDependants(t *testing.T) {
-	configAndStacksInfo := cfg.ConfigAndStacksInfo{}
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)

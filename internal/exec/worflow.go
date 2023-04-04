@@ -7,10 +7,12 @@ import (
 	"path"
 	"path/filepath"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteWorkflowCmd executes a workflow
@@ -76,9 +78,9 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var yamlContent cfg.WorkflowFile
-	var workflowConfig cfg.WorkflowConfig
-	var workflowDefinition cfg.WorkflowDefinition
+	var yamlContent schema.WorkflowFile
+	var workflowConfig schema.WorkflowConfig
+	var workflowDefinition schema.WorkflowDefinition
 
 	if err = yaml.Unmarshal(fileContent, &yamlContent); err != nil {
 		return err
@@ -98,7 +100,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowDefinition = i
 	}
 
-	err = ExecuteWorkflow(workflow, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
+	err = ExecuteWorkflow(cliConfig, workflow, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
 	if err != nil {
 		return err
 	}

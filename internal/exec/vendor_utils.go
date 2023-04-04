@@ -5,9 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hashicorp/go-getter"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"strconv"
@@ -15,9 +12,14 @@ import (
 	"text/template"
 	"time"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteVendorCommand executes `atmos vendor` commands
@@ -71,7 +73,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 			return err
 		}
 
-		return ExecuteComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
+		return ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
 	} else {
 		// Process stack vendoring
 		return ExecuteStackVendorCommandInternal(stack, dryRun, vendorCommand)
@@ -79,9 +81,9 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
-func ReadAndProcessComponentConfigFile(cliConfig cfg.CliConfiguration, component string, componentType string) (cfg.VendorComponentConfig, string, error) {
+func ReadAndProcessComponentConfigFile(cliConfig schema.CliConfiguration, component string, componentType string) (schema.VendorComponentConfig, string, error) {
 	var componentBasePath string
-	var componentConfig cfg.VendorComponentConfig
+	var componentConfig schema.VendorComponentConfig
 
 	if componentType == "terraform" {
 		componentBasePath = cliConfig.Components.Terraform.BasePath
@@ -131,7 +133,8 @@ func ReadAndProcessComponentConfigFile(cliConfig cfg.CliConfiguration, component
 // https://www.allee.xyz/en/posts/getting-started-with-go-getter
 // https://github.com/otiai10/copy
 func ExecuteComponentVendorCommandInternal(
-	vendorComponentSpec cfg.VendorComponentSpec,
+	cliConfig schema.CliConfiguration,
+	vendorComponentSpec schema.VendorComponentSpec,
 	component string,
 	componentPath string,
 	dryRun bool,
@@ -190,7 +193,7 @@ func ExecuteComponentVendorCommandInternal(
 				return err
 			}
 
-			defer removeTempDir(tempDir)
+			defer removeTempDir(cliConfig, tempDir)
 
 			// Download the source into the temp folder
 			client := &getter.Client{

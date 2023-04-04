@@ -1,14 +1,17 @@
 package validate
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestValidateStacksCommand(t *testing.T) {
 	err := e.ExecuteValidateStacksCmd(nil, nil)
-	u.LogError(err)
+	u.LogError(schema.CliConfiguration{}, err)
 	assert.NotNil(t, err)
 }

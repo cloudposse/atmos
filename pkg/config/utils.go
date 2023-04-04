@@ -8,12 +8,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
 func FindAllStackConfigsInPathsForStack(
-	cliConfig CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	stack string,
 	includeStackPaths []string,
 	excludeStackPaths []string,
@@ -56,7 +57,7 @@ func FindAllStackConfigsInPathsForStack(
 				for _, excludePath := range excludeStackPaths {
 					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
-						u.LogError(err)
+						u.LogError(cliConfig, err)
 						continue
 					} else if excludeMatch {
 						allExcluded = false
@@ -74,7 +75,7 @@ func FindAllStackConfigsInPathsForStack(
 			for _, excludePath := range excludeStackPaths {
 				excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 				if err != nil {
-					u.LogError(err)
+					u.LogError(cliConfig, err)
 					include = false
 					continue
 				} else if excludeMatch {
@@ -95,7 +96,7 @@ func FindAllStackConfigsInPathsForStack(
 
 // FindAllStackConfigsInPaths finds all stack config files in the paths specified by globs
 func FindAllStackConfigsInPaths(
-	cliConfig CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {
@@ -132,7 +133,7 @@ func FindAllStackConfigsInPaths(
 			for _, excludePath := range excludeStackPaths {
 				excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 				if err != nil {
-					u.LogError(err)
+					u.LogError(cliConfig, err)
 					include = false
 					continue
 				} else if excludeMatch {
@@ -151,7 +152,7 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
-func processEnvVars(cliConfig *CliConfiguration) error {
+func processEnvVars(cliConfig *schema.CliConfiguration) error {
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
 		u.LogInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
@@ -289,7 +290,7 @@ func processEnvVars(cliConfig *CliConfiguration) error {
 	return nil
 }
 
-func checkConfig(cliConfig CliConfiguration) error {
+func checkConfig(cliConfig schema.CliConfiguration) error {
 	if len(cliConfig.Stacks.BasePath) < 1 {
 		return errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
 	}
@@ -301,7 +302,7 @@ func checkConfig(cliConfig CliConfiguration) error {
 	return nil
 }
 
-func processCommandLineArgs(cliConfig *CliConfiguration, configAndStacksInfo ConfigAndStacksInfo) error {
+func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		cliConfig.BasePath = configAndStacksInfo.BasePath
 		u.LogInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
@@ -367,8 +368,8 @@ func processCommandLineArgs(cliConfig *CliConfiguration, configAndStacksInfo Con
 }
 
 // GetContextFromVars creates a context object from the provided variables
-func GetContextFromVars(vars map[any]any) Context {
-	var context Context
+func GetContextFromVars(vars map[any]any) schema.Context {
+	var context schema.Context
 
 	if namespace, ok := vars["namespace"].(string); ok {
 		context.Namespace = namespace
@@ -398,7 +399,7 @@ func GetContextFromVars(vars map[any]any) Context {
 }
 
 // GetContextPrefix calculates context prefix from the context
-func GetContextPrefix(stack string, context Context, stackNamePattern string, stackFile string) (string, error) {
+func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
 			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
@@ -471,7 +472,7 @@ func GetContextPrefix(stack string, context Context, stackNamePattern string, st
 }
 
 // ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced
-func ReplaceContextTokens(context Context, pattern string) string {
+func ReplaceContextTokens(context schema.Context, pattern string) string {
 	r := strings.NewReplacer(
 		"{base-component}", context.BaseComponent,
 		"{component}", context.Component,

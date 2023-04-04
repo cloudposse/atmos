@@ -3,11 +3,13 @@ package exec
 import (
 	"fmt"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // processHelp processes help commands
 func processHelp(componentType string, command string) error {
+	cliConfig := schema.CliConfiguration{}
 	if len(command) == 0 {
 		u.LogMessage(fmt.Sprintf("'atmos' supports all native '%s' commands.\n", componentType))
 		u.LogMessage("In addition, the 'component' argument and 'stack' flag are required to generate the variables and backend config for the component in the stack.\n")
@@ -50,7 +52,7 @@ func processHelp(componentType string, command string) error {
 				"by setting 'components.helmfile.use_eks' to 'false'")
 		}
 
-		err := ExecuteShellCommand(componentType, []string{"--help"}, "", nil, false, true, "")
+		err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, true, "")
 		if err != nil {
 			return err
 		}
@@ -60,7 +62,7 @@ func processHelp(componentType string, command string) error {
 		u.LogInfo(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
 		u.LogInfo(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
 
-		err := ExecuteShellCommand(componentType, []string{command, "--help"}, "", nil, false, true, "")
+		err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, true, "")
 		if err != nil {
 			return err
 		}

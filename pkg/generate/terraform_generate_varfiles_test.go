@@ -1,19 +1,21 @@
 package generate
 
 import (
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestTerraformGenerateVarfiles(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))

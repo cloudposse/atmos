@@ -6,18 +6,19 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestWorkflowCommand(t *testing.T) {
-	_, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	workflow := "test-1"
 	workflowPath := "stacks/workflows/workflow1.yaml"
 
-	workflowDefinition := cfg.WorkflowDefinition{
+	workflowDefinition := schema.WorkflowDefinition{
 		Description: "Test workflow 1",
-		Steps: []cfg.WorkflowStep{
+		Steps: []schema.WorkflowStep{
 			{
 				Name:    "step1",
 				Type:    "shell",
@@ -42,6 +43,7 @@ func TestWorkflowCommand(t *testing.T) {
 	}
 
 	err = e.ExecuteWorkflow(
+		cliConfig,
 		workflow,
 		workflowPath,
 		&workflowDefinition,
@@ -54,6 +56,7 @@ func TestWorkflowCommand(t *testing.T) {
 	assert.Nil(t, err)
 
 	err = e.ExecuteWorkflow(
+		cliConfig,
 		workflow,
 		workflowPath,
 		&workflowDefinition,

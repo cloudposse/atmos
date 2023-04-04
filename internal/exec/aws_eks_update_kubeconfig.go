@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -64,7 +65,7 @@ func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) err
 		component = args[0]
 	}
 
-	executeAwsEksUpdateKubeconfigContext := cfg.AwsEksUpdateKubeconfigContext{
+	executeAwsEksUpdateKubeconfigContext := schema.AwsEksUpdateKubeconfigContext{
 		Component:   component,
 		Stack:       stack,
 		Profile:     profile,
@@ -82,7 +83,7 @@ func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) err
 
 // ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig'
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
-func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext cfg.AwsEksUpdateKubeconfigContext) error {
+func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconfigContext) error {
 	// AWS profile to authenticate to the cluster
 	profile := kubeconfigContext.Profile
 
@@ -120,8 +121,8 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext cfg.AwsEksUpdateKubeconfigC
 
 	shellCommandWorkingDir := ""
 
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
-	var cliConfig cfg.CliConfiguration
+	var configAndStacksInfo schema.ConfigAndStacksInfo
+	var cliConfig schema.CliConfiguration
 	var err error
 
 	if !requiredParamsProvided {
@@ -222,7 +223,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext cfg.AwsEksUpdateKubeconfigC
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err = ExecuteShellCommand("aws", args, shellCommandWorkingDir, nil, dryRun, true, "")
+	err = ExecuteShellCommand(cliConfig, "aws", args, shellCommandWorkingDir, nil, dryRun, true, "")
 	if err != nil {
 		return err
 	}

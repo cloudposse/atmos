@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -12,8 +13,8 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -127,7 +128,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 
 // ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected compoenents and stacks
 func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	outputPath string,
 	configTemplateName string,
 	projectTemplateName string,
@@ -142,7 +143,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
 
-	var affected []cfg.Affected
+	var affected []schema.Affected
 	var err error
 
 	if repoPath == "" {
@@ -159,14 +160,14 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		return nil
 	}
 
-	affectedComponents := lo.FilterMap[cfg.Affected, string](affected, func(x cfg.Affected, _ int) (string, bool) {
+	affectedComponents := lo.FilterMap[schema.Affected, string](affected, func(x schema.Affected, _ int) (string, bool) {
 		if x.ComponentType == "terraform" {
 			return x.Component, true
 		}
 		return "", false
 	})
 
-	affectedStacks := lo.FilterMap[cfg.Affected, string](affected, func(x cfg.Affected, _ int) (string, bool) {
+	affectedStacks := lo.FilterMap[schema.Affected, string](affected, func(x schema.Affected, _ int) (string, bool) {
 		if x.ComponentType == "terraform" {
 			return x.Stack, true
 		}
@@ -185,7 +186,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
 func ExecuteAtlantisGenerateRepoConfig(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	outputPath string,
 	configTemplateNameArg string,
 	projectTemplateNameArg string,
@@ -198,10 +199,10 @@ func ExecuteAtlantisGenerateRepoConfig(
 		return err
 	}
 
-	var configTemplate cfg.AtlantisRepoConfig
-	var projectTemplate cfg.AtlantisProjectConfig
+	var configTemplate schema.AtlantisRepoConfig
+	var projectTemplate schema.AtlantisProjectConfig
 	var ok bool
-	var atlantisProjects []cfg.AtlantisProjectConfig
+	var atlantisProjects []schema.AtlantisProjectConfig
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
@@ -354,14 +355,14 @@ func ExecuteAtlantisGenerateRepoConfig(
 						whenModified = append(whenModified, processedItem)
 					}
 
-					atlantisProjectAutoplanConfig := cfg.AtlantisProjectAutoplanConfig{
+					atlantisProjectAutoplanConfig := schema.AtlantisProjectAutoplanConfig{
 						Enabled:      projectTemplate.Autoplan.Enabled,
 						WhenModified: whenModified,
 					}
 
 					atlantisProjectName := BuildAtlantisProjectName(context, projectTemplate.Name)
 
-					atlantisProject := cfg.AtlantisProjectConfig{
+					atlantisProject := schema.AtlantisProjectConfig{
 						Name:                      atlantisProjectName,
 						Workspace:                 cfg.ReplaceContextTokens(context, projectTemplate.Workspace),
 						Dir:                       cfg.ReplaceContextTokens(context, projectTemplate.Dir),
@@ -415,7 +416,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	}
 
 	// Final atlantis config
-	atlantisYaml := cfg.AtlantisConfigOutput{}
+	atlantisYaml := schema.AtlantisConfigOutput{}
 	atlantisYaml.Version = configTemplate.Version
 	atlantisYaml.Automerge = configTemplate.Automerge
 	atlantisYaml.DeleteSourceBranchOnMerge = configTemplate.DeleteSourceBranchOnMerge

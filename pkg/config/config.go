@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -22,7 +23,7 @@ var NotFound = errors.New("\n'atmos.yaml' CLI config files not found in any of t
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) (CliConfiguration, error) {
+func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.CliConfiguration, error) {
 	// cliConfig is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
@@ -30,7 +31,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 	// ENV vars
 	// Command-line arguments
 
-	var cliConfig CliConfiguration
+	var cliConfig schema.CliConfiguration
 	var err error
 	var verbose = processStacks
 
@@ -83,7 +84,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 
 	if len(configFilePath1) > 0 {
 		configFile1 := path.Join(configFilePath1, CliConfigFileName)
-		found, err = processConfigFile(printVerbose, configFile1, v)
+		found, err = processConfigFile(cliConfig, printVerbose, configFile1, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -98,7 +99,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 		return cliConfig, err
 	}
 	configFile2 := path.Join(configFilePath2, ".atmos", CliConfigFileName)
-	found, err = processConfigFile(printVerbose, configFile2, v)
+	found, err = processConfigFile(cliConfig, printVerbose, configFile2, v)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -112,7 +113,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 		return cliConfig, err
 	}
 	configFile3 := path.Join(configFilePath3, CliConfigFileName)
-	found, err = processConfigFile(printVerbose, configFile3, v)
+	found, err = processConfigFile(cliConfig, printVerbose, configFile3, v)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -125,7 +126,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 	if len(configFilePath4) > 0 {
 		u.LogInfoVerbose(printVerbose, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
 		configFile4 := path.Join(configFilePath4, CliConfigFileName)
-		found, err = processConfigFile(printVerbose, configFile4, v)
+		found, err = processConfigFile(cliConfig, printVerbose, configFile4, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -139,7 +140,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
 		if len(configFilePath5) > 0 {
 			configFile5 := path.Join(configFilePath5, CliConfigFileName)
-			found, err = processConfigFile(printVerbose, configFile5, v)
+			found, err = processConfigFile(cliConfig, printVerbose, configFile5, v)
 			if err != nil {
 				return cliConfig, err
 			}
@@ -282,7 +283,7 @@ func InitCliConfig(configAndStacksInfo ConfigAndStacksInfo, processStacks bool) 
 // https://github.com/NCAR/go-figure
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func processConfigFile(verbose bool, path string, v *viper.Viper) (bool, error) {
+func processConfigFile(cliConfig schema.CliConfiguration, verbose bool, path string, v *viper.Viper) (bool, error) {
 	if !u.FileExists(path) {
 		u.LogInfoVerbose(verbose, fmt.Sprintf("No config file 'atmos.yaml' found in path '%s'.", path))
 		return false, nil
@@ -298,7 +299,7 @@ func processConfigFile(verbose bool, path string, v *viper.Viper) (bool, error) 
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogError(fmt.Errorf("error closing file '" + path + "'. " + err.Error()))
+			u.LogError(cliConfig, fmt.Errorf("error closing file '"+path+"'. "+err.Error()))
 		}
 	}(reader)
 
