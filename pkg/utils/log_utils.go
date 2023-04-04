@@ -39,25 +39,11 @@ func LogError(cliConfig schema.CliConfiguration, err error) {
 }
 
 // LogInfo logs the provided info message
-func LogInfo(message string) {
+func LogInfo(cliConfig schema.CliConfiguration, message string) {
 	color.Cyan("%s", message)
 }
 
-// LogInfoVerbose checks the log level and logs the provided info message
-func LogInfoVerbose(verbose bool, message string) {
-	if verbose {
-		LogInfo(message)
-	}
-}
-
 // LogMessage logs the provided message to the console
-func LogMessage(message string) {
+func LogMessage(cliConfig schema.CliConfiguration, message string) {
 	fmt.Println(message)
-}
-
-// LogMessageVerbose checks the log level and logs the provided message to the console
-func LogMessageVerbose(verbose bool, message string) {
-	if verbose {
-		LogMessage(message)
-	}
 }

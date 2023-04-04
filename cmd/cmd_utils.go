@@ -209,7 +209,7 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := e.ExecuteShellAndReturnOutput(valCommand, valCommandName, ".", nil, false, commandConfig.Verbose)
+				res, err := e.ExecuteShellAndReturnOutput(cliConfig, valCommand, valCommandName, ".", nil, false, commandConfig.Verbose)
 				if err != nil {
 					u.LogErrorToStdErrorAndExit(err)
 				}
@@ -230,9 +230,9 @@ func executeCustomCommand(
 		}
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
-			u.LogInfo("\nUsing ENV vars:")
+			u.LogInfo(cliConfig, "\nUsing ENV vars:")
 			for _, v := range envVarsList {
-				u.LogMessage(v)
+				u.LogMessage(cliConfig, v)
 			}
 		}
 

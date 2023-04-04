@@ -198,7 +198,7 @@ func ExecuteTerraformGenerateBackends(cliConfig schema.CliConfiguration, fileTem
 					}
 
 					// Write the backend config to the file
-					u.LogMessage(fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
+					u.LogMessage(cliConfig, fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
 
 					if format == "json" {
 						componentBackendConfig := generateComponentBackendConfig(backendType, backendSection)

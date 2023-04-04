@@ -253,8 +253,8 @@ func ProcessStacks(
 		} else {
 			msg = "Found stack config files:"
 		}
-		u.LogInfo(msg)
-		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
+		u.LogInfo(cliConfig, msg)
+		err = u.PrintAsYAML(cliConfig, cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -293,7 +293,7 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		u.LogInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Searching for stack config where the component '%s' is defined", configAndStacksInfo.ComponentFromArg))
+		u.LogInfo(cliConfig, fmt.Sprintf("Searching for stack config where the component '%s' is defined", configAndStacksInfo.ComponentFromArg))
 		foundStackCount := 0
 		var foundStacks []string
 		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
@@ -341,8 +341,8 @@ func ProcessStacks(
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
 
-				u.LogInfoVerbose(
-					cliConfig.Logs.Verbose,
+				u.LogInfo(
+					cliConfig,
 					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
@@ -1307,11 +1307,16 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 
 // printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
 // and prints the data to the console or to a file (if file is specified)
-func printOrWriteToFile(format string, file string, data any) error {
+func printOrWriteToFile(
+	cliConfig schema.CliConfiguration,
+	format string,
+	file string,
+	data any,
+) error {
 	switch format {
 	case "yaml":
 		if file == "" {
-			err := u.PrintAsYAML(data)
+			err := u.PrintAsYAML(cliConfig, data)
 			if err != nil {
 				return err
 			}
@@ -1324,7 +1329,7 @@ func printOrWriteToFile(format string, file string, data any) error {
 
 	case "json":
 		if file == "" {
-			err := u.PrintAsJSON(data)
+			err := u.PrintAsJSON(cliConfig, data)
 			if err != nil {
 				return err
 			}

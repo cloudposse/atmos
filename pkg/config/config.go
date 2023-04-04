@@ -41,7 +41,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	logVerboseEnvVarFound := false
 	logVerboseEnvVarStr := os.Getenv("ATMOS_LOGS_VERBOSE")
 	if len(logVerboseEnvVarStr) > 0 {
-		u.LogInfoVerbose(verbose, fmt.Sprintf("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerboseEnvVarStr))
+		u.LogInfo(cliConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerboseEnvVarStr))
 		logVerboseEnvVar, err = strconv.ParseBool(logVerboseEnvVarStr)
 		if err != nil {
 			return cliConfig, err
@@ -52,8 +52,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	var printVerbose = verbose && logVerboseEnvVarFound && logVerboseEnvVar
 
 	if printVerbose {
-		u.LogInfo("\nSearching, processing and merging atmos CLI configurations (atmos.yaml) in the following order:")
-		u.LogMessage("system dir, home dir, current dir, ENV vars, command-line arguments\n")
+		u.LogInfo(cliConfig, "\nSearching, processing and merging atmos CLI configurations (atmos.yaml) in the following order:")
+		u.LogMessage(cliConfig, "system dir, home dir, current dir, ENV vars, command-line arguments\n")
 	}
 
 	configFound := false
@@ -124,7 +124,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
 	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
 	if len(configFilePath4) > 0 {
-		u.LogInfoVerbose(printVerbose, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
+		u.LogInfo(cliConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
 		configFile4 := path.Join(configFilePath4, CliConfigFileName)
 		found, err = processConfigFile(cliConfig, printVerbose, configFile4, v)
 		if err != nil {
@@ -257,7 +257,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		cliConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 		if stackIsPhysicalPath {
-			u.LogInfoVerbose(printVerbose, fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
+			u.LogInfo(cliConfig, fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
 				configAndStacksInfo.Stack,
 				stackConfigFilesRelativePaths[0]),
 			)
@@ -269,8 +269,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	if printVerbose {
-		u.LogInfo("\nFinal CLI configuration:")
-		err = u.PrintAsYAML(cliConfig)
+		u.LogInfo(cliConfig, "\nFinal CLI configuration:")
+		err = u.PrintAsYAML(cliConfig, cliConfig)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -285,11 +285,11 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(cliConfig schema.CliConfiguration, verbose bool, path string, v *viper.Viper) (bool, error) {
 	if !u.FileExists(path) {
-		u.LogInfoVerbose(verbose, fmt.Sprintf("No config file 'atmos.yaml' found in path '%s'.", path))
+		u.LogInfo(cliConfig, fmt.Sprintf("No config file 'atmos.yaml' found in path '%s'.", path))
 		return false, nil
 	}
 
-	u.LogInfoVerbose(verbose, fmt.Sprintf("Found CLI config in '%s'", path))
+	u.LogInfo(cliConfig, fmt.Sprintf("Found CLI config in '%s'", path))
 
 	reader, err := os.Open(path)
 	if err != nil {
@@ -308,7 +308,7 @@ func processConfigFile(cliConfig schema.CliConfiguration, verbose bool, path str
 		return false, err
 	}
 
-	u.LogInfoVerbose(verbose, fmt.Sprintf("Processed CLI config '%s'", path))
+	u.LogInfo(cliConfig, fmt.Sprintf("Processed CLI config '%s'", path))
 
 	return true, nil
 }

@@ -59,15 +59,15 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 	}
 
 	// Print the component variables
-	u.LogInfo(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
-	err = u.PrintAsYAML(info.ComponentVarsSection)
+	u.LogInfo(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
+	err = u.PrintAsYAML(cliConfig, info.ComponentVarsSection)
 	if err != nil {
 		return err
 	}
 
 	// Write the variables to file
-	u.LogInfo("Writing the variables to file:")
-	u.LogMessage(varFilePath)
+	u.LogInfo(cliConfig, "Writing the variables to file:")
+	u.LogMessage(cliConfig, varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)

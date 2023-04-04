@@ -25,7 +25,7 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(format, "", cliConfig)
+	err = printOrWriteToFile(cliConfig, format, "", cliConfig)
 	if err != nil {
 		return err
 	}

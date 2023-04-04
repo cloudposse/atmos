@@ -54,8 +54,8 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 
 	componentBackendConfig := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 
-	u.LogInfoVerbose(cliConfig.Logs.Verbose, "Component backend config:\n\n")
-	err = u.PrintAsJSON(componentBackendConfig)
+	u.LogInfo(cliConfig, "Component backend config:\n\n")
+	err = u.PrintAsJSON(cliConfig, componentBackendConfig)
 	if err != nil {
 		return err
 	}
@@ -76,8 +76,8 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		"backend.tf.json",
 	)
 
-	u.LogInfo("\nWriting the backend config to file:")
-	u.LogMessage(backendFilePath)
+	u.LogInfo(cliConfig, "\nWriting the backend config to file:")
+	u.LogMessage(cliConfig, backendFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)

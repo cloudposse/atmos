@@ -83,7 +83,7 @@ func ValidateComponent(cliConfig schema.CliConfiguration, componentName string, 
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
-		u.LogInfo(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+		u.LogInfo(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
 		ok, err = validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)
 		if err != nil {
@@ -103,9 +103,9 @@ func ValidateComponent(cliConfig schema.CliConfiguration, componentName string, 
 			schemaPath = v.SchemaPath
 			schemaType = v.SchemaType
 
-			u.LogInfo(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+			u.LogInfo(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 			if v.Description != "" {
-				u.LogMessage(v.Description)
+				u.LogMessage(cliConfig, v.Description)
 			}
 
 			ok2, err := validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)
