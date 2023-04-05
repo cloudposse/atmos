@@ -42,6 +42,10 @@ func LogMessage(cliConfig schema.CliConfiguration, message string) {
 }
 
 func log(cliConfig schema.CliConfiguration, logColor *color.Color, message string) {
+	if cliConfig.Logs.Level == "Off" {
+		return
+	}
+
 	if cliConfig.Logs.File != "" {
 		if cliConfig.Logs.File == "/dev/stdout" {
 			_, err := logColor.Fprintln(os.Stdout, message)
