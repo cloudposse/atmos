@@ -9,6 +9,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	LogLevelOff   = "Off"
+	LogLevelTrace = "Trace"
+	LogLevelInfo  = "Info"
+)
+
 // LogErrorAndExit logs errors to std.Error and exits with an error code
 func LogErrorAndExit(err error) {
 	if err != nil {
@@ -42,7 +48,7 @@ func LogMessage(cliConfig schema.CliConfiguration, message string) {
 }
 
 func log(cliConfig schema.CliConfiguration, logColor *color.Color, message string) {
-	if cliConfig.Logs.Level == "Off" {
+	if cliConfig.Logs.Level == LogLevelOff {
 		return
 	}
 

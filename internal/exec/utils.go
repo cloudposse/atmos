@@ -246,12 +246,12 @@ func ProcessStacks(
 	}
 
 	// Print the stack config files
-	if cliConfig.Logs.Level == "Trace" {
+	if cliConfig.Logs.Level == u.LogLevelTrace {
 		var msg string
 		if cliConfig.StackType == "Directory" {
-			msg = "Found the config file for the provided stack:"
+			msg = "\nFound the config file for the provided stack:"
 		} else {
-			msg = "Found stack config files:"
+			msg = "\nFound stack config files:"
 		}
 		u.LogInfo(cliConfig, msg)
 		err = u.PrintAsYAML(cliConfig, cliConfig.StackConfigFilesRelativePaths)
@@ -341,7 +341,7 @@ func ProcessStacks(
 
 				u.LogInfo(
 					cliConfig,
-					fmt.Sprintf("Found config for the Atmos component '%s' for the stack '%s' in the stack config file '%s'",
+					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack config file '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
 						stackName,
