@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/fatih/color"
@@ -46,27 +47,35 @@ func LogMessage(cliConfig schema.CliConfiguration, message string) {
 }
 
 func log(cliConfig schema.CliConfiguration, logColor *color.Color, message string) {
-	fileName := "/dev/stdout"
-
 	if cliConfig.Logs.File != "" {
-		fileName = cliConfig.Logs.File
-	}
+		if cliConfig.Logs.File == "/dev/stdout" {
+			_, err := logColor.Fprintln(os.Stdout, message)
+			if err != nil {
+				color.Red("%s\n", err)
+			}
+		} else if cliConfig.Logs.File == "/dev/stderr" {
+			_, err := logColor.Fprintln(os.Stderr, message)
+			if err != nil {
+				color.Red("%s\n", err)
+			}
+		} else {
+			f, err := os.OpenFile(cliConfig.Logs.File, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
+			if err != nil {
+				color.Red("%s\n", err)
+				return
+			}
 
-	f, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		color.Red("%s\n", err)
-		return
-	}
+			defer func(f *os.File) {
+				err = f.Close()
+				if err != nil {
+					color.Red("%s\n", err)
+				}
+			}(f)
 
-	defer func(f *os.File) {
-		err = f.Close()
-		if err != nil {
-			color.Red("%s\n", err)
+			_, err = f.Write([]byte(fmt.Sprintf("%s\n", message)))
+			if err != nil {
+				color.Red("%s\n", err)
+			}
 		}
-	}(f)
-
-	_, err = logColor.Fprintln(f, message)
-	if err != nil {
-		color.Red("%s\n", err)
 	}
 }
