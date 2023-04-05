@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/fatih/color"
@@ -20,8 +19,8 @@ func LogErrorToStdErrorAndExit(err error) {
 // LogErrorToStdError logs errors to std.Error
 func LogErrorToStdError(err error) {
 	if err != nil {
-		red := color.New(color.FgRed)
-		_, err2 := red.Fprintln(color.Error, err.Error()+"\n")
+		c := color.New(color.FgRed)
+		_, err2 := c.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
 			color.Red("Error logging the error to std.Error:")
 			color.Red("%s\n", err2)
@@ -33,17 +32,41 @@ func LogErrorToStdError(err error) {
 
 // LogError logs errors
 func LogError(cliConfig schema.CliConfiguration, err error) {
-	if err != nil {
-		color.Red("%s\n", err)
-	}
+	log(cliConfig, color.New(color.FgRed), err.Error())
 }
 
 // LogInfo logs the provided info message
 func LogInfo(cliConfig schema.CliConfiguration, message string) {
-	color.Cyan("%s", message)
+	log(cliConfig, color.New(color.FgCyan), message)
 }
 
-// LogMessage logs the provided message to the console
+// LogMessage logs the provided message
 func LogMessage(cliConfig schema.CliConfiguration, message string) {
-	fmt.Println(message)
+	log(cliConfig, color.New(color.Reset), message)
+}
+
+func log(cliConfig schema.CliConfiguration, logColor *color.Color, message string) {
+	fileName := "/dev/stdout"
+
+	if cliConfig.Logs.File != "" {
+		fileName = cliConfig.Logs.File
+	}
+
+	f, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		color.Red("%s\n", err)
+		return
+	}
+
+	defer func(f *os.File) {
+		err = f.Close()
+		if err != nil {
+			color.Red("%s\n", err)
+		}
+	}(f)
+
+	_, err = logColor.Fprintln(f, message)
+	if err != nil {
+		color.Red("%s\n", err)
+	}
 }
