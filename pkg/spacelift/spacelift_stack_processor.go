@@ -36,7 +36,7 @@ func CreateSpaceliftStacks(
 			false,
 		)
 		if err != nil {
-			u.LogErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
@@ -44,7 +44,7 @@ func CreateSpaceliftStacks(
 	} else {
 		cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
-			u.LogErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
@@ -58,7 +58,7 @@ func CreateSpaceliftStacks(
 			false,
 		)
 		if err != nil {
-			u.LogErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
@@ -175,7 +175,7 @@ func TransformStackConfigToSpaceliftStacks(
 					if stackNamePattern != "" {
 						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
-							u.LogErrorToStdError(err)
+							u.LogError(err)
 							return nil, err
 						}
 					} else {
@@ -215,7 +215,7 @@ func TransformStackConfigToSpaceliftStacks(
 						context,
 					)
 					if err != nil {
-						u.LogErrorToStdError(err)
+						u.LogError(err)
 						return nil, err
 					}
 					spaceliftConfig["workspace"] = workspace
@@ -249,7 +249,7 @@ func TransformStackConfigToSpaceliftStacks(
 							terraformComponentNamesInCurrentStack,
 							component)
 						if err != nil {
-							u.LogErrorToStdError(err)
+							u.LogError(err)
 							return nil, err
 						}
 						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -278,7 +278,7 @@ func TransformStackConfigToSpaceliftStacks(
 							spaceliftStackNamePattern,
 						)
 						er := errors.New(errorMessage)
-						u.LogErrorToStdError(er)
+						u.LogError(er)
 						return nil, er
 					}
 				}

@@ -57,7 +57,7 @@ func FindAllStackConfigsInPathsForStack(
 				for _, excludePath := range excludeStackPaths {
 					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
-						u.LogError(cliConfig, err)
+						u.LogError(err)
 						continue
 					} else if excludeMatch {
 						allExcluded = false
@@ -75,7 +75,7 @@ func FindAllStackConfigsInPathsForStack(
 			for _, excludePath := range excludeStackPaths {
 				excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 				if err != nil {
-					u.LogError(cliConfig, err)
+					u.LogError(err)
 					include = false
 					continue
 				} else if excludeMatch {
@@ -133,7 +133,7 @@ func FindAllStackConfigsInPaths(
 			for _, excludePath := range excludeStackPaths {
 				excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 				if err != nil {
-					u.LogError(cliConfig, err)
+					u.LogError(err)
 					include = false
 					continue
 				} else if excludeMatch {

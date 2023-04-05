@@ -25,7 +25,7 @@ func ProcessComponentInStack(
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.LogErrorToStdError(err)
+		u.LogError(err)
 		return nil, err
 	}
 
@@ -35,7 +35,7 @@ func ProcessComponentInStack(
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
-			u.LogErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 	}
@@ -61,19 +61,19 @@ func ProcessComponentFromContext(
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.LogErrorToStdError(err)
+		u.LogError(err)
 		return nil, err
 	}
 
 	if len(cliConfig.Stacks.NamePattern) < 1 {
 		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-		u.LogErrorToStdError(er)
+		u.LogError(er)
 		return nil, er
 	}
 
 	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, cliConfig.Stacks.NamePattern)
 	if err != nil {
-		u.LogErrorToStdError(err)
+		u.LogError(err)
 		return nil, err
 	}
 

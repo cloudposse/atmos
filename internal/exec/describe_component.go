@@ -66,7 +66,7 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
-		u.LogError(cliConfig, err)
+		u.LogError(err)
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {

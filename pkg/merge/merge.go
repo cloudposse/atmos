@@ -24,13 +24,13 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		// so `mergo` does not have access to the original pointers
 		yamlCurrent, err := yaml.Marshal(current)
 		if err != nil {
-			u.LogErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
 		var dataCurrent map[any]any
 		if err = yaml.Unmarshal(yamlCurrent, &dataCurrent); err != nil {
-			u.LogErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
@@ -51,7 +51,7 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			u.LogErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 	}

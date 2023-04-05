@@ -312,7 +312,7 @@ func ProcessStacks(
 				configAndStacksInfo.ComponentMetadataSection,
 				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
-				u.LogError(cliConfig, err)
+				u.LogError(err)
 				continue
 			}
 
@@ -330,7 +330,7 @@ func ProcessStacks(
 			if err != nil {
 				// If any of the stack config files throws error (which also means that we can't find the component in that stack),
 				// print the error to the console and continue searching for the component in the other stack config files.
-				u.LogError(cliConfig, err)
+				u.LogError(err)
 				continue
 			}
 
@@ -1350,6 +1350,6 @@ func printOrWriteToFile(
 func removeTempDir(cliConfig schema.CliConfiguration, path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
-		u.LogError(cliConfig, err)
+		u.LogError(err)
 	}
 }

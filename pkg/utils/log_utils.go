@@ -12,13 +12,13 @@ import (
 // LogErrorToStdErrorAndExit logs errors to std.Error and exits with an error code
 func LogErrorToStdErrorAndExit(err error) {
 	if err != nil {
-		LogErrorToStdError(err)
+		LogError(err)
 		os.Exit(1)
 	}
 }
 
-// LogErrorToStdError logs errors to std.Error
-func LogErrorToStdError(err error) {
+// LogError logs errors to std.Error
+func LogError(err error) {
 	if err != nil {
 		c := color.New(color.FgRed)
 		_, err2 := c.Fprintln(color.Error, err.Error()+"\n")
@@ -29,11 +29,6 @@ func LogErrorToStdError(err error) {
 			color.Red("%s\n", err)
 		}
 	}
-}
-
-// LogError logs errors
-func LogError(cliConfig schema.CliConfiguration, err error) {
-	log(cliConfig, color.New(color.FgRed), err.Error())
 }
 
 // LogInfo logs the provided info message

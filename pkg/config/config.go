@@ -299,7 +299,7 @@ func processConfigFile(cliConfig schema.CliConfiguration, verbose bool, path str
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogError(cliConfig, fmt.Errorf("error closing file '"+path+"'. "+err.Error()))
+			u.LogError(fmt.Errorf("error closing file '" + path + "'. " + err.Error()))
 		}
 	}(reader)
 
