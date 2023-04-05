@@ -88,6 +88,11 @@ Now that we've got access to `atmos`, let's do something simple like execute `pl
 1. A Stack configuration -- We've provided a simple example stack located at `stacks/example.yaml`. This is similarly mounted to `/tutorials/02-atmos/` inside your running container.
 
 For our example in this step, we'll check out the `components/terraform/fetch-location` component. To plan that component, let's execute the following:
+
+```bash
+atmos terraform plan fetch-location --stack=example
+```
+
 If you correctly entered your command, you should see a successful plan which resulted in "Terraform will perform the following actions" followed by "Changes to Outputs." You'll notice this first executes a `terraform init` before doing the plan. This is intentional to ensure `atmos` can be invoked without prior project setup. Note, we'll discuss the currently unknown `--stack` parameter shortly.
 
 So now that we've done a plan... let's get this project applied. We could invoke `atmos terraform apply ...`, but our best option at this point would be to invoke `deploy` which will execute a terraform `init`, `plan`, and `apply` in sequential order:
