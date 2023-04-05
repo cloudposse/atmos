@@ -123,7 +123,7 @@ workflows:
 
 logs:
   file: "/dev/stdout"
-  # Supported log levels: Off, Trace, Info
+  # Supported log levels: Off, Info
   level: Info
 ```
 
