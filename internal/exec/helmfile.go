@@ -67,7 +67,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print component variables
-	u.LogInfo(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
+	u.LogInfo(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 	err = u.PrintAsYAML(cliConfig, info.ComponentVarsSection)
 	if err != nil {
 		return err
@@ -153,9 +153,9 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
-	u.LogMessage(cliConfig, fmt.Sprintf("Global options: %v\n", info.GlobalOptions))
+	u.LogMessage(cliConfig, fmt.Sprintf("Global options: %v", info.GlobalOptions))
 
-	u.LogMessage(cliConfig, fmt.Sprintf("Arguments and flags: %v\n", info.AdditionalArgsAndFlags))
+	u.LogMessage(cliConfig, fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
 	u.LogMessage(cliConfig, "Component: "+info.ComponentFromArg)
 
 	if len(info.BaseComponent) > 0 {

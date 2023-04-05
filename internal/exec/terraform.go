@@ -121,7 +121,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
-		u.LogInfo(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
+		u.LogInfo(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 		err = u.PrintAsYAML(cliConfig, info.ComponentVarsSection)
 		if err != nil {
 			return err
@@ -269,7 +269,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	workingDir := constructTerraformComponentWorkingDir(cliConfig, info)
-	u.LogMessage(cliConfig, fmt.Sprintf("Working dir: %s\n", workingDir))
+	u.LogMessage(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
 
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {

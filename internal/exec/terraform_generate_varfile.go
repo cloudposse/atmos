@@ -58,7 +58,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Print the component variables
-	u.LogInfo(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':\n", info.ComponentFromArg, info.Stack))
+	u.LogInfo(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 	err = u.PrintAsYAML(cliConfig, info.ComponentVarsSection)
 	if err != nil {
 		return err

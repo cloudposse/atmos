@@ -285,11 +285,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func processConfigFile(cliConfig schema.CliConfiguration, verbose bool, path string, v *viper.Viper) (bool, error) {
 	if !u.FileExists(path) {
-		u.LogInfo(cliConfig, fmt.Sprintf("No config file 'atmos.yaml' found in path '%s'.", path))
 		return false, nil
 	}
-
-	u.LogInfo(cliConfig, fmt.Sprintf("Found CLI config in '%s'", path))
 
 	reader, err := os.Open(path)
 	if err != nil {
@@ -307,8 +304,6 @@ func processConfigFile(cliConfig schema.CliConfiguration, verbose bool, path str
 	if err != nil {
 		return false, err
 	}
-
-	u.LogInfo(cliConfig, fmt.Sprintf("Processed CLI config '%s'", path))
 
 	return true, nil
 }

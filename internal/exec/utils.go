@@ -293,7 +293,6 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		u.LogInfo(cliConfig, fmt.Sprintf("Searching for stack config where the component '%s' is defined", configAndStacksInfo.ComponentFromArg))
 		foundStackCount := 0
 		var foundStacks []string
 		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
@@ -312,7 +311,6 @@ func ProcessStacks(
 				configAndStacksInfo.ComponentMetadataSection,
 				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
-				u.LogError(err)
 				continue
 			}
 
@@ -343,7 +341,7 @@ func ProcessStacks(
 
 				u.LogInfo(
 					cliConfig,
-					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
+					fmt.Sprintf("Found config for the Atmos component '%s' for the stack '%s' in the stack config file '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
 						stackName,
