@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -10,10 +12,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"strconv"
-
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var NotFound = errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
@@ -33,29 +31,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 	var cliConfig schema.CliConfiguration
 	var err error
-	var verbose = processStacks
-
-	// Check `ATMOS_LOGS_VERBOSE` ENV var
-	// If it's set to `true`, log verbose even during the CLI config initialization
-	logVerboseEnvVar := false
-	logVerboseEnvVarFound := false
-	logVerboseEnvVarStr := os.Getenv("ATMOS_LOGS_VERBOSE")
-	if len(logVerboseEnvVarStr) > 0 {
-		u.LogInfo(cliConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_VERBOSE=%s", logVerboseEnvVarStr))
-		logVerboseEnvVar, err = strconv.ParseBool(logVerboseEnvVarStr)
-		if err != nil {
-			return cliConfig, err
-		}
-		logVerboseEnvVarFound = true
-	}
-
-	var printVerbose = verbose && logVerboseEnvVarFound && logVerboseEnvVar
-
-	if printVerbose {
-		u.LogInfo(cliConfig, "\nSearching, processing and merging atmos CLI configurations (atmos.yaml) in the following order:")
-		u.LogMessage(cliConfig, "system dir, home dir, current dir, ENV vars, command-line arguments\n")
-	}
-
 	configFound := false
 	var found bool
 
@@ -84,7 +59,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 	if len(configFilePath1) > 0 {
 		configFile1 := path.Join(configFilePath1, CliConfigFileName)
-		found, err = processConfigFile(cliConfig, printVerbose, configFile1, v)
+		found, err = processConfigFile(configFile1, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -99,7 +74,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return cliConfig, err
 	}
 	configFile2 := path.Join(configFilePath2, ".atmos", CliConfigFileName)
-	found, err = processConfigFile(cliConfig, printVerbose, configFile2, v)
+	found, err = processConfigFile(configFile2, v)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -113,7 +88,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return cliConfig, err
 	}
 	configFile3 := path.Join(configFilePath3, CliConfigFileName)
-	found, err = processConfigFile(cliConfig, printVerbose, configFile3, v)
+	found, err = processConfigFile(configFile3, v)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -126,7 +101,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if len(configFilePath4) > 0 {
 		u.LogInfo(cliConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
 		configFile4 := path.Join(configFilePath4, CliConfigFileName)
-		found, err = processConfigFile(cliConfig, printVerbose, configFile4, v)
+		found, err = processConfigFile(configFile4, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -140,7 +115,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
 		if len(configFilePath5) > 0 {
 			configFile5 := path.Join(configFilePath5, CliConfigFileName)
-			found, err = processConfigFile(cliConfig, printVerbose, configFile5, v)
+			found, err = processConfigFile(configFile5, v)
 			if err != nil {
 				return cliConfig, err
 			}
@@ -159,12 +134,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	err = v.Unmarshal(&cliConfig)
 	if err != nil {
 		return cliConfig, err
-	}
-
-	// Set log verbose for the command that is being executed after the CLI config gets processed
-	// `logs.verbose` can be set in `atmos.yaml` or overridden by `ATMOS_LOGS_VERBOSE` ENV var
-	if logVerboseEnvVarFound {
-		cliConfig.Logs.Verbose = logVerboseEnvVar
 	}
 
 	// Process ENV vars
@@ -268,14 +237,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 	}
 
-	if printVerbose {
-		u.LogInfo(cliConfig, "\nFinal CLI configuration:")
-		err = u.PrintAsYAML(cliConfig, cliConfig)
-		if err != nil {
-			return cliConfig, err
-		}
-	}
-
 	cliConfig.Initialized = true
 	return cliConfig, nil
 }
@@ -283,7 +244,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 // https://github.com/NCAR/go-figure
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func processConfigFile(cliConfig schema.CliConfiguration, verbose bool, path string, v *viper.Viper) (bool, error) {
+func processConfigFile(path string, v *viper.Viper) (bool, error) {
 	if !u.FileExists(path) {
 		return false, nil
 	}

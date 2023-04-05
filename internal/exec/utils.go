@@ -246,7 +246,7 @@ func ProcessStacks(
 	}
 
 	// Print the stack config files
-	if cliConfig.Logs.Verbose {
+	if cliConfig.Logs.Level == "Trace" {
 		var msg string
 		if cliConfig.StackType == "Directory" {
 			msg = "Found the config file for the provided stack:"

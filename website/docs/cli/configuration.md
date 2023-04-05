@@ -123,7 +123,7 @@ workflows:
 
 logs:
   file: "/dev/stdout"
-  # Supported log levels: Off, Info
+  # Supported log levels: Off, Trace, Info
   level: Info
 ```
 
@@ -375,7 +375,6 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 |:------------------------------------------------------|:------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------|
 | ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                |
 | ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                             |
-| ATMOS_LOGS_VERBOSE                                    | logs.verbose                                    | Set to `true` to increase log verbosity                                                                                                    |
 | ATMOS_COMPONENTS_TERRAFORM_BASE_PATH                  | components.terraform.base_path                  | Base path to Terraform components                                                                                                          |
 | ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE         | components.terraform.apply_auto_approve         | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                   |
 | ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT            | components.terraform.deploy_run_init            | Run `terraform init` when executing `atmos terraform deploy` command                                                                       |
