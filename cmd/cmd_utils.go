@@ -113,7 +113,7 @@ func preCustomCommand(
 
 	if len(args) != len(commandConfig.Arguments) {
 		err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(commandConfig.Arguments))
-		u.LogErrorToStdErrorAndExit(err)
+		u.LogErrorAndExit(err)
 	}
 
 	// no "steps" means a sub command should be specified
@@ -148,7 +148,7 @@ func executeCustomCommand(
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
 				if err != nil {
-					u.LogErrorToStdErrorAndExit(err)
+					u.LogErrorAndExit(err)
 				}
 				flagsData[fl.Name] = providedFlag
 			}
@@ -166,27 +166,27 @@ func executeCustomCommand(
 			// Process Go templates in the command's 'component_config.component'
 			component, err := u.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data)
 			if err != nil {
-				u.LogErrorToStdErrorAndExit(err)
+				u.LogErrorAndExit(err)
 			}
 			if component == "" || component == "<no value>" {
-				u.LogErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
 					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := u.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data)
 			if err != nil {
-				u.LogErrorToStdErrorAndExit(err)
+				u.LogErrorAndExit(err)
 			}
 			if stack == "" || stack == "<no value>" {
-				u.LogErrorToStdErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName))
 			}
 
 			// Get the config for the component in the stack
 			componentConfig, err := e.ExecuteDescribeComponent(component, stack)
 			if err != nil {
-				u.LogErrorToStdErrorAndExit(err)
+				u.LogErrorAndExit(err)
 			}
 			data["ComponentConfig"] = componentConfig
 		}
@@ -203,7 +203,7 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				u.LogErrorToStdErrorAndExit(err)
+				u.LogErrorAndExit(err)
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
@@ -211,21 +211,21 @@ func executeCustomCommand(
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := e.ExecuteShellAndReturnOutput(cliConfig, valCommand, valCommandName, ".", nil, false, commandConfig.Verbose)
 				if err != nil {
-					u.LogErrorToStdErrorAndExit(err)
+					u.LogErrorAndExit(err)
 				}
 				value = res
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data)
 				if err != nil {
-					u.LogErrorToStdErrorAndExit(err)
+					u.LogErrorAndExit(err)
 				}
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
 			err = os.Setenv(key, value)
 			if err != nil {
-				u.LogErrorToStdErrorAndExit(err)
+				u.LogErrorAndExit(err)
 			}
 		}
 
@@ -240,14 +240,14 @@ func executeCustomCommand(
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := u.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data)
 		if err != nil {
-			u.LogErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 		err = e.ExecuteShell(cliConfig, commandToRun, commandName, ".", envVarsList, false, commandConfig.Verbose)
 		if err != nil {
-			u.LogErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 	}
 }

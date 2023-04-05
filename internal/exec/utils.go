@@ -370,7 +370,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 				cliConfig.Stacks.NamePattern)
-			u.LogErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}

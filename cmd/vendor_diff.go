@@ -15,7 +15,7 @@ var vendorDiffCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteVendorDiffCmd(cmd, args)
 		if err != nil {
-			u.LogErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }

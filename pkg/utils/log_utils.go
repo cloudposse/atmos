@@ -9,8 +9,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// LogErrorToStdErrorAndExit logs errors to std.Error and exits with an error code
-func LogErrorToStdErrorAndExit(err error) {
+// LogErrorAndExit logs errors to std.Error and exits with an error code
+func LogErrorAndExit(err error) {
 	if err != nil {
 		LogError(err)
 		os.Exit(1)
@@ -71,6 +71,11 @@ func log(cliConfig schema.CliConfiguration, logColor *color.Color, message strin
 			if err != nil {
 				color.Red("%s\n", err)
 			}
+		}
+	} else {
+		_, err := logColor.Fprintln(os.Stdout, message)
+		if err != nil {
+			color.Red("%s\n", err)
 		}
 	}
 }

@@ -29,14 +29,14 @@ func init() {
 	// Here we need the custom commands from the config
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil && err != cfg.NotFound {
-		u.LogErrorToStdErrorAndExit(err)
+		u.LogErrorAndExit(err)
 	}
 
 	// If CLI configuration was found, add its custom commands
 	if err == nil {
 		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.LogErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 	}
 }

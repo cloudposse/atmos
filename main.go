@@ -8,6 +8,6 @@ import (
 func main() {
 	err := cmd.Execute()
 	if err != nil {
-		u.LogErrorToStdErrorAndExit(err)
+		u.LogErrorAndExit(err)
 	}
 }
