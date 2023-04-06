@@ -35,7 +35,6 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		u.LogError(err)
 		return err
 	}
 

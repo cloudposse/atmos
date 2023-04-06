@@ -6,7 +6,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeComponentCmd executes `describe component` command
@@ -66,7 +65,6 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
-		u.LogError(err)
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
