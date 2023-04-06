@@ -46,9 +46,9 @@ jobs:
         with:
           github-access-token: ${{ secrets.GITHUB_TOKEN }}
           max-number-of-prs: 5
-          includes: |
+          include: |
             aws-*
             eks/*
             bastion
-          excludes: aws-sso,aws-saml
+          exclude: aws-sso,aws-saml
 ```
