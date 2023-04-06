@@ -4,7 +4,9 @@ sidebar_position: 10
 sidebar_label: Setup Atmos
 ---
 
-Atmos works anywhere you can [install and run the CLI](/quick-start/install-atmos).
+The Cloud Posse GitHub Action to "Setup Atmos" simplifies your GitHub Action Workflows.
+
+Easily integrate Atmos into your GitHub Action workflows using [`github-action-setup-atmos`](https://github.com/cloudposse/github-action-setup-atmos). To simplify your workflows, we offer a [GitHub Action](https://github.com/cloudposse/github-action-setup-atmos) that streamlines the process of [installing Atmos](/quick-start/install-atmos).
 
 We provide a [GitHub Action](https://github.com/cloudposse/github-action-setup-atmos) to make that easier for CI/CD applications.
 
