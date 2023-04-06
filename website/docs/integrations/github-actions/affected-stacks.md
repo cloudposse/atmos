@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - id: affected
-        uses: cloudposse/github-action-atmos-affected-stacks@feature/initial-implementation
+        uses: cloudposse/github-action-atmos-affected-stacks@v0.0.1
 
     outputs:
       affected: ${{ steps.affected.outputs.affected }}
