@@ -1,7 +1,7 @@
 ---
-title: GitHub Actions Integration
+title: Setup Atmos
 sidebar_position: 10
-sidebar_label: GitHub Actions
+sidebar_label: Setup Atmos
 ---
 
 Atmos works anywhere you can [install and run the CLI](/quick-start/install-atmos).
