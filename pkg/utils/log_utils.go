@@ -49,6 +49,11 @@ func LogInfo(cliConfig schema.CliConfiguration, message string) {
 	log(cliConfig, color.New(color.FgCyan), message)
 }
 
+// LogTrace logs the provided trace message
+func LogTrace(cliConfig schema.CliConfiguration, message string) {
+	log(cliConfig, color.New(color.Reset), message)
+}
+
 // LogMessage logs the provided message
 func LogMessage(cliConfig schema.CliConfiguration, message string) {
 	log(cliConfig, color.New(color.Reset), message)
