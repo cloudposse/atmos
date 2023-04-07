@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	LogLevelOff     = "Off"
 	LogLevelTrace   = "Trace"
 	LogLevelDebug   = "Debug"
 	LogLevelInfo    = "Info"
 	LogLevelWarning = "Warning"
+	LogLevelOff     = "Off"
 )
 
 // LogErrorAndExit logs errors to std.Error and exits with an error code
@@ -39,40 +39,44 @@ func LogError(err error) {
 	}
 }
 
-// LogInfo logs the provided info message
-func LogInfo(cliConfig schema.CliConfiguration, message string) {
-	log(cliConfig, color.New(color.FgCyan), message)
-}
-
 // LogTrace logs the provided trace message
 func LogTrace(cliConfig schema.CliConfiguration, message string) {
-	log(cliConfig, color.New(color.Reset), message)
+	if cliConfig.Logs.Level == LogLevelTrace {
+		log(cliConfig, color.New(color.Reset), message)
+	}
 }
 
 // LogDebug logs the provided debug message
 func LogDebug(cliConfig schema.CliConfiguration, message string) {
-	if cliConfig.Logs.Level == LogLevelDebug {
+	if cliConfig.Logs.Level == LogLevelTrace ||
+		cliConfig.Logs.Level == LogLevelDebug {
+
 		log(cliConfig, color.New(color.FgYellow), message)
+	}
+}
+
+// LogInfo logs the provided info message
+func LogInfo(cliConfig schema.CliConfiguration, message string) {
+	if cliConfig.Logs.Level == LogLevelTrace ||
+		cliConfig.Logs.Level == LogLevelDebug ||
+		cliConfig.Logs.Level == LogLevelInfo {
+
+		log(cliConfig, color.New(color.Reset), message)
 	}
 }
 
 // LogWarning logs the provided warning message
 func LogWarning(cliConfig schema.CliConfiguration, message string) {
-	if cliConfig.Logs.Level == LogLevelWarning {
+	if cliConfig.Logs.Level == LogLevelTrace ||
+		cliConfig.Logs.Level == LogLevelDebug ||
+		cliConfig.Logs.Level == LogLevelInfo ||
+		cliConfig.Logs.Level == LogLevelWarning {
+
 		log(cliConfig, color.New(color.FgYellow), message)
 	}
 }
 
-// LogMessage logs the provided message
-func LogMessage(cliConfig schema.CliConfiguration, message string) {
-	log(cliConfig, color.New(color.Reset), message)
-}
-
 func log(cliConfig schema.CliConfiguration, logColor *color.Color, message string) {
-	if cliConfig.Logs.Level == LogLevelOff {
-		return
-	}
-
 	if cliConfig.Logs.File != "" {
 		if cliConfig.Logs.File == "/dev/stdout" {
 			_, err := logColor.Fprintln(os.Stdout, message)

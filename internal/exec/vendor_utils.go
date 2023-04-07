@@ -229,7 +229,7 @@ func ExecuteComponentVendorCommandInternal(
 							return true, err
 						} else if excludeMatch {
 							// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-							u.LogMessage(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+							u.LogInfo(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 								trimmedSrc,
 								excludePath,
 							))
@@ -246,7 +246,7 @@ func ExecuteComponentVendorCommandInternal(
 								return true, err
 							} else if includeMatch {
 								// If the file matches ANY of the 'included_paths' patterns, include the file
-								u.LogMessage(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+								u.LogInfo(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 									trimmedSrc,
 									includePath,
 								))
@@ -258,13 +258,13 @@ func ExecuteComponentVendorCommandInternal(
 						if anyMatches {
 							return false, nil
 						} else {
-							u.LogMessage(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+							u.LogInfo(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 							return true, nil
 						}
 					}
 
 					// If 'included_paths' is not provided, include all files that were not excluded
-					u.LogMessage(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+					u.LogInfo(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 					return false, nil
 				},
 

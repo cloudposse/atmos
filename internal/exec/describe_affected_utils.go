@@ -345,11 +345,11 @@ func executeDescribeAffected(
 
 	var changedFiles []string
 	for _, fileStat := range patch.Stats() {
-		u.LogMessage(cliConfig, fileStat.Name)
+		u.LogInfo(cliConfig, fileStat.Name)
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
-	u.LogMessage(cliConfig, "")
+	u.LogInfo(cliConfig, "")
 
 	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
 	if err != nil {

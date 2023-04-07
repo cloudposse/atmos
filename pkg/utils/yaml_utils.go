@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v2"
@@ -14,7 +15,7 @@ func PrintAsYAML(cliConfig schema.CliConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	LogMessage(cliConfig, y)
+	fmt.Println(y)
 	return nil
 }
 

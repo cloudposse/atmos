@@ -14,7 +14,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the CLI version",
 	Long:  `This command prints the CLI version`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u.LogMessage(schema.CliConfiguration{}, Version)
+		u.LogInfo(schema.CliConfiguration{}, Version)
 	},
 }
 

@@ -66,7 +66,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 
 	// Write the variables to file
 	u.LogInfo(cliConfig, "Writing the variables to file:")
-	u.LogMessage(cliConfig, varFilePath)
+	u.LogInfo(cliConfig, varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)

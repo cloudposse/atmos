@@ -76,7 +76,7 @@ workflows:
 
 logs:
   file: "/dev/stdout"
-  # Supported log levels: Off, Trace, Debug, Info, Warning
+  # Supported log levels: Trace, Debug, Info, Warning, Off
   level: Info
 
 # Custom CLI commands

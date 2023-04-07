@@ -104,7 +104,7 @@ func ValidateComponent(cliConfig schema.CliConfiguration, componentName string, 
 
 			u.LogInfo(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 			if v.Description != "" {
-				u.LogMessage(cliConfig, v.Description)
+				u.LogInfo(cliConfig, v.Description)
 			}
 
 			ok2, err := validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)

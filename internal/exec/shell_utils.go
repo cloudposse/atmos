@@ -55,7 +55,7 @@ func ExecuteShellCommand(
 
 	if verbose {
 		u.LogInfo(cliConfig, "\nExecuting command:")
-		u.LogMessage(cliConfig, cmd.String())
+		u.LogInfo(cliConfig, cmd.String())
 	}
 
 	if dryRun {
@@ -77,7 +77,7 @@ func ExecuteShell(
 ) error {
 	if verbose {
 		u.LogInfo(cliConfig, "\nExecuting command:")
-		u.LogMessage(cliConfig, command)
+		u.LogInfo(cliConfig, command)
 	}
 
 	if dryRun {
@@ -101,7 +101,7 @@ func ExecuteShellAndReturnOutput(
 
 	if verbose {
 		u.LogInfo(cliConfig, "\nExecuting command:")
-		u.LogMessage(cliConfig, command)
+		u.LogInfo(cliConfig, command)
 	}
 
 	if dryRun {
@@ -173,7 +173,7 @@ func ExecuteShellCommandAndReturnOutput(
 
 	if verbose {
 		u.LogInfo(cliConfig, "\nExecuting command:")
-		u.LogMessage(cliConfig, cmd.String())
+		u.LogInfo(cliConfig, cmd.String())
 	}
 
 	if dryRun {
@@ -228,10 +228,10 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
 
 	u.LogInfo(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
-	u.LogMessage(cliConfig, fmt.Sprintf("Component: %s\n", component))
-	u.LogMessage(cliConfig, fmt.Sprintf("Stack: %s\n", stack))
-	u.LogMessage(cliConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
-	u.LogMessage(cliConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
+	u.LogInfo(cliConfig, fmt.Sprintf("Component: %s\n", component))
+	u.LogInfo(cliConfig, fmt.Sprintf("Stack: %s\n", stack))
+	u.LogInfo(cliConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
+	u.LogInfo(cliConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
 	u.LogInfo(cliConfig, "\nSetting the ENV vars in the shell:\n")
 	for _, v := range componentEnvList {
 		u.LogInfo(cliConfig, v)
@@ -262,7 +262,7 @@ func execTerraformShellCommand(
 		shellCommand = shellCommand + " -l"
 	}
 
-	u.LogMessage(cliConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
+	u.LogInfo(cliConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
 
 	args := strings.Fields(shellCommand)
 
@@ -277,6 +277,6 @@ func execTerraformShellCommand(
 		return err
 	}
 
-	u.LogMessage(cliConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
+	u.LogInfo(cliConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
 	return nil
 }

@@ -178,10 +178,10 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 					}
 
 					u.LogInfo(cliConfig, fmt.Sprintf("varfile: %s", fileName))
-					u.LogMessage(cliConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
-					u.LogMessage(cliConfig, fmt.Sprintf("atmos component: %s", componentName))
-					u.LogMessage(cliConfig, fmt.Sprintf("atmos stack: %s", contextPrefix))
-					u.LogMessage(cliConfig, fmt.Sprintf("stack config file: %s", stackFileName))
+					u.LogInfo(cliConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
+					u.LogInfo(cliConfig, fmt.Sprintf("atmos component: %s", componentName))
+					u.LogInfo(cliConfig, fmt.Sprintf("atmos stack: %s", contextPrefix))
+					u.LogInfo(cliConfig, fmt.Sprintf("stack config file: %s", stackFileName))
 				}
 			}
 		}

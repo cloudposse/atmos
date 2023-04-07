@@ -232,7 +232,7 @@ func executeCustomCommand(
 		if len(envVarsList) > 0 && commandConfig.Verbose {
 			u.LogInfo(cliConfig, "\nUsing ENV vars:")
 			for _, v := range envVarsList {
-				u.LogMessage(cliConfig, v)
+				u.LogInfo(cliConfig, v)
 			}
 		}
 

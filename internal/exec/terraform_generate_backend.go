@@ -77,7 +77,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	)
 
 	u.LogInfo(cliConfig, "\nWriting the backend config to file:")
-	u.LogMessage(cliConfig, backendFilePath)
+	u.LogInfo(cliConfig, backendFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)
