@@ -39,11 +39,6 @@ func LogError(err error) {
 	}
 }
 
-// LogWarning logs the provided warning message
-func LogWarning(cliConfig schema.CliConfiguration, message string) {
-	log(cliConfig, color.New(color.FgYellow), message)
-}
-
 // LogInfo logs the provided info message
 func LogInfo(cliConfig schema.CliConfiguration, message string) {
 	log(cliConfig, color.New(color.FgCyan), message)
@@ -52,6 +47,20 @@ func LogInfo(cliConfig schema.CliConfiguration, message string) {
 // LogTrace logs the provided trace message
 func LogTrace(cliConfig schema.CliConfiguration, message string) {
 	log(cliConfig, color.New(color.Reset), message)
+}
+
+// LogDebug logs the provided debug message
+func LogDebug(cliConfig schema.CliConfiguration, message string) {
+	if cliConfig.Logs.Level == LogLevelDebug {
+		log(cliConfig, color.New(color.FgYellow), message)
+	}
+}
+
+// LogWarning logs the provided warning message
+func LogWarning(cliConfig schema.CliConfiguration, message string) {
+	if cliConfig.Logs.Level == LogLevelWarning {
+		log(cliConfig, color.New(color.FgYellow), message)
+	}
 }
 
 // LogMessage logs the provided message
