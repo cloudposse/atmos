@@ -169,7 +169,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0644)
+						err = u.WriteToFileAsHcl(cliConfig, fileAbsolutePath, varsSection, 0644)
 						if err != nil {
 							return err
 						}

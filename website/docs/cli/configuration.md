@@ -368,7 +368,7 @@ Atmos logs are configured in the `logs` section:
 ```yaml
 logs:
   file: "/dev/stdout"
-  # Supported log levels: Off, Trace, Info
+  # Supported log levels: Off, Trace, Debug, Info, Warning
   level: Info
 ```
 

@@ -6,7 +6,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
@@ -60,7 +59,6 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 					if stackNamePattern != "" {
 						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
-							u.LogError(err)
 							return nil, err
 						}
 					} else {

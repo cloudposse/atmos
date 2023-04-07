@@ -207,12 +207,12 @@ func ExecuteTerraformGenerateBackends(cliConfig schema.CliConfiguration, fileTem
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteTerraformBackendConfigToFileAsHcl(backendFileAbsolutePath, backendType, backendSection)
+						err = u.WriteTerraformBackendConfigToFileAsHcl(cliConfig, backendFileAbsolutePath, backendType, backendSection)
 						if err != nil {
 							return err
 						}
 					} else if format == "backend-config" {
-						err = u.WriteToFileAsHcl(backendFileAbsolutePath, backendSection, 0644)
+						err = u.WriteToFileAsHcl(cliConfig, backendFileAbsolutePath, backendSection, 0644)
 						if err != nil {
 							return err
 						}

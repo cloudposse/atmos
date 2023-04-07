@@ -78,7 +78,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		u.LogMessage(cliConfig, "Deleting '.terraform' folder")
 		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
 		if err != nil {
-			u.LogError(err)
+			u.LogWarning(cliConfig, err.Error())
 		}
 
 		u.LogMessage(cliConfig, "Deleting '.terraform.lock.hcl' file")
@@ -110,7 +110,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				u.LogMessage(cliConfig, fmt.Sprintf("Deleting folder '%s'\n", tfDataDir))
 				err = os.RemoveAll(path.Join(componentPath, tfDataDir))
 				if err != nil {
-					u.LogError(err)
+					u.LogWarning(cliConfig, err.Error())
 				}
 			}
 		}

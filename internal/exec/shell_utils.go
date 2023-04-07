@@ -46,7 +46,7 @@ func ExecuteShellCommand(
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.LogError(err)
+				u.LogWarning(cliConfig, err.Error())
 			}
 		}(f)
 
@@ -164,7 +164,7 @@ func ExecuteShellCommandAndReturnOutput(
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.LogError(err)
+				u.LogWarning(cliConfig, err.Error())
 			}
 		}(f)
 

@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	LogLevelOff   = "Off"
-	LogLevelTrace = "Trace"
-	LogLevelInfo  = "Info"
+	LogLevelOff     = "Off"
+	LogLevelTrace   = "Trace"
+	LogLevelDebug   = "Debug"
+	LogLevelInfo    = "Info"
+	LogLevelWarning = "Warning"
 )
 
 // LogErrorAndExit logs errors to std.Error and exits with an error code
@@ -29,12 +31,17 @@ func LogError(err error) {
 		c := color.New(color.FgRed)
 		_, err2 := c.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
-			color.Red("Error logging the error to std.Error:")
+			color.Red("Error logging the error:")
 			color.Red("%s\n", err2)
 			color.Red("Original error:")
 			color.Red("%s\n", err)
 		}
 	}
+}
+
+// LogWarning logs the provided warning message
+func LogWarning(cliConfig schema.CliConfiguration, message string) {
+	log(cliConfig, color.New(color.FgYellow), message)
 }
 
 // LogInfo logs the provided info message

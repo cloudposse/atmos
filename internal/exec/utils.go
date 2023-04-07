@@ -320,15 +320,13 @@ func ProcessStacks(
 			configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
 			configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 				configAndStacksInfo.Context,
 				cliConfig.Stacks.NamePattern,
 				stackName,
 			)
 			if err != nil {
-				// If any of the stack config files throws error (which also means that we can't find the component in that stack),
-				// print the error to the console and continue searching for the component in the other stack config files.
-				u.LogError(err)
 				continue
 			}
 
@@ -1348,6 +1346,6 @@ func printOrWriteToFile(
 func removeTempDir(cliConfig schema.CliConfiguration, path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
-		u.LogError(err)
+		u.LogWarning(cliConfig, err.Error())
 	}
 }

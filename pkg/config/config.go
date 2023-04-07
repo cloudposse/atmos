@@ -59,7 +59,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 	if len(configFilePath1) > 0 {
 		configFile1 := path.Join(configFilePath1, CliConfigFileName)
-		found, err = processConfigFile(configFile1, v)
+		found, err = processConfigFile(cliConfig, configFile1, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -74,7 +74,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return cliConfig, err
 	}
 	configFile2 := path.Join(configFilePath2, ".atmos", CliConfigFileName)
-	found, err = processConfigFile(configFile2, v)
+	found, err = processConfigFile(cliConfig, configFile2, v)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -88,7 +88,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return cliConfig, err
 	}
 	configFile3 := path.Join(configFilePath3, CliConfigFileName)
-	found, err = processConfigFile(configFile3, v)
+	found, err = processConfigFile(cliConfig, configFile3, v)
 	if err != nil {
 		return cliConfig, err
 	}
@@ -101,7 +101,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if len(configFilePath4) > 0 {
 		u.LogInfo(cliConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
 		configFile4 := path.Join(configFilePath4, CliConfigFileName)
-		found, err = processConfigFile(configFile4, v)
+		found, err = processConfigFile(cliConfig, configFile4, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -115,7 +115,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
 		if len(configFilePath5) > 0 {
 			configFile5 := path.Join(configFilePath5, CliConfigFileName)
-			found, err = processConfigFile(configFile5, v)
+			found, err = processConfigFile(cliConfig, configFile5, v)
 			if err != nil {
 				return cliConfig, err
 			}
@@ -244,7 +244,11 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 // https://github.com/NCAR/go-figure
 // https://github.com/spf13/viper/issues/181
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func processConfigFile(path string, v *viper.Viper) (bool, error) {
+func processConfigFile(
+	cliConfig schema.CliConfiguration,
+	path string,
+	v *viper.Viper,
+) (bool, error) {
 	if !u.FileExists(path) {
 		return false, nil
 	}
@@ -257,7 +261,7 @@ func processConfigFile(path string, v *viper.Viper) (bool, error) {
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogError(fmt.Errorf("error closing file '" + path + "'. " + err.Error()))
+			u.LogWarning(cliConfig, fmt.Sprintf("error closing file '"+path+"'. "+err.Error()))
 		}
 	}(reader)
 
