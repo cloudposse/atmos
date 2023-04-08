@@ -46,7 +46,7 @@ func LogError(err error) {
 // LogTrace logs the provided trace message
 func LogTrace(cliConfig schema.CliConfiguration, message string) {
 	if cliConfig.Logs.Level == LogLevelTrace {
-		log(cliConfig, color.New(color.Reset), message)
+		log(cliConfig, color.New(color.FgCyan), message)
 	}
 }
 
@@ -55,7 +55,7 @@ func LogDebug(cliConfig schema.CliConfiguration, message string) {
 	if cliConfig.Logs.Level == LogLevelTrace ||
 		cliConfig.Logs.Level == LogLevelDebug {
 
-		log(cliConfig, color.New(color.Reset), message)
+		log(cliConfig, color.New(color.FgCyan), message)
 	}
 }
 
