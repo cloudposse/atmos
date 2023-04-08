@@ -15,7 +15,7 @@ var vendorPullCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }

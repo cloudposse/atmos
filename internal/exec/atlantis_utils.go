@@ -1,25 +1,28 @@
 package exec
 
 import (
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/mitchellh/mapstructure"
 	"reflect"
 	"strings"
+
+	"github.com/mitchellh/mapstructure"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // BuildAtlantisProjectName builds an Atlantis project name from the provided context and project name pattern
-func BuildAtlantisProjectName(context cfg.Context, projectNameTemplate string) string {
+func BuildAtlantisProjectName(context schema.Context, projectNameTemplate string) string {
 	return cfg.ReplaceContextTokens(context, projectNameTemplate)
 }
 
 // BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from from the component config
 func BuildAtlantisProjectNameFromComponentConfig(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	componentName string,
 	componentSettingsSection map[any]any,
 	componentVarsSection map[any]any,
 ) (string, error) {
-	var atlantisProjectTemplate cfg.AtlantisProjectConfig
+	var atlantisProjectTemplate schema.AtlantisProjectConfig
 	var atlantisProjectName string
 
 	if atlantisSettingsSection, ok := componentSettingsSection["atlantis"].(map[any]any); ok {

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -26,16 +27,16 @@ func init() {
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, false)
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil && err != cfg.NotFound {
-		u.PrintErrorToStdErrorAndExit(err)
+		u.LogErrorAndExit(err)
 	}
 
 	// If CLI configuration was found, add its custom commands
 	if err == nil {
-		err = processCustomCommands(cliConfig.Commands, RootCmd, true)
+		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 	}
 }

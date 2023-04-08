@@ -2,11 +2,12 @@ package exec
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"path"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildTerraformWorkspace builds Terraform workspace
@@ -14,7 +15,7 @@ func BuildTerraformWorkspace(
 	stack string,
 	stackNamePattern string,
 	componentMetadata map[any]any,
-	context cfg.Context,
+	context schema.Context,
 ) (string, error) {
 
 	var contextPrefix string
@@ -111,7 +112,7 @@ func BuildDependantStackNameFromDependsOn(
 
 // BuildComponentPath builds component path (path to the component's physical location on disk)
 func BuildComponentPath(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	componentSectionMap map[string]any,
 	componentType string,
 ) string {

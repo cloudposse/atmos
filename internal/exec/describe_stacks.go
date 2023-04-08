@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -91,7 +92,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 
 // ExecuteDescribeStacks processes stack configs and returns the final map of stacks and components
 func ExecuteDescribeStacks(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	filterByStack string,
 	components []string,
 	componentTypes []string,

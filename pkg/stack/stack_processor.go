@@ -8,12 +8,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -586,7 +588,7 @@ func ProcessStackConfig(
 				baseComponentBackendSection := map[any]any{}
 				baseComponentRemoteStateBackendType := ""
 				baseComponentRemoteStateBackendSection := map[any]any{}
-				var baseComponentConfig cfg.BaseComponentConfig
+				var baseComponentConfig schema.BaseComponentConfig
 				var componentInheritanceChain []string
 				var baseComponents []string
 
@@ -940,7 +942,7 @@ func ProcessStackConfig(
 				baseComponentEnv := map[any]any{}
 				baseComponentName := ""
 				baseComponentHelmfileCommand := ""
-				var baseComponentConfig cfg.BaseComponentConfig
+				var baseComponentConfig schema.BaseComponentConfig
 				var componentInheritanceChain []string
 				var baseComponents []string
 

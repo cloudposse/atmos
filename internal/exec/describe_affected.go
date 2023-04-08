@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -77,7 +78,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
 
-	var affected []cfg.Affected
+	var affected []schema.Affected
 	if repoPath == "" {
 		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
 	} else {
@@ -88,7 +89,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	u.PrintInfoVerbose(verbose && file == "", fmt.Sprintf("\nAffected components and stacks: \n"))
+	u.LogDebug(cliConfig, fmt.Sprintf("\nAffected components and stacks: \n"))
 
 	err = printOrWriteToFile(format, file, affected)
 	if err != nil {

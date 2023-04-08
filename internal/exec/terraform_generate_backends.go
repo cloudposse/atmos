@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -63,7 +64,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components
-func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
+func ExecuteTerraformGenerateBackends(cliConfig schema.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
 	stacksMap, _, err := FindStacksMap(cliConfig, false)
 	if err != nil {
 		return err
@@ -197,7 +198,7 @@ func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, fileTempla
 					}
 
 					// Write the backend config to the file
-					u.PrintMessage(fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
+					u.LogDebug(cliConfig, fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
 
 					if format == "json" {
 						componentBackendConfig := generateComponentBackendConfig(backendType, backendSection)
@@ -206,12 +207,12 @@ func ExecuteTerraformGenerateBackends(cliConfig cfg.CliConfiguration, fileTempla
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteTerraformBackendConfigToFileAsHcl(backendFileAbsolutePath, backendType, backendSection)
+						err = u.WriteTerraformBackendConfigToFileAsHcl(cliConfig, backendFileAbsolutePath, backendType, backendSection)
 						if err != nil {
 							return err
 						}
 					} else if format == "backend-config" {
-						err = u.WriteToFileAsHcl(backendFileAbsolutePath, backendSection, 0644)
+						err = u.WriteToFileAsHcl(cliConfig, backendFileAbsolutePath, backendSection, 0644)
 						if err != nil {
 							return err
 						}

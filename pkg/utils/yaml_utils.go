@@ -1,9 +1,9 @@
 package utils
 
 import (
-	"fmt"
-	"gopkg.in/yaml.v2"
 	"os"
+
+	"gopkg.in/yaml.v2"
 )
 
 // PrintAsYAML prints the provided value as YAML document to the console
@@ -12,7 +12,7 @@ func PrintAsYAML(data any) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(y)
+	PrintMessage(y)
 	return nil
 }
 

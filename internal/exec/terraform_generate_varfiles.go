@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -63,13 +64,11 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
-func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
+func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
 	stacksMap, _, err := FindStacksMap(cliConfig, false)
 	if err != nil {
 		return err
 	}
-
-	fmt.Println()
 
 	var ok bool
 	var componentsSection map[string]any
@@ -170,7 +169,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0644)
+						err = u.WriteToFileAsHcl(cliConfig, fileAbsolutePath, varsSection, 0644)
 						if err != nil {
 							return err
 						}
@@ -178,12 +177,11 @@ func ExecuteTerraformGenerateVarfiles(cliConfig cfg.CliConfiguration, fileTempla
 						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
-					u.PrintInfo(fmt.Sprintf("varfile: %s", fileName))
-					u.PrintMessage(fmt.Sprintf("terraform component: %s", terraformComponent))
-					u.PrintMessage(fmt.Sprintf("atmos component: %s", componentName))
-					u.PrintMessage(fmt.Sprintf("atmos stack: %s", contextPrefix))
-					u.PrintMessage(fmt.Sprintf("stack config file: %s", stackFileName))
-					fmt.Println()
+					u.LogDebug(cliConfig, fmt.Sprintf("varfile: %s", fileName))
+					u.LogDebug(cliConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
+					u.LogDebug(cliConfig, fmt.Sprintf("atmos component: %s", componentName))
+					u.LogDebug(cliConfig, fmt.Sprintf("atmos stack: %s", contextPrefix))
+					u.LogDebug(cliConfig, fmt.Sprintf("stack config file: %s", stackFileName))
 				}
 			}
 		}

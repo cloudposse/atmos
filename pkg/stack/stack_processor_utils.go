@@ -15,6 +15,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -169,19 +170,19 @@ func FindComponentDependencies(
 // The `import` section` can be of two different type:
 // 1. list of `StackImport` structs
 // 2. list of strings
-func processImportSection(stackMap map[any]any, filePath string) ([]cfg.StackImport, error) {
+func processImportSection(stackMap map[any]any, filePath string) ([]schema.StackImport, error) {
 	if imports, ok := stackMap[cfg.ImportSectionName]; ok && imports != nil {
-		var res1 []cfg.StackImport
+		var res1 []schema.StackImport
 		err := mapstructure.Decode(imports, &res1)
 		if err == nil && len(res1) > 0 {
 			return res1, nil
 		}
 
 		if stringImports, ok := imports.([]any); ok && len(stringImports) > 0 {
-			var res2 []cfg.StackImport
+			var res2 []schema.StackImport
 			for _, i := range stringImports {
 				if s, ok := i.(string); ok {
-					res2 = append(res2, cfg.StackImport{Path: s})
+					res2 = append(res2, schema.StackImport{Path: s})
 				} else if i == nil {
 					return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 				} else {
@@ -328,7 +329,7 @@ func getFileContent(filePath string) (string, error) {
 
 // ProcessBaseComponentConfig processes base component(s) config
 func ProcessBaseComponentConfig(
-	baseComponentConfig *cfg.BaseComponentConfig,
+	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[any]any,
 	component string,
 	stack string,

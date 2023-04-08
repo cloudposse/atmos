@@ -5,9 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hashicorp/go-getter"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"strconv"
@@ -15,9 +12,14 @@ import (
 	"text/template"
 	"time"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteVendorCommand executes `atmos vendor` commands
@@ -71,7 +73,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 			return err
 		}
 
-		return ExecuteComponentVendorCommandInternal(componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
+		return ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
 	} else {
 		// Process stack vendoring
 		return ExecuteStackVendorCommandInternal(stack, dryRun, vendorCommand)
@@ -79,9 +81,9 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
-func ReadAndProcessComponentConfigFile(cliConfig cfg.CliConfiguration, component string, componentType string) (cfg.VendorComponentConfig, string, error) {
+func ReadAndProcessComponentConfigFile(cliConfig schema.CliConfiguration, component string, componentType string) (schema.VendorComponentConfig, string, error) {
 	var componentBasePath string
-	var componentConfig cfg.VendorComponentConfig
+	var componentConfig schema.VendorComponentConfig
 
 	if componentType == "terraform" {
 		componentBasePath = cliConfig.Components.Terraform.BasePath
@@ -131,7 +133,8 @@ func ReadAndProcessComponentConfigFile(cliConfig cfg.CliConfiguration, component
 // https://www.allee.xyz/en/posts/getting-started-with-go-getter
 // https://github.com/otiai10/copy
 func ExecuteComponentVendorCommandInternal(
-	vendorComponentSpec cfg.VendorComponentSpec,
+	cliConfig schema.CliConfiguration,
+	vendorComponentSpec schema.VendorComponentSpec,
 	component string,
 	componentPath string,
 	dryRun bool,
@@ -173,7 +176,7 @@ func ExecuteComponentVendorCommandInternal(
 			uri = absPath
 		}
 
-		u.PrintInfo(fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
+		u.LogTrace(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
 			component,
 			uri,
 			componentPath,
@@ -190,7 +193,7 @@ func ExecuteComponentVendorCommandInternal(
 				return err
 			}
 
-			defer removeTempDir(tempDir)
+			defer removeTempDir(cliConfig, tempDir)
 
 			// Download the source into the temp folder
 			client := &getter.Client{
@@ -226,10 +229,10 @@ func ExecuteComponentVendorCommandInternal(
 							return true, err
 						} else if excludeMatch {
 							// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-							fmt.Printf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+							u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 								trimmedSrc,
 								excludePath,
-							)
+							))
 							return true, nil
 						}
 					}
@@ -243,10 +246,10 @@ func ExecuteComponentVendorCommandInternal(
 								return true, err
 							} else if includeMatch {
 								// If the file matches ANY of the 'included_paths' patterns, include the file
-								fmt.Printf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+								u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 									trimmedSrc,
 									includePath,
-								)
+								))
 								anyMatches = true
 								break
 							}
@@ -255,13 +258,13 @@ func ExecuteComponentVendorCommandInternal(
 						if anyMatches {
 							return false, nil
 						} else {
-							fmt.Printf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc)
+							u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 							return true, nil
 						}
 					}
 
 					// If 'included_paths' is not provided, include all files that were not excluded
-					fmt.Printf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src))
+					u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 					return false, nil
 				},
 
@@ -280,8 +283,6 @@ func ExecuteComponentVendorCommandInternal(
 
 		// Process mixins
 		if len(vendorComponentSpec.Mixins) > 0 {
-			fmt.Println()
-
 			for _, mixin := range vendorComponentSpec.Mixins {
 				if mixin.Uri == "" {
 					return errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
@@ -316,7 +317,7 @@ func ExecuteComponentVendorCommandInternal(
 					uri = absPath
 				}
 
-				u.PrintInfo(fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
+				u.LogTrace(cliConfig, fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
 					uri,
 					component,
 					path.Join(componentPath, mixin.Filename),

@@ -1,19 +1,21 @@
 package atlantis
 
 import (
-	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestAtlantisGenerateRepoConfig(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	err = utils.PrintAsYAML(cliConfig)
+	err = u.PrintAsYAML(cliConfig)
 	assert.Nil(t, err)
 
 	atlantisConfig := cliConfig.Integrations.Atlantis
@@ -25,7 +27,7 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	workflowTemplate := atlantisConfig.ProjectTemplates[workflowTemplateName]
 	projectTemplate.Workflow = workflowTemplateName
 
-	atlantisYaml := cfg.AtlantisConfigOutput{}
+	atlantisYaml := schema.AtlantisConfigOutput{}
 	atlantisYaml.Version = configTemplate.Version
 	atlantisYaml.Automerge = configTemplate.Automerge
 	atlantisYaml.DeleteSourceBranchOnMerge = configTemplate.DeleteSourceBranchOnMerge
@@ -33,14 +35,14 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	atlantisYaml.ParallelApply = configTemplate.ParallelApply
 	atlantisYaml.Workflows = map[string]any{workflowTemplateName: workflowTemplate}
 	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
-	atlantisYaml.Projects = []cfg.AtlantisProjectConfig{projectTemplate}
+	atlantisYaml.Projects = []schema.AtlantisProjectConfig{projectTemplate}
 
-	err = utils.PrintAsYAML(atlantisYaml)
+	err = u.PrintAsYAML(atlantisYaml)
 	assert.Nil(t, err)
 }
 
 func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	err = e.ExecuteAtlantisGenerateRepoConfig(
@@ -56,7 +58,7 @@ func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	err = e.ExecuteAtlantisGenerateRepoConfig(
@@ -72,7 +74,7 @@ func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	err = e.ExecuteAtlantisGenerateRepoConfigAffectedOnly(

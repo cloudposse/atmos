@@ -1,10 +1,10 @@
 package utils
 
 import (
-	"fmt"
-	jsoniter "github.com/json-iterator/go"
 	"os"
 	"strings"
+
+	jsoniter "github.com/json-iterator/go"
 )
 
 // PrintAsJSON prints the provided value as YAML document to the console
@@ -13,7 +13,7 @@ func PrintAsJSON(data any) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(j)
+	PrintMessage(j)
 	return nil
 }
 

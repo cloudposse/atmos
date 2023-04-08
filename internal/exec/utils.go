@@ -7,10 +7,12 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -131,8 +133,8 @@ func FindComponentConfig(
 }
 
 // processCommandLineArgs processes command-line args
-func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (cfg.ConfigAndStacksInfo, error) {
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
+func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
+	var configAndStacksInfo schema.ConfigAndStacksInfo
 
 	cmd.DisableFlagParsing = false
 
@@ -191,7 +193,7 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(cliConfig cfg.CliConfiguration, ignoreMissingFiles bool) (
+func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
 	error,
@@ -216,11 +218,11 @@ func FindStacksMap(cliConfig cfg.CliConfiguration, ignoreMissingFiles bool) (
 
 // ProcessStacks processes stack config
 func ProcessStacks(
-	cliConfig cfg.CliConfiguration,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	cliConfig schema.CliConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
 ) (
-	cfg.ConfigAndStacksInfo,
+	schema.ConfigAndStacksInfo,
 	error,
 ) {
 
@@ -244,15 +246,14 @@ func ProcessStacks(
 	}
 
 	// Print the stack config files
-	if cliConfig.Logs.Verbose {
-		fmt.Println()
+	if cliConfig.Logs.Level == u.LogLevelTrace {
 		var msg string
 		if cliConfig.StackType == "Directory" {
-			msg = "Found the config file for the provided stack:"
+			msg = "\nFound the config file for the provided stack:"
 		} else {
-			msg = "Found stack config files:"
+			msg = "\nFound stack config files:"
 		}
-		u.PrintInfo(msg)
+		u.PrintMessage(msg)
 		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -292,10 +293,9 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Searching for stack config where the component '%s' is defined", configAndStacksInfo.ComponentFromArg))
 		foundStackCount := 0
 		var foundStacks []string
-		var foundConfigAndStacksInfo cfg.ConfigAndStacksInfo
+		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
 			// Check if we've found the component config
@@ -311,7 +311,6 @@ func ProcessStacks(
 				configAndStacksInfo.ComponentMetadataSection,
 				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
 			if err != nil {
-				u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
 				continue
 			}
 
@@ -321,15 +320,13 @@ func ProcessStacks(
 			configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
 			configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 				configAndStacksInfo.Context,
 				cliConfig.Stacks.NamePattern,
 				stackName,
 			)
 			if err != nil {
-				// If any of the stack config files throws error (which also means that we can't find the component in that stack),
-				// print the error to the console and continue searching for the component in the other stack config files.
-				u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
 				continue
 			}
 
@@ -340,9 +337,9 @@ func ProcessStacks(
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
 
-				u.PrintInfoVerbose(
-					cliConfig.Logs.Verbose,
-					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
+				u.LogDebug(
+					cliConfig,
+					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack config file '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
 						stackName,
@@ -369,7 +366,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 				cliConfig.Stacks.NamePattern)
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -441,7 +438,7 @@ func ProcessStacks(
 
 // processConfigSources processes the sources (files) for all variables for a component in a stack
 func processConfigSources(
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 ) (
 	map[string]map[string]any,
@@ -464,7 +461,7 @@ func processConfigSources(
 }
 
 func processVariableInStacks(
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	variable string,
 ) []map[string]any {
@@ -593,7 +590,7 @@ func processComponentVariableInStack(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	variable string,
 ) *[]map[string]any {
@@ -674,7 +671,7 @@ func processComponentTypeVariableInStack(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	variable string,
 ) *[]map[string]any {
@@ -785,7 +782,7 @@ func processComponentVariableInStackImports(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	variable string,
 ) *[]map[string]any {
@@ -868,7 +865,7 @@ func processComponentTypeVariableInStackImports(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	variable string,
 ) *[]map[string]any {
@@ -989,8 +986,8 @@ func appendVariableDescriptor(result *[]map[string]any, descriptor map[string]an
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
-func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.ArgsAndFlagsInfo, error) {
-	var info cfg.ArgsAndFlagsInfo
+func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (schema.ArgsAndFlagsInfo, error) {
+	var info schema.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 
@@ -1306,7 +1303,11 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 
 // printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
 // and prints the data to the console or to a file (if file is specified)
-func printOrWriteToFile(format string, file string, data any) error {
+func printOrWriteToFile(
+	format string,
+	file string,
+	data any,
+) error {
 	switch format {
 	case "yaml":
 		if file == "" {
@@ -1341,9 +1342,9 @@ func printOrWriteToFile(format string, file string, data any) error {
 	return nil
 }
 
-func removeTempDir(path string) {
+func removeTempDir(cliConfig schema.CliConfiguration, path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
-		u.PrintError(err)
+		u.LogWarning(cliConfig, err.Error())
 	}
 }

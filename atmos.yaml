@@ -63,8 +63,9 @@ workflows:
   base_path: "stacks/workflows"
 
 logs:
-  verbose: false
-  colors: true
+  file: "/dev/stdout"
+  # Supported log levels: Trace, Debug, Info, Warning, Off
+  level: Info
 
 # Custom CLI commands
 commands:

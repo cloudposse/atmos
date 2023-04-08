@@ -2,11 +2,13 @@ package spacelift
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -34,15 +36,15 @@ func CreateSpaceliftStacks(
 			false,
 		)
 		if err != nil {
-			u.PrintErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
 		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports)
 	} else {
-		cliConfig, err := cfg.InitCliConfig(cfg.ConfigAndStacksInfo{}, true)
+		cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
-			u.PrintErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
@@ -56,7 +58,7 @@ func CreateSpaceliftStacks(
 			false,
 		)
 		if err != nil {
-			u.PrintErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
@@ -173,7 +175,7 @@ func TransformStackConfigToSpaceliftStacks(
 					if stackNamePattern != "" {
 						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
-							u.PrintErrorToStdError(err)
+							u.LogError(err)
 							return nil, err
 						}
 					} else {
@@ -213,7 +215,7 @@ func TransformStackConfigToSpaceliftStacks(
 						context,
 					)
 					if err != nil {
-						u.PrintErrorToStdError(err)
+						u.LogError(err)
 						return nil, err
 					}
 					spaceliftConfig["workspace"] = workspace
@@ -247,7 +249,7 @@ func TransformStackConfigToSpaceliftStacks(
 							terraformComponentNamesInCurrentStack,
 							component)
 						if err != nil {
-							u.PrintErrorToStdError(err)
+							u.LogError(err)
 							return nil, err
 						}
 						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -276,7 +278,7 @@ func TransformStackConfigToSpaceliftStacks(
 							spaceliftStackNamePattern,
 						)
 						er := errors.New(errorMessage)
-						u.PrintErrorToStdError(er)
+						u.LogError(er)
 						return nil, er
 					}
 				}

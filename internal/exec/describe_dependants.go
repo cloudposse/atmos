@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ExecuteDescribeDependantsCmd executes `describe dependants` command
@@ -62,12 +63,12 @@ func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
 
 // ExecuteDescribeDependants produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
 func ExecuteDescribeDependants(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	component string,
 	stack string,
-) ([]cfg.Dependant, error) {
+) ([]schema.Dependant, error) {
 
-	dependants := []cfg.Dependant{}
+	dependants := []schema.Dependant{}
 	var ok bool
 
 	// Get all stacks with all components
@@ -88,7 +89,7 @@ func ExecuteDescribeDependants(
 	}
 
 	// Convert the current component `vars` section to the `Context` structure
-	var currentComponentVars cfg.Context
+	var currentComponentVars schema.Context
 	err = mapstructure.Decode(currentComponentVarsSection, &currentComponentVars)
 	if err != nil {
 		return nil, err
@@ -140,7 +141,7 @@ func ExecuteDescribeDependants(
 				}
 
 				// Convert the stack component `vars` section to the `Context` structure
-				var stackComponentVars cfg.Context
+				var stackComponentVars schema.Context
 				err = mapstructure.Decode(stackComponentVarsSection, &stackComponentVars)
 				if err != nil {
 					return nil, err
@@ -153,7 +154,7 @@ func ExecuteDescribeDependants(
 				}
 
 				// Convert the `settings` section to the `Settings` structure
-				var stackComponentSettings cfg.Settings
+				var stackComponentSettings schema.Settings
 				err = mapstructure.Decode(stackComponentSettingsSection, &stackComponentSettings)
 				if err != nil {
 					return nil, err
@@ -203,7 +204,7 @@ func ExecuteDescribeDependants(
 						continue
 					}
 
-					dependant := cfg.Dependant{
+					dependant := schema.Dependant{
 						Component:     stackComponentName,
 						ComponentPath: BuildComponentPath(cliConfig, stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
