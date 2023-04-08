@@ -89,7 +89,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	u.LogInfo(cliConfig, fmt.Sprintf("\nAffected components and stacks: \n"))
+	u.LogDebug(cliConfig, fmt.Sprintf("\nAffected components and stacks: \n"))
 
 	err = printOrWriteToFile(cliConfig, format, file, affected)
 	if err != nil {

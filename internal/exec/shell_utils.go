@@ -54,8 +54,8 @@ func ExecuteShellCommand(
 	}
 
 	if verbose {
-		u.LogInfo(cliConfig, "\nExecuting command:")
-		u.LogInfo(cliConfig, cmd.String())
+		u.LogTrace(cliConfig, "\nExecuting command:")
+		u.LogTrace(cliConfig, cmd.String())
 	}
 
 	if dryRun {
