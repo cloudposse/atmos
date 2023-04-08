@@ -9,11 +9,8 @@ import (
 
 // processHelp processes help commands
 func processHelp(componentType string, command string) error {
-	cliConfig := schema.CliConfiguration{
-		Logs: schema.Logs{
-			Level: u.LogLevelTrace,
-		},
-	}
+	cliConfig := schema.CliConfiguration{}
+	cliConfig.Logs.Level = u.LogLevelTrace
 
 	if len(command) == 0 {
 		u.PrintMessage(fmt.Sprintf("'atmos' supports all native '%s' commands.\n", componentType))
@@ -57,7 +54,7 @@ func processHelp(componentType string, command string) error {
 				"by setting 'components.helmfile.use_eks' to 'false'")
 		}
 
-		err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, true, "")
+		err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, "")
 		if err != nil {
 			return err
 		}
@@ -67,7 +64,7 @@ func processHelp(componentType string, command string) error {
 		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
 		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
 
-		err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, true, "")
+		err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, "")
 		if err != nil {
 			return err
 		}

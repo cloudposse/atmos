@@ -17,6 +17,11 @@ const (
 	LogLevelOff     = "Off"
 )
 
+// PrintMessage prints the message to the console
+func PrintMessage(message string) {
+	fmt.Println(message)
+}
+
 // LogErrorAndExit logs errors to std.Error and exits with an error code
 func LogErrorAndExit(err error) {
 	if err != nil {
@@ -115,9 +120,4 @@ func log(cliConfig schema.CliConfiguration, logColor *color.Color, message strin
 			color.Red("%s\n", err)
 		}
 	}
-}
-
-// PrintMessage prints the message to the console
-func PrintMessage(message string) {
-	fmt.Println(message)
 }

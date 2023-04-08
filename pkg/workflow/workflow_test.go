@@ -1,17 +1,21 @@
 package workflow
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestWorkflowCommand(t *testing.T) {
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
+
+	cliConfig.Logs.Level = u.LogLevelTrace
 
 	workflow := "test-1"
 	workflowPath := "stacks/workflows/workflow1.yaml"

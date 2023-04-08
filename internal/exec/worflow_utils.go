@@ -73,7 +73,7 @@ func ExecuteWorkflow(
 
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			if err := ExecuteShell(cliConfig, command, commandName, ".", []string{}, dryRun, true); err != nil {
+			if err := ExecuteShell(cliConfig, command, commandName, ".", []string{}, dryRun); err != nil {
 				return err
 			}
 		} else if commandType == "atmos" {
@@ -102,7 +102,7 @@ func ExecuteWorkflow(
 				u.LogDebug(cliConfig, fmt.Sprintf("Stack: %s", finalStack))
 			}
 
-			if err := ExecuteShellCommand(cliConfig, "atmos", args, ".", []string{}, dryRun, true, ""); err != nil {
+			if err := ExecuteShellCommand(cliConfig, "atmos", args, ".", []string{}, dryRun, ""); err != nil {
 				return err
 			}
 		} else {

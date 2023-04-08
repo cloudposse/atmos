@@ -220,7 +220,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			componentPath,
 			info.ComponentEnvList,
 			info.DryRun,
-			true,
 			info.RedirectStdErr,
 		)
 		if err != nil {
@@ -341,7 +340,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			componentPath,
 			info.ComponentEnvList,
 			info.DryRun,
-			true,
 			workspaceSelectRedirectStdErr,
 		)
 		if err != nil {
@@ -352,7 +350,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				componentPath,
 				info.ComponentEnvList,
 				info.DryRun,
-				true,
 				info.RedirectStdErr,
 			)
 			if err != nil {
@@ -410,7 +407,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			componentPath,
 			info.ComponentEnvList,
 			info.DryRun,
-			true,
 			info.RedirectStdErr,
 		)
 		if err != nil {

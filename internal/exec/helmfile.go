@@ -133,7 +133,6 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			componentPath,
 			nil,
 			info.DryRun,
-			true,
 			info.RedirectStdErr,
 		)
 		if err != nil {
@@ -226,7 +225,6 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		componentPath,
 		envVars,
 		info.DryRun,
-		true,
 		info.RedirectStdErr,
 	)
 	if err != nil {
@@ -234,7 +232,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Cleanup
-	_ = os.Remove(varFilePath)
+	err = os.Remove(varFilePath)
+	if err != nil {
+		u.LogWarning(cliConfig, err.Error())
+	}
 
 	return nil
 }

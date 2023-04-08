@@ -26,7 +26,6 @@ func ExecuteShellCommand(
 	dir string,
 	env []string,
 	dryRun bool,
-	verbose bool,
 	redirectStdError string,
 ) error {
 	cmd := exec.Command(command, args...)
@@ -53,10 +52,8 @@ func ExecuteShellCommand(
 		cmd.Stderr = f
 	}
 
-	if verbose {
-		u.LogTrace(cliConfig, "\nExecuting command:")
-		u.LogTrace(cliConfig, cmd.String())
-	}
+	u.LogDebug(cliConfig, "\nExecuting command:")
+	u.LogDebug(cliConfig, cmd.String())
 
 	if dryRun {
 		return nil
@@ -73,12 +70,9 @@ func ExecuteShell(
 	dir string,
 	env []string,
 	dryRun bool,
-	verbose bool,
 ) error {
-	if verbose {
-		u.LogInfo(cliConfig, "\nExecuting command:")
-		u.LogInfo(cliConfig, command)
-	}
+	u.LogDebug(cliConfig, "\nExecuting command:")
+	u.LogDebug(cliConfig, command)
 
 	if dryRun {
 		return nil
@@ -95,14 +89,11 @@ func ExecuteShellAndReturnOutput(
 	dir string,
 	env []string,
 	dryRun bool,
-	verbose bool,
 ) (string, error) {
 	var b bytes.Buffer
 
-	if verbose {
-		u.LogInfo(cliConfig, "\nExecuting command:")
-		u.LogInfo(cliConfig, command)
-	}
+	u.LogDebug(cliConfig, "\nExecuting command:")
+	u.LogDebug(cliConfig, command)
 
 	if dryRun {
 		return "", nil
@@ -137,78 +128,6 @@ func shellRunner(command string, name string, dir string, env []string, out io.W
 	return runner.Run(context.TODO(), parser)
 }
 
-// ExecuteShellCommandAndReturnOutput prints and executes the provided command with args and flags and returns the command output
-func ExecuteShellCommandAndReturnOutput(
-	cliConfig schema.CliConfiguration,
-	command string,
-	args []string,
-	dir string,
-	env []string,
-	dryRun bool,
-	verbose bool,
-	redirectStdError string,
-) (string, error) {
-	cmd := exec.Command(command, args...)
-	cmd.Env = append(os.Environ(), env...)
-	cmd.Dir = dir
-	cmd.Stdin = os.Stdin
-
-	if redirectStdError == "" {
-		cmd.Stderr = os.Stderr
-	} else {
-		f, err := os.OpenFile(redirectStdError, os.O_RDWR|os.O_CREATE, 0644)
-		if err != nil {
-			return "", err
-		}
-
-		defer func(f *os.File) {
-			err = f.Close()
-			if err != nil {
-				u.LogWarning(cliConfig, err.Error())
-			}
-		}(f)
-
-		cmd.Stderr = f
-	}
-
-	if verbose {
-		u.LogInfo(cliConfig, "\nExecuting command:")
-		u.LogInfo(cliConfig, cmd.String())
-	}
-
-	if dryRun {
-		return "", nil
-	}
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	return string(output), nil
-}
-
-// ExecuteShellCommands sequentially executes the provided list of commands
-func ExecuteShellCommands(
-	cliConfig schema.CliConfiguration,
-	commands []string,
-	dir string,
-	env []string,
-	dryRun bool,
-	verbose bool,
-	redirectStdError string,
-) error {
-	for _, command := range commands {
-		args := strings.Fields(command)
-		if len(args) > 0 {
-			if err := ExecuteShellCommand(cliConfig, args[0], args[1:], dir, env, dryRun, verbose, redirectStdError); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
 func execTerraformShellCommand(
 	cliConfig schema.CliConfiguration,
@@ -227,14 +146,14 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
 
-	u.LogInfo(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
-	u.LogInfo(cliConfig, fmt.Sprintf("Component: %s\n", component))
-	u.LogInfo(cliConfig, fmt.Sprintf("Stack: %s\n", stack))
-	u.LogInfo(cliConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
-	u.LogInfo(cliConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
-	u.LogInfo(cliConfig, "\nSetting the ENV vars in the shell:\n")
+	u.LogDebug(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
+	u.LogDebug(cliConfig, fmt.Sprintf("Component: %s\n", component))
+	u.LogDebug(cliConfig, fmt.Sprintf("Stack: %s\n", stack))
+	u.LogDebug(cliConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
+	u.LogDebug(cliConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
+	u.LogDebug(cliConfig, "\nSetting the ENV vars in the shell:\n")
 	for _, v := range componentEnvList {
-		u.LogInfo(cliConfig, v)
+		u.LogDebug(cliConfig, v)
 	}
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
@@ -262,7 +181,7 @@ func execTerraformShellCommand(
 		shellCommand = shellCommand + " -l"
 	}
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
+	u.LogDebug(cliConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
 
 	args := strings.Fields(shellCommand)
 
@@ -277,6 +196,6 @@ func execTerraformShellCommand(
 		return err
 	}
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
+	u.LogDebug(cliConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
 	return nil
 }

@@ -133,6 +133,10 @@ func executeCustomCommand(
 ) {
 	var err error
 
+	if commandConfig.Verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
+
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
 		// Prepare template data for arguments
@@ -209,7 +213,7 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := e.ExecuteShellAndReturnOutput(cliConfig, valCommand, valCommandName, ".", nil, false, commandConfig.Verbose)
+				res, err := e.ExecuteShellAndReturnOutput(cliConfig, valCommand, valCommandName, ".", nil, false)
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
@@ -245,7 +249,7 @@ func executeCustomCommand(
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(cliConfig, commandToRun, commandName, ".", envVarsList, false, commandConfig.Verbose)
+		err = e.ExecuteShell(cliConfig, commandToRun, commandName, ".", envVarsList, false)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
