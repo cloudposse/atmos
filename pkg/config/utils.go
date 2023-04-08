@@ -250,7 +250,7 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 
 	componentsHelmfileHelmAwsProfilePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN")
 	if len(componentsHelmfileHelmAwsProfilePattern) > 0 {
-		u.LogInfo(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN=%s", componentsHelmfileHelmAwsProfilePattern))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN=%s", componentsHelmfileHelmAwsProfilePattern))
 		cliConfig.Components.Helmfile.HelmAwsProfilePattern = componentsHelmfileHelmAwsProfilePattern
 	}
 
@@ -314,23 +314,23 @@ func checkConfig(cliConfig schema.CliConfiguration) error {
 func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		cliConfig.BasePath = configAndStacksInfo.BasePath
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
 	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		cliConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		cliConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
 	}
 	if len(configAndStacksInfo.ConfigDir) > 0 {
 		cliConfig.Stacks.BasePath = configAndStacksInfo.ConfigDir
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
 	}
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		cliConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
 	}
 	if len(configAndStacksInfo.DeployRunInit) > 0 {
 		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
@@ -338,7 +338,7 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 			return err
 		}
 		cliConfig.Components.Terraform.DeployRunInit = deployRunInitBool
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
 	}
 	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
 		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
@@ -346,11 +346,11 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 			return err
 		}
 		cliConfig.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
 	}
 	if len(configAndStacksInfo.WorkflowsDir) > 0 {
 		cliConfig.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
 	}
 	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
 		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
@@ -358,19 +358,19 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 			return err
 		}
 		cliConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
 	}
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
 		cliConfig.Schemas.JsonSchema.BasePath = configAndStacksInfo.JsonSchemaDir
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
 		cliConfig.Schemas.Opa.BasePath = configAndStacksInfo.OpaDir
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
 		cliConfig.Schemas.Cue.BasePath = configAndStacksInfo.CueDir
-		u.LogInfo(*cliConfig, fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
 	}
 
 	return nil

@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -14,7 +13,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the CLI version",
 	Long:  `This command prints the CLI version`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u.LogInfo(schema.CliConfiguration{}, Version)
+		u.PrintMessage(Version)
 	},
 }
 

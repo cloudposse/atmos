@@ -57,7 +57,9 @@ func LogDebug(cliConfig schema.CliConfiguration, message string) {
 
 // LogInfo logs the provided info message
 func LogInfo(cliConfig schema.CliConfiguration, message string) {
-	if cliConfig.Logs.Level == LogLevelTrace ||
+	// Info level is default, it's used if not set in `atmos.yaml` in the `logs.level` section
+	if cliConfig.Logs.Level == "" ||
+		cliConfig.Logs.Level == LogLevelTrace ||
 		cliConfig.Logs.Level == LogLevelDebug ||
 		cliConfig.Logs.Level == LogLevelInfo {
 
