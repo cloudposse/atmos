@@ -55,7 +55,7 @@ func LogDebug(cliConfig schema.CliConfiguration, message string) {
 	if cliConfig.Logs.Level == LogLevelTrace ||
 		cliConfig.Logs.Level == LogLevelDebug {
 
-		log(cliConfig, color.New(color.FgYellow), message)
+		log(cliConfig, color.New(color.Reset), message)
 	}
 }
 
