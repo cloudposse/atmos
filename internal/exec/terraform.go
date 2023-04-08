@@ -75,39 +75,39 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	planFile := constructTerraformComponentPlanfileName(info)
 
 	if info.SubCommand == "clean" {
-		u.LogInfo(cliConfig, "Deleting '.terraform' folder")
+		u.LogTrace(cliConfig, "Deleting '.terraform' folder")
 		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
 		if err != nil {
 			u.LogWarning(cliConfig, err.Error())
 		}
 
-		u.LogInfo(cliConfig, "Deleting '.terraform.lock.hcl' file")
+		u.LogTrace(cliConfig, "Deleting '.terraform.lock.hcl' file")
 		_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
 
-		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s\n", varFile))
+		u.LogTrace(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s\n", varFile))
 		_ = os.Remove(path.Join(componentPath, varFile))
 
-		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s\n", planFile))
+		u.LogTrace(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s\n", planFile))
 		_ = os.Remove(path.Join(componentPath, planFile))
 
 		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
 		if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-			u.LogInfo(cliConfig, "Deleting 'backend.tf.json' file")
+			u.LogTrace(cliConfig, "Deleting 'backend.tf.json' file")
 			_ = os.Remove(path.Join(componentPath, "backend.tf.json"))
 		}
 
 		tfDataDir := os.Getenv("TF_DATA_DIR")
 		if len(tfDataDir) > 0 && tfDataDir != "." && tfDataDir != "/" && tfDataDir != "./" {
-			u.LogInfo(cliConfig, fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
+			u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
 			var userAnswer string
-			u.LogInfo(cliConfig, fmt.Sprintf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)\n", tfDataDir))
+			u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)\n", tfDataDir))
 			fmt.Print("Enter a value: ")
 			count, err := fmt.Scanln(&userAnswer)
 			if count > 0 && err != nil {
 				return err
 			}
 			if userAnswer == "yes" {
-				u.LogInfo(cliConfig, fmt.Sprintf("Deleting folder '%s'\n", tfDataDir))
+				u.PrintMessage(fmt.Sprintf("Deleting folder '%s'\n", tfDataDir))
 				err = os.RemoveAll(path.Join(componentPath, tfDataDir))
 				if err != nil {
 					u.LogWarning(cliConfig, err.Error())
@@ -121,7 +121,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
-		u.LogInfo(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+		u.LogDebug(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 		err = u.PrintAsYAML(cliConfig, info.ComponentVarsSection)
 		if err != nil {
 			return err
@@ -147,8 +147,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				varFilePath = constructTerraformComponentVarfilePath(cliConfig, info)
 			}
 
-			u.LogInfo(cliConfig, "Writing the variables to file:")
-			u.LogInfo(cliConfig, varFilePath)
+			u.LogDebug(cliConfig, "Writing the variables to file:")
+			u.LogDebug(cliConfig, varFilePath)
 
 			if !info.DryRun {
 				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
@@ -180,8 +180,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			"backend.tf.json",
 		)
 
-		u.LogInfo(cliConfig, "Writing the backend config to file:")
-		u.LogInfo(cliConfig, backendFileName)
+		u.LogDebug(cliConfig, "Writing the backend config to file:")
+		u.LogDebug(cliConfig, backendFileName)
 
 		if !info.DryRun {
 			var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
@@ -201,7 +201,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SkipInit {
-		u.LogInfo(cliConfig, "Skipping over 'terraform init' due to '--skip-init' flag being passed")
+		u.LogDebug(cliConfig, "Skipping over 'terraform init' due to '--skip-init' flag being passed")
 		runTerraformInit = false
 	}
 
@@ -241,41 +241,41 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print command info
-	u.LogInfo(cliConfig, "\nCommand info:")
-	u.LogInfo(cliConfig, "Terraform binary: "+info.Command)
+	u.LogDebug(cliConfig, "\nCommand info:")
+	u.LogDebug(cliConfig, "Terraform binary: "+info.Command)
 
 	if info.SubCommand2 == "" {
-		u.LogInfo(cliConfig, fmt.Sprintf("Terraform command: %s", info.SubCommand))
+		u.LogDebug(cliConfig, fmt.Sprintf("Terraform command: %s", info.SubCommand))
 	} else {
-		u.LogInfo(cliConfig, fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
+		u.LogDebug(cliConfig, fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
 	}
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
-	u.LogInfo(cliConfig, "Component: "+info.ComponentFromArg)
+	u.LogDebug(cliConfig, fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	u.LogDebug(cliConfig, "Component: "+info.ComponentFromArg)
 
 	if len(info.BaseComponentPath) > 0 {
-		u.LogInfo(cliConfig, "Terraform component: "+info.BaseComponentPath)
+		u.LogDebug(cliConfig, "Terraform component: "+info.BaseComponentPath)
 	}
 
 	if len(info.ComponentInheritanceChain) > 0 {
-		u.LogInfo(cliConfig, "Inheritance: "+info.ComponentFromArg+" -> "+strings.Join(info.ComponentInheritanceChain, " -> "))
+		u.LogDebug(cliConfig, "Inheritance: "+info.ComponentFromArg+" -> "+strings.Join(info.ComponentInheritanceChain, " -> "))
 	}
 
 	if info.Stack == info.StackFromArg {
-		u.LogInfo(cliConfig, "Stack: "+info.StackFromArg)
+		u.LogDebug(cliConfig, "Stack: "+info.StackFromArg)
 	} else {
-		u.LogInfo(cliConfig, "Stack: "+info.StackFromArg)
-		u.LogInfo(cliConfig, "Stack path: "+path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
+		u.LogDebug(cliConfig, "Stack: "+info.StackFromArg)
+		u.LogDebug(cliConfig, "Stack path: "+path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
 	}
 
 	workingDir := constructTerraformComponentWorkingDir(cliConfig, info)
-	u.LogInfo(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
+	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
 
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
-		u.LogInfo(cliConfig, "\nUsing ENV vars:")
+		u.LogDebug(cliConfig, "\nUsing ENV vars:")
 		for _, v := range info.ComponentEnvList {
-			u.LogInfo(cliConfig, v)
+			u.LogDebug(cliConfig, v)
 		}
 	}
 

@@ -253,7 +253,7 @@ func ProcessStacks(
 		} else {
 			msg = "\nFound stack config files:"
 		}
-		u.LogInfo(cliConfig, msg)
+		u.PrintMessage(msg)
 		err = u.PrintAsYAML(cliConfig, cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -337,7 +337,7 @@ func ProcessStacks(
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
 
-				u.LogInfo(
+				u.LogDebug(
 					cliConfig,
 					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack config file '%s'",
 						configAndStacksInfo.ComponentFromArg,

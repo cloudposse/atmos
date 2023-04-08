@@ -177,11 +177,11 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
-					u.LogInfo(cliConfig, fmt.Sprintf("varfile: %s", fileName))
-					u.LogInfo(cliConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
-					u.LogInfo(cliConfig, fmt.Sprintf("atmos component: %s", componentName))
-					u.LogInfo(cliConfig, fmt.Sprintf("atmos stack: %s", contextPrefix))
-					u.LogInfo(cliConfig, fmt.Sprintf("stack config file: %s", stackFileName))
+					u.LogDebug(cliConfig, fmt.Sprintf("varfile: %s", fileName))
+					u.LogDebug(cliConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
+					u.LogDebug(cliConfig, fmt.Sprintf("atmos component: %s", componentName))
+					u.LogDebug(cliConfig, fmt.Sprintf("atmos stack: %s", contextPrefix))
+					u.LogDebug(cliConfig, fmt.Sprintf("stack config file: %s", stackFileName))
 				}
 			}
 		}

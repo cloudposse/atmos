@@ -176,7 +176,7 @@ func ExecuteComponentVendorCommandInternal(
 			uri = absPath
 		}
 
-		u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
+		u.LogTrace(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
 			component,
 			uri,
 			componentPath,
@@ -229,7 +229,7 @@ func ExecuteComponentVendorCommandInternal(
 							return true, err
 						} else if excludeMatch {
 							// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-							u.LogInfo(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+							u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 								trimmedSrc,
 								excludePath,
 							))
@@ -246,7 +246,7 @@ func ExecuteComponentVendorCommandInternal(
 								return true, err
 							} else if includeMatch {
 								// If the file matches ANY of the 'included_paths' patterns, include the file
-								u.LogInfo(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+								u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 									trimmedSrc,
 									includePath,
 								))
@@ -258,13 +258,13 @@ func ExecuteComponentVendorCommandInternal(
 						if anyMatches {
 							return false, nil
 						} else {
-							u.LogInfo(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+							u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 							return true, nil
 						}
 					}
 
 					// If 'included_paths' is not provided, include all files that were not excluded
-					u.LogInfo(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+					u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 					return false, nil
 				},
 
@@ -317,7 +317,7 @@ func ExecuteComponentVendorCommandInternal(
 					uri = absPath
 				}
 
-				u.LogInfo(cliConfig, fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
+				u.LogTrace(cliConfig, fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
 					uri,
 					component,
 					path.Join(componentPath, mixin.Filename),

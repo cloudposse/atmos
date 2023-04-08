@@ -36,7 +36,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders\n",
+	u.LogDebug(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders\n",
 		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 
 	var errorMessages []string
