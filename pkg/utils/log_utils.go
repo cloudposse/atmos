@@ -114,3 +114,8 @@ func log(cliConfig schema.CliConfiguration, logColor *color.Color, message strin
 		}
 	}
 }
+
+// PrintMessage prints the message to the console
+func PrintMessage(message string) {
+	fmt.Println(message)
+}

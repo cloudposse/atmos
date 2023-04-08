@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -16,7 +15,7 @@ func PrintAsJSON(cliConfig schema.CliConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(j)
+	PrintMessage(j)
 	return nil
 }
 
