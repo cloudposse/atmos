@@ -4,12 +4,10 @@ import (
 	"os"
 
 	"gopkg.in/yaml.v2"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // PrintAsYAML prints the provided value as YAML document to the console
-func PrintAsYAML(cliConfig schema.CliConfiguration, data any) error {
+func PrintAsYAML(data any) error {
 	y, err := ConvertToYAML(data)
 	if err != nil {
 		return err

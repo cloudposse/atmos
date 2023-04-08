@@ -8,14 +8,14 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	err = utils.PrintAsYAML(cliConfig, cliConfig)
+	err = u.PrintAsYAML(cliConfig)
 	assert.Nil(t, err)
 
 	atlantisConfig := cliConfig.Integrations.Atlantis
@@ -37,7 +37,7 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
 	atlantisYaml.Projects = []schema.AtlantisProjectConfig{projectTemplate}
 
-	err = utils.PrintAsYAML(cliConfig, atlantisYaml)
+	err = u.PrintAsYAML(atlantisYaml)
 	assert.Nil(t, err)
 }
 

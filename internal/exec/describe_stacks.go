@@ -82,7 +82,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(cliConfig, format, file, finalStacksMap)
+	err = printOrWriteToFile(format, file, finalStacksMap)
 	if err != nil {
 		return err
 	}

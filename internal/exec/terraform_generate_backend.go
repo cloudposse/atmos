@@ -55,9 +55,12 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	componentBackendConfig := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 
 	u.LogDebug(cliConfig, "Component backend config:\n\n")
-	err = u.PrintAsJSON(cliConfig, componentBackendConfig)
-	if err != nil {
-		return err
+
+	if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
+		err = u.PrintAsJSON(componentBackendConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Check if the `backend` section has `workspace_key_prefix` when `backend_type` is `s3`

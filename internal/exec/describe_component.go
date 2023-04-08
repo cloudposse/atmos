@@ -14,7 +14,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
 
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	_, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(cliConfig, format, file, componentSection)
+	err = printOrWriteToFile(format, file, componentSection)
 	if err != nil {
 		return err
 	}

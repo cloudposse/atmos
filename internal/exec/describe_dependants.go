@@ -53,7 +53,7 @@ func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(cliConfig, format, file, dependants)
+	err = printOrWriteToFile(format, file, dependants)
 	if err != nil {
 		return err
 	}

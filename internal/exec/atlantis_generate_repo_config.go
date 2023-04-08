@@ -469,7 +469,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 			return err
 		}
 	} else {
-		err = u.PrintAsYAML(cliConfig, atlantisYaml)
+		err = u.PrintAsYAML(atlantisYaml)
 		if err != nil {
 			return err
 		}

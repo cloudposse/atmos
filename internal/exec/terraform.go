@@ -122,9 +122,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
 		u.LogDebug(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
-		err = u.PrintAsYAML(cliConfig, info.ComponentVarsSection)
-		if err != nil {
-			return err
+
+		if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
+			err = u.PrintAsYAML(info.ComponentVarsSection)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Write variables to a file (only if we are not using the previously generated terraform plan)

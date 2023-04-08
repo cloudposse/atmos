@@ -254,7 +254,7 @@ func ProcessStacks(
 			msg = "\nFound stack config files:"
 		}
 		u.PrintMessage(msg)
-		err = u.PrintAsYAML(cliConfig, cliConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -1304,7 +1304,6 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 // printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
 // and prints the data to the console or to a file (if file is specified)
 func printOrWriteToFile(
-	cliConfig schema.CliConfiguration,
 	format string,
 	file string,
 	data any,
@@ -1312,7 +1311,7 @@ func printOrWriteToFile(
 	switch format {
 	case "yaml":
 		if file == "" {
-			err := u.PrintAsYAML(cliConfig, data)
+			err := u.PrintAsYAML(data)
 			if err != nil {
 				return err
 			}
@@ -1325,7 +1324,7 @@ func printOrWriteToFile(
 
 	case "json":
 		if file == "" {
-			err := u.PrintAsJSON(cliConfig, data)
+			err := u.PrintAsJSON(data)
 			if err != nil {
 				return err
 			}

@@ -5,12 +5,10 @@ import (
 	"strings"
 
 	jsoniter "github.com/json-iterator/go"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // PrintAsJSON prints the provided value as YAML document to the console
-func PrintAsJSON(cliConfig schema.CliConfiguration, data any) error {
+func PrintAsJSON(data any) error {
 	j, err := ConvertToJSON(data)
 	if err != nil {
 		return err

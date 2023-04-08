@@ -44,7 +44,7 @@ func ExecuteWorkflow(
 	u.LogDebug(cliConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
 	if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
-		err := u.PrintAsYAML(cliConfig, workflowDefinition)
+		err := u.PrintAsYAML(workflowDefinition)
 		if err != nil {
 			return err
 		}
