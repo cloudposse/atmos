@@ -14,7 +14,6 @@ const (
 	LogLevelDebug   = "Debug"
 	LogLevelInfo    = "Info"
 	LogLevelWarning = "Warning"
-	LogLevelOff     = "Off"
 )
 
 // PrintMessage prints the message to the console
