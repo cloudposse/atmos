@@ -111,6 +111,10 @@ const config = {
                                 label: 'Slack Archives',
                                 href: 'https://archive.sweetops.com/atmos/',
                             },
+                            {
+                                label: 'Office Hours',
+                                href: 'https://cloudposse.com/office-hours/',
+                            },
                         ],
                     },
                     {
