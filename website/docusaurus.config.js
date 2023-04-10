@@ -91,14 +91,27 @@ const config = {
                         label: 'CLI'
                     },
                     {
-                        to: 'https://github.com/cloudposse/community/discussions',
-                        label: 'GitHub Discussions',
-                        position: 'right'
-                    },
-                    {
-                        to: 'https://slack.cloudposse.com/',
-                        label: 'Slack Community',
-                        position: 'right'
+                        type: 'dropdown',
+                        label: 'Community',
+                        position: 'right',
+                        items: [
+                            {
+                                label: 'Github Discussions',
+                                href: 'https://ask.sweetops.com/',
+                            },
+                            {
+                                label: 'Community',
+                                href: 'https://sweetops.com/',
+                            },
+                            {
+                                label: 'Slack',
+                                href: 'https://slack.sweetops.com/',
+                            },
+                            {
+                                label: 'Slack Archives',
+                                href: 'https://archive.sweetops.com/atmos/',
+                            },
+                        ],
                     },
                     {
                         to: 'https://cloudposse.com/services/',
