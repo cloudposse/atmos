@@ -97,7 +97,7 @@ const config = {
                         items: [
                             {
                                 label: 'GitHub Discussions',
-                                href: 'https://github.com/cloudposse/community/discussions',
+                                href: 'https://ask.sweetops.com/',
                             },
                             {
                                 label: 'Community',
