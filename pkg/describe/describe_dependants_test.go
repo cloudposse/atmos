@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestDescribeDependants(t *testing.T) {
+func TestDescribeDependents(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -20,11 +20,11 @@ func TestDescribeDependants(t *testing.T) {
 	component := "test/test-component"
 	stack := "tenant1-ue2-test-1"
 
-	dependants, err := e.ExecuteDescribeDependants(cliConfig, component, stack)
+	dependents, err := e.ExecuteDescribeDependents(cliConfig, component, stack)
 	assert.Nil(t, err)
-	assert.Equal(t, 2, len(dependants))
+	assert.Equal(t, 2, len(dependents))
 
-	dependantsYaml, err := yaml.Marshal(dependants)
+	dependentsYaml, err := yaml.Marshal(dependents)
 	assert.Nil(t, err)
-	t.Log(string(dependantsYaml))
+	t.Log(string(dependentsYaml))
 }
