@@ -28,11 +28,11 @@ metadata:
   description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
 spec:
   source:
-
     # 'uri' supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
     # and all URL and archive formats as described in https://github.com/hashicorp/go-getter
     # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
+    # To vendor a module from a Git repo, use the following format: 'github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
     uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
     version: 0.194.0
 
