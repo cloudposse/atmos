@@ -242,7 +242,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					for _, v := range spaceliftDependsOn {
-						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
+						spaceliftStackNameDependsOn, err := e.BuildDependantStackNameFromDependsOn(
 							v.(string),
 							allStackNames,
 							contextPrefix,
