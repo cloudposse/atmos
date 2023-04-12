@@ -8,13 +8,13 @@ import (
 )
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
-var describeDependentsCmd = &cobra.Command{
-	Use:                "dependents",
-	Short:              "Execute 'describe dependents' command",
-	Long:               `This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component: atmos describe dependents [options]`,
+var describeDependantsCmd = &cobra.Command{
+	Use:                "dependants",
+	Short:              "Execute 'describe dependants' command",
+	Long:               `This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component: atmos describe dependants [options]`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteDescribeDependentsCmd(cmd, args)
+		err := e.ExecuteDescribeDependantsCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
@@ -22,16 +22,16 @@ var describeDependentsCmd = &cobra.Command{
 }
 
 func init() {
-	describeDependentsCmd.DisableFlagParsing = false
+	describeDependantsCmd.DisableFlagParsing = false
 
-	describeDependentsCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe dependents <component> -s <stack>")
-	describeDependentsCmd.PersistentFlags().StringP("format", "f", "json", "The output format: atmos describe dependents <component> -s <stack> --format=json|yaml ('json' is default)")
-	describeDependentsCmd.PersistentFlags().String("file", "", "Write the result to the file: atmos describe dependents <component> -s <stack> --file dependents.yaml")
+	describeDependantsCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe dependants <component> -s <stack>")
+	describeDependantsCmd.PersistentFlags().StringP("format", "f", "json", "The output format: atmos describe dependants <component> -s <stack> --format=json|yaml ('json' is default)")
+	describeDependantsCmd.PersistentFlags().String("file", "", "Write the result to the file: atmos describe dependants <component> -s <stack> --file dependants.yaml")
 
-	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
+	err := describeDependantsCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
 		u.LogErrorAndExit(err)
 	}
 
-	describeCmd.AddCommand(describeDependentsCmd)
+	describeCmd.AddCommand(describeDependantsCmd)
 }

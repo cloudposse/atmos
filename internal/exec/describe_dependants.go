@@ -13,8 +13,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ExecuteDescribeDependentsCmd executes `describe dependents` command
-func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
+// ExecuteDescribeDependantsCmd executes `describe dependants` command
+func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("", cmd, args)
 	if err != nil {
 		return err
@@ -48,12 +48,12 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack)
+	dependants, err := ExecuteDescribeDependants(cliConfig, component, stack)
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, dependents)
+	err = printOrWriteToFile(format, file, dependants)
 	if err != nil {
 		return err
 	}
@@ -61,14 +61,14 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
-func ExecuteDescribeDependents(
+// ExecuteDescribeDependants produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
+func ExecuteDescribeDependants(
 	cliConfig schema.CliConfiguration,
 	component string,
 	stack string,
-) ([]schema.Dependent, error) {
+) ([]schema.Dependant, error) {
 
-	dependents := []schema.Dependent{}
+	dependants := []schema.Dependant{}
 	var ok bool
 
 	// Get all stacks with all components
@@ -85,7 +85,7 @@ func ExecuteDescribeDependents(
 	// Get the current component `vars`
 	var currentComponentVarsSection map[any]any
 	if currentComponentVarsSection, ok = currentComponentSection["vars"].(map[any]any); !ok {
-		return dependents, nil
+		return dependants, nil
 	}
 
 	// Convert the current component `vars` section to the `Context` structure
@@ -137,7 +137,7 @@ func ExecuteDescribeDependents(
 				// Get the stack component `vars`
 				var stackComponentVarsSection map[any]any
 				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[any]any); !ok {
-					return dependents, nil
+					return dependants, nil
 				}
 
 				// Convert the stack component `vars` section to the `Context` structure
@@ -166,7 +166,7 @@ func ExecuteDescribeDependents(
 					continue
 				}
 
-				// Check if the stack component is a dependent of the current component
+				// Check if the stack component is a dependant of the current component
 				for _, stackComponentSettingsContext := range stackComponentSettings.DependsOn {
 					if stackComponentSettingsContext.Component != component {
 						continue
@@ -204,7 +204,7 @@ func ExecuteDescribeDependents(
 						continue
 					}
 
-					dependent := schema.Dependent{
+					dependant := schema.Dependant{
 						Component:     stackComponentName,
 						ComponentPath: BuildComponentPath(cliConfig, stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
@@ -216,7 +216,7 @@ func ExecuteDescribeDependents(
 						Stage:         stackComponentVars.Stage,
 					}
 
-					// Add Spacelift stack and Atlantis project if they are configured for the dependent stack component
+					// Add Spacelift stack and Atlantis project if they are configured for the dependant stack component
 					if stackComponentType == "terraform" {
 
 						// Spacelift stack
@@ -232,7 +232,7 @@ func ExecuteDescribeDependents(
 							return nil, err
 						}
 
-						dependent.SpaceliftStack = spaceliftStackName
+						dependant.SpaceliftStack = spaceliftStackName
 
 						// Atlantis project
 						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
@@ -246,14 +246,14 @@ func ExecuteDescribeDependents(
 							return nil, err
 						}
 
-						dependent.AtlantisProject = atlantisProjectName
+						dependant.AtlantisProject = atlantisProjectName
 					}
 
-					dependents = append(dependents, dependent)
+					dependants = append(dependants, dependant)
 				}
 			}
 		}
 	}
 
-	return dependents, nil
+	return dependants, nil
 }
