@@ -14,7 +14,7 @@ After defining the `component.yaml` configuration, the remote component can be d
 atmos vendor pull -c components/terraform/vpc
 ```
 
-## Vendoring Modules as Components
+## Vendoring Components from a Monorepo
 
 To vendor a component, create a `component.yaml` file stored inside of the `components/_type_/_name_/` folder (e.g. `components/terraform/vpc/`).
 
