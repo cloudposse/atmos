@@ -70,7 +70,7 @@ Any terraform module can also be used as a component, provided that atmos backen
 
 To vendor a module as a component, simply create a component.yaml file stored inside of the `components/_type_/_name_/` folder (e.g. `components/terraform/ec2-instance/`). Note the usage of the `///`, which is to vendor from the root of the remote repository.
 
-The schema of a component.yaml file for a module is as follows:
+The schema of a `component.yaml` file for a module is as follows:
 
 ```yaml
 apiVersion: atmos/v1
