@@ -66,7 +66,7 @@ spec:
 
 ## Vendoring Modules as Components
 
-Any terraform module can also be used as a component, provided that atmos backend generation (auto_generate_backend_file is true) is enabled. Use this strategy when you want to use the module directly, without needing to wrap it in a component to add additional functionality. This is essentially treating a terraform child module as a root module.
+Any terraform module can also be used as a component, provided that atmos backend generation ([`auto_generate_backend_file` is `true`](/cli/configuration/#components)) is enabled. Use this strategy when you want to use the module directly, without needing to wrap it in a component to add additional functionality. This is essentially treating a terraform child module as a root module.
 
 To vendor a module as a component, simply create a component.yaml file stored inside of the `components/_type_/_name_/` folder (e.g. `components/terraform/ec2-instance/`). Note the usage of the `///`, which is to vendor from the root of the remote repository.
 
