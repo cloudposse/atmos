@@ -14,7 +14,7 @@ After defining the `component.yaml` configuration, the remote component can be d
 atmos vendor pull -c components/terraform/vpc
 ```
 
-## Schema: `component.yaml`
+## Vendoring Components from a Monorepo
 
 To vendor a component, create a `component.yaml` file stored inside of the `components/_type_/_name_/` folder (e.g. `components/terraform/vpc/`).
 
@@ -28,11 +28,11 @@ metadata:
   description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
 spec:
   source:
-
     # 'uri' supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
     # and all URL and archive formats as described in https://github.com/hashicorp/go-getter
     # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
+    # To vendor a module from a Git repo, use the following format: 'github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
     uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
     version: 0.194.0
 
@@ -62,4 +62,32 @@ spec:
     - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
       version: 0.194.0
       filename: introspection.mixin.tf
+```
+
+## Vendoring Modules as Components
+
+Any terraform module can also be used as a component, provided that atmos backend generation ([`auto_generate_backend_file` is `true`](/cli/configuration/#components)) is enabled. Use this strategy when you want to use the module directly, without needing to wrap it in a component to add additional functionality. This is essentially treating a terraform child module as a root module.
+
+To vendor a module as a component, simply create a component.yaml file stored inside of the `components/_type_/_name_/` folder (e.g. `components/terraform/ec2-instance/`). Note the usage of the `///`, which is to vendor from the root of the remote repository.
+
+The schema of a `component.yaml` file for a module is as follows:
+
+```yaml
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: ec2-instance
+  description: Source for vendoring of 'ec2-instance' module as a component
+spec:
+  source:
+    # To vendor a module from a Git repo, use the following format: 'github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
+    uri: github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
+    version: 0.47.1
+
+    # Only include the files that match the 'included_paths' patterns
+    # 'included_paths' support POSIX-style Globs for file names/paths (double-star/globstar `**` is supported)
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
 ```
