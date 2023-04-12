@@ -83,20 +83,20 @@ func ProcessComponentMetadata(
 	return componentMetadata, baseComponentName, componentIsAbstract
 }
 
-// BuildDependentStackNameFromDependsOn builds the dependent stack name from "depends_on" attribute
-func BuildDependentStackNameFromDependsOn(
+// BuildDependantStackNameFromDependsOn builds the dependant stack name from "depends_on" attribute
+func BuildDependantStackNameFromDependsOn(
 	dependsOn string,
 	allStackNames []string,
 	currentStackName string,
 	componentNamesInCurrentStack []string,
 	currentComponentName string,
 ) (string, error) {
-	var dependentStackName string
+	var dependantStackName string
 
 	if u.SliceContainsString(allStackNames, dependsOn) {
-		dependentStackName = dependsOn
+		dependantStackName = dependsOn
 	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
-		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
+		dependantStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
 	} else {
 		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
 			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
@@ -107,7 +107,7 @@ func BuildDependentStackNameFromDependsOn(
 		return "", errorMessage
 	}
 
-	return dependentStackName, nil
+	return dependantStackName, nil
 }
 
 // BuildComponentPath builds component path (path to the component's physical location on disk)
