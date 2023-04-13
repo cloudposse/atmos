@@ -83,8 +83,8 @@ func ProcessComponentMetadata(
 	return componentMetadata, baseComponentName, componentIsAbstract
 }
 
-// BuildDependantStackNameFromDependsOn builds the dependent stack name from "depends_on" attribute
-func BuildDependantStackNameFromDependsOn(
+// BuildDependentStackNameFromDependsOn builds the dependent stack name from "depends_on" attribute
+func BuildDependentStackNameFromDependsOn(
 	dependsOn string,
 	allStackNames []string,
 	currentStackName string,

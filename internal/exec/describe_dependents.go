@@ -66,9 +66,9 @@ func ExecuteDescribeDependents(
 	cliConfig schema.CliConfiguration,
 	component string,
 	stack string,
-) ([]schema.Dependant, error) {
+) ([]schema.Dependent, error) {
 
-	dependents := []schema.Dependant{}
+	dependents := []schema.Dependent{}
 	var ok bool
 
 	// Get all stacks with all components
@@ -166,7 +166,7 @@ func ExecuteDescribeDependents(
 					continue
 				}
 
-				// Check if the stack component is a dependant of the current component
+				// Check if the stack component is a dependent of the current component
 				for _, stackComponentSettingsContext := range stackComponentSettings.DependsOn {
 					if stackComponentSettingsContext.Component != component {
 						continue
@@ -204,7 +204,7 @@ func ExecuteDescribeDependents(
 						continue
 					}
 
-					dependant := schema.Dependant{
+					dependent := schema.Dependent{
 						Component:     stackComponentName,
 						ComponentPath: BuildComponentPath(cliConfig, stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
@@ -216,7 +216,7 @@ func ExecuteDescribeDependents(
 						Stage:         stackComponentVars.Stage,
 					}
 
-					// Add Spacelift stack and Atlantis project if they are configured for the dependant stack component
+					// Add Spacelift stack and Atlantis project if they are configured for the dependent stack component
 					if stackComponentType == "terraform" {
 
 						// Spacelift stack
@@ -232,7 +232,7 @@ func ExecuteDescribeDependents(
 							return nil, err
 						}
 
-						dependant.SpaceliftStack = spaceliftStackName
+						dependent.SpaceliftStack = spaceliftStackName
 
 						// Atlantis project
 						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
@@ -246,10 +246,10 @@ func ExecuteDescribeDependents(
 							return nil, err
 						}
 
-						dependant.AtlantisProject = atlantisProjectName
+						dependent.AtlantisProject = atlantisProjectName
 					}
 
-					dependents = append(dependents, dependant)
+					dependents = append(dependents, dependent)
 				}
 			}
 		}
