@@ -25,3 +25,10 @@
 *.tar
 *.gz
 /bin
+
+# Nix
+.envrc
+.direnv/
+
+# Compiled Binary
+atmos

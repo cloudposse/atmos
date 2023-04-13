@@ -13,8 +13,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ExecuteDescribeDependantsCmd executes `describe dependants` command
-func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
+// ExecuteDescribeDependentsCmd executes `describe dependents` command
+func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("", cmd, args)
 	if err != nil {
 		return err
@@ -48,12 +48,12 @@ func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	dependants, err := ExecuteDescribeDependants(cliConfig, component, stack)
+	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack)
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, dependants)
+	err = printOrWriteToFile(format, file, dependents)
 	if err != nil {
 		return err
 	}
@@ -61,14 +61,14 @@ func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeDependants produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
-func ExecuteDescribeDependants(
+// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
+func ExecuteDescribeDependents(
 	cliConfig schema.CliConfiguration,
 	component string,
 	stack string,
 ) ([]schema.Dependant, error) {
 
-	dependants := []schema.Dependant{}
+	dependents := []schema.Dependant{}
 	var ok bool
 
 	// Get all stacks with all components
@@ -85,7 +85,7 @@ func ExecuteDescribeDependants(
 	// Get the current component `vars`
 	var currentComponentVarsSection map[any]any
 	if currentComponentVarsSection, ok = currentComponentSection["vars"].(map[any]any); !ok {
-		return dependants, nil
+		return dependents, nil
 	}
 
 	// Convert the current component `vars` section to the `Context` structure
@@ -137,7 +137,7 @@ func ExecuteDescribeDependants(
 				// Get the stack component `vars`
 				var stackComponentVarsSection map[any]any
 				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[any]any); !ok {
-					return dependants, nil
+					return dependents, nil
 				}
 
 				// Convert the stack component `vars` section to the `Context` structure
@@ -249,11 +249,11 @@ func ExecuteDescribeDependants(
 						dependant.AtlantisProject = atlantisProjectName
 					}
 
-					dependants = append(dependants, dependant)
+					dependents = append(dependents, dependant)
 				}
 			}
 		}
 	}
 
-	return dependants, nil
+	return dependents, nil
 }
