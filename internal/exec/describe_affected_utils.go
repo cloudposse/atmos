@@ -244,6 +244,10 @@ func executeDescribeAffected(
 	verbose bool,
 ) ([]schema.Affected, error) {
 
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
+
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
 		return nil, err
@@ -254,10 +258,8 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	if verbose {
-		u.LogTrace(cliConfig, fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
-		u.LogTrace(cliConfig, fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
-	}
+	u.LogTrace(cliConfig, fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
+	u.LogTrace(cliConfig, fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
 
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
@@ -341,15 +343,15 @@ func executeDescribeAffected(
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Found diff between the current working branch and remote target branch"))
-	u.LogDebug(cliConfig, "\nChanged files:")
+	u.LogTrace(cliConfig, "\nChanged files:\n")
 
 	var changedFiles []string
 	for _, fileStat := range patch.Stats() {
-		u.LogDebug(cliConfig, fileStat.Name)
+		u.LogTrace(cliConfig, fileStat.Name)
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
-	u.LogDebug(cliConfig, "")
+	u.LogTrace(cliConfig, "")
 
 	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
 	if err != nil {

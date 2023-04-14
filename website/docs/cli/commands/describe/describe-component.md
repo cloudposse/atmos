@@ -109,7 +109,7 @@ env:
   TEST_ENV_VAR1: val1-override-3
   TEST_ENV_VAR2: val2-override-3
   TEST_ENV_VAR3: val3-override-3
-  TEST_ENV_VAR4: val4-override-3
+  TEST_ENV_VAR4: null
 inheritance:
   - mixin/test-2
   - mixin/test-1

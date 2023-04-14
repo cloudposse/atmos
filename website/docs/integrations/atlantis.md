@@ -681,7 +681,7 @@ on:
     branches: [ main ]
 
 env:
-  ATMOS_VERSION: 1.14.0
+  ATMOS_VERSION: 1.33.3
   ATMOS_CLI_CONFIG_PATH: ./
 
 jobs:

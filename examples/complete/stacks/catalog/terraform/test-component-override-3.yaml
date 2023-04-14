@@ -25,7 +25,10 @@ components:
         TEST_ENV_VAR1: "val1-override-3"
         TEST_ENV_VAR2: "val2-override-3"
         TEST_ENV_VAR3: "val3-override-3"
-        TEST_ENV_VAR4: "val4-override-3"
+        # Use `null` to unset the ENV var.
+        # If it's set to `null`, it will not be set as ENV var in the executing process (will be just skipped).
+        # Setting it to `null` will override all other values set in the stack configs for the component.
+        TEST_ENV_VAR4: null
       metadata:
         # `real` is implicit, you don't need to specify it; `abstract` makes the component protected from being deployed
         type: real
