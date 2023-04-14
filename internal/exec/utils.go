@@ -119,9 +119,9 @@ func FindComponentConfig(
 	// Process component metadata and find a base component (if any) and whether the component is real or abstract
 	componentMetadata, baseComponentName, componentIsAbstract := ProcessComponentMetadata(component, componentSection)
 
-	// Remove the ENV vars that are set to `null` in the `env` section
+	// Remove the ENV vars that are set to `null` in the `env` section.
 	// Setting an ENV var to `null` in stack config has the effect of unsetting it
-	// (because the exec.Command, which sets these ENV vars, is itself executed in a separate process started by os.StartProcess function)
+	// because the exec.Command, which sets these ENV vars, is itself executed in a separate process started by the os.StartProcess function.
 	componentEnvSectionFiltered := map[any]any{}
 
 	for k, v := range componentEnvSection {
