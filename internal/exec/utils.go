@@ -253,7 +253,7 @@ func ProcessStacks(
 		} else {
 			msg = "\nFound stack config files:"
 		}
-		u.PrintMessage(msg)
+		u.LogTrace(cliConfig, msg)
 		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
