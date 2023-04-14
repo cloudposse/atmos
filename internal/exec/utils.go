@@ -126,10 +126,6 @@ func FindComponentConfig(
 	for k, v := range componentEnvSection {
 		if v != nil {
 			componentEnvSectionFiltered[k] = v
-		} else {
-			if err := os.Unsetenv(fmt.Sprint(k)); err != nil {
-				return nil, nil, nil, nil, "", "", "", nil, false, nil, err
-			}
 		}
 	}
 
