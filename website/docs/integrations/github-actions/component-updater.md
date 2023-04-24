@@ -22,33 +22,92 @@ Leverage the [Atmos components GitHub Action](https://github.com/cloudposse/terr
 
 Discover more details and a comprehensive list of `inputs` and `outputs` in the [GitHub Action repository](https://github.com/cloudposse/github-action-atmos-component-updater) on GitHub. 
 
-## Usage Example
+## Usage Examples
+
+### Workflow example
 
 ```yaml
-name: "atmos-components"
+  name: "atmos-components"
 
-on:
-  workflow_dispatch: {}
+  on:
+    workflow_dispatch: {}
 
-  schedule:
-    - cron:  '0 8 * * 1'         # Execute every week on Monday at 08:00
+    schedule:
+      - cron:  '0 8 * * 1'         # Execute every week on Monday at 08:00
 
-permissions:
-  contents: write
-  pull-requests: write
+  permissions:
+    contents: write
+    pull-requests: write
 
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Update Atmos Components
-        uses: cloudposse/github-action-atmos-component-updater@v1
-        with:
-          github-access-token: ${{ secrets.GITHUB_TOKEN }}
-          max-number-of-prs: 5
-          include: |
-            aws-*
-            eks/*
-            bastion
-          exclude: aws-sso,aws-saml
+  jobs:
+    update:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Update Atmos Components
+          uses: cloudposse/github-action-atmos-component-updater@v1
+          with:
+            github-access-token: ${{ secrets.GITHUB_TOKEN }}
+            max-number-of-prs: 5
+            include: |
+              aws-*
+              eks/*
+              bastion
+            exclude: aws-sso,aws-saml
 ```
+
+### Using a Custom Atmos CLI Config Path (`atmos.yaml`)
+
+If your [`atmos.yaml` file](https://atmos.tools/cli/configuration) is not located in the root of the infrastructure repository, you can specify the path to it using [`ATMOS_CLI_CONFIG_PATH` env variable](https://atmos.tools/cli/configuration/#environment-variables).
+
+```yaml
+  # ...
+  - name: Update Atmos Components
+    uses: cloudposse/github-action-atmos-component-updater@v1
+    env:
+      # Directory containing the `atmos.yaml` file
+      ATMOS_CLI_CONFIG_PATH: ${{ github.workspace }}/rootfs/usr/local/etc/atmos/
+    with:
+      github-access-token: ${{ secrets.GITHUB_TOKEN }}
+      max-number-of-prs: 5
+```
+
+### Customize Pull Request labels, title and body
+
+```yaml
+  # ...
+  - name: Update Atmos Components
+    uses: cloudposse/github-action-atmos-component-updater@v1
+    with:
+      github-access-token: ${{ secrets.GITHUB_TOKEN }}
+      max-number-of-prs: 5
+      pr-title: 'Update Atmos Component \`{{ component_name }}\` to {{ new_version }}'
+      pr-body: |
+        ## what
+        Component \`{{ component_name }}\` was updated [{{ old_version }}]({{ old_version_link }}) → [{{ old_version }}]({{ old_version_link }}).
+
+        ## references
+        - [{{ source_name }}]({{ source_link }})
+      pr-labels: |
+        component-update
+        automated
+        atmos
+```
+
+**IMPORTANT:** The backtick symbols must be escaped in the GitHub Action parameters. This is because GitHub evaluates whatever is in the backticks and it will render as an empty string.
+
+#### For `title` template these placeholders are available:
+- `component_name`
+- `source_name`
+- `old_version`
+- `new_version`
+
+#### For `body` template these placeholders are available:
+- `component_name`
+- `source_name`
+- `source_link`
+- `old_version`
+- `new_version`
+- `old_version_link`
+- `new_version_link`
+- `old_component_release_link`
+- `new_component_release_link`
