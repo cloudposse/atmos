@@ -47,22 +47,12 @@ var (
 
 // FindComponentConfig finds component config sections
 func FindComponentConfig(
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
 	componentType string,
 	component string,
-) (map[string]any,
-	map[any]any,
-	map[any]any,
-	map[any]any,
-	string,
-	string,
-	string,
-	[]string,
-	bool,
-	map[any]any,
-	error,
-) {
+) error {
 
 	var stackSection map[any]any
 	var componentsSection map[string]any
@@ -77,28 +67,28 @@ func FindComponentConfig(
 	var ok bool
 
 	if len(stack) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("stack must be provided and must not be empty")
+		return errors.New("stack must be provided and must not be empty")
 	}
 	if len(component) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component must be provided and must not be empty")
+		return errors.New("component must be provided and must not be empty")
 	}
 	if len(componentType) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component type must be provided and must not be empty")
+		return errors.New("component type must be provided and must not be empty")
 	}
 	if stackSection, ok = stacksMap[stack].(map[any]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("could not find the stack '%s'", stack)
+		return fmt.Errorf("could not find the stack '%s'", stack)
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components' section is missing in the stack file '%s'", stack)
+		return fmt.Errorf("'components' section is missing in the stack file '%s'", stack)
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack file '%s'", componentType, stack)
+		return fmt.Errorf("'components/%s' section is missing in the stack file '%s'", componentType, stack)
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("no config found for the component '%s' in the stack file '%s'", component, stack)
+		return fmt.Errorf("no config found for the component '%s' in the stack file '%s'", component, stack)
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
+		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[any]any); !ok {
 		componentBackendSection = nil
@@ -130,17 +120,18 @@ func FindComponentConfig(
 		}
 	}
 
-	return componentSection,
-		componentVarsSection,
-		componentEnvSectionFiltered,
-		componentBackendSection,
-		componentBackendType,
-		baseComponentName,
-		command,
-		componentInheritanceChain,
-		componentIsAbstract,
-		componentMetadata,
-		nil
+	configAndStacksInfo.ComponentSection = componentSection
+	configAndStacksInfo.ComponentVarsSection = componentVarsSection
+	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
+	configAndStacksInfo.ComponentBackendSection = componentBackendSection
+	configAndStacksInfo.ComponentBackendType = componentBackendType
+	configAndStacksInfo.BaseComponentPath = baseComponentName
+	configAndStacksInfo.Command = command
+	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
+	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
+	configAndStacksInfo.ComponentMetadataSection = componentMetadata
+
+	return nil
 }
 
 // processCommandLineArgs processes command-line args
@@ -273,17 +264,13 @@ func ProcessStacks(
 
 	// Check and process stacks
 	if cliConfig.StackType == "Directory" {
-		configAndStacksInfo.ComponentSection,
-			configAndStacksInfo.ComponentVarsSection,
-			configAndStacksInfo.ComponentEnvSection,
-			configAndStacksInfo.ComponentBackendSection,
-			configAndStacksInfo.ComponentBackendType,
-			configAndStacksInfo.BaseComponentPath,
-			configAndStacksInfo.Command,
-			configAndStacksInfo.ComponentInheritanceChain,
-			configAndStacksInfo.ComponentIsAbstract,
-			configAndStacksInfo.ComponentMetadataSection,
-			err = FindComponentConfig(configAndStacksInfo.Stack, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
+		err = FindComponentConfig(
+			&configAndStacksInfo,
+			configAndStacksInfo.Stack,
+			stacksMap,
+			configAndStacksInfo.ComponentType,
+			configAndStacksInfo.ComponentFromArg,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -310,17 +297,13 @@ func ProcessStacks(
 
 		for stackName := range stacksMap {
 			// Check if we've found the component config
-			configAndStacksInfo.ComponentSection,
-				configAndStacksInfo.ComponentVarsSection,
-				configAndStacksInfo.ComponentEnvSection,
-				configAndStacksInfo.ComponentBackendSection,
-				configAndStacksInfo.ComponentBackendType,
-				configAndStacksInfo.BaseComponentPath,
-				configAndStacksInfo.Command,
-				configAndStacksInfo.ComponentInheritanceChain,
-				configAndStacksInfo.ComponentIsAbstract,
-				configAndStacksInfo.ComponentMetadataSection,
-				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
+			err = FindComponentConfig(
+				&configAndStacksInfo,
+				stackName,
+				stacksMap,
+				configAndStacksInfo.ComponentType,
+				configAndStacksInfo.ComponentFromArg,
+			)
 			if err != nil {
 				continue
 			}
@@ -447,7 +430,7 @@ func ProcessStacks(
 	return configAndStacksInfo, nil
 }
 
-// processConfigSources processes the sources (files) for all variables for a component in a stack
+// processConfigSources processes the sources (files) for all sections for a component in a stack
 func processConfigSources(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
