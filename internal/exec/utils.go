@@ -59,6 +59,7 @@ func FindComponentConfig(
 	var componentTypeSection map[string]any
 	var componentSection map[string]any
 	var componentVarsSection map[any]any
+	var componentSettingsSection map[any]any
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
 	var componentBackendType string
@@ -102,6 +103,9 @@ func FindComponentConfig(
 	if componentEnvSection, ok = componentSection["env"].(map[any]any); !ok {
 		componentEnvSection = map[any]any{}
 	}
+	if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+		componentSettingsSection = map[any]any{}
+	}
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
@@ -122,6 +126,7 @@ func FindComponentConfig(
 
 	configAndStacksInfo.ComponentSection = componentSection
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
+	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
