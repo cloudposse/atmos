@@ -243,7 +243,7 @@ func processComponentVariableInStack(
 		"dependency_type":    "inline",
 	}
 
-	appendVariableDescriptor(result, val)
+	appendSettingDescriptor(result, val)
 
 	return result
 }
@@ -304,7 +304,7 @@ func processComponentTypeVariableInStack(
 		"dependency_type":    "inline",
 	}
 
-	appendVariableDescriptor(result, val)
+	appendSettingDescriptor(result, val)
 
 	return result
 }
@@ -354,7 +354,7 @@ func processGlobalVariableInStack(
 		"dependency_type":    "inline",
 	}
 
-	appendVariableDescriptor(result, val)
+	appendSettingDescriptor(result, val)
 
 	return result
 }
@@ -436,7 +436,7 @@ func processComponentVariableInStackImports(
 			"dependency_type":    "import",
 		}
 
-		appendVariableDescriptor(result, val)
+		appendSettingDescriptor(result, val)
 	}
 
 	return result
@@ -499,7 +499,7 @@ func processComponentTypeVariableInStackImports(
 			"dependency_type":    "import",
 		}
 
-		appendVariableDescriptor(result, val)
+		appendSettingDescriptor(result, val)
 	}
 
 	return result
@@ -551,13 +551,13 @@ func processGlobalVariableInStackImports(
 			"dependency_type":    "import",
 		}
 
-		appendVariableDescriptor(result, val)
+		appendSettingDescriptor(result, val)
 	}
 
 	return result
 }
 
-func appendVariableDescriptor(result *[]map[string]any, descriptor map[string]any) {
+func appendSettingDescriptor(result *[]map[string]any, descriptor map[string]any) {
 	for _, item := range *result {
 		if reflect.DeepEqual(item, descriptor) {
 			return
