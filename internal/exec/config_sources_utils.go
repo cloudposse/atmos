@@ -16,6 +16,8 @@ func processConfigSources(
 	error,
 ) {
 	result := map[string]map[string]any{}
+
+	// `vars` section
 	vars := map[string]any{}
 	result["vars"] = vars
 
@@ -27,6 +29,14 @@ func processConfigSources(
 		varObj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
 		vars[variable] = varObj
 	}
+
+	// `env` section
+	env := map[string]any{}
+	result["env"] = env
+
+	// `settings` section
+	settings := map[string]any{}
+	result["settings"] = settings
 
 	return result, nil
 }
