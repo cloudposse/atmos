@@ -26,7 +26,7 @@ func processConfigSources(
 		obj := map[string]any{}
 		obj["name"] = name
 		obj["final_value"] = v
-		obj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, "vars", name)
+		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "vars", name)
 		vars[name] = obj
 	}
 
@@ -39,7 +39,7 @@ func processConfigSources(
 		obj := map[string]any{}
 		obj["name"] = name
 		obj["final_value"] = v
-		obj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, "env", name)
+		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "env", name)
 		env[name] = obj
 	}
 
@@ -52,145 +52,145 @@ func processConfigSources(
 		obj := map[string]any{}
 		obj["name"] = name
 		obj["final_value"] = v
-		obj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, "settings", name)
+		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "settings", name)
 		settings[name] = obj
 	}
 
 	return result, nil
 }
 
-func processVariableInStacks(
+func processSectionValueInStacks(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
-	variable string,
+	value string,
 ) []map[string]any {
 
 	result := []map[string]any{}
 
-	// Process the variable for the component in the stack
-	// Because we want to show the variable dependencies from higher to lower priority,
+	// Process the value for the component in the stack
+	// Because we want to show the value dependencies from higher to lower priority,
 	// the order of processing is the reverse order from what Atmos follows when calculating the final variables in the `vars` section
-	processComponentVariableInStack(
+	processComponentSectionValueInStack(
 		configAndStacksInfo.ComponentFromArg,
 		configAndStacksInfo.StackFile,
 		&result,
 		configAndStacksInfo,
 		rawStackConfigs,
 		section,
-		variable,
+		value,
 	)
 
-	processComponentVariableInStackImports(
+	processComponentSectionValueInStackImports(
 		configAndStacksInfo.ComponentFromArg,
 		configAndStacksInfo.StackFile,
 		&result,
 		configAndStacksInfo,
 		rawStackConfigs,
 		section,
-		variable,
+		value,
 	)
 
-	// Process the variable for all the base components in the stack from the inheritance chain
+	// Process the value for all the base components in the stack from the inheritance chain
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processComponentVariableInStack(
+		processComponentSectionValueInStack(
 			baseComponent,
 			configAndStacksInfo.StackFile,
 			&result,
 			configAndStacksInfo,
 			rawStackConfigs,
 			section,
-			variable,
+			value,
 		)
 
-		processComponentVariableInStackImports(
+		processComponentSectionValueInStackImports(
 			baseComponent,
 			configAndStacksInfo.StackFile,
 			&result,
 			configAndStacksInfo,
 			rawStackConfigs,
 			section,
-			variable,
+			value,
 		)
 	}
 
-	processComponentTypeVariableInStack(
+	processComponentTypeSectionValueInStack(
 		configAndStacksInfo.ComponentFromArg,
 		configAndStacksInfo.StackFile,
 		&result,
 		configAndStacksInfo,
 		rawStackConfigs,
 		section,
-		variable,
+		value,
 	)
 
-	processGlobalVariableInStack(
+	processGlobalSectionValueInStack(
 		configAndStacksInfo.ComponentFromArg,
 		configAndStacksInfo.StackFile,
 		&result,
 		rawStackConfigs,
 		section,
-		variable,
+		value,
 	)
 
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processComponentTypeVariableInStack(
+		processComponentTypeSectionValueInStack(
 			baseComponent,
 			configAndStacksInfo.StackFile,
 			&result,
 			configAndStacksInfo,
 			rawStackConfigs,
 			section,
-			variable,
+			value,
 		)
 
-		processGlobalVariableInStack(
+		processGlobalSectionValueInStack(
 			baseComponent,
 			configAndStacksInfo.StackFile,
 			&result,
 			rawStackConfigs,
 			section,
-			variable,
+			value,
 		)
 	}
 
-	processComponentTypeVariableInStackImports(
+	processComponentTypeSectionValueInStackImports(
 		configAndStacksInfo.ComponentFromArg,
 		configAndStacksInfo.StackFile,
 		&result,
 		configAndStacksInfo,
 		rawStackConfigs,
 		section,
-		variable,
+		value,
 	)
 
-	processGlobalVariableInStackImports(
+	processGlobalSectionValueInStackImports(
 		configAndStacksInfo.ComponentFromArg,
 		configAndStacksInfo.StackFile,
 		&result,
 		rawStackConfigs,
 		section,
-		variable,
+		value,
 	)
 
 	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processComponentTypeVariableInStackImports(
+		processComponentTypeSectionValueInStackImports(
 			baseComponent,
 			configAndStacksInfo.StackFile,
 			&result,
 			configAndStacksInfo,
 			rawStackConfigs,
 			section,
-			variable,
+			value,
 		)
 
-		processGlobalVariableInStackImports(
+		processGlobalSectionValueInStackImports(
 			baseComponent,
 			configAndStacksInfo.StackFile,
 			&result,
 			rawStackConfigs,
 			section,
-			variable,
+			value,
 		)
 	}
 
@@ -198,14 +198,14 @@ func processVariableInStacks(
 }
 
 // https://medium.com/swlh/golang-tips-why-pointers-to-slices-are-useful-and-how-ignoring-them-can-lead-to-tricky-bugs-cac90f72e77b
-func processComponentVariableInStack(
+func processComponentSectionValueInStack(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
-	variable string,
+	value string,
 ) *[]map[string]any {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
@@ -263,7 +263,7 @@ func processComponentVariableInStack(
 		return result
 	}
 
-	rawStackVarVal, ok := rawStackVarsMap[variable]
+	rawStackVarVal, ok := rawStackVarsMap[value]
 	if !ok {
 		return result
 	}
@@ -275,19 +275,19 @@ func processComponentVariableInStack(
 		"dependency_type":    "inline",
 	}
 
-	appendSettingDescriptor(result, val)
+	appendSectionValue(result, val)
 
 	return result
 }
 
-func processComponentTypeVariableInStack(
+func processComponentTypeSectionValueInStack(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
-	variable string,
+	value string,
 ) *[]map[string]any {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
@@ -325,7 +325,7 @@ func processComponentTypeVariableInStack(
 		return result
 	}
 
-	rawStackVarVal, ok := rawStackVarsMap[variable]
+	rawStackVarVal, ok := rawStackVarsMap[value]
 	if !ok {
 		return result
 	}
@@ -337,18 +337,18 @@ func processComponentTypeVariableInStack(
 		"dependency_type":    "inline",
 	}
 
-	appendSettingDescriptor(result, val)
+	appendSectionValue(result, val)
 
 	return result
 }
 
-func processGlobalVariableInStack(
+func processGlobalSectionValueInStack(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
 	rawStackConfigs map[string]map[string]any,
 	section string,
-	variable string,
+	value string,
 ) *[]map[string]any {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
@@ -376,7 +376,7 @@ func processGlobalVariableInStack(
 		return result
 	}
 
-	rawStackVarVal, ok := rawStackVarsMap[variable]
+	rawStackVarVal, ok := rawStackVarsMap[value]
 	if !ok {
 		return result
 	}
@@ -388,19 +388,19 @@ func processGlobalVariableInStack(
 		"dependency_type":    "inline",
 	}
 
-	appendSettingDescriptor(result, val)
+	appendSectionValue(result, val)
 
 	return result
 }
 
-func processComponentVariableInStackImports(
+func processComponentSectionValueInStackImports(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
-	variable string,
+	value string,
 ) *[]map[string]any {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
@@ -459,7 +459,7 @@ func processComponentVariableInStackImports(
 			continue
 		}
 
-		rawStackVarVal, ok := rawStackVarsMap[variable]
+		rawStackVarVal, ok := rawStackVarsMap[value]
 		if !ok {
 			continue
 		}
@@ -471,20 +471,20 @@ func processComponentVariableInStackImports(
 			"dependency_type":    "import",
 		}
 
-		appendSettingDescriptor(result, val)
+		appendSectionValue(result, val)
 	}
 
 	return result
 }
 
-func processComponentTypeVariableInStackImports(
+func processComponentTypeSectionValueInStackImports(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
-	variable string,
+	value string,
 ) *[]map[string]any {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
@@ -523,7 +523,7 @@ func processComponentTypeVariableInStackImports(
 			continue
 		}
 
-		rawStackVarVal, ok := rawStackVarsMap[variable]
+		rawStackVarVal, ok := rawStackVarsMap[value]
 		if !ok {
 			continue
 		}
@@ -535,19 +535,19 @@ func processComponentTypeVariableInStackImports(
 			"dependency_type":    "import",
 		}
 
-		appendSettingDescriptor(result, val)
+		appendSectionValue(result, val)
 	}
 
 	return result
 }
 
-func processGlobalVariableInStackImports(
+func processGlobalSectionValueInStackImports(
 	component string,
 	stackFile string,
 	result *[]map[string]any,
 	rawStackConfigs map[string]map[string]any,
 	section string,
-	variable string,
+	value string,
 ) *[]map[string]any {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
@@ -576,7 +576,7 @@ func processGlobalVariableInStackImports(
 			continue
 		}
 
-		rawStackVarVal, ok := rawStackVarsMap[variable]
+		rawStackVarVal, ok := rawStackVarsMap[value]
 		if !ok {
 			continue
 		}
@@ -588,17 +588,17 @@ func processGlobalVariableInStackImports(
 			"dependency_type":    "import",
 		}
 
-		appendSettingDescriptor(result, val)
+		appendSectionValue(result, val)
 	}
 
 	return result
 }
 
-func appendSettingDescriptor(result *[]map[string]any, descriptor map[string]any) {
+func appendSectionValue(result *[]map[string]any, value map[string]any) {
 	for _, item := range *result {
-		if reflect.DeepEqual(item, descriptor) {
+		if reflect.DeepEqual(item, value) {
 			return
 		}
 	}
-	*result = append(*result, descriptor)
+	*result = append(*result, value)
 }
