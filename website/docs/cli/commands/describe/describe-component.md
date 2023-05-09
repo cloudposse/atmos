@@ -74,7 +74,7 @@ The output contains the following sections:
 - `remote_state_backend` - Terraform backend config for remote state
 - `remote_state_backend_type` - Terraform backend type for remote state
 - `settings` - component settings (free-form map)
-- `sources` - sources of the component's variables
+- `sources` - sources of the values from the component's sections (`vars`, `env`, `settings`)
 - `vars` - the final deep-merged component variables that are provided to Terraform and Helmfile when executing `atmos terraform`
   and `atmos helmfile` commands
 - `workspace` - Terraform workspace for the Atmos component
@@ -134,9 +134,64 @@ settings:
   config:
     is_prod: false
   spacelift:
+    protect_from_deletion: true
+    stack_destructor_enabled: false
     stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
-    workspace_enabled: true
+    workspace_enabled: false
 sources:
+  env:
+    TEST_ENV_VAR1:
+      final_value: val1-override-3
+      name: TEST_ENV_VAR1
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-3
+          stack_file_section: components.terraform.env
+          variable_value: val1-override-3
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-2
+          stack_file_section: components.terraform.env
+          variable_value: val1-override-2
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override
+          stack_file_section: components.terraform.env
+          variable_value: val1-override
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component
+          stack_file_section: components.terraform.env
+          variable_value: val1
+  settings:
+    spacelift:
+      final_value:
+        protect_from_deletion: true
+        stack_destructor_enabled: false
+        stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+        workspace_enabled: false
+      name: spacelift
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-3
+          stack_file_section: components.terraform.settings
+          variable_value:
+            workspace_enabled: false
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-2
+          stack_file_section: components.terraform.settings
+          variable_value:
+            stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+            workspace_enabled: true
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component
+          stack_file_section: components.terraform.settings
+          variable_value:
+            workspace_enabled: true
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: settings
+          variable_value:
+            protect_from_deletion: true
+            stack_destructor_enabled: false
+            workspace_enabled: true  
   vars:
     enabled:
       final_value: true
