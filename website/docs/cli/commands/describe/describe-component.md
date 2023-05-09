@@ -233,7 +233,7 @@ Each variable descriptor has the following schema:
 - `stack_dependencies` - the variable's inheritance chain (stack config files where the values for the variable were provided). It has the following
   schema:
 
-  - `stack_file` - the stack config file where a value for the variable was provided
+  - `stack_file` - the stack config file where the value for the variable was provided
   - `stack_file_section` - the section of the stack config file where the value for the variable was provided
   - `variable_value` - the variable's value
   - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
@@ -411,7 +411,7 @@ Each variable descriptor has the following schema:
 - `stack_dependencies` - the variable's inheritance chain (stack config files where the values for the variable were provided). It has the following
   schema:
 
-  - `stack_file` - the stack config file where a value for the variable was provided
+  - `stack_file` - the stack config file where the value for the variable was provided
   - `stack_file_section` - the section of the stack config file where the value for the variable was provided
   - `variable_value` - the variable's value
   - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
@@ -537,3 +537,73 @@ Which we can interpret as follows (reading from the last to the first item in th
   via [`import`](/core-concepts/stacks/imports)), the value was set to `val1-override-3` in the `components.terraform.env` section of
   the `test/test-component-override-3` Atmos component. This value overrode all the previous values arriving at the `final_value: val1-override-3` for
   the ENV variable
+
+## Sources of Component Settings
+
+The `sources.settings` section of the output shows the final deep-merged component's settings and their inheritance chain.
+
+Each setting descriptor has the following schema:
+
+- `final_value` - the final value of the setting after Atmos processes and deep-merges all values from all stack config files
+- `name` - the setting name
+- `stack_dependencies` - the setting's inheritance chain (stack config files where the values for the variable were provided). It has the following
+  schema:
+
+  - `stack_file` - the stack config file where the value for the setting was provided
+  - `stack_file_section` - the section of the stack config file where the value for the setting was provided
+  - `variable_value` - the setting's value
+  - `dependency_type` - how the setting was defined (`inline` or `import`). `inline` means the setting was defined in one of the sections
+    in the stack config file. `import` means the stack config file where the setting is defined was imported into the parent Atmos stack
+
+<br/>
+
+For example:
+
+```shell
+atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
+```
+
+```yaml
+sources:
+  settings:
+    spacelift:
+      final_value:
+        protect_from_deletion: true
+        stack_destructor_enabled: false
+        stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+        workspace_enabled: false
+      name: spacelift
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-3
+          stack_file_section: components.terraform.settings
+          variable_value:
+            workspace_enabled: false
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-2
+          stack_file_section: components.terraform.settings
+          variable_value:
+            stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
+            workspace_enabled: true
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component
+          stack_file_section: components.terraform.settings
+          variable_value:
+            workspace_enabled: true
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: settings
+          variable_value:
+            protect_from_deletion: true
+            stack_destructor_enabled: false
+            workspace_enabled: true
+```
+
+<br/>
+
+:::info
+
+The `stack_dependencies` inheritance chain shows the sources of the setting in the reverse order the sources were processed.
+The first item in the list was processed the last and its `variable_value` overrode all the previous values of the setting.
+
+:::
