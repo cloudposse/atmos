@@ -21,22 +21,40 @@ func processConfigSources(
 	vars := map[string]any{}
 	result["vars"] = vars
 
-	for varKey, varVal := range configAndStacksInfo.ComponentVarsSection {
-		variable := varKey.(string)
-		varObj := map[string]any{}
-		varObj["name"] = variable
-		varObj["final_value"] = varVal
-		varObj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, "vars", variable)
-		vars[variable] = varObj
+	for k, v := range configAndStacksInfo.ComponentVarsSection {
+		name := k.(string)
+		obj := map[string]any{}
+		obj["name"] = name
+		obj["final_value"] = v
+		obj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, "vars", name)
+		vars[name] = obj
 	}
 
 	// `env` section
 	env := map[string]any{}
 	result["env"] = env
 
+	for k, v := range configAndStacksInfo.ComponentEnvSection {
+		name := k.(string)
+		obj := map[string]any{}
+		obj["name"] = name
+		obj["final_value"] = v
+		obj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, "env", name)
+		env[name] = obj
+	}
+
 	// `settings` section
 	settings := map[string]any{}
 	result["settings"] = settings
+
+	for k, v := range configAndStacksInfo.ComponentSettingsSection {
+		name := k.(string)
+		obj := map[string]any{}
+		obj["name"] = name
+		obj["final_value"] = v
+		obj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, "settings", name)
+		settings[name] = obj
+	}
 
 	return result, nil
 }
