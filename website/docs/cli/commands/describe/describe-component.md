@@ -191,7 +191,7 @@ sources:
           variable_value:
             protect_from_deletion: true
             stack_destructor_enabled: false
-            workspace_enabled: true  
+            workspace_enabled: true
   vars:
     enabled:
       final_value: true
@@ -399,3 +399,141 @@ Which we can interpret as follows (reading from the last to the first item in th
   the `test/test-component-override-3` Atmos component. This value overrode all the previous values arriving at the `final_value: true` for the
   variable. This final value is then set for the `enabled` variable of the Terraform component `test/test-component` when Atmos
   executes `atmos terraform apply test/test-component-override-3 -s <stack>` command
+
+## Sources of Component ENV Variables
+
+The `sources.env` section of the output shows the final deep-merged component's environment variables and their inheritance chain.
+
+Each variable descriptor has the following schema:
+
+- `final_value` - the final value of the variable after Atmos processes and deep-merges all values from all stack config files
+- `name` - the variable name
+- `stack_dependencies` - the variable's inheritance chain (stack config files where the values for the variable were provided). It has the following
+  schema:
+
+  - `stack_file` - the stack config file where a value for the variable was provided
+  - `stack_file_section` - the section of the stack config file where the value for the variable was provided
+  - `variable_value` - the variable's value
+  - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
+    in the stack config file. `import` means the stack config file where the variable is defined was imported into the parent Atmos stack
+
+<br/>
+
+For example:
+
+```shell
+atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
+```
+
+```yaml
+sources:
+  env:
+    TEST_ENV_VAR1:
+      final_value: val1-override-3
+      name: TEST_ENV_VAR1
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-3
+          stack_file_section: components.terraform.env
+          variable_value: val1-override-3
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-2
+          stack_file_section: components.terraform.env
+          variable_value: val1-override-2
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override
+          stack_file_section: components.terraform.env
+          variable_value: val1-override
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component
+          stack_file_section: components.terraform.env
+          variable_value: val1
+    TEST_ENV_VAR2:
+      final_value: val2-override-3
+      name: TEST_ENV_VAR2
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-3
+          stack_file_section: components.terraform.env
+          variable_value: val2-override-3
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-2
+          stack_file_section: components.terraform.env
+          variable_value: val2-override-2
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component
+          stack_file_section: components.terraform.env
+          variable_value: val2
+    TEST_ENV_VAR3:
+      final_value: val3-override-3
+      name: TEST_ENV_VAR3
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-3
+          stack_file_section: components.terraform.env
+          variable_value: val3-override-3
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override
+          stack_file_section: components.terraform.env
+          variable_value: val3-override
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component
+          stack_file_section: components.terraform.env
+          variable_value: val3
+```
+
+<br/>
+
+:::info
+
+The `stack_dependencies` inheritance chain shows the ENV variable sources in the reverse order the sources were processed.
+The first item in the list was processed the last and its `variable_value` overrode all the previous values of the variable.
+
+:::
+
+<br/>
+
+For example, the component's `TEST_ENV_VAR1` ENV variable has the following inheritance chain:
+
+```yaml
+sources:
+  env:
+    TEST_ENV_VAR1:
+      final_value: val1-override-3
+      name: TEST_ENV_VAR1
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-3
+          stack_file_section: components.terraform.env
+          variable_value: val1-override-3
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override-2
+          stack_file_section: components.terraform.env
+          variable_value: val1-override-2
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component-override
+          stack_file_section: components.terraform.env
+          variable_value: val1-override
+        - dependency_type: import
+          stack_file: catalog/terraform/test-component
+          stack_file_section: components.terraform.env
+          variable_value: val1
+```
+
+<br/>
+
+Which we can interpret as follows (reading from the last to the first item in the `stack_dependencies` list):
+
+- In the `catalog/terraform/test-component` stack config file (the last item in the list), the value for the `TEST_ENV_VAR1` ENV variable was set
+  to `val1` in the `components.terraform.env` section
+
+- Then the value was set to `val1-override` in the `catalog/terraform/test-component-override` stack config file. This value overrides the value set
+  in the `catalog/terraform/test-component` stack config file
+
+- Then the value was set to `val1-override-2` in the `catalog/terraform/test-component-override-2` stack config file. This value overrides the values
+  set in the `catalog/terraform/test-component` and `catalog/terraform/test-component-override` stack config files
+
+- Finally, in the `catalog/terraform/test-component-override-3` stack config file (which was imported into the parent Atmos stack
+  via [`import`](/core-concepts/stacks/imports)), the value was set to `val1-override-3` in the `components.terraform.env` section of
+  the `test/test-component-override-3` Atmos component. This value overrode all the previous values arriving at the `final_value: val1-override-3` for
+  the ENV variable
