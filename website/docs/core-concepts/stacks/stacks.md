@@ -2,11 +2,11 @@
 title: Atmos Stacks
 sidebar_position: 1
 sidebar_label: Stacks
-description: Use JSON Schema and OPA policies to validate Stacks.
+description: Stacks are a way to express the complete infrastructure needed for an environment
 id: stacks
 ---
 
-Stacks are a way to express the complete infrastructure needed for an that is environment. Think of a Stack as an architectural "Blueprint" composed
+Stacks are a way to express the complete infrastructure needed for an environment. Think of a Stack as an architectural "Blueprint" composed
 of one or more [Components](/core-concepts/components) and defined using a
 [standardized YAML configuration](#schema).
 
