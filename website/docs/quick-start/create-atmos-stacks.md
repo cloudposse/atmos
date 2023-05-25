@@ -12,7 +12,7 @@ Next step is to create and configure [Atmos stacks](/core-concepts/stacks).
 
 Atmos supports the [Catalog](/core-concepts/stacks/catalogs) pattern to configure default settings for Atmos components.
 All the common default settings for each Atmos component should be in a separate file in the `stacks/catalog` directory.
-The file then get imported into the parent Atmos stacks.
+The file then gets imported into the parent Atmos stacks.
 This makes the stack configurations DRY by reusing the component's config that is common for all environments.
 
 Refer to [Stack Imports](/core-concepts/stacks/imports) for more details on Atmos imports.
@@ -71,7 +71,7 @@ also be overridden in the derived Atmos components by using [Atmos Component Inh
 
 When executing the [CLI commands](/cli/cheatsheet), Atmos does not use the stack file names and their filesystem locations to search for the stack
 where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The
-stack config file names cam be anything, and they can be in any folders in any sub-folders in the `stacks` directory.
+stack config file names can be anything, and they can be in any folder in any sub-folder in the `stacks` directory.
 
 For example, when executing the `atmos terraform apply infra/vpc -s tenant1-ue2-dev`
 command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"`
@@ -83,7 +83,7 @@ Atmos parent stacks can be configured using a Basic Layout or a Hierarchical Lay
 
 The Basic Layout can be used when you have a very simple configuration using just a few accounts and regions.
 The Hierarchical Layout should be used when you have a very complex organization, for example, with many AWS Organizational Units (which Atmos
-refers to as tenants) and dozens of AWS accounts and region.
+refers to as tenants) and dozens of AWS accounts and regions.
 
 ### Basic Layout
 
@@ -95,7 +95,7 @@ For example, `$environment` might be `ue2` (for `us-east-2`) and `$stage` might 
 Some resources, however, are global in scope. For example, Route53 and IAM might not make sense to tie to a region. These are what we call "global
 resources". You might want to put these into a file like `stacks/global-region.yaml` to connote that they are not tied to any particular region.
 
-In out example, the filesystem layout for the stacks Basic Layout using `dev`, `staging` and `prod` accounts and `us-east-2` and `us-west-2` regions
+In our example, the filesystem layout for the stacks Basic Layout using `dev`, `staging` and `prod` accounts and `us-east-2` and `us-west-2` regions
 would look like this:
 
 ```console
@@ -247,7 +247,7 @@ vars:
 <br/>
 
 As we can see, in the region and stage mixins, besides some other common variables, we are defining the global context variables `environment`
-and `stage`, which Atmos uses when searching for a component in a stack. These mixins then get imported into the parent Atmos stacks without defining
+and `stage`, which Atmos uses when searching for a component in a stack. These mixins then gets imported into the parent Atmos stacks without defining
 the context variables in each parent stack, making the configuration DRY.
 
 ### Configure Defaults for Organization, OU and accounts
