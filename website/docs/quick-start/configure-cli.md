@@ -16,7 +16,7 @@ Next step is to configure `atmos.yaml`.
 `atmos.yaml` configuration file is used to control the behavior of the `atmos` CLI. The file supports many features that are configured in different
 sections of the `atmos.yaml` file. For the description of all the sections, refer to [CLI Configuration](/cli/configuration).
 
-For the purpuse of this Quck Start, below is the minimum configuration required for Atmos to work with Terraform and to
+For the purpose of this Quick Start, below is the minimum configuration required for Atmos to work with Terraform and to
 configure [Atmos components](/core-concepts/components) and [Atmos stacks](/core-concepts/stacks). Copy the YAML config below into your `atmos.yaml`
 file.
 
@@ -129,8 +129,8 @@ to [CLI Configuration](/cli/configuration).
 
 - `stacks.name_pattern` - Atmos stack name pattern. When executing `atmos` commands, Atmos does not use the configuration file names and their
   filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context
-  variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names cam be anything, and they can be in
-  any folders in any sub-folders in the `stacks` directory. For example, when executing the `atmos terraform apply infra/vpc -s tenant1-ue2-dev`
+  variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names can be anything, and they can be in
+  any folder in any sub-folder in the `stacks` directory. For example, when executing the `atmos terraform apply infra/vpc -s tenant1-ue2-dev`
   command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"` and processing
   the tokens, Atmos knows that the first part of the stack name is `tenant`, the second part is `environment`, and the third part is `stage`. Then
   Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are
