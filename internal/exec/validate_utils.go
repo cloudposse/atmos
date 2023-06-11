@@ -80,7 +80,7 @@ func ValidateWithOpa(
 		return false, err
 	}
 
-	// Set timeoutSeconds for schema validation
+	// Set timeout for schema validation
 	if timeoutSeconds == 0 {
 		timeoutSeconds = 10
 	}
