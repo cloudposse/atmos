@@ -32,6 +32,7 @@ Run `atmos validate component --help` to see all the available options
 atmos validate component infra/vpc -s tenant1-ue2-dev
 atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-infra-vpc-component.json --schema-type jsonschema
 atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-infra-vpc-component.rego --schema-type opa
+atmos validate component infra/vpc -s tenant1-ue2-dev --timeout 15
 ```
 
 ## Arguments
@@ -47,3 +48,4 @@ atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path validate-inf
 | `--stack`       | Atmos stack                                                                                                                                                       | `-s`  | yes      |
 | `--schema-path` | Path to the schema file.<br/>Can be an absolute path or a path relative to `schemas.jsonschema.base_path`<br/>and `schemas.opa.base_path` defined in `atmos.yaml` |       | no       |
 | `--schema-type` | Schema type: `jsonschema` or `opa`                                                                                                                                |       | no       |
+| `--timeout`     | Validation timeout in seconds. Can also be specified in `settings.validation` component config. If not provided, timeout of 10 seconds is used by default         |       | no       |

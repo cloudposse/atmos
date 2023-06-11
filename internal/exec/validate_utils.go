@@ -61,7 +61,12 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 
 // ValidateWithOpa validates the data structure using the provided OPA document
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
-func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, error) {
+func ValidateWithOpa(
+	data any,
+	schemaName string,
+	schemaText string,
+	timeoutSeconds int,
+) (bool, error) {
 	// The OPA SDK does not support map[any]any data types (which can be part of 'data' input)
 	// ast: interface conversion: json: unsupported type: map[interface {}]interface {}
 	// To fix the issue, convert the data to JSON and back to Go map
@@ -75,8 +80,12 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		return false, err
 	}
 
-	// Set timeout for schema validation
-	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*7)
+	// Set timeoutSeconds for schema validation
+	if timeoutSeconds == 0 {
+		timeoutSeconds = 10
+	}
+
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 	defer cancelFunc()
 
 	// '/bundles/' prefix is required by the OPA SDK

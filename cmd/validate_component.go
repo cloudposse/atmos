@@ -26,6 +26,7 @@ func init() {
 	validateComponentCmd.PersistentFlags().StringP("stack", "s", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
 	validateComponentCmd.PersistentFlags().String("schema-path", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
 	validateComponentCmd.PersistentFlags().String("schema-type", "jsonschema", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa|cue>")
+	validateComponentCmd.PersistentFlags().Int("timeout", 0, "Validation timeout in seconds: atmos validate component <component> -s <stack> --timeout 15")
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
