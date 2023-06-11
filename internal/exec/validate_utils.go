@@ -152,5 +152,5 @@ func ValidateWithOpa(
 // ValidateWithCue validates the data structure using the provided CUE document
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
-	return false, errors.New("validation using CUE is not implemented yet")
+	return false, errors.New("validation using CUE is not supported yet")
 }
