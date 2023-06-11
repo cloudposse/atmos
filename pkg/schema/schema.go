@@ -336,6 +336,7 @@ type ValidationItem struct {
 	SchemaPath  string `yaml:"schema_path" json:"schema_path" mapstructure:"schema_path"`
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
 	Disabled    bool   `yaml:"disabled" json:"disabled" mapstructure:"disabled"`
+	Timeout     int    `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
 }
 
 type Validation map[string]ValidationItem
