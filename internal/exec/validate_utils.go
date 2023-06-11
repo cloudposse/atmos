@@ -85,6 +85,7 @@ func ValidateWithOpa(
 		timeoutSeconds = 10
 	}
 
+	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 	defer cancelFunc()
 
