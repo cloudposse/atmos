@@ -82,7 +82,7 @@ func ValidateWithOpa(
 
 	// Set timeout for schema validation
 	if timeoutSeconds == 0 {
-		timeoutSeconds = 10
+		timeoutSeconds = 20
 	}
 
 	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer

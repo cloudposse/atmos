@@ -48,4 +48,4 @@ atmos validate component infra/vpc -s tenant1-ue2-dev --timeout 15
 | `--stack`       | Atmos stack                                                                                                                                                       | `-s`  | yes      |
 | `--schema-path` | Path to the schema file.<br/>Can be an absolute path or a path relative to `schemas.jsonschema.base_path`<br/>and `schemas.opa.base_path` defined in `atmos.yaml` |       | no       |
 | `--schema-type` | Schema type: `jsonschema` or `opa`                                                                                                                                |       | no       |
-| `--timeout`     | Validation timeout in seconds. Can also be specified in `settings.validation` component config. If not provided, timeout of 10 seconds is used by default         |       | no       |
+| `--timeout`     | Validation timeout in seconds. Can also be specified in `settings.validation` component config. If not provided, timeout of 20 seconds is used by default         |       | no       |
