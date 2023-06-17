@@ -26,6 +26,8 @@ components:
             # Set `disabled` to `true` to skip the validation step
             # `disabled` is set to `false` by default, the step is allowed if `disabled` is not declared
             disabled: false
+            # Validation timeout in seconds
+            timeout: 10
       vars:
         enabled: true
         name: "common"

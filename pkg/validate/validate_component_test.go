@@ -16,7 +16,14 @@ func TestValidateComponent(t *testing.T) {
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	assert.Nil(t, err)
 
-	_, err = e.ExecuteValidateComponent(cliConfig, info, "infra/vpc", "tenant1-ue2-dev", "validate-infra-vpc-component.rego", "opa")
+	_, err = e.ExecuteValidateComponent(
+		cliConfig,
+		info,
+		"infra/vpc",
+		"tenant1-ue2-dev",
+		"validate-infra-vpc-component.rego",
+		"opa",
+		0)
 	u.LogError(err)
 	assert.Error(t, err)
 }
@@ -27,7 +34,14 @@ func TestValidateComponent2(t *testing.T) {
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	assert.Nil(t, err)
 
-	_, err = e.ExecuteValidateComponent(cliConfig, info, "infra/vpc", "tenant1-ue2-prod", "", "")
+	_, err = e.ExecuteValidateComponent(
+		cliConfig,
+		info,
+		"infra/vpc",
+		"tenant1-ue2-prod",
+		"",
+		"",
+		0)
 	u.LogError(err)
 	assert.Error(t, err)
 }
@@ -38,7 +52,14 @@ func TestValidateComponent3(t *testing.T) {
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	assert.Nil(t, err)
 
-	_, err = e.ExecuteValidateComponent(cliConfig, info, "infra/vpc", "tenant1-ue2-staging", "", "")
+	_, err = e.ExecuteValidateComponent(
+		cliConfig,
+		info,
+		"infra/vpc",
+		"tenant1-ue2-staging",
+		"",
+		"",
+		0)
 	u.LogError(err)
 	assert.Error(t, err)
 }

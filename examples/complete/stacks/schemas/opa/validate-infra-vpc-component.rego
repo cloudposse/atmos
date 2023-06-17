@@ -7,12 +7,16 @@
 # https://www.fugue.co/blog/5-tips-for-using-the-rego-language-for-open-policy-agent-opa
 # https://medium.com/@agarwalshubhi17/rego-cheat-sheet-5e25faa6eee8
 # https://code.tutsplus.com/tutorials/regular-expressions-with-go-part-1--cms-30403
+# https://www.styra.com/blog/how-to-write-your-first-rules-in-rego-the-policy-language-for-opa
+# https://www.openpolicyagent.org/docs/v0.12.2/how-does-opa-work
 
 # 'atmos' looks for the 'errors' (array of strings) output from all OPA policies
 # If the 'errors' output contains one or more error messages, 'atmos' considers the policy failed
 
 # 'package atmos' is required in all `atmos` OPA policies
 package atmos
+
+import future.keywords.in
 
 # In production, don't allow mapping public IPs on launch
 errors[message] {

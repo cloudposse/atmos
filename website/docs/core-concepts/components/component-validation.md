@@ -41,6 +41,8 @@ atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path validate-in
 atmos validate component infra/vpc -s tenant1-ue2-prod
 
 atmos validate component infra/vpc -s tenant1-ue2-dev
+
+atmos validate component infra/vpc -s tenant1-ue2-dev --timeout 15
 ```
 
 ### Configure Component Validation
@@ -83,6 +85,8 @@ components:
             # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
             schema_path: validate-infra-vpc-component.rego
             description: Check 'infra/vpc' component configuration using OPA policy
+            # Validation timeout in seconds
+            timeout: 10
 ```
 
 Add the following JSON Schema in the file `stacks/schemas/jsonschema/validate-infra-vpc-component.json`:
