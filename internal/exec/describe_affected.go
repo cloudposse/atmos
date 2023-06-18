@@ -74,15 +74,20 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	includeSpaceliftAdminStacks, err := flags.GetBool("include-spacelift-admin-stacks")
+	if err != nil {
+		return err
+	}
+
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
 
 	var affected []schema.Affected
 	if repoPath == "" {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
+		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks)
 	} else {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose)
+		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks)
 	}
 
 	if err != nil {

@@ -33,6 +33,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,
+	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
@@ -176,7 +177,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +191,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	cliConfig schema.CliConfiguration,
 	repoPath string,
 	verbose bool,
+	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
@@ -227,7 +229,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, repoPath, localRepo, remoteRepo, verbose)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, repoPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +244,7 @@ func executeDescribeAffected(
 	localRepo *git.Repository,
 	remoteRepo *git.Repository,
 	verbose bool,
+	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
 	if verbose {
@@ -353,7 +356,7 @@ func executeDescribeAffected(
 
 	u.LogTrace(cliConfig, "")
 
-	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
+	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -367,6 +370,7 @@ func findAffected(
 	remoteStacks map[string]any,
 	cliConfig schema.CliConfiguration,
 	changedFiles []string,
+	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
 	res := []schema.Affected{}
@@ -375,6 +379,8 @@ func findAffected(
 	for stackName, stackSection := range currentStacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
+
+				// Terraform
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
@@ -473,6 +479,7 @@ func findAffected(
 					}
 				}
 
+				// Helmfile
 				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
