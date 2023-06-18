@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"os"
 	"path"
 	"path/filepath"
@@ -817,6 +818,21 @@ func addAffectedSpaceliftAdminStack(
 	settingsSection map[any]any,
 	stacks map[string]any,
 ) ([]schema.Affected, error) {
+
+	// 1. Find if the affected component has `settings.spacelift.admin_stack_config` section
+
+	// Convert the `settings` section to the `Settings` structure
+	var componentSettings schema.Settings
+	err := mapstructure.Decode(settingsSection, &componentSettings)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip if the component has an empty `settings.spacelift.admin_stack_config` section
+	if reflect.ValueOf(componentSettings).IsZero() ||
+		reflect.ValueOf(componentSettings.Spacelift).IsZero() {
+		return affectedList, nil
+	}
 
 	return affectedList, nil
 }
