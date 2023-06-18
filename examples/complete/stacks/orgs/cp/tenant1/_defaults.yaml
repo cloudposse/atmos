@@ -3,3 +3,8 @@ import:
 
 vars:
   tenant: tenant1
+
+settings:
+  spacelift:
+    # All Spacelift child stacks in the `tenant1` tenant are managed by the `infrastructure-tenant1` Spacelift admin stack
+    admin_stack_component_name: "infrastructure-tenant1"
