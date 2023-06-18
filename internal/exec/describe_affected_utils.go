@@ -477,6 +477,13 @@ func findAffected(
 							}
 						}
 					}
+
+					if includeSpaceliftAdminStacks {
+						res, err = addAffectedSpaceliftAdminStacks(res, terraformSection)
+						if err != nil {
+							return nil, err
+						}
+					}
 				}
 
 				// Helmfile
@@ -709,4 +716,13 @@ func isComponentFolderChanged(
 		}
 	}
 	return false, nil
+}
+
+// addAffectedSpaceliftAdminStacks adds the affected Spacelift admin stacks that manage the affected child stacks
+func addAffectedSpaceliftAdminStacks(
+	affected []schema.Affected,
+	components map[string]any,
+) ([]schema.Affected, error) {
+
+	return affected, nil
 }
