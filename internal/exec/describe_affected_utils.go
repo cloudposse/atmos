@@ -728,7 +728,7 @@ func appendToAffected(
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {
-			affectedList, err = addAffectedSpaceliftAdminStacks(affectedList, components)
+			affectedList, err = addAffectedSpaceliftAdminStack(affected, affectedList, components)
 			if err != nil {
 				return nil, err
 			}
@@ -810,8 +810,9 @@ func isComponentFolderChanged(
 	return false, nil
 }
 
-// addAffectedSpaceliftAdminStacks adds the affected Spacelift admin stacks that manage the affected child stacks
-func addAffectedSpaceliftAdminStacks(
+// addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack
+func addAffectedSpaceliftAdminStack(
+	affected schema.Affected,
 	affectedList []schema.Affected,
 	components map[string]any,
 ) ([]schema.Affected, error) {
