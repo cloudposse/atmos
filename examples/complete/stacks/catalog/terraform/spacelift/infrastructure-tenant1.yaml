@@ -1,0 +1,21 @@
+import:
+  - catalog/terraform/spacelift/defaults
+
+components:
+  terraform:
+    infrastructure-tenant1:
+      metadata:
+        component: spacelift
+        inherits:
+          - spacelift-defaults
+      settings:
+        spacelift:
+          autodeploy: true
+          labels:
+            - admin
+            - admin-infrastructure-tenant1
+      vars:
+        space_id: root
+        attachment_space_id: root
+        tag_filters:
+          OU: tenant1
