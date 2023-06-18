@@ -399,7 +399,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										terraformSection,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -420,7 +429,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										terraformSection,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -436,7 +454,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										terraformSection,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -452,7 +479,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										terraformSection,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -468,20 +504,22 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										terraformSection,
+									)
 									if err != nil {
 										return nil, err
 									}
 									continue
 								}
 							}
-						}
-					}
-
-					if includeSpaceliftAdminStacks {
-						res, err = addAffectedSpaceliftAdminStacks(res, terraformSection)
-						if err != nil {
-							return nil, err
 						}
 					}
 				}
@@ -505,7 +543,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -526,7 +573,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -542,7 +598,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -558,7 +623,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -574,7 +648,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -599,6 +682,8 @@ func appendToAffected(
 	componentSection map[string]any,
 	affectedList []schema.Affected,
 	affected schema.Affected,
+	includeSpaceliftAdminStacks bool,
+	components map[string]any,
 ) ([]schema.Affected, error) {
 
 	if affected.ComponentType == "terraform" {
@@ -641,6 +726,13 @@ func appendToAffected(
 		}
 
 		affected.AtlantisProject = atlantisProjectName
+
+		if includeSpaceliftAdminStacks {
+			affectedList, err = addAffectedSpaceliftAdminStacks(affectedList, components)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Check `component` section and add `ComponentPath` to the output
