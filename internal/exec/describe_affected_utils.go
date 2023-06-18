@@ -828,11 +828,27 @@ func addAffectedSpaceliftAdminStack(
 		return nil, err
 	}
 
-	// Skip if the component has an empty `settings.spacelift.admin_stack_config` section
+	// Skip if the component has an empty `settings.spacelift` section
 	if reflect.ValueOf(componentSettings).IsZero() ||
 		reflect.ValueOf(componentSettings.Spacelift).IsZero() {
 		return affectedList, nil
 	}
+
+	// Find and process `settings.spacelift.admin_stack_config` section
+	var adminStackContextSection any
+	var adminStackContext schema.Context
+	var ok bool
+
+	if adminStackContextSection, ok = componentSettings.Spacelift["admin_stack_context"]; !ok {
+		return affectedList, nil
+	}
+
+	err = mapstructure.Decode(adminStackContextSection, &adminStackContext)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip if the component has an empty `settings.spacelift.admin_stack_config` section
 
 	return affectedList, nil
 }
