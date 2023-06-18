@@ -151,7 +151,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
 | `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
 | `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
 | `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
-| `--include-spacelift-admin-stacks` | Include the Spacelift parent admin stack of any stack that is affected by config changes                                                                         | no       |
+| `--include-spacelift-admin-stacks` | Include the Spacelift parent admin stack of any stack<br/>that is affected by config changes                                                                     | no       |
 
 ## Output
 
