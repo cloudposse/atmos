@@ -10,8 +10,6 @@ import:
   - catalog/helmfile/echo-server
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
-  # `catalog/terraform/spacelift/infrastructure-tenant1` Spacelift admin stack for the `tenant1` tenant
-  - catalog/terraform/spacelift/infrastructure-tenant1
 
 components:
   terraform:

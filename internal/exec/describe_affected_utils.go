@@ -812,9 +812,9 @@ func isComponentFolderChanged(
 
 // addAffectedSpaceliftAdminStacks adds the affected Spacelift admin stacks that manage the affected child stacks
 func addAffectedSpaceliftAdminStacks(
-	affected []schema.Affected,
+	affectedList []schema.Affected,
 	components map[string]any,
 ) ([]schema.Affected, error) {
 
-	return affected, nil
+	return affectedList, nil
 }

@@ -6,7 +6,11 @@ vars:
 
 settings:
   spacelift:
-    # All Spacelift child stacks in the `tenant1` tenant are managed by the `infrastructure-tenant1` Spacelift admin stack.
-    # The `admin_stack_component_name` attribute is used to find the affected Spacelift admin stack for each affected Atmos stack
-    # in the command `atmos describe affected --include-spacelift-admin-stacks=true`
-    admin_stack_component_name: "infrastructure-tenant1"
+    # All Spacelift child stacks for the `tenant1` tenant are managed by the `tenant1-ue2-prod-infrastructure-tenant1` Spacelift admin stack.
+    # The `admin_stack_config` attribute is used to find the affected Spacelift admin stack for each affected Atmos stack
+    # when executing the command `atmos describe affected --include-spacelift-admin-stacks=true`
+    admin_stack_config:
+      component: infrastructure-tenant1
+      tenant: tenant1
+      environment: ue2
+      stage: prod
