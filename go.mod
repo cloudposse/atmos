@@ -23,7 +23,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/zclconf/go-cty v1.13.2
 	gopkg.in/yaml.v2 v2.4.0
-	mvdan.cc/sh/v3 v3.6.0
+	mvdan.cc/sh/v3 v3.7.0
 )
 
 require (
