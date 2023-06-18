@@ -81,5 +81,38 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 		configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
 	}
 
+	// Spacelift stack
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
+		cliConfig,
+		component,
+		stack,
+		configAndStacksInfo.ComponentSettingsSection,
+		configAndStacksInfo.ComponentVarsSection,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	// Atlantis project
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
+		cliConfig,
+		component,
+		configAndStacksInfo.ComponentSettingsSection,
+		configAndStacksInfo.ComponentVarsSection,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
 	return configAndStacksInfo.ComponentSection, nil
 }
