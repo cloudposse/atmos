@@ -407,7 +407,7 @@ func findAffected(
 										res,
 										affected,
 										includeSpaceliftAdminStacks,
-										terraformSection,
+										currentStacks,
 									)
 									if err != nil {
 										return nil, err
@@ -437,7 +437,7 @@ func findAffected(
 										res,
 										affected,
 										includeSpaceliftAdminStacks,
-										terraformSection,
+										currentStacks,
 									)
 									if err != nil {
 										return nil, err
@@ -462,7 +462,7 @@ func findAffected(
 										res,
 										affected,
 										includeSpaceliftAdminStacks,
-										terraformSection,
+										currentStacks,
 									)
 									if err != nil {
 										return nil, err
@@ -487,7 +487,7 @@ func findAffected(
 										res,
 										affected,
 										includeSpaceliftAdminStacks,
-										terraformSection,
+										currentStacks,
 									)
 									if err != nil {
 										return nil, err
@@ -512,7 +512,7 @@ func findAffected(
 										res,
 										affected,
 										includeSpaceliftAdminStacks,
-										terraformSection,
+										currentStacks,
 									)
 									if err != nil {
 										return nil, err
@@ -683,7 +683,7 @@ func appendToAffected(
 	affectedList []schema.Affected,
 	affected schema.Affected,
 	includeSpaceliftAdminStacks bool,
-	components map[string]any,
+	stacks map[string]any,
 ) ([]schema.Affected, error) {
 
 	if affected.ComponentType == "terraform" {
@@ -728,7 +728,7 @@ func appendToAffected(
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {
-			affectedList, err = addAffectedSpaceliftAdminStack(affected, affectedList, components)
+			affectedList, err = addAffectedSpaceliftAdminStack(affected, affectedList, settingsSection, stacks)
 			if err != nil {
 				return nil, err
 			}
@@ -814,7 +814,8 @@ func isComponentFolderChanged(
 func addAffectedSpaceliftAdminStack(
 	affected schema.Affected,
 	affectedList []schema.Affected,
-	components map[string]any,
+	settingsSection map[any]any,
+	stacks map[string]any,
 ) ([]schema.Affected, error) {
 
 	return affectedList, nil
