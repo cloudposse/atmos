@@ -16,6 +16,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -729,7 +730,7 @@ func appendToAffected(
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {
-			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks)
+			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks, stackName)
 			if err != nil {
 				return nil, err
 			}
@@ -817,6 +818,7 @@ func addAffectedSpaceliftAdminStack(
 	affectedList []schema.Affected,
 	settingsSection map[any]any,
 	stacks map[string]any,
+	currentStackName string,
 ) ([]schema.Affected, error) {
 
 	// Convert the `settings` section to the `Settings` structure
@@ -851,6 +853,11 @@ func addAffectedSpaceliftAdminStack(
 		return affectedList, nil
 	}
 
+	adminStackContextPrefix, err := cfg.GetContextPrefix(currentStackName, adminStackContext, cliConfig.Stacks.NamePattern, currentStackName)
+	if err != nil {
+		return nil, err
+	}
+
 	// Find the Spacelift adin stack that manages the current stack
 	for stackName, stackSection := range stacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
@@ -865,13 +872,12 @@ func addAffectedSpaceliftAdminStack(
 									return nil, err
 								}
 
-								context.Component = componentName
+								contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+								if err != nil {
+									return nil, err
+								}
 
-								if context.Component == adminStackContext.Component &&
-									context.Tenant == adminStackContext.Tenant &&
-									context.Environment == adminStackContext.Environment &&
-									context.Stage == adminStackContext.Stage {
-
+								if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {
 									affectedSpaceliftAdminStack := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
