@@ -254,7 +254,7 @@ Atmos components and are not meant to be provisioned.
 ## Output Example
 
 ```shell
-atmos describe affected
+atmos describe affected --include-spacelift-admin-stacks=true
 ```
 
 ```json
