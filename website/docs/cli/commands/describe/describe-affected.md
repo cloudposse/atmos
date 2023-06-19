@@ -203,7 +203,7 @@ where:
 
   - `component` - the Terraform or Helmfile component that the Atmos component provisions has been changed
 
-  - `stack.settings.spacelift.admin_stack_context` - the Atmos component for the Spacelift admin stack that has been affected by the changes. 
+  - `stack.settings.spacelift.admin_stack_context` - the Atmos component for the Spacelift admin stack. 
      This will be included only if all the following is true:
 
     - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
