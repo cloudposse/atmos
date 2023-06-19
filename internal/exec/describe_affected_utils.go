@@ -730,7 +730,7 @@ func appendToAffected(
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {
-			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks, stackName)
+			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks, stackName, componentName)
 			if err != nil {
 				return nil, err
 			}
@@ -819,6 +819,7 @@ func addAffectedSpaceliftAdminStack(
 	settingsSection map[any]any,
 	stacks map[string]any,
 	currentStackName string,
+	currentComponentName string,
 ) ([]schema.Affected, error) {
 
 	// Convert the `settings` section to the `Settings` structure
@@ -870,18 +871,6 @@ func addAffectedSpaceliftAdminStack(
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
 
-							if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
-								return affectedList, nil
-							}
-
-							if componentSettingsSpaceliftSection, ok = componentSettingsSection["spacelift"].(map[any]any); !ok {
-								return affectedList, nil
-							}
-
-							if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
-								return affectedList, nil
-							}
-
 							if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
 								return affectedList, nil
 							}
@@ -898,11 +887,33 @@ func addAffectedSpaceliftAdminStack(
 							}
 
 							if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {
+								if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+									return affectedList, nil
+								}
+
+								if componentSettingsSpaceliftSection, ok = componentSettingsSection["spacelift"].(map[any]any); !ok {
+									return affectedList, nil
+								}
+
+								if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
+									return nil, errors.New(fmt.Sprintf(
+										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_context' "+
+											"to point to the Spacelift admin component '%s' in the stack '%s', "+
+											"but that component has Spacelift workspace disabled "+
+											"in the 'settings.spacelift.workspace_enabled' section "+
+											"and can't be added to the affected stacks",
+										currentComponentName,
+										currentStackName,
+										componentName,
+										stackName,
+									))
+								}
+
 								affectedSpaceliftAdminStack := schema.Affected{
 									ComponentType: "terraform",
 									Component:     componentName,
 									Stack:         stackName,
-									Affected:      "spacelift_admin_stack",
+									Affected:      "stack.settings.spacelift.admin_stack_context",
 								}
 								affectedList, err = appendToAffected(
 									cliConfig,
