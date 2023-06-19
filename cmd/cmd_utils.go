@@ -200,8 +200,8 @@ func executeCustomCommand(
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		var envVarsList []string
 		for _, v := range commandConfig.Env {
-			key := v.Key
-			value := v.Value
+			key := strings.TrimSpace(v.Key)
+			value := strings.TrimSpace(v.Value)
 
 			// https://www.dotnetperls.com/trim-go
 			valCommand := strings.TrimSpace(v.ValueCommand)
@@ -230,7 +230,7 @@ func executeCustomCommand(
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
-			err = os.Setenv(key, value)
+			err = os.Setenv(key, strings.TrimSpace(value))
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
