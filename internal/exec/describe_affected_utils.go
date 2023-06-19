@@ -909,24 +909,34 @@ func addAffectedSpaceliftAdminStack(
 									))
 								}
 
-								affectedSpaceliftAdminStack := schema.Affected{
-									ComponentType: "terraform",
-									Component:     componentName,
-									Stack:         stackName,
-									Affected:      "stack.settings.spacelift.admin_stack_context",
+								adminStackAlreadyAdded := false
+								for _, v := range affectedList {
+									if v.Component == componentName && v.Stack == stackName {
+										adminStackAlreadyAdded = true
+									}
 								}
-								affectedList, err = appendToAffected(
-									cliConfig,
-									componentName,
-									stackName,
-									componentSection,
-									affectedList,
-									affectedSpaceliftAdminStack,
-									false,
-									nil,
-								)
-								if err != nil {
-									return nil, err
+
+								if !adminStackAlreadyAdded {
+									affectedSpaceliftAdminStack := schema.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "stack.settings.spacelift.admin_stack_context",
+									}
+
+									affectedList, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										affectedList,
+										affectedSpaceliftAdminStack,
+										false,
+										nil,
+									)
+									if err != nil {
+										return nil, err
+									}
 								}
 							}
 						}
