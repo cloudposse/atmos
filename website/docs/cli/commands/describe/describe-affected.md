@@ -151,7 +151,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
 | `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
 | `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
 | `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
-| `--include-spacelift-admin-stacks` | Include the Spacelift parent admin stack of any stack<br/>that is affected by config changes                                                                     | no       |
+| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                            | no       |
 
 ## Output
 
@@ -194,10 +194,53 @@ where:
 - `affected` - shows what was changed for the component. The possible values are:
 
   - `stack.vars` - the `vars` component section in the stack config has been modified
+
   - `stack.env` - the `env` component section in the stack config has been modified
+
   - `stack.settings` - the `settings` component section in the stack config has been modified
+
   - `stack.metadata` - the `metadata` component section in the stack config has been modified
+
   - `component` - the Terraform or Helmfile component that the Atmos component provisions has been changed
+
+  - `stack.settings.spacelift.admin_stack_context` - the Atmos component for the Spacelift admin stack that has been affected by the changes. 
+     This will be included only if all the following is true:
+
+    - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
+
+    - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_context` pointing to the Spacelift admin stack
+      that manages the components. For example:
+
+      ```yaml title="stacks/orgs/cp/tenant1/_defaults.yaml"
+      settings:
+        spacelift:
+          # All Spacelift child stacks for the `tenant1` tenant are managed by the 
+          # `tenant1-ue2-prod-infrastructure-tenant1` Spacelift admin stack.
+          # The `admin_stack_context` attribute is used to find the affected Spacelift 
+          # admin stack for each affected Atmos stack
+          # when executing the command 
+          # `atmos describe affected --include-spacelift-admin-stacks=true`
+          admin_stack_context:
+            component: infrastructure-tenant1
+            tenant: tenant1
+            environment: ue2
+            stage: prod
+      ```
+
+    - The Spacelift admin stack is enabled by `settings.spacelift.workdpace_enabled` set to `true`. For example:
+
+      ```yaml title="stacks/catalog/terraform/spacelift/infrastructure-tenant1.yaml"
+      components:
+        terraform:
+          infrastructure-tenant1:
+            metadata:
+              component: spacelift
+              inherits:
+                - spacelift-defaults
+            settings:
+              spacelift:
+                workspace_enabled: true
+        ```
 
 <br/>
 
@@ -216,6 +259,26 @@ atmos describe affected
 
 ```json
 [
+  {
+    "component": "infrastructure-tenant1",
+    "component_type": "terraform",
+    "component_path": "examples/complete/components/terraform/spacelift",
+    "stack": "tenant1-ue2-prod",
+    "stack_slug": "tenant1-ue2-prod-infrastructure-tenant1",
+    "spacelift_stack": "tenant1-ue2-prod-infrastructure-tenant1",
+    "atlantis_project": "tenant1-ue2-prod-infrastructure-tenant1",
+    "affected": "stack.settings.spacelift.admin_stack_context"
+  },
+  {
+    "component": "infrastructure-tenant2",
+    "component_type": "terraform",
+    "component_path": "examples/complete/components/terraform/spacelift",
+    "stack": "tenant2-ue2-prod",
+    "stack_slug": "tenant2-ue2-prod-infrastructure-tenant2",
+    "spacelift_stack": "tenant2-ue2-prod-infrastructure-tenant2",
+    "atlantis_project": "tenant2-ue2-prod-infrastructure-tenant2",
+    "affected": "stack.settings.spacelift.admin_stack_context"
+  },
   {
     "component": "test/test-component-override-2",
     "component_type": "terraform",

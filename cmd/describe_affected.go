@@ -32,7 +32,7 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Print more detailed output when cloning and checking out the Git repository: atmos describe affected --verbose=true")
 	describeAffectedCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos describe affected --ssh-key <path_to_ssh_key>")
 	describeAffectedCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
-	describeAffectedCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "Include the Spacelift parent admin stack of any stack that is affected by config changes: atmos describe affected --include-spacelift-admin-stacks=true")
+	describeAffectedCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "Include the Spacelift admin stack of any stack that is affected by config changes: atmos describe affected --include-spacelift-admin-stacks=true")
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }

@@ -688,6 +688,13 @@ func appendToAffected(
 	stacks map[string]any,
 ) ([]schema.Affected, error) {
 
+	// If the affected component in the stack was already added to the result, don't add it again
+	for _, v := range affectedList {
+		if v.Component == affected.Component && v.Stack == affected.Stack && v.ComponentType == affected.ComponentType {
+			return affectedList, nil
+		}
+	}
+
 	if affected.ComponentType == "terraform" {
 		varSection := map[any]any{}
 		settingsSection := map[any]any{}
@@ -909,34 +916,25 @@ func addAffectedSpaceliftAdminStack(
 									))
 								}
 
-								adminStackAlreadyAdded := false
-								for _, v := range affectedList {
-									if v.Component == componentName && v.Stack == stackName {
-										adminStackAlreadyAdded = true
-									}
+								affectedSpaceliftAdminStack := schema.Affected{
+									ComponentType: "terraform",
+									Component:     componentName,
+									Stack:         stackName,
+									Affected:      "stack.settings.spacelift.admin_stack_context",
 								}
 
-								if !adminStackAlreadyAdded {
-									affectedSpaceliftAdminStack := schema.Affected{
-										ComponentType: "terraform",
-										Component:     componentName,
-										Stack:         stackName,
-										Affected:      "stack.settings.spacelift.admin_stack_context",
-									}
-
-									affectedList, err = appendToAffected(
-										cliConfig,
-										componentName,
-										stackName,
-										componentSection,
-										affectedList,
-										affectedSpaceliftAdminStack,
-										false,
-										nil,
-									)
-									if err != nil {
-										return nil, err
-									}
+								affectedList, err = appendToAffected(
+									cliConfig,
+									componentName,
+									stackName,
+									componentSection,
+									affectedList,
+									affectedSpaceliftAdminStack,
+									false,
+									nil,
+								)
+								if err != nil {
+									return nil, err
 								}
 							}
 						}
