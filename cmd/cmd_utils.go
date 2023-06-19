@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -201,7 +202,9 @@ func executeCustomCommand(
 		for _, v := range commandConfig.Env {
 			key := v.Key
 			value := v.Value
-			valCommand := v.ValueCommand
+
+			// https://www.dotnetperls.com/trim-go
+			valCommand := strings.TrimSpace(v.ValueCommand)
 
 			if value != "" && valCommand != "" {
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
