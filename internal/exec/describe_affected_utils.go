@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -729,7 +729,7 @@ func appendToAffected(
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {
-			affectedList, err = addAffectedSpaceliftAdminStack(affected, affectedList, settingsSection, stacks)
+			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks)
 			if err != nil {
 				return nil, err
 			}
@@ -813,7 +813,7 @@ func isComponentFolderChanged(
 
 // addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack
 func addAffectedSpaceliftAdminStack(
-	affected schema.Affected,
+	cliConfig schema.CliConfiguration,
 	affectedList []schema.Affected,
 	settingsSection map[any]any,
 	stacks map[string]any,
@@ -848,7 +848,54 @@ func addAffectedSpaceliftAdminStack(
 		return nil, err
 	}
 
-	// Skip if the component has an empty `settings.spacelift.admin_stack_config` section
+	// Find the Spacelift adin stack that manages the current stack
+	for stackName, stackSection := range stacks {
+		if stackSectionMap, ok := stackSection.(map[string]any); ok {
+			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
+				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+					for componentName, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							if varSection, ok := componentSection["vars"].(map[any]any); ok {
+								var context schema.Context
+								err = mapstructure.Decode(varSection, &context)
+								if err != nil {
+									return nil, err
+								}
+
+								context.Component = componentName
+
+								if context.Component == adminStackContext.Component &&
+									context.Tenant == adminStackContext.Tenant &&
+									context.Environment == adminStackContext.Environment &&
+									context.Stage == adminStackContext.Stage {
+
+									affectedSpaceliftAdminStack := schema.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "spacelift_admin_stack",
+									}
+									affectedList, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										affectedList,
+										affectedSpaceliftAdminStack,
+										false,
+										nil,
+									)
+									if err != nil {
+										return nil, err
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 
 	return affectedList, nil
 }
