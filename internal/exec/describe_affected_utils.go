@@ -819,8 +819,6 @@ func addAffectedSpaceliftAdminStack(
 	stacks map[string]any,
 ) ([]schema.Affected, error) {
 
-	// 1. Find if the affected component has `settings.spacelift.admin_stack_config` section
-
 	// Convert the `settings` section to the `Settings` structure
 	var componentSettings schema.Settings
 	err := mapstructure.Decode(settingsSection, &componentSettings)
@@ -846,6 +844,11 @@ func addAffectedSpaceliftAdminStack(
 	err = mapstructure.Decode(adminStackContextSection, &adminStackContext)
 	if err != nil {
 		return nil, err
+	}
+
+	// Skip if the component has an empty `settings.spacelift.admin_stack_context` section
+	if reflect.ValueOf(adminStackContext).IsZero() {
+		return affectedList, nil
 	}
 
 	// Find the Spacelift adin stack that manages the current stack
