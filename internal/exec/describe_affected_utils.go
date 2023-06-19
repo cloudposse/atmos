@@ -858,6 +858,10 @@ func addAffectedSpaceliftAdminStack(
 		return nil, err
 	}
 
+	var componentVarsSection map[any]any
+	var componentSettingsSection map[any]any
+	var componentSettingsSpaceliftSection map[any]any
+
 	// Find the Spacelift adin stack that manages the current stack
 	for stackName, stackSection := range stacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
@@ -865,38 +869,53 @@ func addAffectedSpaceliftAdminStack(
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							if varSection, ok := componentSection["vars"].(map[any]any); ok {
-								var context schema.Context
-								err = mapstructure.Decode(varSection, &context)
+
+							if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+								return affectedList, nil
+							}
+
+							if componentSettingsSpaceliftSection, ok = componentSettingsSection["spacelift"].(map[any]any); !ok {
+								return affectedList, nil
+							}
+
+							if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
+								return affectedList, nil
+							}
+
+							if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
+								return affectedList, nil
+							}
+
+							var context schema.Context
+							err = mapstructure.Decode(componentVarsSection, &context)
+							if err != nil {
+								return nil, err
+							}
+
+							contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+							if err != nil {
+								return nil, err
+							}
+
+							if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {
+								affectedSpaceliftAdminStack := schema.Affected{
+									ComponentType: "terraform",
+									Component:     componentName,
+									Stack:         stackName,
+									Affected:      "spacelift_admin_stack",
+								}
+								affectedList, err = appendToAffected(
+									cliConfig,
+									componentName,
+									stackName,
+									componentSection,
+									affectedList,
+									affectedSpaceliftAdminStack,
+									false,
+									nil,
+								)
 								if err != nil {
 									return nil, err
-								}
-
-								contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
-								if err != nil {
-									return nil, err
-								}
-
-								if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {
-									affectedSpaceliftAdminStack := schema.Affected{
-										ComponentType: "terraform",
-										Component:     componentName,
-										Stack:         stackName,
-										Affected:      "spacelift_admin_stack",
-									}
-									affectedList, err = appendToAffected(
-										cliConfig,
-										componentName,
-										stackName,
-										componentSection,
-										affectedList,
-										affectedSpaceliftAdminStack,
-										false,
-										nil,
-									)
-									if err != nil {
-										return nil, err
-									}
 								}
 							}
 						}
