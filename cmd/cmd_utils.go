@@ -228,7 +228,7 @@ func executeCustomCommand(
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
-			err = os.Setenv(key, strings.TrimSpace(value))
+			err = os.Setenv(key, value)
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
