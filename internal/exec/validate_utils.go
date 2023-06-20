@@ -5,14 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
+	"log"
+	"os"
 	"strings"
 	"time"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/open-policy-agent/opa/loader"
+	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/sdk"
 	opaTestServer "github.com/open-policy-agent/opa/sdk/test"
+	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ValidateWithJsonSchema validates the data structure using the provided JSON Schema document
@@ -142,7 +147,7 @@ func ValidateWithOpa(
 		return false, err
 	}
 
-	ers, ok := result.Result.([]interface{})
+	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
 		return false, errors.New(strings.Join(u.SliceOfInterfacesToSliceOdStrings(ers), "\n"))
 	}
@@ -154,4 +159,46 @@ func ValidateWithOpa(
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
 	return false, errors.New("validation using CUE is not supported yet")
+}
+
+// Usage: go run main.go example.rego 'data.example.violation' < input.json
+func ValidateWithOpa2(
+	data any,
+	schemaName string,
+	schemaText string,
+	timeoutSeconds int,
+) (bool, error) {
+	ctx := context.Background()
+
+	// Construct a Rego object that can be prepared or evaluated.
+	r := rego.New(
+		rego.Query(os.Args[2]),
+		rego.Load([]string{os.Args[1]}, loader.GlobExcludeName("*_test.rego", 0)))
+
+	// Create a prepared query that can be evaluated.
+	query, err := r.PrepareForEval(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Load the input document from stdin.
+	var input any
+	dec := json.NewDecoder(os.Stdin)
+	dec.UseNumber()
+	if err := dec.Decode(&input); err != nil {
+		log.Fatal(err)
+	}
+
+	// Execute the prepared query.
+	rs, err := query.Eval(ctx, rego.EvalInput(input))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Do something with the result.
+	fmt.Print("ResultSet: ")
+	fmt.Println(rs)
+	fmt.Printf("Allowed? : %v\n", rs.Allowed())
+
+	return true, nil
 }
