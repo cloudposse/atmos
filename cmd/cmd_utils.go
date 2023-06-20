@@ -218,7 +218,7 @@ func executeCustomCommand(
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
-				value = res
+				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data)
