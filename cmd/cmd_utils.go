@@ -201,10 +201,8 @@ func executeCustomCommand(
 		var envVarsList []string
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
-			value := strings.TrimSpace(v.Value)
-
-			// https://www.dotnetperls.com/trim-go
-			valCommand := strings.TrimSpace(v.ValueCommand)
+			value := v.Value
+			valCommand := v.ValueCommand
 
 			if value != "" && valCommand != "" {
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
