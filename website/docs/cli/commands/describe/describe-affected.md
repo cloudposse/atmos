@@ -203,12 +203,12 @@ where:
 
   - `component` - the Terraform or Helmfile component that the Atmos component provisions has been changed
 
-  - `stack.settings.spacelift.admin_stack_context` - the Atmos component for the Spacelift admin stack. 
+  - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack. 
      This will be included only if all the following is true:
 
     - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
 
-    - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_context` pointing to the Spacelift admin stack
+    - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_selector` pointing to the Spacelift admin stack
       that manages the components. For example:
 
       ```yaml title="stacks/orgs/cp/tenant1/_defaults.yaml"
@@ -216,11 +216,11 @@ where:
         spacelift:
           # All Spacelift child stacks for the `tenant1` tenant are managed by the 
           # `tenant1-ue2-prod-infrastructure-tenant1` Spacelift admin stack.
-          # The `admin_stack_context` attribute is used to find the affected Spacelift 
+          # The `admin_stack_selector` attribute is used to find the affected Spacelift 
           # admin stack for each affected Atmos stack
           # when executing the command 
           # `atmos describe affected --include-spacelift-admin-stacks=true`
-          admin_stack_context:
+          admin_stack_selector:
             component: infrastructure-tenant1
             tenant: tenant1
             environment: ue2
@@ -267,7 +267,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
     "stack_slug": "tenant1-ue2-prod-infrastructure-tenant1",
     "spacelift_stack": "tenant1-ue2-prod-infrastructure-tenant1",
     "atlantis_project": "tenant1-ue2-prod-infrastructure-tenant1",
-    "affected": "stack.settings.spacelift.admin_stack_context"
+    "affected": "stack.settings.spacelift.admin_stack_selector"
   },
   {
     "component": "infrastructure-tenant2",
@@ -277,7 +277,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
     "stack_slug": "tenant2-ue2-prod-infrastructure-tenant2",
     "spacelift_stack": "tenant2-ue2-prod-infrastructure-tenant2",
     "atlantis_project": "tenant2-ue2-prod-infrastructure-tenant2",
-    "affected": "stack.settings.spacelift.admin_stack_context"
+    "affected": "stack.settings.spacelift.admin_stack_selector"
   },
   {
     "component": "test/test-component-override-2",

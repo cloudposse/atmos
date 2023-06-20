@@ -847,7 +847,7 @@ func addAffectedSpaceliftAdminStack(
 	var adminStackContext schema.Context
 	var ok bool
 
-	if adminStackContextSection, ok = componentSettings.Spacelift["admin_stack_context"]; !ok {
+	if adminStackContextSection, ok = componentSettings.Spacelift["admin_stack_selector"]; !ok {
 		return affectedList, nil
 	}
 
@@ -856,7 +856,7 @@ func addAffectedSpaceliftAdminStack(
 		return nil, err
 	}
 
-	// Skip if the component has an empty `settings.spacelift.admin_stack_context` section
+	// Skip if the component has an empty `settings.spacelift.admin_stack_selector` section
 	if reflect.ValueOf(adminStackContext).IsZero() {
 		return affectedList, nil
 	}
@@ -904,7 +904,7 @@ func addAffectedSpaceliftAdminStack(
 
 								if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
 									return nil, errors.New(fmt.Sprintf(
-										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_context' "+
+										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
 											"to point to the Spacelift admin component '%s' in the stack '%s', "+
 											"but that component has Spacelift workspace disabled "+
 											"in the 'settings.spacelift.workspace_enabled' section "+
@@ -920,7 +920,7 @@ func addAffectedSpaceliftAdminStack(
 									ComponentType: "terraform",
 									Component:     componentName,
 									Stack:         stackName,
-									Affected:      "stack.settings.spacelift.admin_stack_context",
+									Affected:      "stack.settings.spacelift.admin_stack_selector",
 								}
 
 								affectedList, err = appendToAffected(
