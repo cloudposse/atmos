@@ -126,12 +126,20 @@ func ValidateComponent(
 				continue
 			}
 
-			schemaPath = v.SchemaPath
-			schemaType = v.SchemaType
-			timeoutSeconds = v.Timeout
+			if schemaPath == "" {
+				schemaPath = v.SchemaPath
+			}
+
+			if schemaType == "" {
+				schemaType = v.SchemaType
+			}
 
 			if len(modulePaths) == 0 {
 				modulePaths = v.ModulePaths
+			}
+
+			if timeoutSeconds == 0 {
+				timeoutSeconds = v.Timeout
 			}
 
 			u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
