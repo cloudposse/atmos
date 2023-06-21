@@ -28,7 +28,7 @@ func TestDescribeAffectedWithTargetRepoClone(t *testing.T) {
 	ref := "refs/heads/master"
 	sha := ""
 
-	affected, err := e.ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, "", "", true)
+	affected, err := e.ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, "", "", true, true)
 	assert.Nil(t, err)
 
 	affectedYaml, err := yaml.Marshal(affected)
@@ -52,7 +52,7 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
 	repoPath := "../../"
 
-	affected, err := e.ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, true)
+	affected, err := e.ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, true, true)
 	assert.Nil(t, err)
 
 	affectedYaml, err := yaml.Marshal(affected)

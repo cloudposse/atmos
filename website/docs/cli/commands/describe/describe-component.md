@@ -61,6 +61,7 @@ The command outputs the final deep-merged component configuration in YAML format
 
 The output contains the following sections:
 
+- `atlantis_project` - Atlantis project name (if [Atlantis Integration](/integrations/atlantis) is configured for the component in the stack)
 - `atmos_component` - [Atmos component](/core-concepts/components) name
 - `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
 - `backend` - Terraform backend configuration
@@ -75,6 +76,8 @@ The output contains the following sections:
 - `remote_state_backend_type` - Terraform backend type for remote state
 - `settings` - component settings (free-form map)
 - `sources` - sources of the values from the component's sections (`vars`, `env`, `settings`)
+- `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/integrations/spacelift) is configured for the component in the stack 
+   and `settings.spacelift.workspace_enabled` is set to `true`)
 - `vars` - the final deep-merged component variables that are provided to Terraform and Helmfile when executing `atmos terraform`
   and `atmos helmfile` commands
 - `workspace` - Terraform workspace for the Atmos component
@@ -88,6 +91,7 @@ atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
 ```
 
 ```yaml
+atlantis_project: tenant1-ue2-dev-test-test-component-override-3
 atmos_component: test/test-component-override-3
 atmos_stack: tenant1-ue2-dev
 backend:

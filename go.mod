@@ -14,7 +14,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/open-policy-agent/opa v0.53.1
-	github.com/otiai10/copy v1.11.0
+	github.com/otiai10/copy v1.12.0
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.38.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.0
@@ -23,7 +23,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/zclconf/go-cty v1.13.2
 	gopkg.in/yaml.v2 v2.4.0
-	mvdan.cc/sh/v3 v3.6.0
+	mvdan.cc/sh/v3 v3.7.0
 )
 
 require (

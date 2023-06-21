@@ -1,0 +1,64 @@
+components:
+  terraform:
+    spacelift-defaults:
+      metadata:
+        type: abstract
+      settings:
+        spacelift:
+          workspace_enabled: true
+          administrative: true
+          autodeploy: false
+          before_init: []
+          component_root: components/terraform/spacelift
+          repository: infrastructure
+          branch: main
+          worker_pool_name: Primary Worker Pool
+          stack_destructor_enabled: false
+          policies_enabled: []
+          policies_by_id_enabled: []
+          terraform_version: 1
+      vars:
+        enabled: true
+        administrative_stack_drift_detection_enabled: false
+        administrative_stack_drift_detection_reconcile: true
+        administrative_stack_drift_detection_schedule: ["0 4 * * *"]
+        administrative_trigger_policy_enabled: false
+        administrative_push_policy_enabled: false
+        autodeploy: false
+        drift_detection_enabled: true
+        drift_detection_reconcile: true
+        drift_detection_schedule: ["0 4 * * *"]
+        external_execution: true
+        git_repository: infrastructure
+        git_branch: main
+        spacelift_api_endpoint: https://xxxxxx.app.spacelift.io
+        spacelift_stack_dependency_enabled: true
+
+        # List of available default Rego policies to create in Spacelift.
+        # These policies are defined in the catalog https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation/tree/master/catalog/policies
+        # These policies will not be attached to Spacelift stacks by default (but will be created in Spacelift, and could be attached to a stack manually).
+        # For specify policies to attach to each Spacelift stack, use `var.policies_enabled`.
+        policies_available: []
+
+        # List of default Rego policies to attach to all Spacelift stacks.
+        # These policies are defined in the catalog https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation/tree/master/catalog/policies
+        policies_enabled: []
+
+        # List of custom policy names to attach to all Spacelift stacks
+        # These policies must exist in `components/terraform/spacelift/rego-policies`
+        policies_by_name_enabled: []
+
+        policies_by_id_enabled: []
+
+        runner_image: xxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com/infrastructure:latest
+        spacelift_component_path: components/terraform
+        stack_config_path_template: "stacks/%s.yaml"
+        stack_destructor_enabled: false
+        worker_pool_name_id_map:
+          "Primary Worker Pool": XXXXXXXXXXXXXXXXXXXXXXXXX
+        terraform_version: 1.5.0
+        terraform_version_map:
+          "0.13": 0.13.7
+          "0.14": 0.14.9
+          "0.15": 0.15.4
+          "1": 1.5.0

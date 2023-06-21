@@ -147,9 +147,9 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	var err error
 
 	if repoPath == "" {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose)
+		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, false)
 	} else {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose)
+		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, false)
 	}
 
 	if err != nil {

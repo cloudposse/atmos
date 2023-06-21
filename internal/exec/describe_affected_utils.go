@@ -13,8 +13,10 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -33,6 +35,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,
+	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
@@ -176,7 +179,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +193,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	cliConfig schema.CliConfiguration,
 	repoPath string,
 	verbose bool,
+	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
@@ -227,7 +231,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, repoPath, localRepo, remoteRepo, verbose)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, repoPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +246,7 @@ func executeDescribeAffected(
 	localRepo *git.Repository,
 	remoteRepo *git.Repository,
 	verbose bool,
+	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
 	if verbose {
@@ -353,7 +358,7 @@ func executeDescribeAffected(
 
 	u.LogTrace(cliConfig, "")
 
-	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
+	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -367,6 +372,7 @@ func findAffected(
 	remoteStacks map[string]any,
 	cliConfig schema.CliConfiguration,
 	changedFiles []string,
+	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
 	res := []schema.Affected{}
@@ -375,6 +381,8 @@ func findAffected(
 	for stackName, stackSection := range currentStacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
+
+				// Terraform
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
@@ -393,7 +401,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -414,7 +431,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -430,7 +456,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -446,7 +481,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -462,7 +506,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -473,6 +526,7 @@ func findAffected(
 					}
 				}
 
+				// Helmfile
 				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
@@ -491,7 +545,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -512,7 +575,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -528,7 +600,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -544,7 +625,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -560,7 +650,16 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -585,7 +684,16 @@ func appendToAffected(
 	componentSection map[string]any,
 	affectedList []schema.Affected,
 	affected schema.Affected,
+	includeSpaceliftAdminStacks bool,
+	stacks map[string]any,
 ) ([]schema.Affected, error) {
+
+	// If the affected component in the stack was already added to the result, don't add it again
+	for _, v := range affectedList {
+		if v.Component == affected.Component && v.Stack == affected.Stack && v.ComponentType == affected.ComponentType {
+			return affectedList, nil
+		}
+	}
 
 	if affected.ComponentType == "terraform" {
 		varSection := map[any]any{}
@@ -627,6 +735,13 @@ func appendToAffected(
 		}
 
 		affected.AtlantisProject = atlantisProjectName
+
+		if includeSpaceliftAdminStacks {
+			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks, stackName, componentName)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Check `component` section and add `ComponentPath` to the output
@@ -702,4 +817,132 @@ func isComponentFolderChanged(
 		}
 	}
 	return false, nil
+}
+
+// addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack
+func addAffectedSpaceliftAdminStack(
+	cliConfig schema.CliConfiguration,
+	affectedList []schema.Affected,
+	settingsSection map[any]any,
+	stacks map[string]any,
+	currentStackName string,
+	currentComponentName string,
+) ([]schema.Affected, error) {
+
+	// Convert the `settings` section to the `Settings` structure
+	var componentSettings schema.Settings
+	err := mapstructure.Decode(settingsSection, &componentSettings)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip if the component has an empty `settings.spacelift` section
+	if reflect.ValueOf(componentSettings).IsZero() ||
+		reflect.ValueOf(componentSettings.Spacelift).IsZero() {
+		return affectedList, nil
+	}
+
+	// Find and process `settings.spacelift.admin_stack_config` section
+	var adminStackContextSection any
+	var adminStackContext schema.Context
+	var ok bool
+
+	if adminStackContextSection, ok = componentSettings.Spacelift["admin_stack_selector"]; !ok {
+		return affectedList, nil
+	}
+
+	err = mapstructure.Decode(adminStackContextSection, &adminStackContext)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip if the component has an empty `settings.spacelift.admin_stack_selector` section
+	if reflect.ValueOf(adminStackContext).IsZero() {
+		return affectedList, nil
+	}
+
+	adminStackContextPrefix, err := cfg.GetContextPrefix(currentStackName, adminStackContext, cliConfig.Stacks.NamePattern, currentStackName)
+	if err != nil {
+		return nil, err
+	}
+
+	var componentVarsSection map[any]any
+	var componentSettingsSection map[any]any
+	var componentSettingsSpaceliftSection map[any]any
+
+	// Find the Spacelift adin stack that manages the current stack
+	for stackName, stackSection := range stacks {
+		if stackSectionMap, ok := stackSection.(map[string]any); ok {
+			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
+				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+					for componentName, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+
+							if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
+								return affectedList, nil
+							}
+
+							var context schema.Context
+							err = mapstructure.Decode(componentVarsSection, &context)
+							if err != nil {
+								return nil, err
+							}
+
+							contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+							if err != nil {
+								return nil, err
+							}
+
+							if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {
+								if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+									return affectedList, nil
+								}
+
+								if componentSettingsSpaceliftSection, ok = componentSettingsSection["spacelift"].(map[any]any); !ok {
+									return affectedList, nil
+								}
+
+								if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
+									return nil, errors.New(fmt.Sprintf(
+										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
+											"to point to the Spacelift admin component '%s' in the stack '%s', "+
+											"but that component has Spacelift workspace disabled "+
+											"in the 'settings.spacelift.workspace_enabled' section "+
+											"and can't be added to the affected stacks",
+										currentComponentName,
+										currentStackName,
+										componentName,
+										stackName,
+									))
+								}
+
+								affectedSpaceliftAdminStack := schema.Affected{
+									ComponentType: "terraform",
+									Component:     componentName,
+									Stack:         stackName,
+									Affected:      "stack.settings.spacelift.admin_stack_selector",
+								}
+
+								affectedList, err = appendToAffected(
+									cliConfig,
+									componentName,
+									stackName,
+									componentSection,
+									affectedList,
+									affectedSpaceliftAdminStack,
+									false,
+									nil,
+								)
+								if err != nil {
+									return nil, err
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return affectedList, nil
 }

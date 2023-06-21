@@ -398,6 +398,9 @@ type Dependent struct {
 
 // Settings
 
+type SettingsSpacelift map[any]any
+
 type Settings struct {
-	DependsOn DependsOn `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
+	DependsOn DependsOn         `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
+	Spacelift SettingsSpacelift `yaml:"spacelift" json:"spacelift" mapstructure:"spacelift"`
 }

@@ -10,6 +10,7 @@ import:
   - catalog/helmfile/echo-server
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
+  - catalog/terraform/spacelift/infrastructure-tenant2
 
 components:
   terraform:
