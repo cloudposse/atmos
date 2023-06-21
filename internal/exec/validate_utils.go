@@ -127,6 +127,7 @@ func ValidateWithOpa(
 		return false, errors.New(invalidRegoPolicyErrorMessage)
 	}
 
+	// Check the query evaluation result (if the `errors` output array has any items)
 	ers, ok := rs[0].Expressions[0].Value.([]any)
 	if !ok {
 		return false, errors.New(invalidRegoPolicyErrorMessage)
