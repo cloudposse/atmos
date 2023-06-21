@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -66,7 +64,50 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 
 // ValidateWithOpa validates the data structure using the provided OPA document
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
+// Usage: go run main.go example.rego 'data.example.violation' < input.json
 func ValidateWithOpa(
+	data any,
+	schemaFilePath string,
+	timeoutSeconds int,
+) (bool, error) {
+
+	// Set timeout for schema validation
+	if timeoutSeconds == 0 {
+		timeoutSeconds = 20
+	}
+
+	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
+	defer cancelFunc()
+
+	j, err := u.ConvertToJSON(data)
+	if err != nil {
+		return false, err
+	}
+
+	// Construct a Rego object that can be prepared or evaluated.
+	r := rego.New(
+		rego.Query(j),
+		rego.Load([]string{schemaFilePath}, loader.GlobExcludeName("*_test.rego", 0)))
+
+	// Create a prepared query that can be evaluated.
+	query, err := r.PrepareForEval(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	// Execute the prepared query.
+	rs, err := query.Eval(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return rs.Allowed(), nil
+}
+
+// ValidateWithOpaLegacy validates the data structure using the provided OPA document
+// https://www.openpolicyagent.org/docs/latest/integration/#sdk
+func ValidateWithOpaLegacy(
 	data any,
 	schemaName string,
 	schemaText string,
@@ -159,46 +200,4 @@ func ValidateWithOpa(
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
 	return false, errors.New("validation using CUE is not supported yet")
-}
-
-// Usage: go run main.go example.rego 'data.example.violation' < input.json
-func ValidateWithOpa2(
-	data any,
-	schemaName string,
-	schemaText string,
-	timeoutSeconds int,
-) (bool, error) {
-	ctx := context.Background()
-
-	// Construct a Rego object that can be prepared or evaluated.
-	r := rego.New(
-		rego.Query(os.Args[2]),
-		rego.Load([]string{os.Args[1]}, loader.GlobExcludeName("*_test.rego", 0)))
-
-	// Create a prepared query that can be evaluated.
-	query, err := r.PrepareForEval(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Load the input document from stdin.
-	var input any
-	dec := json.NewDecoder(os.Stdin)
-	dec.UseNumber()
-	if err := dec.Decode(&input); err != nil {
-		log.Fatal(err)
-	}
-
-	// Execute the prepared query.
-	rs, err := query.Eval(ctx, rego.EvalInput(input))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Do something with the result.
-	fmt.Print("ResultSet: ")
-	fmt.Println(rs)
-	fmt.Printf("Allowed? : %v\n", rs.Allowed())
-
-	return true, nil
 }

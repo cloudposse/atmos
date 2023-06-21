@@ -196,7 +196,14 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			ok, err = ValidateWithOpa(componentSection, filePath, schemaText, timeoutSeconds)
+			ok, err = ValidateWithOpa(componentSection, filePath, timeoutSeconds)
+			if err != nil {
+				return false, err
+			}
+		}
+	case "opa_legacy":
+		{
+			ok, err = ValidateWithOpaLegacy(componentSection, filePath, schemaText, timeoutSeconds)
 			if err != nil {
 				return false, err
 			}
