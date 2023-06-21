@@ -15,13 +15,14 @@ func BuildAtlantisProjectName(context schema.Context, projectNameTemplate string
 	return cfg.ReplaceContextTokens(context, projectNameTemplate)
 }
 
-// BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from from the component config
+// BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from the component config
 func BuildAtlantisProjectNameFromComponentConfig(
 	cliConfig schema.CliConfiguration,
 	componentName string,
 	componentSettingsSection map[any]any,
 	componentVarsSection map[any]any,
 ) (string, error) {
+
 	var atlantisProjectTemplate schema.AtlantisProjectConfig
 	var atlantisProjectName string
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -199,7 +200,7 @@ func executeCustomCommand(
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		var envVarsList []string
 		for _, v := range commandConfig.Env {
-			key := v.Key
+			key := strings.TrimSpace(v.Key)
 			value := v.Value
 			valCommand := v.ValueCommand
 
@@ -217,7 +218,7 @@ func executeCustomCommand(
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
-				value = res
+				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data)

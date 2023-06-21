@@ -136,20 +136,22 @@ atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 atmos describe affected --ssh-key <path_to_ssh_key>
 atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>
 atmos describe affected --repo-path <path_to_already_cloned_repo>
+atmos describe affected --include-spacelift-admin-stacks=true
 ```
 
 ## Flags
 
-| Flag                 | Description                                                                                                                                                      | Required |
-|:---------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--ref`              | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                    | no       |
-| `--sha`              | Git commit SHA with which to compare the current working branch                                                                                                  | no       |
-| `--file`             | If specified, write the result to the file                                                                                                                       | no       |
-| `--format`           | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                  | no       |
-| `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                                                                 | no       |
-| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
-| `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
-| `--verbose`          | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
+| Flag                               | Description                                                                                                                                                      | Required |
+|:-----------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
+| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                    | no       |
+| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                  | no       |
+| `--file`                           | If specified, write the result to the file                                                                                                                       | no       |
+| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                  | no       |
+| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                 | no       |
+| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
+| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
+| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
+| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                            | no       |
 
 ## Output
 
@@ -192,10 +194,53 @@ where:
 - `affected` - shows what was changed for the component. The possible values are:
 
   - `stack.vars` - the `vars` component section in the stack config has been modified
+
   - `stack.env` - the `env` component section in the stack config has been modified
+
   - `stack.settings` - the `settings` component section in the stack config has been modified
+
   - `stack.metadata` - the `metadata` component section in the stack config has been modified
+
   - `component` - the Terraform or Helmfile component that the Atmos component provisions has been changed
+
+  - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack. 
+     This will be included only if all the following is true:
+
+    - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
+
+    - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_selector` pointing to the Spacelift admin stack
+      that manages the components. For example:
+
+      ```yaml title="stacks/orgs/cp/tenant1/_defaults.yaml"
+      settings:
+        spacelift:
+          # All Spacelift child stacks for the `tenant1` tenant are managed by the 
+          # `tenant1-ue2-prod-infrastructure-tenant1` Spacelift admin stack.
+          # The `admin_stack_selector` attribute is used to find the affected Spacelift 
+          # admin stack for each affected Atmos stack
+          # when executing the command 
+          # `atmos describe affected --include-spacelift-admin-stacks=true`
+          admin_stack_selector:
+            component: infrastructure-tenant1
+            tenant: tenant1
+            environment: ue2
+            stage: prod
+      ```
+
+    - The Spacelift admin stack is enabled by `settings.spacelift.workdpace_enabled` set to `true`. For example:
+
+      ```yaml title="stacks/catalog/terraform/spacelift/infrastructure-tenant1.yaml"
+      components:
+        terraform:
+          infrastructure-tenant1:
+            metadata:
+              component: spacelift
+              inherits:
+                - spacelift-defaults
+            settings:
+              spacelift:
+                workspace_enabled: true
+        ```
 
 <br/>
 
@@ -209,11 +254,31 @@ Atmos components and are not meant to be provisioned.
 ## Output Example
 
 ```shell
-atmos describe affected
+atmos describe affected --include-spacelift-admin-stacks=true
 ```
 
 ```json
 [
+  {
+    "component": "infrastructure-tenant1",
+    "component_type": "terraform",
+    "component_path": "examples/complete/components/terraform/spacelift",
+    "stack": "tenant1-ue2-prod",
+    "stack_slug": "tenant1-ue2-prod-infrastructure-tenant1",
+    "spacelift_stack": "tenant1-ue2-prod-infrastructure-tenant1",
+    "atlantis_project": "tenant1-ue2-prod-infrastructure-tenant1",
+    "affected": "stack.settings.spacelift.admin_stack_selector"
+  },
+  {
+    "component": "infrastructure-tenant2",
+    "component_type": "terraform",
+    "component_path": "examples/complete/components/terraform/spacelift",
+    "stack": "tenant2-ue2-prod",
+    "stack_slug": "tenant2-ue2-prod-infrastructure-tenant2",
+    "spacelift_stack": "tenant2-ue2-prod-infrastructure-tenant2",
+    "atlantis_project": "tenant2-ue2-prod-infrastructure-tenant2",
+    "affected": "stack.settings.spacelift.admin_stack_selector"
+  },
   {
     "component": "test/test-component-override-2",
     "component_type": "terraform",
