@@ -64,6 +64,7 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 
 // ValidateWithOpa validates the data structure using the provided OPA document
 // https://github.com/open-policy-agent/opa/blob/main/rego/example_test.go
+// https://github.com/open-policy-agent/opa/blob/main/rego/rego_test.go
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
 func ValidateWithOpa(
 	data any,
