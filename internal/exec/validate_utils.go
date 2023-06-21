@@ -86,17 +86,6 @@ func ValidateWithOpa(
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 	defer cancelFunc()
 
-	// Construct a Rego object that can be prepared or evaluated.
-	r := rego.New(
-		rego.Query("data.atmos.errors"),
-		rego.Load([]string{schemaFilePath}, loader.GlobExcludeName("*_test.rego", 0)))
-
-	// Create a prepared query that can be evaluated
-	query, err := r.PrepareForEval(ctx)
-	if err != nil {
-		return false, err
-	}
-
 	// Load the input document
 	j, err := u.ConvertToJSON(data)
 	if err != nil {
@@ -107,6 +96,17 @@ func ValidateWithOpa(
 	dec := json.NewDecoder(bytes.NewBufferString(j))
 	dec.UseNumber()
 	if err = dec.Decode(&input); err != nil {
+		return false, err
+	}
+
+	// Construct a Rego object that can be prepared or evaluated.
+	r := rego.New(
+		rego.Query("data.atmos.errors"),
+		rego.Load([]string{schemaFilePath}, loader.GlobExcludeName("*_test.rego", 0)))
+
+	// Create a prepared query that can be evaluated
+	query, err := r.PrepareForEval(ctx)
+	if err != nil {
 		return false, err
 	}
 
