@@ -17,25 +17,26 @@
 package atmos
 
 import future.keywords.in
+import data.atmos.constants.vpc_dev_max_availability_zones_error_message
+import data.atmos.constants.vpc_prod_map_public_ip_on_launch_error_message
+import data.atmos.constants.vpc_name_regex
+import data.atmos.constants.vpc_name_regex_error_message
 
 # In production, don't allow mapping public IPs on launch
-errors[message] {
+errors[vpc_prod_map_public_ip_on_launch_error_message] {
     input.vars.stage == "prod"
     input.vars.map_public_ip_on_launch == true
-    message = "Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'"
 }
 
 # In 'dev', only 2 Availability Zones are allowed
-errors[message] {
+errors[vpc_dev_max_availability_zones_error_message] {
     input.vars.stage == "dev"
     count(input.vars.availability_zones) != 2
-    message = "In 'dev', only 2 Availability Zones are allowed"
 }
 
 # Check VPC name
-errors[message] {
-    not re_match("^[a-zA-Z0-9]{2,20}$", input.vars.name)
-    message = "VPC name must be a valid string from 2 to 20 alphanumeric chars"
+errors[vpc_name_regex_error_message] {
+    not re_match(vpc_name_regex, input.vars.name)
 }
 
 # Note:

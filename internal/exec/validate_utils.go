@@ -103,7 +103,14 @@ func ValidateWithOpa(
 	// Construct a Rego object that can be prepared or evaluated.
 	r := rego.New(
 		rego.Query("data.atmos.errors"),
-		rego.Load([]string{schemaFilePath}, loader.GlobExcludeName("*_test.rego", 0)))
+		rego.Load(
+			[]string{
+				schemaFilePath,
+				"constants",
+			},
+			loader.GlobExcludeName("*_test.rego", 0),
+		),
+	)
 
 	// Create a prepared query that can be evaluated
 	query, err := r.PrepareForEval(ctx)
