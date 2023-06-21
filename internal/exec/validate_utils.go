@@ -63,8 +63,8 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 }
 
 // ValidateWithOpa validates the data structure using the provided OPA document
+// https://github.com/open-policy-agent/opa/blob/main/rego/example_test.go
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
-// Usage: go run main.go example.rego 'data.example.violation' < input.json
 func ValidateWithOpa(
 	data any,
 	schemaFilePath string,
@@ -76,33 +76,66 @@ func ValidateWithOpa(
 		timeoutSeconds = 20
 	}
 
+	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
+		"1. Rego syntax\n" +
+		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
+
+	invalidRegoPolicyErrorMessage := fmt.Sprintf("invalid Rego policy in the file '%s'", schemaFilePath)
+
 	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 	defer cancelFunc()
 
-	j, err := u.ConvertToJSON(data)
-	if err != nil {
-		return false, err
-	}
-
 	// Construct a Rego object that can be prepared or evaluated.
 	r := rego.New(
-		rego.Query(j),
+		rego.Query("data.atmos.errors"),
 		rego.Load([]string{schemaFilePath}, loader.GlobExcludeName("*_test.rego", 0)))
 
-	// Create a prepared query that can be evaluated.
+	// Create a prepared query that can be evaluated
 	query, err := r.PrepareForEval(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	// Execute the prepared query.
-	rs, err := query.Eval(ctx)
+	// Load the input document
+	j, err := u.ConvertToJSON(data)
 	if err != nil {
 		return false, err
 	}
 
-	return rs.Allowed(), nil
+	var input any
+	dec := json.NewDecoder(bytes.NewBufferString(j))
+	dec.UseNumber()
+	if err = dec.Decode(&input); err != nil {
+		return false, err
+	}
+
+	// Execute the prepared query
+	rs, err := query.Eval(ctx, rego.EvalInput(input))
+	if err != nil {
+		if err.Error() == "context deadline exceeded" {
+			err = errors.New(timeoutErrorMessage)
+		}
+		return false, err
+	}
+
+	if len(rs) < 1 {
+		return false, errors.New(invalidRegoPolicyErrorMessage)
+	}
+
+	if len(rs[0].Expressions) < 1 {
+		return false, errors.New(invalidRegoPolicyErrorMessage)
+	}
+
+	ers, ok := rs[0].Expressions[0].Value.([]any)
+	if !ok {
+		return false, errors.New(invalidRegoPolicyErrorMessage)
+	}
+	if len(ers) > 0 {
+		return false, errors.New(strings.Join(u.SliceOfInterfacesToSliceOdStrings(ers), "\n"))
+	}
+
+	return true, nil
 }
 
 // ValidateWithOpaLegacy validates the data structure using the provided OPA document
