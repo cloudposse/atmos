@@ -6,11 +6,12 @@ description: Use JSON Schema and OPA policies to validate Components.
 id: validation
 ---
 
-Validation is critical to maintaining hygenic configurations in distributed team environments.
+Validation is critical to maintaining hygienic configurations in distributed team environments.
 
 `atmos` component validation allows:
 
-* Validate component config (vars, settings, backend, and other sections) using JSON Schema
+* Validate component config (`vars`, `settings`, `backend`, `env`, and other sections) using JSON Schema
+
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   OPA/Rego policies
 
@@ -30,13 +31,15 @@ e.g. for microservice configurations).
 
 ## Usage
 
-`atmos` `validate component` command supports `--schema-path` and `--schema-type` command line arguments.
+`atmos` `validate component` command supports `--schema-path`, `--schema-type` and `--module-paths` command line arguments.
 If the arguments are not provided, `atmos` will try to find and use the `settings.validation` section defined in the component's YAML config.
 
 ```bash
-atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path validate-infra-vpc-component.json --schema-type jsonschema
+atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path vpc/validate-infra-vpc-component.json --schema-type jsonschema
 
-atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path validate-infra-vpc-component.rego --schema-type opa
+atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path vpc/validate-infra-vpc-component.rego --schema-type opa
+
+atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path vpc/validate-infra-vpc-component.rego --schema-type opa --module-paths constants
 
 atmos validate component infra/vpc -s tenant1-ue2-prod
 
