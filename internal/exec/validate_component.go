@@ -48,12 +48,17 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	modulePaths, err := flags.GetStringSlice("module-paths")
+	if err != nil {
+		return err
+	}
+
 	timeout, err := flags.GetInt("timeout")
 	if err != nil {
 		return err
 	}
 
-	_, err = ExecuteValidateComponent(cliConfig, info, componentName, stack, schemaPath, schemaType, timeout)
+	_, err = ExecuteValidateComponent(cliConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
 		return err
 	}
@@ -69,6 +74,7 @@ func ExecuteValidateComponent(
 	stack string,
 	schemaPath string,
 	schemaType string,
+	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
 	configAndStacksInfo.ComponentFromArg = componentName
@@ -86,7 +92,7 @@ func ExecuteValidateComponent(
 
 	componentSection := configAndStacksInfo.ComponentSection
 
-	return ValidateComponent(cliConfig, componentName, componentSection, schemaPath, schemaType, timeoutSeconds)
+	return ValidateComponent(cliConfig, componentName, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 }
 
 // ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
@@ -96,6 +102,7 @@ func ValidateComponent(
 	componentSection any,
 	schemaPath string,
 	schemaType string,
+	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
 	ok := true
@@ -104,7 +111,7 @@ func ValidateComponent(
 	if schemaPath != "" && schemaType != "" {
 		u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
-		ok, err = validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType, timeoutSeconds)
+		ok, err = validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 		if err != nil {
 			return false, err
 		}
@@ -123,12 +130,16 @@ func ValidateComponent(
 			schemaType = v.SchemaType
 			timeoutSeconds = v.Timeout
 
+			if len(modulePaths) == 0 {
+				modulePaths = v.ModulePaths
+			}
+
 			u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 			if v.Description != "" {
 				u.LogDebug(cliConfig, v.Description)
 			}
 
-			ok2, err := validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType, timeoutSeconds)
+			ok2, err := validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 			if err != nil {
 				return false, err
 			}
@@ -146,6 +157,7 @@ func validateComponentInternal(
 	componentSection any,
 	schemaPath string,
 	schemaType string,
+	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
@@ -196,7 +208,12 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			ok, err = ValidateWithOpa(componentSection, filePath, timeoutSeconds)
+			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(path.Join(cliConfig.BasePath, cliConfig.Schemas.Opa.BasePath), modulePaths)
+			if err != nil {
+				return false, err
+			}
+
+			ok, err = ValidateWithOpa(componentSection, filePath, modulePathsAbsolute, timeoutSeconds)
 			if err != nil {
 				return false, err
 			}

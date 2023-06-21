@@ -68,7 +68,8 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
 func ValidateWithOpa(
 	data any,
-	schemaFilePath string,
+	schemaPath string,
+	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
 
@@ -81,7 +82,7 @@ func ValidateWithOpa(
 		"1. Rego syntax\n" +
 		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
 
-	invalidRegoPolicyErrorMessage := fmt.Sprintf("invalid Rego policy in the file '%s'", schemaFilePath)
+	invalidRegoPolicyErrorMessage := fmt.Sprintf("invalid Rego policy in the file '%s'", schemaPath)
 
 	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
@@ -103,11 +104,7 @@ func ValidateWithOpa(
 	// Construct a Rego object that can be prepared or evaluated.
 	r := rego.New(
 		rego.Query("data.atmos.errors"),
-		rego.Load(
-			[]string{
-				schemaFilePath,
-				"constants",
-			},
+		rego.Load(append([]string{schemaPath}, modulePaths...),
 			loader.GlobExcludeName("*_test.rego", 0),
 		),
 	)
