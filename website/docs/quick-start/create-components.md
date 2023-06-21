@@ -25,7 +25,7 @@ or
 
 > You will need to prime the orgs directory with a few placeholders as we are putting together the building blocks. From the base repo directory run command
 ```bash
-{                                                                                                                                                                                                      [10:29:02]
+{
 mkdir -p stacks/orgs/test
 touch stacks/orgs/test/test.yaml
 }
