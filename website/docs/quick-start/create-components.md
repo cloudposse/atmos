@@ -23,6 +23,14 @@ There are a few ways to create the Terraform components:
 
 or
 
+> You will need to prime the orgs directory with a few placeholders as we are putting together the building blocks. From the base repo directory run command
+```bash
+{                                                                                                                                                                                                      [10:29:02]
+mkdir -p stacks/orgs/test
+touch stacks/orgs/test/test.yaml
+}
+```
+
 - Copy the `component.yaml` component vendoring config file from the Atmos
   example [components/terraform/infra/vpc-flow-logs-bucket/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket/component.yaml)
   into `components/terraform/infra/vpc-flow-logs-bucket/component.yaml` and then run the Atmos
