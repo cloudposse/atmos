@@ -126,28 +126,43 @@ func ValidateComponent(
 				continue
 			}
 
-			if schemaPath == "" {
-				schemaPath = v.SchemaPath
+			// Command line parameters override the validation config in YAML
+			var finalSchemaPath string
+			var finalSchemaType string
+			var finalModulePaths []string
+			var finalTimeoutSeconds int
+
+			if schemaPath != "" {
+				finalSchemaPath = schemaPath
+			} else {
+				finalSchemaPath = v.SchemaPath
 			}
 
-			if schemaType == "" {
-				schemaType = v.SchemaType
+			if schemaType != "" {
+				finalSchemaType = schemaType
+			} else {
+				finalSchemaType = v.SchemaType
 			}
 
-			if len(modulePaths) == 0 {
-				modulePaths = v.ModulePaths
+			if len(modulePaths) > 0 {
+				finalModulePaths = modulePaths
+			} else {
+				finalModulePaths = v.ModulePaths
 			}
 
-			if timeoutSeconds == 0 {
-				timeoutSeconds = v.Timeout
+			if timeoutSeconds > 0 {
+				finalTimeoutSeconds = timeoutSeconds
+			} else {
+				finalTimeoutSeconds = v.Timeout
 			}
 
-			u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+			u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
+
 			if v.Description != "" {
 				u.LogDebug(cliConfig, v.Description)
 			}
 
-			ok2, err := validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
+			ok2, err := validateComponentInternal(cliConfig, componentSection, finalSchemaPath, finalSchemaType, finalModulePaths, finalTimeoutSeconds)
 			if err != nil {
 				return false, err
 			}

@@ -23,7 +23,7 @@ func TestValidateComponent(t *testing.T) {
 		"tenant1-ue2-dev",
 		"vpc/validate-infra-vpc-component.rego",
 		"opa",
-		[]string{"constants"},
+		[]string{"catalog"},
 		0)
 	u.LogError(err)
 	assert.Error(t, err)
@@ -42,7 +42,7 @@ func TestValidateComponent2(t *testing.T) {
 		"tenant1-ue2-prod",
 		"",
 		"",
-		[]string{"constants"},
+		[]string{"catalog/constants"},
 		0)
 	u.LogError(err)
 	assert.Error(t, err)
@@ -61,7 +61,7 @@ func TestValidateComponent3(t *testing.T) {
 		"tenant1-ue2-staging",
 		"",
 		"",
-		[]string{"constants"},
+		nil,
 		0)
 	u.LogError(err)
 	assert.Error(t, err)

@@ -10,14 +10,15 @@
 # https://www.styra.com/blog/how-to-write-your-first-rules-in-rego-the-policy-language-for-opa
 # https://www.openpolicyagent.org/docs/v0.12.2/how-does-opa-work
 
-# 'atmos' looks for the 'errors' (array of strings) output from all OPA policies
-# If the 'errors' output contains one or more error messages, 'atmos' considers the policy failed
+# Atmos looks for the 'errors' (array of strings) output from all OPA policies
+# If the 'errors' output contains one or more error messages, Atmos considers the policy failed
 
 # 'package atmos' is required in all `atmos` OPA policies
 package atmos
 
 import future.keywords.in
 
+# Import the constants from the file `stacks/schemas/opa/catalog/constants/constants.rego`
 import data.atmos.constants.vpc_dev_max_availability_zones_error_message
 import data.atmos.constants.vpc_prod_map_public_ip_on_launch_error_message
 import data.atmos.constants.vpc_name_regex
