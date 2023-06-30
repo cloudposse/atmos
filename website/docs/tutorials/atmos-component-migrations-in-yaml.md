@@ -212,8 +212,8 @@ This approach is recommended because this will allow the catalog to be imported 
     ⨠ terraform init
     ⨠ terraform workspace list
     default
-  * plat-gbl-sandbox
-    plat-ue2-dev
+    * plat-gbl-sandbox
+      plat-ue2-dev
     ```
 
 1. Select the original component's workspace
