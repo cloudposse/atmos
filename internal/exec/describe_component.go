@@ -3,6 +3,9 @@ package exec
 import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"path"
+
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -75,6 +78,15 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 	// Add Atmos component and stack
 	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
+
+	// Add Atmos CLI config
+	atmosCliConfig := map[string]any{}
+	atmosCliConfig["base_path"] = cliConfig.BasePath
+	atmosCliConfig["components"] = cliConfig.Components
+	atmosCliConfig["stacks"] = cliConfig.Stacks
+	atmosCliConfig["workflows"] = cliConfig.Workflows
+	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
 	if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
@@ -113,6 +125,21 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 	if atlantisProjectName != "" {
 		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
+
+	// Add component info, including Terraform config
+	componentInfo := map[string]any{}
+	componentInfo["component_type"] = configAndStacksInfo.ComponentType
+
+	if configAndStacksInfo.ComponentType == "terraform" {
+		componentPath := path.Join(cliConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+		componentInfo["component_path"] = componentPath
+		module, _ := tfconfig.LoadModule(componentPath)
+		componentInfo["terraform_config"] = module
+	} else if configAndStacksInfo.ComponentType == "helmfile" {
+		componentInfo["component_path"] = path.Join(cliConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+	}
+
+	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
 	return configAndStacksInfo.ComponentSection, nil
 }
