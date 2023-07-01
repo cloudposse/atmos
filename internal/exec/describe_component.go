@@ -3,7 +3,6 @@ package exec
 import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"path"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
@@ -131,13 +130,13 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 	componentInfo["component_type"] = configAndStacksInfo.ComponentType
 
 	if configAndStacksInfo.ComponentType == "terraform" {
-		componentPath := path.Join(cliConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
 		componentInfo["component_path"] = componentPath
 		module, _ := tfconfig.LoadModule(componentPath)
 		configAndStacksInfo.TerraformConfig = module
 		componentInfo["terraform_config"] = module
 	} else if configAndStacksInfo.ComponentType == "helmfile" {
-		componentInfo["component_path"] = path.Join(cliConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
 	}
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
