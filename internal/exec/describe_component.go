@@ -134,6 +134,7 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 		componentPath := path.Join(cliConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		componentInfo["component_path"] = componentPath
 		module, _ := tfconfig.LoadModule(componentPath)
+		configAndStacksInfo.TerraformConfig = module
 		componentInfo["terraform_config"] = module
 	} else if configAndStacksInfo.ComponentType == "helmfile" {
 		componentInfo["component_path"] = path.Join(cliConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
