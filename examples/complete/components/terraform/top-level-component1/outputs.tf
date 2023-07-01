@@ -4,6 +4,6 @@ output "service_1_id" {
 }
 
 output "service_2_id" {
-  value       = module.service_2_label.id
+  value       = module.service_2_label.label.id
   description = "Service 2 ID"
 }
