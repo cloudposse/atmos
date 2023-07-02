@@ -238,8 +238,8 @@ where:
 
     The `label` module is not in the stack config of the `top-level-component1` component (not in the YAML stack config files), but Atmos
     understands Terraform dependencies (using a Terraform parser from HashiCorp), and can automatically detect any changes to the module.
-  
-    For example, if yu make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a 
+
+    For example, if you make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a 
     Terraform dependency of the `top-level-component1` component, Atmos will mark the component as affected with the `affected` attribute
     set to `component.module`:
 
