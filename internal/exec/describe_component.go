@@ -132,9 +132,8 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 	if configAndStacksInfo.ComponentType == "terraform" {
 		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
 		componentInfo["component_path"] = componentPath
-		module, _ := tfconfig.LoadModule(componentPath)
-		configAndStacksInfo.TerraformConfig = module
-		componentInfo["terraform_config"] = module
+		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+		componentInfo["terraform_config"] = terraformConfiguration
 	} else if configAndStacksInfo.ComponentType == "helmfile" {
 		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
 	}

@@ -1,7 +1,5 @@
 package schema
 
-import "github.com/hashicorp/terraform-config-inspect/tfconfig"
-
 // CliConfiguration structure represents schema for `atmos.yaml` CLI config
 type CliConfiguration struct {
 	BasePath                      string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
@@ -125,7 +123,6 @@ type ConfigAndStacksInfo struct {
 	GlobalOptions                 []string
 	BasePath                      string
 	TerraformDir                  string
-	TerraformConfig               *tfconfig.Module
 	HelmfileDir                   string
 	ConfigDir                     string
 	StacksDir                     string

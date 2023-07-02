@@ -13,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
@@ -417,9 +418,40 @@ func findAffected(
 									continue
 								}
 							}
-							// Check if any files in the component's folder have changed
+
+							// Check the Terraform configuration of the component
 							if component, ok := componentSection["component"].(string); ok && component != "" {
-								changed, err := isComponentFolderChanged(component, "terraform", cliConfig, changedFiles)
+								// Check if the component uses some external modules (but on the local filesystem) that have changed
+								changed, err := areTerraformComponentModulesChanged(component, cliConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
+									affected := schema.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "component.module",
+									}
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
+									if err != nil {
+										return nil, err
+									}
+									continue
+								}
+
+								// Check if any files in the component's folder have changed
+								changed, err = isComponentFolderChanged(component, "terraform", cliConfig, changedFiles)
 								if err != nil {
 									return nil, err
 								}
@@ -561,8 +593,9 @@ func findAffected(
 									continue
 								}
 							}
-							// Check if any files in the component's folder have changed
+							// Check the Helmfile configuration of the component
 							if component, ok := componentSection["component"].(string); ok && component != "" {
+								// Check if any files in the component's folder have changed
 								changed, err := isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles)
 								if err != nil {
 									return nil, err
@@ -814,6 +847,50 @@ func isComponentFolderChanged(
 
 		if match {
 			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// areTerraformComponentModulesChanged checks if any of the external Terraform modules (but on the local filesystem) that the component uses have changed
+func areTerraformComponentModulesChanged(
+	component string,
+	cliConfig schema.CliConfiguration,
+	changedFiles []string,
+) (bool, error) {
+
+	componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+	terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+
+	for _, changedFile := range changedFiles {
+		changedFileAbs, err := filepath.Abs(changedFile)
+		if err != nil {
+			return false, err
+		}
+
+		for _, moduleConfig := range terraformConfiguration.ModuleCalls {
+			// We are interested in local modules only, they will have `Version` as an empty string
+			if moduleConfig.Version != "" {
+				continue
+			}
+
+			modulePath := path.Join(moduleConfig.Pos.Filename, moduleConfig.Source) + "/**"
+
+			modulePathAbs, err := filepath.Abs(modulePath)
+			if err != nil {
+				return false, err
+			}
+
+			modulePathPattern := modulePathAbs + "/**"
+
+			match, err := u.PathMatch(modulePathPattern, changedFileAbs)
+			if err != nil {
+				return false, err
+			}
+
+			if match {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
