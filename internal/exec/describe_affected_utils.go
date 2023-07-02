@@ -849,6 +849,7 @@ func isComponentFolderChanged(
 			return true, nil
 		}
 	}
+
 	return false, nil
 }
 
@@ -860,7 +861,13 @@ func areTerraformComponentModulesChanged(
 ) (bool, error) {
 
 	componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
-	terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+
+	componentPathAbs, err := filepath.Abs(componentPath)
+	if err != nil {
+		return false, err
+	}
+
+	terraformConfiguration, _ := tfconfig.LoadModule(componentPathAbs)
 
 	for _, changedFile := range changedFiles {
 		changedFileAbs, err := filepath.Abs(changedFile)
@@ -893,6 +900,7 @@ func areTerraformComponentModulesChanged(
 			}
 		}
 	}
+
 	return false, nil
 }
 
