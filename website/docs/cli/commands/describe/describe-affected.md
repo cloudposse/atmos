@@ -212,7 +212,6 @@ where:
       module "label" {
         source  = "cloudposse/label/null"
         version = "0.25.0"
-
         context = module.this.context
       }
 
@@ -226,8 +225,7 @@ where:
 
       ```hcl title="components/terraform/top-level-component1"
       module "service_2_label" {
-        source = "../../../modules/label"
-
+        source  = "../../../modules/label"
         context = module.this.context
       }
 
@@ -236,6 +234,39 @@ where:
         description = "Service 2 ID"
       }
     ```
+
+    The `label` module is not in the stack config of the `top-level-component1` component (not in the YAML stack config files), but Atmos
+    understands Terraform dependencies (using a Terraform parser from HashiCorp), and can automatically detect any changes to the module.
+  
+    For example, if yu make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a 
+    Terraform dependency of the `top-level-component1` component, Atmos will mark the component as affected with the `affected` attribute
+    set to `component.module`:
+
+    ```json
+      [
+        {
+          "component": "top-level-component1",
+          "component_type": "terraform",
+          "component_path": "examples/complete/components/terraform/top-level-component1",
+          "stack": "tenant1-ue2-staging",
+          "stack_slug": "tenant1-ue2-staging-top-level-component1",
+          "spacelift_stack": "tenant1-ue2-staging-top-level-component1",
+          "atlantis_project": "tenant1-ue2-staging-top-level-component1",
+          "affected": "component.module"
+        },
+        {
+          "component": "top-level-component1",
+          "component_type": "terraform",
+          "component_path": "examples/complete/components/terraform/top-level-component1",
+          "stack": "tenant2-ue2-staging",
+          "stack_slug": "tenant2-ue2-staging-top-level-component1",
+          "spacelift_stack": "tenant2-ue2-staging-top-level-component1",
+          "atlantis_project": "tenant2-ue2-staging-top-level-component1",
+          "affected": "component.module"
+        }
+      ]
+    ```
+    <br/>
 
   - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack.
     This will be included only if all the following is true:
