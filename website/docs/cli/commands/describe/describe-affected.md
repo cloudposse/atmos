@@ -203,6 +203,9 @@ where:
 
   - `component` - the Terraform or Helmfile component that the Atmos component provisions has been changed
 
+  - `component.module` - the Terraform component is affected because it uses a local Terraform module (not from the Terraform registry) 
+     that has been changed
+
   - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack. 
      This will be included only if all the following is true:
 
