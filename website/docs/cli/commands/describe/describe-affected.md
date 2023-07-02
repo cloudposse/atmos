@@ -203,11 +203,42 @@ where:
 
   - `component` - the Terraform or Helmfile component that the Atmos component provisions has been changed
 
-  - `component.module` - the Terraform component is affected because it uses a local Terraform module (not from the Terraform registry) 
-     that has been changed
+  - `component.module` - the Terraform component is affected because it uses a local Terraform module (not from the Terraform registry, but from the
+    local filesystem), and that local module has been changed.
+    For example, let's suppose that we have a catalog of reusable Terraform modules in the `modules` folder (outside the `components` folder), and 
+    we have defined the following `label` Terraform module in `modules/label`:
 
-  - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack. 
-     This will be included only if all the following is true:
+      ```hcl title="modules/label"
+      module "label" {
+        source  = "cloudposse/label/null"
+        version = "0.25.0"
+
+        context = module.this.context
+      }
+
+      output "label" {
+        value       = module.label
+        description = "Label outputs"
+      }
+    ```
+
+    We then use the Terraform module in the `components/terraform/top-level-component1` component:
+
+      ```hcl title="components/terraform/top-level-component1"
+      module "service_2_label" {
+        source = "../../../modules/label"
+
+        context = module.this.context
+      }
+
+      output "service_2_id" {
+        value       = module.service_2_label.label.id
+        description = "Service 2 ID"
+      }
+    ```
+
+  - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack.
+    This will be included only if all the following is true:
 
     - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
 
