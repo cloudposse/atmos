@@ -62,12 +62,15 @@ The command outputs the final deep-merged component configuration in YAML format
 The output contains the following sections:
 
 - `atlantis_project` - Atlantis project name (if [Atlantis Integration](/integrations/atlantis) is configured for the component in the stack)
+- `atmos_cli_config` - information about Atmos CLI configuration from `atmos.yaml`
 - `atmos_component` - [Atmos component](/core-concepts/components) name
 - `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
+- `atmos_stack_file` - the stack config file name where the Atmos stack is defined
 - `backend` - Terraform backend configuration
 - `backend_type` - Terraform backend type
 - `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `helmfile`)
 - `component` - the Terraform component for which the Atmos component provides configuration
+- `component_info` - a block describing the Terraform or Helmfile components that the Atmos component manages
 - `deps` - a list of stack dependencies (stack config files where the component settings are defined, either inline or via imports)
 - `env` - a list of ENV variables defined for the Atmos component
 - `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
@@ -92,8 +95,33 @@ atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
 
 ```yaml
 atlantis_project: tenant1-ue2-dev-test-test-component-override-3
+atmos_cli_config:
+  base_path: ./examples/complete
+  components:
+    terraform:
+      base_path: components/terraform
+      apply_auto_approve: false
+      deploy_run_init: true
+      init_run_reconfigure: true
+      auto_generate_backend_file: false
+    helmfile:
+      base_path: components/helmfile
+      use_eks: true
+      kubeconfig_path: /dev/shm
+      helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
+      cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+  stacks:
+    base_path: stacks
+    included_paths:
+      - orgs/**/*
+    excluded_paths:
+      - '**/_defaults.yaml'
+    name_pattern: '{tenant}-{environment}-{stage}'
+  workflows:
+    base_path: stacks/workflows
 atmos_component: test/test-component-override-3
 atmos_stack: tenant1-ue2-dev
+atmos_stack_file: orgs/cp/tenant1/dev/us-east-2
 backend:
   bucket: cp-ue2-root-tfstate
   dynamodb_table: cp-ue2-root-tfstate-lock
@@ -103,6 +131,139 @@ backend:
 backend_type: s3
 command: terraform
 component: test/test-component
+component_info:
+  component_path: examples/complete/components/terraform/test/test-component
+  component_type: terraform
+  terraform_config:
+    path: examples/complete/components/terraform/test/test-component
+    variables:
+      enabled:
+        name: enabled
+        type: bool
+        description: Set to false to prevent the module from creating any resources
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/context.tf
+          line: 97
+      environment:
+        name: environment
+        type: string
+        description: ID element. Usually used for region e.g. 'uw2', 'us-west-2',
+          OR role 'prod', 'staging', 'dev', 'UAT'
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/context.tf
+          line: 115
+      name:
+        name: name
+        type: string
+        description: |
+          ID element. Usually the component or solution name, e.g. 'app' or 'jenkins'.
+          This is the only ID element not also included as a `tag`.
+          The "name" tag is set to the full `id` string. There is no tag with the value of the `name` input.
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/context.tf
+          line: 127
+      namespace:
+        name: namespace
+        type: string
+        description: ID element. Usually an abbreviation of your organization name,
+          e.g. 'eg' or 'cp', to help ensure generated IDs are globally unique
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/context.tf
+          line: 103
+      region:
+        name: region
+        type: string
+        description: Region
+        default: null
+        required: true
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/variables.tf
+          line: 1
+      service_1_name:
+        name: service_1_name
+        type: string
+        description: Service 1 name
+        default: null
+        required: true
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/variables.tf
+          line: 6
+      stage:
+        name: stage
+        type: string
+        description: ID element. Usually used to indicate role, e.g. 'prod', 'staging',
+          'source', 'build', 'test', 'deploy', 'release'
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/context.tf
+          line: 121
+      tenant:
+        name: tenant
+        type: string
+        description: ID element _(Rarely used, not included by default)_. A customer
+          identifier, indicating who this instance of a resource is for
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/context.tf
+          line: 109
+    outputs:
+      service_1_id:
+        name: service_1_id
+        description: Service 1 ID
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/outputs.tf
+          line: 1
+      service_2_id:
+        name: service_2_id
+        description: Service 2 ID
+        sensitive: false
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/outputs.tf
+          line: 6
+    requiredcore:
+      - '>= 1.0.0'
+    modulecalls:
+      service_1_label:
+        name: service_1_label
+        source: cloudposse/label/null
+        version: 0.25.0
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/main.tf
+          line: 1
+      service_2_label:
+        name: service_2_label
+        source: cloudposse/label/null
+        version: 0.25.0
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/main.tf
+          line: 10
+      this:
+        name: this
+        source: cloudposse/label/null
+        version: 0.25.0
+        pos:
+          filename: examples/complete/components/terraform/test/test-component/context.tf
+          line: 23
+    diagnostics: []
 deps:
   - catalog/terraform/mixins/test-1
   - catalog/terraform/mixins/test-2
