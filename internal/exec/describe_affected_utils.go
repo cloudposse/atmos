@@ -876,12 +876,12 @@ func areTerraformComponentModulesChanged(
 		}
 
 		for _, moduleConfig := range terraformConfiguration.ModuleCalls {
-			// We are interested in local modules only, they will have `Version` as an empty string
+			// We are processing the local modules only (not from terraform registry), they will have `Version` as an empty string
 			if moduleConfig.Version != "" {
 				continue
 			}
 
-			modulePath := path.Join(moduleConfig.Pos.Filename, moduleConfig.Source) + "/**"
+			modulePath := path.Join(path.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
 
 			modulePathAbs, err := filepath.Abs(modulePath)
 			if err != nil {
