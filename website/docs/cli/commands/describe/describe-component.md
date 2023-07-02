@@ -62,27 +62,56 @@ The command outputs the final deep-merged component configuration in YAML format
 The output contains the following sections:
 
 - `atlantis_project` - Atlantis project name (if [Atlantis Integration](/integrations/atlantis) is configured for the component in the stack)
+
 - `atmos_cli_config` - information about Atmos CLI configuration from `atmos.yaml`
+
 - `atmos_component` - [Atmos component](/core-concepts/components) name
+
 - `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
+
 - `atmos_stack_file` - the stack config file name where the Atmos stack is defined
+
 - `backend` - Terraform backend configuration
+
 - `backend_type` - Terraform backend type
+
 - `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `helmfile`)
+
 - `component` - the Terraform component for which the Atmos component provides configuration
-- `component_info` - a block describing the Terraform or Helmfile components that the Atmos component manages
+
+- `component_info` - a block describing the Terraform or Helmfile components that the Atmos component manages. The `component_info` block has the
+  following sections:
+  - `component_path` - the filesystem path to the Terraform or Helmfile component
+
+  - `component_type` - the type of the component (`terraform` or `helmfile`)
+
+  - `terraform_config` - if the component type is `terraform`, this sections describes the high-level metadata about the Terraform component from its
+    source code, including variables, outputs and child Terraform modules (using a Terraform parser from HashiCorp). The file names and line numbers
+    where the variables, outputs and child modules are defined are also included. Invalid Terraform configurations are also detected, and in case of
+    any issues, the warnings and errors are shows in the `terraform_config.diagnostics` section
+
 - `deps` - a list of stack dependencies (stack config files where the component settings are defined, either inline or via imports)
+
 - `env` - a list of ENV variables defined for the Atmos component
+
 - `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
+
 - `metadata` - component's metadata config
+
 - `remote_state_backend` - Terraform backend config for remote state
+
 - `remote_state_backend_type` - Terraform backend type for remote state
+
 - `settings` - component settings (free-form map)
+
 - `sources` - sources of the values from the component's sections (`vars`, `env`, `settings`)
-- `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/integrations/spacelift) is configured for the component in the stack 
-   and `settings.spacelift.workspace_enabled` is set to `true`)
+
+- `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/integrations/spacelift) is configured for the component in the stack
+  and `settings.spacelift.workspace_enabled` is set to `true`)
+
 - `vars` - the final deep-merged component variables that are provided to Terraform and Helmfile when executing `atmos terraform`
   and `atmos helmfile` commands
+
 - `workspace` - Terraform workspace for the Atmos component
 
 <br/>

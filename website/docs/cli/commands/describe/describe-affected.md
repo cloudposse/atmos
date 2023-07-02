@@ -205,7 +205,8 @@ where:
 
   - `component.module` - the Terraform component is affected because it uses a local Terraform module (not from the Terraform registry, but from the
     local filesystem), and that local module has been changed.
-    For example, let's suppose that we have a catalog of reusable Terraform modules in the `modules` folder (outside the `components` folder), and 
+
+    For example, let's suppose that we have a catalog of reusable Terraform modules in the `modules` folder (outside the `components` folder), and
     we have defined the following `label` Terraform module in `modules/label`:
 
       ```hcl title="modules/label"
