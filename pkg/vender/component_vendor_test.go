@@ -45,6 +45,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Check if the correct files were pulled and written to the correct folder
 	assert.FileExists(t, path.Join(componentPath, "context.tf"))
+	assert.FileExists(t, path.Join(componentPath, "dynamic-roles.tf"))
 	assert.FileExists(t, path.Join(componentPath, "main.tf"))
 	assert.FileExists(t, path.Join(componentPath, "outputs.tf"))
 	assert.FileExists(t, path.Join(componentPath, "providers.tf"))
@@ -63,6 +64,8 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Delete the files and folders
 	err = os.Remove(path.Join(componentPath, "context.tf"))
+	assert.Nil(t, err)
+	err = os.Remove(path.Join(componentPath, "dynamic-roles.tf"))
 	assert.Nil(t, err)
 	err = os.Remove(path.Join(componentPath, "main.tf"))
 	assert.Nil(t, err)
