@@ -16,12 +16,10 @@ This action is intended to be used with [Atmos Terraform Plan](/integrations/git
 name: "atmos-terraform-apply"
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
   pull_request:
     types:
-      - opened
-      - synchronize
-      - reopened
+      - closed
     branches:
       - main
 
