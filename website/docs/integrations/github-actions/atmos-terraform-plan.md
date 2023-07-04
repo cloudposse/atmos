@@ -46,4 +46,4 @@ jobs:
           terraform-state-table: "acme-core-ue2-auto-gitops"
           aws-region: "us-east-2"
 
-`
+```
