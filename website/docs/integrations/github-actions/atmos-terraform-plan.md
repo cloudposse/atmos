@@ -4,7 +4,7 @@ sidebar_position: 40
 sidebar_label: Terraform Plan
 ---
 
-The Cloud Posse GitHub Action "Atmos Terraform Plan" runs Terraform entirely from GitHub Action workflows.
+The Cloud Posse GitHub Action for "Atmos Terraform Plan" runs Terraform entirely from GitHub Action workflows.
 
 Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) will run `atmos terraform plan`, generate a Terraform planfile, store this planfile in a S3 Bucket with metadata in DynamodDB, and finally format the Terraform Plan result as part of a GitHub Workflow Summary.
 
