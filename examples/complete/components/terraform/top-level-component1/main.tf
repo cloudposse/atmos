@@ -8,8 +8,7 @@ module "service_1_label" {
 }
 
 module "service_2_label" {
-  source  = "cloudposse/label/null"
-  version = "0.25.0"
+  source = "../../../modules/label"
 
   name = var.service_2_name
 

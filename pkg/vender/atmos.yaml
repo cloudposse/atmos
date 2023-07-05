@@ -186,6 +186,79 @@ commands:
           - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
           - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
 
+  - name: list
+    description: Execute 'atmos list' commands
+    # subcommands
+    commands:
+      - name: stacks
+        description: |
+          List all Atmos stacks.
+        steps:
+          - >
+            atmos describe stacks --sections none | grep -e "^\S" | sed s/://g
+      - name: components
+        description: |
+          List all Atmos components in all stacks or in a single stack.
+
+          Example usage:
+            atmos list components
+            atmos list components -s tenant1-ue1-dev
+            atmos list components --stack tenant2-uw2-prod
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: false
+        steps:
+          - >
+            {{ if .Flags.stack }}
+            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+            {{ else }}
+            atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+            {{ end }}
+
+  - name: set-eks-cluster
+    description: |
+      Download 'kubeconfig' and set EKS cluster.
+
+      Example usage:
+        atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
+        atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
+    verbose: false  # Set to `true` to see verbose outputs
+    arguments:
+      - name: component
+        description: Name of the component
+    flags:
+      - name: stack
+        shorthand: s
+        description: Name of the stack
+        required: true
+      - name: role
+        shorthand: r
+        description: IAM role to use
+        required: true
+    # If a custom command defines 'component_config' section with 'component' and 'stack',
+    # Atmos generates the config for the component in the stack
+    # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
+    # exposing all the component sections (which are also shown by 'atmos describe component' command)
+    component_config:
+      component: "{{ .Arguments.component }}"
+      stack: "{{ .Flags.stack }}"
+    env:
+      - key: KUBECONFIG
+        value: /dev/shm/kubecfg.{{ .Flags.stack }}-{{ .Flags.role }}
+    steps:
+      - >
+        aws
+        --profile {{ .ComponentConfig.vars.namespace }}-{{ .ComponentConfig.vars.tenant }}-gbl-{{ .ComponentConfig.vars.stage }}-{{ .Flags.role }}
+        --region {{ .ComponentConfig.vars.region }}
+        eks update-kubeconfig
+        --name={{ .ComponentConfig.vars.namespace }}-{{ .Flags.stack }}-eks-cluster
+        --kubeconfig="${KUBECONFIG}"
+        > /dev/null
+      - chmod 600 ${KUBECONFIG}
+      - echo ${KUBECONFIG}
+
 # Integrations
 integrations:
 
