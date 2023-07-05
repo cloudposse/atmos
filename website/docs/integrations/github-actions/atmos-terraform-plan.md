@@ -47,3 +47,141 @@ jobs:
           aws-region: "us-east-2"
 
 ```
+
+### Requirements
+
+This GitHub Action expects an S3 bucket, DynamoDB table, and two access roles. 
+
+#### S3 Bucket
+
+Any basic S3 Bucket can be connected to this action. For example, using Atmos stack configuration, define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
+
+<details>
+<summary>Example S3 Bucket Catalog</summary>
+```yaml
+import:
+  - catalog/s3-bucket/defaults
+
+components:
+  terraform:
+    # S3 Bucket for storing Terraform Plans
+    gitops/s3-bucket:
+      metadata:
+        component: s3-bucket
+        inherits:
+          - s3-bucket/defaults
+      vars:
+        name: gitops-plan-storage
+        allow_encrypted_uploads_only: false
+```
+</details>
+
+
+Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
+
+#### DynamoDB Table
+
+Similiarly, a basic DynamoDB table can be created with our [`dynamodb` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/dynamodb). Set the following Hash Key and Range Key as follows:
+
+<details>
+<summary>Example DynamoDB Catalog</summary>
+```yaml
+import:
+  - catalog/dynamodb/defaults
+
+components:
+  terraform:
+    # DynamoDB table used to store metadata for Terraform Plans
+    gitops/dynamodb:
+      metadata:
+        component: dynamodb
+        inherits:
+          - dynamodb/defaults
+      vars:
+        name: gitops-plan-storage
+        # These keys (case-sensitive) are required for the cloudposse/github-action-terraform-plan-storage action
+        hash_key: id
+        range_key: createdAt
+```
+</details>
+
+
+Assign this table ARN to the `terraform-plan-table` input.
+
+#### IAM Access Roles
+
+First create an access role for storing and retrieving planfiles from the S3 Bucket and DynamoDB table. This snippet of code partially demostrates how this could be done with Terraform.
+
+Assign this role ARN to the `terraform-state-role` input.
+
+<details>
+<summary>Example Terraform Snippet</summary>
+```hcl
+data "aws_iam_policy_document" "github_actions_iam_policy" {
+  # Allow access to the Dynamodb table used to store TF Plans
+  # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_examples_dynamodb_specific-table.html
+  statement {
+    sid    = "AllowDynamodbAccess"
+    effect = "Allow"
+    actions = [
+      "dynamodb:List*",
+      "dynamodb:DescribeReservedCapacity*",
+      "dynamodb:DescribeLimits",
+      "dynamodb:DescribeTimeToLive"
+    ]
+    resources = [
+      "*"
+    ]
+  }
+  statement {
+    sid    = "AllowDynamodbTableAccess"
+    effect = "Allow"
+    actions = [
+      "dynamodb:BatchGet*",
+      "dynamodb:DescribeStream",
+      "dynamodb:DescribeTable",
+      "dynamodb:Get*",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:BatchWrite*",
+      "dynamodb:CreateTable",
+      "dynamodb:Delete*",
+      "dynamodb:Update*",
+      "dynamodb:PutItem"
+    ]
+    resources = [
+      local.dynamodb_table_arn,
+    ]
+  }
+
+  # Allow access to the S3 Bucket used to store TF Plans
+  # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_examples_s3_rw-bucket.html
+  statement {
+    sid    = "AllowS3Actions"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket"
+    ]
+    resources = [
+      local.s3_bucket_arn,
+    ]
+  }
+  statement {
+    sid    = "AllowS3ObjectActions"
+    effect = "Allow"
+    actions = [
+      "s3:*Object"
+    ]
+    resources = [
+      "${local.s3_bucket_arn}/*"
+    ]
+  }
+}
+
+```
+</details>
+
+
+Next, create a role for GitHub workflows to use to plan and apply Terraform. We typically create an "AWS Team" with our [`aws-teams` component](https://docs.cloudposse.com/components/library/aws/aws-teams/), and then allow this team to assume `terraform` in the delegated accounts with our [`aws-team-roles` component](https://docs.cloudposse.com/components/library/aws/aws-teams/).
+
+Assign this role ARN to the `terraform-plan-role` input
