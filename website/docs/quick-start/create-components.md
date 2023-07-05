@@ -92,7 +92,7 @@ module "vpc_flow_logs_bucket" {
   count = var.vpc_flow_logs_enabled ? 1 : 0
 
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
-  version = "1.3.1"
+  version = "1.4.3"
 
   # Specify the Atmos component name (defined in YAML stack config files) 
   # for which to get the remote state outputs

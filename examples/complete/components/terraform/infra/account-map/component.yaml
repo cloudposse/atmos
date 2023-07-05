@@ -12,7 +12,7 @@ spec:
     # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
     uri: github.com/cloudposse/terraform-aws-components.git//modules/account-map?ref={{.Version}}
-    version: 1.91.0
+    version: 1.240.0
     # Only include the files that match the 'included_paths' patterns
     # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
     # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
