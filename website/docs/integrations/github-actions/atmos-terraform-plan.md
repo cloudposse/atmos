@@ -56,7 +56,7 @@ This GitHub Action expects an S3 bucket, DynamoDB table, and two access roles.
 
 This action can use any S3 Bucket to keep track of your planfiles. Just ensure the bucket is properly locked down since planfiles may contain secrets.
 
-For example, [vendor in](/core-concepts/components/vendoring) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using [Atmos stack configuration](/core-concepts/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
+For example, [vendor in](/core-concepts/components/vendoring) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/core-concepts/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
 
 ```yaml
 import:
@@ -80,7 +80,7 @@ Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
 
 #### DynamoDB Table
 
-Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/dynamodb). Set the **Hash Key** and **Range Key** as follows:
+Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://docs.cloudposse.com/components/library/aws/dynamodb/). Set the **Hash Key** and **Range Key** as follows:
 
 ```yaml
 import:
