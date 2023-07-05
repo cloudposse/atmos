@@ -80,7 +80,7 @@ Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
 
 #### DynamoDB Table
 
-Similiarly, a basic DynamoDB table can be created with our [`dynamodb` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/dynamodb). Set the Hash Key and Range Key as follows:
+Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/dynamodb). Set the **Hash Key** and **Range Key** as follows:
 
 ```yaml
 import:
@@ -102,7 +102,7 @@ components:
 ```
 
 
-Assign this table ARN to the `terraform-plan-table` input.
+Pass the ARN of this table as the input to the `terraform-plan-table` of the `cloudposse/github-action-atmos-terraform-plan` GitHub Action.
 
 #### IAM Access Roles
 
