@@ -1,12 +1,12 @@
 ---
 title: Atmos Terraform Apply
-sidebar_position: 10
+sidebar_position: 50
 sidebar_label: Terraform Apply
 ---
 
 The Cloud Posse GitHub Action "Atmos Terraform Apply" runs Terraform entirely from GitHub Action workflows.
 
-Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply) will retrive an existing Terraform planfile from a given S3 bucket using metadata in a DynamoDB table, run `atmos terraform apply` with that planfile, and format the Terraform Apply result as part of a GitHub Workflow Summary.
+Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply) will retrieve an existing Terraform planfile from a given S3 bucket using metadata in a DynamoDB table, run `atmos terraform apply` with that planfile, and format the Terraform Apply result as part of a GitHub Workflow Summary.
 
 This action is intended to be used with [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan)
 
