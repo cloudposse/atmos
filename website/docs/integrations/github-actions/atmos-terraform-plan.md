@@ -6,7 +6,7 @@ sidebar_label: Terraform Plan
 
 The Cloud Posse GitHub Action for "Atmos Terraform Plan" runs Terraform entirely from GitHub Action workflows.
 
-Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) will run `atmos terraform plan`, generate a Terraform planfile, store this planfile in a S3 Bucket with metadata in DynamodDB, and finally format the Terraform Plan result as part of a GitHub Workflow Summary.
+Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) will run `atmos terraform plan`, generate a Terraform [planfile](https://developer.hashicorp.com/terraform/tutorials/automation/automate-terraform), store this planfile in an S3 Bucket with metadata in DynamodDB, and finally format the Terraform Plan result as part of a [GitHub Workflow Job Summary](https://github.blog/2022-05-09-supercharging-github-actions-with-job-summaries/).
 
 This action is intended to be used with [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply)
 
@@ -54,7 +54,9 @@ This GitHub Action expects an S3 bucket, DynamoDB table, and two access roles.
 
 #### S3 Bucket
 
-Any basic S3 Bucket can be connected to this action. For example, using Atmos stack configuration, define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
+This action can use any S3 Bucket to keep track of your planfiles. Just ensure the bucket is properly locked down since planfiles may contain secrets.
+
+For example, [vendor in](/core-concepts/components/vendoring) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using [Atmos stack configuration](/core-concepts/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
 
 ```yaml
 import:
