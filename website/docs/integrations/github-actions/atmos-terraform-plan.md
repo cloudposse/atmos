@@ -116,7 +116,7 @@ Assign this role ARN to the `terraform-state-role` input.
 
 <details>
 <summary>Example Terraform Snippet</summary>
-```
+```hcl
 data "aws_iam_policy_document" "github_actions_iam_policy" {
   # Allow access to the Dynamodb table used to store TF Plans
   # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_examples_dynamodb_specific-table.html
