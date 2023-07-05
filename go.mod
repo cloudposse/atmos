@@ -21,7 +21,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.0
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.16.0
-	github.com/stretchr/testify v1.8.3
+	github.com/stretchr/testify v1.8.4
 	github.com/zclconf/go-cty v1.13.2
 	gopkg.in/yaml.v2 v2.4.0
 	mvdan.cc/sh/v3 v3.7.0
