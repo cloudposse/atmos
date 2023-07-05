@@ -106,4 +106,4 @@ Assign this table ARN to the `terraform-plan-table` input.
 
 First create an access role for storing and retrieving planfiles from the S3 Bucket and DynamoDB table. Assign this role ARN to the `terraform-state-role` input.
 
-Next, create a role for GitHub workflows to use to plan and apply Terraform. We typically create an "AWS Team" with our [`aws-teams` component](https://docs.cloudposse.com/components/library/aws/aws-teams/), and then allow this team to assume `terraform` in the delegated accounts with our [`aws-team-roles` component](https://docs.cloudposse.com/components/library/aws/aws-teams/). Assign this role ARN to the `terraform-plan-role` input
+Next, create a role for GitHub workflows to use to plan and apply Terraform. We typically create an "AWS Team" with our [`aws-teams` component](https://docs.cloudposse.com/components/library/aws/aws-teams/), and then allow this team to assume `terraform` in the delegated accounts with our [`aws-team-roles` component](https://docs.cloudposse.com/components/library/aws/aws-team-roles/). Assign this role ARN to the `terraform-plan-role` input
