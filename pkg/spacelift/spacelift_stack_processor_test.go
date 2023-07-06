@@ -96,18 +96,18 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 }
 
 func TestLegacySpaceliftStackProcessor(t *testing.T) {
-	stacksBasePath := "../../examples/complete/stacks"
-	terraformComponentsBasePath := "../../examples/complete/components/terraform"
-	helmfileComponentsBasePath := "../../examples/complete/components/helmfile"
+	stacksBasePath := "../../examples/test/stacks"
+	terraformComponentsBasePath := "../../examples/test/components/terraform"
+	helmfileComponentsBasePath := "../../examples/test/components/helmfile"
 
 	filePaths := []string{
-		"../../examples/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
-		"../../examples/complete/stacks/orgs/cp/tenant1/prod/us-east-2.yaml",
-		"../../examples/complete/stacks/orgs/cp/tenant1/staging/us-east-2.yaml",
-		"../../examples/complete/stacks/orgs/cp/tenant1/test1/us-east-2.yaml",
-		"../../examples/complete/stacks/orgs/cp/tenant2/dev/us-east-2.yaml",
-		"../../examples/complete/stacks/orgs/cp/tenant2/prod/us-east-2.yaml",
-		"../../examples/complete/stacks/orgs/cp/tenant2/staging/us-east-2.yaml",
+		"../../examples/test/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
+		"../../examples/test/stacks/orgs/cp/tenant1/prod/us-east-2.yaml",
+		"../../examples/test/stacks/orgs/cp/tenant1/staging/us-east-2.yaml",
+		"../../examples/test/stacks/orgs/cp/tenant1/test1/us-east-2.yaml",
+		"../../examples/test/stacks/orgs/cp/tenant2/dev/us-east-2.yaml",
+		"../../examples/test/stacks/orgs/cp/tenant2/prod/us-east-2.yaml",
+		"../../examples/test/stacks/orgs/cp/tenant2/staging/us-east-2.yaml",
 	}
 
 	processStackDeps := true
