@@ -10,6 +10,10 @@ Given any component and stack in an Atmos supported infrastructure environment, 
 
 This action is intended to be used with [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply)
 
+![Example Image](/img/github-actions/tf_plan.png)
+
+![Example Image Expanded](/img/github-actions/tf_plan_expanded.png)
+
 ## Usage Example
 
 ```yaml
