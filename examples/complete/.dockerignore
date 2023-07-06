@@ -1,0 +1,44 @@
+# Things that could be checked into Git but need not be in the Docker image
+.git
+.editorconfig
+
+# Below here should be pretty much a copy of .gitignore
+.build-harness
+build-harness/
+aws-assumed-role/
+.idea/
+*.iml
+
+# Compiled and auto-generated files
+**/nohup.out
+**/*.tfstate
+**/*.tfstate.*
+**/planfile
+**/*.planfile
+**/*.kubeconfig
+**/terraform.tfvars.json
+**/terraform.auto.tfvars.json
+**/*.terraform.tfvars.json
+**/*.terraform.auto.tfvars.json
+**/*.helmfile.vars.yaml
+**/vendir.lock.yml
+
+# Module directory
+**/.terraform/
+**/.module/
+**/.helmfile/
+
+
+# Draft or auto-saved version
+# Note that the leading "**/" appears necessary for Docker even if not for Git
+**/*.draft.*
+**/*.draft
+**/*.orig
+**/*.bak
+**/*~
+
+# macOS special files and folders
+**/.DS_Store
+**/.CFUserTextEncoding
+**/.Trash/
+**/$RECYCLE.BIN/
