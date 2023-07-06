@@ -1,4 +1,7 @@
-# atmos examples
+# Atmos configuration for testing
+
+__NOTE:__ This folder is used to test different Atmos functionality (e.g. components and stacks config) and to run all Atmos tests.
+It's not intended to be provisioned. For a complete working example, see [examples/complete](../complete).
 
 The [`atmos`](https://github.com/cloudposse/atmos) CLI is a universal tool for DevOps and cloud automation. It allows
 deploying and destroying Terraform and helmfile components, as well as running workflows to bootstrap or teardown all
