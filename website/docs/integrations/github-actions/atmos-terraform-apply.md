@@ -20,9 +20,6 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 * **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments
 * **100% Open Source with Permissive APACHE2 License** means you have no expensive subscriptions or long-term commitments.
 
-
-
-
 ![Example Image](/img/github-actions/tf_apply.png)
 
 ## Usage Example

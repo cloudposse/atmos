@@ -10,6 +10,16 @@ Given any component and stack in an Atmos supported infrastructure environment, 
 
 This action is intended to be used with [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply)
 
+## Features
+
+This GitHub Action incorporates superior GitOps support for Terraform by utilizing the capabilities of Atmos, enabling efficient management of large enterprise-scale environments.
+
+* **Implements Native GitOps** with Atmos and Terraform
+* **No hardcoded credentials.** Use GitHub OIDC to assume roles.
+* **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility. 
+* **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments
+* **100% Open Source with Permissive APACHE2 License** means you have no expensive subscriptions or long-term commitments.
+
 ![Example Image](/img/github-actions/tf_plan.png)
 
 ![Example Image Expanded](/img/github-actions/tf_plan_expanded.png)
