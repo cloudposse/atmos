@@ -4,11 +4,11 @@ sidebar_position: 40
 sidebar_label: Terraform Plan
 ---
 
-The Cloud Posse GitHub Action for "Atmos Terraform Plan" runs Terraform entirely from GitHub Action workflows.
+The Cloud Posse GitHub Action for "Atmos Terraform Plan" simplifies provisioning Terraform from within GitHub using workflows. Understand precisely what to expect from running a `terraform plan` from directly within the GitHub UI for any Pull Request.
 
 Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) will run `atmos terraform plan`, generate a Terraform [planfile](https://developer.hashicorp.com/terraform/tutorials/automation/automate-terraform), store this planfile in an S3 Bucket with metadata in DynamodDB, and finally format the Terraform Plan result as part of a [GitHub Workflow Job Summary](https://github.blog/2022-05-09-supercharging-github-actions-with-job-summaries/).
 
-This action is intended to be used with [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply)
+This action is intended to be used together with [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply) and [Atmos Affected Stacks](/integrations/github-actions/affected-stacks).
 
 ## Features
 
@@ -20,12 +20,19 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 * **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments
 * **100% Open Source with Permissive APACHE2 License** means you have no expensive subscriptions or long-term commitments.
 
+
+## Screenshots
+
+The following screenshot showcases a successful "plan" Job Summary report. The report effectively utilizes badges to clearly indicate success or failure. Furthermore, it specifically highlights any potentially destructive operations, mitigating the risk of unintentional destructive actions. A `diff`-style format is employed to illustrate the creation, recreation, destruction, or modification of resources. Unnecessary details are neatly hidden behind a collapsible `<details/>` block, ensuring a streamlined view. Additionally, developers are provided with a direct link to access the job run, eliminating the need for manual searching to gather information about any potential issues.
+
 ![Example Image](/img/github-actions/tf_plan.png)
+
+By expanding the "Terraform Plan Summary" block (clicking on the `<details/>` block), the full details of the plan are visible.
 
 ![Example Image Expanded](/img/github-actions/tf_plan_expanded.png)
 
 ## Usage Example
-
+In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "plan" job, the "component" and "stack" are hardcoded. In practice, these are usually derived from another action. 
 ```yaml
 name: "atmos-terraform-plan"
 
@@ -62,9 +69,13 @@ jobs:
 
 ```
 
+Please note that in practice, we recommend combining this action with the [`affected-stacks`](/integrations/github-actions/affected-stacks) GitHub Action inside a matrix to plan all affected stacks in parallel.
 ### Requirements
 
-This GitHub Action expects an S3 bucket, DynamoDB table, and two access roles. 
+This GitHub Action depends on a few resources:
+* **S3 bucket** for storing planfiles
+* **DynamoDB table** for retrieving metadata about planfiles
+* **2x IAM roles** for "planning" and accessing the "state" bucket
 
 #### S3 Bucket
 
@@ -115,8 +126,7 @@ components:
         range_key: createdAt
 ```
 
-
-Pass the ARN of this table as the input to the `terraform-plan-table` of the `cloudposse/github-action-atmos-terraform-plan` GitHub Action.
+Pass the ARN of this table as the input to the `terraform-plan-table` of the [`cloudposse/github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) GitHub Action.
 
 #### IAM Access Roles
 
