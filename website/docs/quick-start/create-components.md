@@ -16,22 +16,22 @@ Next step is to create the Terraform components `vpc-flow-logs-bucket` and `vpc`
 There are a few ways to create the Terraform components:
 
 - Copy the `vpc-flow-logs-bucket` component from the Atmos
-  example [components/terraform/infra/vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
+  example [components/terraform/infra/vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/vpc-flow-logs-bucket)
 
 - Copy the `vpc` component from the Atmos
-  example [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
+  example [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/vpc)
 
 or
 
 - Copy the `component.yaml` component vendoring config file from the Atmos
-  example [components/terraform/infra/vpc-flow-logs-bucket/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket/component.yaml)
+  example [components/terraform/infra/vpc-flow-logs-bucket/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/components/terraform/vpc-flow-logs-bucket/component.yaml)
   into `components/terraform/infra/vpc-flow-logs-bucket/component.yaml` and then run the Atmos
   command `atmos vendor pull --component infra/vpc-flow-logs-bucket` from
   the root of the repo. The command will copy all the component's files from the open-source component
   repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/vpc-flow-logs-bucket)
 
 - Copy the `component.yaml` component vendoring config file from the Atmos
-  example [components/terraform/infra/vpc/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/components/terraform/infra/vpc/component.yaml)
+  example [components/terraform/infra/vpc/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/components/terraform/vpc/component.yaml)
   into `components/terraform/infra/vpc/component.yaml` and then run the Atmos command `atmos vendor pull --component infra/vpc` from
   the root of the repo. The command will copy all the component's files from the open-source component
   repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/vpc)
