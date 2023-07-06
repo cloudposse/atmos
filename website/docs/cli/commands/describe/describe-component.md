@@ -125,7 +125,7 @@ atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
 ```yaml
 atlantis_project: tenant1-ue2-dev-test-test-component-override-3
 atmos_cli_config:
-  base_path: ./examples/complete
+  base_path: ./examples/test
   components:
     terraform:
       base_path: components/terraform
@@ -161,10 +161,10 @@ backend_type: s3
 command: terraform
 component: test/test-component
 component_info:
-  component_path: examples/complete/components/terraform/test/test-component
+  component_path: examples/test/components/terraform/test/test-component
   component_type: terraform
   terraform_config:
-    path: examples/complete/components/terraform/test/test-component
+    path: examples/test/components/terraform/test/test-component
     variables:
       enabled:
         name: enabled
@@ -174,7 +174,7 @@ component_info:
         required: false
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
+          filename: examples/test/components/terraform/test/test-component/context.tf
           line: 97
       environment:
         name: environment
@@ -185,7 +185,7 @@ component_info:
         required: false
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
+          filename: examples/test/components/terraform/test/test-component/context.tf
           line: 115
       name:
         name: name
@@ -198,7 +198,7 @@ component_info:
         required: false
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
+          filename: examples/test/components/terraform/test/test-component/context.tf
           line: 127
       namespace:
         name: namespace
@@ -209,7 +209,7 @@ component_info:
         required: false
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
+          filename: examples/test/components/terraform/test/test-component/context.tf
           line: 103
       region:
         name: region
@@ -219,7 +219,7 @@ component_info:
         required: true
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/variables.tf
+          filename: examples/test/components/terraform/test/test-component/variables.tf
           line: 1
       service_1_name:
         name: service_1_name
@@ -229,7 +229,7 @@ component_info:
         required: true
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/variables.tf
+          filename: examples/test/components/terraform/test/test-component/variables.tf
           line: 6
       stage:
         name: stage
@@ -240,7 +240,7 @@ component_info:
         required: false
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
+          filename: examples/test/components/terraform/test/test-component/context.tf
           line: 121
       tenant:
         name: tenant
@@ -251,7 +251,7 @@ component_info:
         required: false
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
+          filename: examples/test/components/terraform/test/test-component/context.tf
           line: 109
     outputs:
       service_1_id:
@@ -259,14 +259,14 @@ component_info:
         description: Service 1 ID
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/outputs.tf
+          filename: examples/test/components/terraform/test/test-component/outputs.tf
           line: 1
       service_2_id:
         name: service_2_id
         description: Service 2 ID
         sensitive: false
         pos:
-          filename: examples/complete/components/terraform/test/test-component/outputs.tf
+          filename: examples/test/components/terraform/test/test-component/outputs.tf
           line: 6
     requiredcore:
       - '>= 1.0.0'
@@ -276,21 +276,21 @@ component_info:
         source: cloudposse/label/null
         version: 0.25.0
         pos:
-          filename: examples/complete/components/terraform/test/test-component/main.tf
+          filename: examples/test/components/terraform/test/test-component/main.tf
           line: 1
       service_2_label:
         name: service_2_label
         source: cloudposse/label/null
         version: 0.25.0
         pos:
-          filename: examples/complete/components/terraform/test/test-component/main.tf
+          filename: examples/test/components/terraform/test/test-component/main.tf
           line: 10
       this:
         name: this
         source: cloudposse/label/null
         version: 0.25.0
         pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
+          filename: examples/test/components/terraform/test/test-component/context.tf
           line: 23
     diagnostics: []
 deps:

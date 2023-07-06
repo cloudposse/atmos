@@ -68,7 +68,7 @@ Remote repo HEAD: 40210e8d365d3d88ac13c0778c0867b679bbba69 refs/heads/master
 
 Changed files:
 
-examples/complete/components/terraform/infra/vpc/main.tf
+examples/test/components/terraform/infra/vpc/main.tf
 internal/exec/describe_affected.go
 website/docs/cli/commands/describe/describe-affected.md
 
@@ -248,7 +248,7 @@ where:
         {
           "component": "top-level-component1",
           "component_type": "terraform",
-          "component_path": "examples/complete/components/terraform/top-level-component1",
+          "component_path": "examples/test/components/terraform/top-level-component1",
           "stack": "tenant1-ue2-staging",
           "stack_slug": "tenant1-ue2-staging-top-level-component1",
           "spacelift_stack": "tenant1-ue2-staging-top-level-component1",
@@ -258,7 +258,7 @@ where:
         {
           "component": "top-level-component1",
           "component_type": "terraform",
-          "component_path": "examples/complete/components/terraform/top-level-component1",
+          "component_path": "examples/test/components/terraform/top-level-component1",
           "stack": "tenant2-ue2-staging",
           "stack_slug": "tenant2-ue2-staging-top-level-component1",
           "spacelift_stack": "tenant2-ue2-staging-top-level-component1",
@@ -328,7 +328,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
   {
     "component": "infrastructure-tenant1",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/spacelift",
+    "component_path": "examples/test/components/terraform/spacelift",
     "stack": "tenant1-ue2-prod",
     "stack_slug": "tenant1-ue2-prod-infrastructure-tenant1",
     "spacelift_stack": "tenant1-ue2-prod-infrastructure-tenant1",
@@ -338,7 +338,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
   {
     "component": "infrastructure-tenant2",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/spacelift",
+    "component_path": "examples/test/components/terraform/spacelift",
     "stack": "tenant2-ue2-prod",
     "stack_slug": "tenant2-ue2-prod-infrastructure-tenant2",
     "spacelift_stack": "tenant2-ue2-prod-infrastructure-tenant2",

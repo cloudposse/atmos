@@ -126,7 +126,7 @@ projects:
   - name: tenant1-ue2-staging-test-test-component-override-3
     workspace: test-component-override-3-workspace
     workflow: workflow-1
-    dir: examples/complete/components/terraform/test/test-component
+    dir: examples/test/components/terraform/test/test-component
     terraform_version: v1.2
     delete_source_branch_on_merge: true
     autoplan:
@@ -139,7 +139,7 @@ projects:
   - name: tenant1-ue2-staging-infra-vpc
     workspace: tenant1-ue2-staging
     workflow: workflow-1
-    dir: examples/complete/components/terraform/infra/vpc
+    dir: examples/test/components/terraform/infra/vpc
     terraform_version: v1.2
     delete_source_branch_on_merge: true
     autoplan:
