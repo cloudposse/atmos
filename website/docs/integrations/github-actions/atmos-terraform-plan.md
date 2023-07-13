@@ -105,7 +105,7 @@ Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
 
 #### DynamoDB Table
 
-Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://docs.cloudposse.com/components/library/aws/dynamodb/). Set the **Hash Key** and **Range Key** as follows:
+Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://docs.cloudposse.com/components/library/aws/dynamodb/). Set the **Hash Key** and create a **Global Secondary Index** as follows:
 
 ```yaml
 import:
@@ -121,9 +121,28 @@ components:
           - dynamodb/defaults
       vars:
         name: gitops-plan-storage
-        # These keys (case-sensitive) are required for the cloudposse/github-action-terraform-plan-storage action
+        # This key (case-sensitive) is required for the cloudposse/github-action-terraform-plan-storage action
         hash_key: id
-        range_key: createdAt
+        range_key: ""
+        # Only these 2 attributes are required for creating the GSI, 
+        # but there will be several other attributes on the table itself
+        dynamodb_attributes:
+          - name: 'createdAt'
+            type: 'S'
+          - name: 'pr'
+            type: 'N'
+        # This GSI is used to Query the latest plan file for a given PR.
+        global_secondary_index_map:
+          - name: pr-createdAt-index
+            hash_key: pr
+            range_key: createdAt
+            projection_type: ALL
+            non_key_attributes: []
+            read_capacity: null
+            write_capacity: null
+        # Auto delete old entries
+        ttl_enabled: true
+        ttl_attribute: ttl
 ```
 
 Pass the ARN of this table as the input to the `terraform-plan-table` of the [`cloudposse/github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) GitHub Action.
