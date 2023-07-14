@@ -10,4 +10,4 @@ components:
           - base-component-4
       vars:
         enabled: true
-        service_1_name: "derived-component-3-service-1"
+        service_1_name: "bad-name"
