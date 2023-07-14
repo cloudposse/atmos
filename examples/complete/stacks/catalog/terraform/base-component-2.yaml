@@ -3,6 +3,7 @@ components:
     base-component-2:
       metadata:
         type: abstract
+        component: "test/test-component"
       settings:
         spacelift:
           workspace_enabled: false

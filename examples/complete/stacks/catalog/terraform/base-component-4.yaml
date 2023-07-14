@@ -1,0 +1,14 @@
+import:
+  - catalog/terraform/base-component-3
+
+components:
+  terraform:
+    base-component-4:
+      metadata:
+        type: abstract
+        component: "test/test-component"
+        inherits:
+          - base-component-3
+      vars:
+        service_1_name: "base-component-4-service-1"
+        service_2_name: "base-component-4-service-2"
