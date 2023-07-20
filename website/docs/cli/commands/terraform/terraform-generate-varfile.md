@@ -14,7 +14,7 @@ Use this command to generate a varfile (`.tfvar` ) for an Atmos terraform [compo
 Execute the `terraform generate varfile` command like this:
 
 ```shell
-atmos terraform generate varfile <command> <component> -s <stack>
+atmos terraform generate varfile <component> -s <stack>
 ```
 
 This command generates a varfile for an Atmos terraform component in a stack.
