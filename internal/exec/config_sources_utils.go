@@ -2,7 +2,9 @@ package exec
 
 import (
 	"fmt"
+	"github.com/samber/lo"
 	"reflect"
+	"sort"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -487,7 +489,14 @@ func processComponentSectionValueInStackImports(
 		return result
 	}
 
-	for impKey, impVal := range rawStackImportsMap {
+	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
+	// https://github.com/samber/lo#keys
+	rawStackImportsMapSortedKeys := lo.Keys(rawStackImportsMap)
+	sort.Strings(rawStackImportsMapSortedKeys)
+
+	for _, impKey := range rawStackImportsMapSortedKeys {
+		impVal := rawStackImportsMap[impKey]
+
 		rawStackComponentsSection, ok := impVal["components"]
 		if !ok {
 			continue
@@ -585,7 +594,14 @@ func processComponentTypeSectionValueInStackImports(
 		return result
 	}
 
-	for impKey, impVal := range rawStackImportsMap {
+	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
+	// https://github.com/samber/lo#keys
+	rawStackImportsMapSortedKeys := lo.Keys(rawStackImportsMap)
+	sort.Strings(rawStackImportsMapSortedKeys)
+
+	for _, impKey := range rawStackImportsMapSortedKeys {
+		impVal := rawStackImportsMap[impKey]
+
 		rawStackComponentTypeSection, ok := impVal[configAndStacksInfo.ComponentType]
 		if !ok {
 			continue
@@ -662,7 +678,14 @@ func processGlobalSectionValueInStackImports(
 		return result
 	}
 
-	for impKey, impVal := range rawStackImportsMap {
+	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
+	// https://github.com/samber/lo#keys
+	rawStackImportsMapSortedKeys := lo.Keys(rawStackImportsMap)
+	sort.Strings(rawStackImportsMapSortedKeys)
+
+	for _, impKey := range rawStackImportsMapSortedKeys {
+		impVal := rawStackImportsMap[impKey]
+
 		rawStackVars, ok := impVal[section]
 		if !ok {
 			continue
