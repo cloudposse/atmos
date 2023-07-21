@@ -137,6 +137,7 @@ type ConfigAndStacksInfo struct {
 	DryRun                        bool
 	SkipInit                      bool
 	ComponentInheritanceChain     []string
+	ComponentImportsSection       []string
 	NeedHelp                      bool
 	ComponentIsAbstract           bool
 	ComponentMetadataSection      map[any]any

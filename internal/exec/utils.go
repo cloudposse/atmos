@@ -60,6 +60,7 @@ func FindComponentConfig(
 	var componentSection map[string]any
 	var componentVarsSection map[any]any
 	var componentSettingsSection map[any]any
+	var componentImportsSection []string
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
 	var componentBackendType string
@@ -96,6 +97,9 @@ func FindComponentConfig(
 	}
 	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
 		componentBackendType = ""
+	}
+	if componentImportsSection, ok = stackSection["imports"].([]string); !ok {
+		componentImportsSection = nil
 	}
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
@@ -135,6 +139,7 @@ func FindComponentConfig(
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
 	configAndStacksInfo.ComponentMetadataSection = componentMetadata
+	configAndStacksInfo.ComponentImportsSection = componentImportsSection
 
 	return nil
 }
@@ -431,6 +436,9 @@ func ProcessStacks(
 	}
 
 	configAndStacksInfo.ComponentSection["sources"] = sources
+
+	// Add imports
+	configAndStacksInfo.ComponentSection["imports"] = configAndStacksInfo.ComponentImportsSection
 
 	// Add Atmos component and stack
 	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
