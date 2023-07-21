@@ -26,7 +26,7 @@ func processConfigSources(
 		obj := map[string]any{}
 		obj["name"] = name
 		obj["final_value"] = v
-		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "vars", name)
+		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "vars", "", name)
 		vars[name] = obj
 	}
 
@@ -39,7 +39,7 @@ func processConfigSources(
 		obj := map[string]any{}
 		obj["name"] = name
 		obj["final_value"] = v
-		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "env", name)
+		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "env", "", name)
 		env[name] = obj
 	}
 
@@ -52,8 +52,21 @@ func processConfigSources(
 		obj := map[string]any{}
 		obj["name"] = name
 		obj["final_value"] = v
-		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "settings", name)
+		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "settings", "", name)
 		settings[name] = obj
+	}
+
+	// `backend` section
+	backend := map[string]any{}
+	result["backend"] = backend
+
+	for k, v := range configAndStacksInfo.ComponentBackendSection {
+		name := k.(string)
+		obj := map[string]any{}
+		obj["name"] = name
+		obj["final_value"] = v
+		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "backend", configAndStacksInfo.ComponentBackendType, name)
+		backend[name] = obj
 	}
 
 	return result, nil
@@ -63,6 +76,7 @@ func processSectionValueInStacks(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
+	subsection string,
 	value string,
 ) []map[string]any {
 
@@ -78,6 +92,7 @@ func processSectionValueInStacks(
 		configAndStacksInfo,
 		rawStackConfigs,
 		section,
+		subsection,
 		value,
 	)
 
@@ -88,6 +103,7 @@ func processSectionValueInStacks(
 		configAndStacksInfo,
 		rawStackConfigs,
 		section,
+		subsection,
 		value,
 	)
 
@@ -100,6 +116,7 @@ func processSectionValueInStacks(
 			configAndStacksInfo,
 			rawStackConfigs,
 			section,
+			subsection,
 			value,
 		)
 
@@ -110,6 +127,7 @@ func processSectionValueInStacks(
 			configAndStacksInfo,
 			rawStackConfigs,
 			section,
+			subsection,
 			value,
 		)
 	}
@@ -121,6 +139,7 @@ func processSectionValueInStacks(
 		configAndStacksInfo,
 		rawStackConfigs,
 		section,
+		subsection,
 		value,
 	)
 
@@ -130,6 +149,7 @@ func processSectionValueInStacks(
 		&result,
 		rawStackConfigs,
 		section,
+		subsection,
 		value,
 	)
 
@@ -141,6 +161,7 @@ func processSectionValueInStacks(
 			configAndStacksInfo,
 			rawStackConfigs,
 			section,
+			subsection,
 			value,
 		)
 
@@ -150,6 +171,7 @@ func processSectionValueInStacks(
 			&result,
 			rawStackConfigs,
 			section,
+			subsection,
 			value,
 		)
 	}
@@ -161,6 +183,7 @@ func processSectionValueInStacks(
 		configAndStacksInfo,
 		rawStackConfigs,
 		section,
+		subsection,
 		value,
 	)
 
@@ -170,6 +193,7 @@ func processSectionValueInStacks(
 		&result,
 		rawStackConfigs,
 		section,
+		subsection,
 		value,
 	)
 
@@ -181,6 +205,7 @@ func processSectionValueInStacks(
 			configAndStacksInfo,
 			rawStackConfigs,
 			section,
+			subsection,
 			value,
 		)
 
@@ -190,6 +215,7 @@ func processSectionValueInStacks(
 			&result,
 			rawStackConfigs,
 			section,
+			subsection,
 			value,
 		)
 	}
@@ -205,6 +231,7 @@ func processComponentSectionValueInStack(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
+	subsection string,
 	value string,
 ) *[]map[string]any {
 
@@ -263,14 +290,27 @@ func processComponentSectionValueInStack(
 		return result
 	}
 
+	if subsection != "" {
+		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+		if !ok {
+			return result
+		}
+		rawStackVarsMap = rawStackVarsMapSubsection
+	}
+
 	rawStackVarVal, ok := rawStackVarsMap[value]
 	if !ok {
 		return result
 	}
 
+	stackFileSection := fmt.Sprintf("components.%s.%s", configAndStacksInfo.ComponentType, section)
+	if subsection != "" {
+		stackFileSection = fmt.Sprintf("components.%s.%s.%s", configAndStacksInfo.ComponentType, section, subsection)
+	}
+
 	val := map[string]any{
 		"stack_file":         stackFile,
-		"stack_file_section": fmt.Sprintf("components.%s.%s", configAndStacksInfo.ComponentType, section),
+		"stack_file_section": stackFileSection,
 		"variable_value":     rawStackVarVal,
 		"dependency_type":    "inline",
 	}
@@ -287,6 +327,7 @@ func processComponentTypeSectionValueInStack(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
+	subsection string,
 	value string,
 ) *[]map[string]any {
 
@@ -325,14 +366,27 @@ func processComponentTypeSectionValueInStack(
 		return result
 	}
 
+	if subsection != "" {
+		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+		if !ok {
+			return result
+		}
+		rawStackVarsMap = rawStackVarsMapSubsection
+	}
+
 	rawStackVarVal, ok := rawStackVarsMap[value]
 	if !ok {
 		return result
 	}
 
+	stackFileSection := fmt.Sprintf("%s.%s", configAndStacksInfo.ComponentType, section)
+	if subsection != "" {
+		stackFileSection = fmt.Sprintf("%s.%s.%s", configAndStacksInfo.ComponentType, section, subsection)
+	}
+
 	val := map[string]any{
 		"stack_file":         stackFile,
-		"stack_file_section": fmt.Sprintf("%s.%s", configAndStacksInfo.ComponentType, section),
+		"stack_file_section": stackFileSection,
 		"variable_value":     rawStackVarVal,
 		"dependency_type":    "inline",
 	}
@@ -348,6 +402,7 @@ func processGlobalSectionValueInStack(
 	result *[]map[string]any,
 	rawStackConfigs map[string]map[string]any,
 	section string,
+	subsection string,
 	value string,
 ) *[]map[string]any {
 
@@ -376,14 +431,27 @@ func processGlobalSectionValueInStack(
 		return result
 	}
 
+	if subsection != "" {
+		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+		if !ok {
+			return result
+		}
+		rawStackVarsMap = rawStackVarsMapSubsection
+	}
+
 	rawStackVarVal, ok := rawStackVarsMap[value]
 	if !ok {
 		return result
 	}
 
+	stackFileSection := section
+	if subsection != "" {
+		stackFileSection = fmt.Sprintf("%s.%s", section, subsection)
+	}
+
 	val := map[string]any{
 		"stack_file":         stackFile,
-		"stack_file_section": section,
+		"stack_file_section": stackFileSection,
 		"variable_value":     rawStackVarVal,
 		"dependency_type":    "inline",
 	}
@@ -400,6 +468,7 @@ func processComponentSectionValueInStackImports(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
+	subsection string,
 	value string,
 ) *[]map[string]any {
 
@@ -459,14 +528,27 @@ func processComponentSectionValueInStackImports(
 			continue
 		}
 
+		if subsection != "" {
+			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+			if !ok {
+				return result
+			}
+			rawStackVarsMap = rawStackVarsMapSubsection
+		}
+
 		rawStackVarVal, ok := rawStackVarsMap[value]
 		if !ok {
 			continue
 		}
 
+		stackFileSection := fmt.Sprintf("components.%s.%s", configAndStacksInfo.ComponentType, section)
+		if subsection != "" {
+			stackFileSection = fmt.Sprintf("components.%s.%s.%s", configAndStacksInfo.ComponentType, section, subsection)
+		}
+
 		val := map[string]any{
 			"stack_file":         impKey,
-			"stack_file_section": fmt.Sprintf("components.%s.%s", configAndStacksInfo.ComponentType, section),
+			"stack_file_section": stackFileSection,
 			"variable_value":     rawStackVarVal,
 			"dependency_type":    "import",
 		}
@@ -484,6 +566,7 @@ func processComponentTypeSectionValueInStackImports(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
+	subsection string,
 	value string,
 ) *[]map[string]any {
 
@@ -523,14 +606,27 @@ func processComponentTypeSectionValueInStackImports(
 			continue
 		}
 
+		if subsection != "" {
+			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+			if !ok {
+				return result
+			}
+			rawStackVarsMap = rawStackVarsMapSubsection
+		}
+
 		rawStackVarVal, ok := rawStackVarsMap[value]
 		if !ok {
 			continue
 		}
 
+		stackFileSection := fmt.Sprintf("%s.%s", configAndStacksInfo.ComponentType, section)
+		if subsection != "" {
+			stackFileSection = fmt.Sprintf("%s.%s.%s", configAndStacksInfo.ComponentType, section, subsection)
+		}
+
 		val := map[string]any{
 			"stack_file":         impKey,
-			"stack_file_section": fmt.Sprintf("%s.%s", configAndStacksInfo.ComponentType, section),
+			"stack_file_section": stackFileSection,
 			"variable_value":     rawStackVarVal,
 			"dependency_type":    "import",
 		}
@@ -547,6 +643,7 @@ func processGlobalSectionValueInStackImports(
 	result *[]map[string]any,
 	rawStackConfigs map[string]map[string]any,
 	section string,
+	subsection string,
 	value string,
 ) *[]map[string]any {
 
@@ -576,14 +673,27 @@ func processGlobalSectionValueInStackImports(
 			continue
 		}
 
+		if subsection != "" {
+			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+			if !ok {
+				return result
+			}
+			rawStackVarsMap = rawStackVarsMapSubsection
+		}
+
 		rawStackVarVal, ok := rawStackVarsMap[value]
 		if !ok {
 			continue
 		}
 
+		stackFileSection := section
+		if subsection != "" {
+			stackFileSection = fmt.Sprintf("%s.%s", section, subsection)
+		}
+
 		val := map[string]any{
 			"stack_file":         impKey,
-			"stack_file_section": section,
+			"stack_file_section": stackFileSection,
 			"variable_value":     rawStackVarVal,
 			"dependency_type":    "import",
 		}
