@@ -406,3 +406,21 @@ type Settings struct {
 	DependsOn DependsOn         `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
 	Spacelift SettingsSpacelift `yaml:"spacelift" json:"spacelift" mapstructure:"spacelift"`
 }
+
+// Config Sources
+type ConfigSourcesStackDependency struct {
+	StackFile        string `yaml:"stack_file" json:"stack_file" mapstructure:"stack_file"`
+	StackFileSection string `yaml:"stack_file_section" json:"stack_file_section" mapstructure:"stack_file_section"`
+	DependencyType   string `yaml:"dependency_type" json:"dependency_type" mapstructure:"dependency_type"`
+	VariableValue    any    `yaml:"variable_value" json:"variable_value" mapstructure:"variable_value"`
+}
+
+type ConfigSourcesStackDependencies []ConfigSourcesStackDependency
+
+type ConfigSourcesItem struct {
+	FinalValue        any                            `yaml:"final_value" json:"final_value" mapstructure:"final_value"`
+	Name              string                         `yaml:"name" json:"name" mapstructure:"name"`
+	StackDependencies ConfigSourcesStackDependencies `yaml:"stack_dependencies" json:"stack_dependencies" mapstructure:"stack_dependencies"`
+}
+
+type ConfigSources map[string]map[string]ConfigSourcesItem

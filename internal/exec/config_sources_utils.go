@@ -11,61 +11,58 @@ import (
 func processConfigSources(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
-) (
-	map[string]map[string]any,
-	error,
-) {
-	result := map[string]map[string]any{}
+) (schema.ConfigSources, error) {
+	result := schema.ConfigSources{}
 
 	// `vars` section
-	vars := map[string]any{}
+	vars := map[string]schema.ConfigSourcesItem{}
 	result["vars"] = vars
 
 	for k, v := range configAndStacksInfo.ComponentVarsSection {
 		name := k.(string)
-		obj := map[string]any{}
-		obj["name"] = name
-		obj["final_value"] = v
-		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "vars", "", name)
+		obj := schema.ConfigSourcesItem{}
+		obj.Name = name
+		obj.FinalValue = v
+		obj.StackDependencies = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "vars", "", name)
 		vars[name] = obj
 	}
 
 	// `env` section
-	env := map[string]any{}
+	env := map[string]schema.ConfigSourcesItem{}
 	result["env"] = env
 
 	for k, v := range configAndStacksInfo.ComponentEnvSection {
 		name := k.(string)
-		obj := map[string]any{}
-		obj["name"] = name
-		obj["final_value"] = v
-		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "env", "", name)
+		obj := schema.ConfigSourcesItem{}
+		obj.Name = name
+		obj.FinalValue = v
+		obj.StackDependencies = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "env", "", name)
 		env[name] = obj
 	}
 
 	// `settings` section
-	settings := map[string]any{}
+	settings := map[string]schema.ConfigSourcesItem{}
 	result["settings"] = settings
 
 	for k, v := range configAndStacksInfo.ComponentSettingsSection {
 		name := k.(string)
-		obj := map[string]any{}
-		obj["name"] = name
-		obj["final_value"] = v
-		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "settings", "", name)
+		obj := schema.ConfigSourcesItem{}
+		obj.Name = name
+		obj.FinalValue = v
+		obj.StackDependencies = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "settings", "", name)
 		settings[name] = obj
 	}
 
 	// `backend` section
-	backend := map[string]any{}
+	backend := map[string]schema.ConfigSourcesItem{}
 	result["backend"] = backend
 
 	for k, v := range configAndStacksInfo.ComponentBackendSection {
 		name := k.(string)
-		obj := map[string]any{}
-		obj["name"] = name
-		obj["final_value"] = v
-		obj["stack_dependencies"] = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "backend", configAndStacksInfo.ComponentBackendType, name)
+		obj := schema.ConfigSourcesItem{}
+		obj.Name = name
+		obj.FinalValue = v
+		obj.StackDependencies = processSectionValueInStacks(configAndStacksInfo, rawStackConfigs, "backend", configAndStacksInfo.ComponentBackendType, name)
 		backend[name] = obj
 	}
 
@@ -78,9 +75,9 @@ func processSectionValueInStacks(
 	section string,
 	subsection string,
 	value string,
-) []map[string]any {
+) schema.ConfigSourcesStackDependencies {
 
-	result := []map[string]any{}
+	result := schema.ConfigSourcesStackDependencies{}
 
 	// Process the value for the component in the stack
 	// Because we want to show the value dependencies from higher to lower priority,
@@ -227,13 +224,13 @@ func processSectionValueInStacks(
 func processComponentSectionValueInStack(
 	component string,
 	stackFile string,
-	result *[]map[string]any,
+	result *schema.ConfigSourcesStackDependencies,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
 	subsection string,
 	value string,
-) *[]map[string]any {
+) *schema.ConfigSourcesStackDependencies {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
@@ -308,11 +305,11 @@ func processComponentSectionValueInStack(
 		stackFileSection = fmt.Sprintf("components.%s.%s.%s", configAndStacksInfo.ComponentType, section, subsection)
 	}
 
-	val := map[string]any{
-		"stack_file":         stackFile,
-		"stack_file_section": stackFileSection,
-		"variable_value":     rawStackVarVal,
-		"dependency_type":    "inline",
+	val := schema.ConfigSourcesStackDependency{
+		StackFile:        stackFile,
+		StackFileSection: stackFileSection,
+		VariableValue:    rawStackVarVal,
+		DependencyType:   "inline",
 	}
 
 	appendSectionValue(result, val)
@@ -323,13 +320,13 @@ func processComponentSectionValueInStack(
 func processComponentTypeSectionValueInStack(
 	component string,
 	stackFile string,
-	result *[]map[string]any,
+	result *schema.ConfigSourcesStackDependencies,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
 	subsection string,
 	value string,
-) *[]map[string]any {
+) *schema.ConfigSourcesStackDependencies {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
@@ -384,11 +381,11 @@ func processComponentTypeSectionValueInStack(
 		stackFileSection = fmt.Sprintf("%s.%s.%s", configAndStacksInfo.ComponentType, section, subsection)
 	}
 
-	val := map[string]any{
-		"stack_file":         stackFile,
-		"stack_file_section": stackFileSection,
-		"variable_value":     rawStackVarVal,
-		"dependency_type":    "inline",
+	val := schema.ConfigSourcesStackDependency{
+		StackFile:        stackFile,
+		StackFileSection: stackFileSection,
+		VariableValue:    rawStackVarVal,
+		DependencyType:   "inline",
 	}
 
 	appendSectionValue(result, val)
@@ -399,12 +396,12 @@ func processComponentTypeSectionValueInStack(
 func processGlobalSectionValueInStack(
 	component string,
 	stackFile string,
-	result *[]map[string]any,
+	result *schema.ConfigSourcesStackDependencies,
 	rawStackConfigs map[string]map[string]any,
 	section string,
 	subsection string,
 	value string,
-) *[]map[string]any {
+) *schema.ConfigSourcesStackDependencies {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
@@ -449,11 +446,11 @@ func processGlobalSectionValueInStack(
 		stackFileSection = fmt.Sprintf("%s.%s", section, subsection)
 	}
 
-	val := map[string]any{
-		"stack_file":         stackFile,
-		"stack_file_section": stackFileSection,
-		"variable_value":     rawStackVarVal,
-		"dependency_type":    "inline",
+	val := schema.ConfigSourcesStackDependency{
+		StackFile:        stackFile,
+		StackFileSection: stackFileSection,
+		VariableValue:    rawStackVarVal,
+		DependencyType:   "inline",
 	}
 
 	appendSectionValue(result, val)
@@ -464,13 +461,13 @@ func processGlobalSectionValueInStack(
 func processComponentSectionValueInStackImports(
 	component string,
 	stackFile string,
-	result *[]map[string]any,
+	result *schema.ConfigSourcesStackDependencies,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
 	subsection string,
 	value string,
-) *[]map[string]any {
+) *schema.ConfigSourcesStackDependencies {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
@@ -558,11 +555,11 @@ func processComponentSectionValueInStackImports(
 			stackFileSection = fmt.Sprintf("components.%s.%s.%s", configAndStacksInfo.ComponentType, section, subsection)
 		}
 
-		val := map[string]any{
-			"stack_file":         impKey,
-			"stack_file_section": stackFileSection,
-			"variable_value":     rawStackVarVal,
-			"dependency_type":    "import",
+		val := schema.ConfigSourcesStackDependency{
+			StackFile:        impKey,
+			StackFileSection: stackFileSection,
+			VariableValue:    rawStackVarVal,
+			DependencyType:   "import",
 		}
 
 		appendSectionValue(result, val)
@@ -574,13 +571,13 @@ func processComponentSectionValueInStackImports(
 func processComponentTypeSectionValueInStackImports(
 	component string,
 	stackFile string,
-	result *[]map[string]any,
+	result *schema.ConfigSourcesStackDependencies,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
 	section string,
 	subsection string,
 	value string,
-) *[]map[string]any {
+) *schema.ConfigSourcesStackDependencies {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
@@ -648,11 +645,11 @@ func processComponentTypeSectionValueInStackImports(
 			stackFileSection = fmt.Sprintf("%s.%s.%s", configAndStacksInfo.ComponentType, section, subsection)
 		}
 
-		val := map[string]any{
-			"stack_file":         impKey,
-			"stack_file_section": stackFileSection,
-			"variable_value":     rawStackVarVal,
-			"dependency_type":    "import",
+		val := schema.ConfigSourcesStackDependency{
+			StackFile:        impKey,
+			StackFileSection: stackFileSection,
+			VariableValue:    rawStackVarVal,
+			DependencyType:   "import",
 		}
 
 		appendSectionValue(result, val)
@@ -664,12 +661,12 @@ func processComponentTypeSectionValueInStackImports(
 func processGlobalSectionValueInStackImports(
 	component string,
 	stackFile string,
-	result *[]map[string]any,
+	result *schema.ConfigSourcesStackDependencies,
 	rawStackConfigs map[string]map[string]any,
 	section string,
 	subsection string,
 	value string,
-) *[]map[string]any {
+) *schema.ConfigSourcesStackDependencies {
 
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
@@ -727,11 +724,11 @@ func processGlobalSectionValueInStackImports(
 			stackFileSection = fmt.Sprintf("%s.%s", section, subsection)
 		}
 
-		val := map[string]any{
-			"stack_file":         impKey,
-			"stack_file_section": stackFileSection,
-			"variable_value":     rawStackVarVal,
-			"dependency_type":    "import",
+		val := schema.ConfigSourcesStackDependency{
+			StackFile:        impKey,
+			StackFileSection: stackFileSection,
+			VariableValue:    rawStackVarVal,
+			DependencyType:   "import",
 		}
 
 		appendSectionValue(result, val)
@@ -740,7 +737,7 @@ func processGlobalSectionValueInStackImports(
 	return result
 }
 
-func appendSectionValue(result *[]map[string]any, value map[string]any) {
+func appendSectionValue(result *schema.ConfigSourcesStackDependencies, value schema.ConfigSourcesStackDependency) {
 	for _, item := range *result {
 		if reflect.DeepEqual(item, value) {
 			return
