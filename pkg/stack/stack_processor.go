@@ -869,8 +869,10 @@ func ProcessStackConfig(
 						return nil, err
 					}
 					comp["deps"] = componentDeps
+					comp["deps_all"] = componentDeps
 				} else {
 					comp["deps"] = []string{}
+					comp["deps_all"] = []string{}
 				}
 
 				terraformComponents[component] = comp
@@ -1094,8 +1096,10 @@ func ProcessStackConfig(
 						return nil, err
 					}
 					comp["deps"] = componentDeps
+					comp["deps_all"] = componentDeps
 				} else {
 					comp["deps"] = []string{}
+					comp["deps_all"] = []string{}
 				}
 
 				helmfileComponents[component] = comp

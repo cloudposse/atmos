@@ -149,6 +149,15 @@ func TransformStackConfigToSpaceliftStacks(
 						componentDeps = i.([]string)
 					}
 
+					componentDepsAll := []string{}
+					if i, ok2 := componentMap["deps_all"]; ok2 {
+						componentDepsAll = i.([]string)
+					}
+
+					if i, ok2 := componentMap["imports"]; ok2 {
+						imports = i.([]string)
+					}
+
 					componentStacks := []string{}
 					if i, ok2 := componentMap["stacks"]; ok2 {
 						componentStacks = i.([]string)
@@ -189,6 +198,7 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["settings"] = componentSettings
 					spaceliftConfig["env"] = componentEnv
 					spaceliftConfig["deps"] = componentDeps
+					spaceliftConfig["deps_all"] = componentDepsAll
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
 					spaceliftConfig["base_component"] = baseComponentName
