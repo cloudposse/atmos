@@ -130,6 +130,7 @@ func ProcessYAMLConfigFiles(
 			rawStackConfigs[stackFileName] = map[string]any{}
 			rawStackConfigs[stackFileName]["stack"] = stackConfig
 			rawStackConfigs[stackFileName]["imports"] = importsConfig
+			rawStackConfigs[stackFileName]["import_files"] = uniqueImports
 		}(i, filePath)
 	}
 

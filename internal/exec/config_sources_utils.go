@@ -2,9 +2,7 @@ package exec
 
 import (
 	"fmt"
-	"github.com/samber/lo"
 	"reflect"
-	"sort"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -489,12 +487,17 @@ func processComponentSectionValueInStackImports(
 		return result
 	}
 
-	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
-	// https://github.com/samber/lo#keys
-	rawStackImportsMapSortedKeys := lo.Keys(rawStackImportsMap)
-	sort.Strings(rawStackImportsMapSortedKeys)
+	rawStackImportFiles, ok := rawStackConfig["import_files"]
+	if !ok {
+		return result
+	}
 
-	for _, impKey := range rawStackImportsMapSortedKeys {
+	rawStackImportFilesList, ok := rawStackImportFiles.([]string)
+	if !ok {
+		return result
+	}
+
+	for _, impKey := range rawStackImportFilesList {
 		impVal := rawStackImportsMap[impKey]
 
 		rawStackComponentsSection, ok := impVal["components"]
@@ -594,12 +597,17 @@ func processComponentTypeSectionValueInStackImports(
 		return result
 	}
 
-	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
-	// https://github.com/samber/lo#keys
-	rawStackImportsMapSortedKeys := lo.Keys(rawStackImportsMap)
-	sort.Strings(rawStackImportsMapSortedKeys)
+	rawStackImportFiles, ok := rawStackConfig["import_files"]
+	if !ok {
+		return result
+	}
 
-	for _, impKey := range rawStackImportsMapSortedKeys {
+	rawStackImportFilesList, ok := rawStackImportFiles.([]string)
+	if !ok {
+		return result
+	}
+
+	for _, impKey := range rawStackImportFilesList {
 		impVal := rawStackImportsMap[impKey]
 
 		rawStackComponentTypeSection, ok := impVal[configAndStacksInfo.ComponentType]
@@ -678,12 +686,17 @@ func processGlobalSectionValueInStackImports(
 		return result
 	}
 
-	// Iterate not over the map itself, but over the sorted map keys since Go iterates over maps in random order
-	// https://github.com/samber/lo#keys
-	rawStackImportsMapSortedKeys := lo.Keys(rawStackImportsMap)
-	sort.Strings(rawStackImportsMapSortedKeys)
+	rawStackImportFiles, ok := rawStackConfig["import_files"]
+	if !ok {
+		return result
+	}
 
-	for _, impKey := range rawStackImportsMapSortedKeys {
+	rawStackImportFilesList, ok := rawStackImportFiles.([]string)
+	if !ok {
+		return result
+	}
+
+	for _, impKey := range rawStackImportFilesList {
 		impVal := rawStackImportsMap[impKey]
 
 		rawStackVars, ok := impVal[section]
