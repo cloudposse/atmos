@@ -882,7 +882,7 @@ func removeTempDir(cliConfig schema.CliConfiguration, path string) {
 	}
 }
 
-// FindComponentDependencies finds all imports that the component depends on
+// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defind in
 func findComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
 	var deps []string
 	var depsAll []string
