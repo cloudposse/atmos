@@ -15,6 +15,12 @@ Atmos component validation allows:
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   OPA/Rego policies
 
+:::note
+
+Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
+
+:::
+
 ## JSON Schema
 
 Atmos has native support for [JSON Schema](https://json-schema.org/), which can validate the schema of configurations. JSON Schema is an industry

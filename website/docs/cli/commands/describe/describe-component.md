@@ -90,13 +90,6 @@ The output contains the following sections:
     where the variables, outputs and child modules are defined are also included. Invalid Terraform configurations are also detected, and in case of
     any issues, the warnings and errors are shows in the `terraform_config.diagnostics` section
 
-- `imports` - a list of all imports in the Atmos stack
-
-- `deps_all` - a list of all component stack dependencies (stack config files where the component settings are defined, either inline or via imports)
-
-- `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
-  (after the deep-merging and processing all the inheritance chains and all the base components)
-
 - `env` - a list of ENV variables defined for the Atmos component
 
 - `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
@@ -119,9 +112,60 @@ The output contains the following sections:
 
 - `workspace` - Terraform workspace for the Atmos component
 
-<br/>
+- `imports` - a list of all imports in the Atmos stack (this shows all imports in the stack, related to the component and not)
 
-For example:
+- `deps_all` - a list of all component stack dependencies (stack config files where the component settings are defined, either inline or via imports)
+
+- `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
+  (after the deep-merging and processing all the inheritance chains and all the base components)
+
+## Difference between `imports`, `deps_all` and `deps` outputs
+
+The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
+
+- `imports` shows all imports in the stack for all components. This can be useful in GitHub actions (or other CI/CD systems) and 
+   in [OPA validation policies](/core-concepts/components/validation) to check whether an import is allowed in the stack or not
+
+- `deps_all` shows all component stack dependencies (imports and root-level stacks) where any configuration for the component is present.
+  This also can be useful in CI/CD systems and [OPA validation policies](/core-concepts/components/validation) to check whether a user or a team 
+  is allowed to import a particular config file for the component in the stack
+
+- `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined.
+  (after the deep-merging and processing all the inheritance chains and all the base components). This is useful in CI/CD systems (e.g. Spacelift)
+  to detect all the affected files that the component depends on (and trigger the component's stack if any of the files is affected).
+  `deps` is usually a much smaller list than `deps_all` and can differ from it in the following ways:
+
+  - The component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/components/inheritance), and 
+    import those base component configurations
+
+  - The component can override all the default variables from the base components, and the final values are not dependent on the base components 
+    config anymore. For example, `derived-component-3` import the base component `base-component-4` configuration,
+    inherits from it, and overrides all the variables:
+
+   ```yaml
+   # Import the base component config
+   import:
+     - catalog/terraform/base-component-4
+
+   components:
+     terraform:
+       derived-component-3:
+         metadata:
+           component: "test/test-component"  # Point to the Terraform component
+           inherits:
+             # Inherit all the values from the base component
+             - base-component-4
+         vars:
+           # Override all the variables from the base component
+   ```
+
+  - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the component does 
+    not directly depend on it (all values are coming from `derived-component-3`)
+
+  - In the above case, the `deps_all` output will include both `derived-component-3` and `base-component-4`, but the `deps` output will only include
+    `derived-component-3`
+
+## Command example
 
 ```shell
 atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
@@ -391,6 +435,87 @@ settings:
     stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
     workspace_enabled: false
 sources:
+  backend:
+    acl:
+      final_value: bucket-owner-full-control
+      name: acl
+      stack_dependencies:
+        - stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: bucket-owner-full-control
+        - stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: bucket-owner-full-control
+    bucket:
+      final_value: cp-ue2-root-tfstate
+      name: bucket
+      stack_dependencies:
+        - stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-ue2-root-tfstate
+        - stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-ue2-root-tfstate
+    dynamodb_table:
+      final_value: cp-ue2-root-tfstate-lock
+      name: dynamodb_table
+      stack_dependencies:
+        - stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-ue2-root-tfstate-lock
+        - stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-ue2-root-tfstate-lock
+    key:
+      final_value: terraform.tfstate
+      name: key
+      stack_dependencies:
+        - stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: terraform.tfstate
+        - stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: terraform.tfstate
+    profile:
+      final_value: cp-gbl-root-tfstate
+      name: profile
+      stack_dependencies:
+        - stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-gbl-root-tfstate
+    region:
+      final_value: us-east-2
+      name: region
+      stack_dependencies:
+        - stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: us-east-2
+        - stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: us-east-2
+    role_arn:
+      final_value: null
+      name: role_arn
+      stack_dependencies:
+        - stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: null
+    workspace_key_prefix:
+      final_value: test-test-component
+      name: workspace_key_prefix
+      stack_dependencies: []
   env:
     TEST_ENV_VAR1:
       final_value: val1-override-3
