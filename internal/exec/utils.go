@@ -234,10 +234,7 @@ func ProcessStacks(
 	cliConfig schema.CliConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
-) (
-	schema.ConfigAndStacksInfo,
-	error,
-) {
+) (schema.ConfigAndStacksInfo, error) {
 
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
@@ -293,6 +290,7 @@ func ProcessStacks(
 		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
 		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
 			cliConfig.Stacks.NamePattern,
