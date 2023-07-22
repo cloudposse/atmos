@@ -206,11 +206,15 @@ func TransformStackConfigToSpaceliftStacks(
 
 					// Component dependencies
 					configAndStacksInfo := schema.ConfigAndStacksInfo{
-						ComponentVarsSection:     componentVars,
-						ComponentEnvSection:      componentEnv,
-						ComponentSettingsSection: componentSettings,
-						ComponentBackendSection:  componentBackend,
-						ComponentBackendType:     backendTypeName,
+						ComponentFromArg:          component,
+						ComponentType:             "terraform",
+						StackFile:                 stackName,
+						ComponentVarsSection:      componentVars,
+						ComponentEnvSection:       componentEnv,
+						ComponentSettingsSection:  componentSettings,
+						ComponentBackendSection:   componentBackend,
+						ComponentBackendType:      backendTypeName,
+						ComponentInheritanceChain: componentInheritance,
 					}
 
 					sources, err := e.ProcessConfigSources(configAndStacksInfo, rawStackConfigs)

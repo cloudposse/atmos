@@ -297,7 +297,7 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/context.tf
           line: 23
-    diagnostics: [ ]
+    diagnostics: []
 deps:
   - catalog/terraform/mixins/test-2
   - catalog/terraform/services/service-1-override-2
