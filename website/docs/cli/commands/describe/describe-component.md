@@ -90,7 +90,12 @@ The output contains the following sections:
     where the variables, outputs and child modules are defined are also included. Invalid Terraform configurations are also detected, and in case of
     any issues, the warnings and errors are shows in the `terraform_config.diagnostics` section
 
-- `deps` - a list of stack dependencies (stack config files where the component settings are defined, either inline or via imports)
+- `imports` - a list of all imports in the Atmos stack
+
+- `deps_all` - a list of all component stack dependencies (stack config files where the component settings are defined, either inline or via imports)
+
+- `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
+  (after the deep-merging and processing all the inheritance chains and all the base components)
 
 - `env` - a list of ENV variables defined for the Atmos component
 
@@ -292,7 +297,7 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/context.tf
           line: 23
-    diagnostics: []
+    diagnostics: [ ]
 deps:
   - catalog/terraform/mixins/test-1
   - catalog/terraform/mixins/test-2
