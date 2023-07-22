@@ -23,7 +23,8 @@ func CreateSpaceliftStacks(
 	processStackDeps bool,
 	processComponentDeps bool,
 	processImports bool,
-	stackConfigPathTemplate string) (map[string]any, error) {
+	stackConfigPathTemplate string,
+) (map[string]any, error) {
 
 	if len(filePaths) > 0 {
 		_, stacks, _, err := s.ProcessYAMLConfigFiles(
@@ -71,7 +72,8 @@ func TransformStackConfigToSpaceliftStacks(
 	stacks map[string]any,
 	stackConfigPathTemplate string,
 	stackNamePattern string,
-	processImports bool) (map[string]any, error) {
+	processImports bool,
+) (map[string]any, error) {
 
 	var err error
 	res := map[string]any{}
@@ -149,15 +151,6 @@ func TransformStackConfigToSpaceliftStacks(
 						componentDeps = i.([]string)
 					}
 
-					componentDepsAll := []string{}
-					if i, ok2 := componentMap["deps_all"]; ok2 {
-						componentDepsAll = i.([]string)
-					}
-
-					if i, ok2 := componentMap["imports"]; ok2 {
-						imports = i.([]string)
-					}
-
 					componentStacks := []string{}
 					if i, ok2 := componentMap["stacks"]; ok2 {
 						componentStacks = i.([]string)
@@ -198,7 +191,6 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["settings"] = componentSettings
 					spaceliftConfig["env"] = componentEnv
 					spaceliftConfig["deps"] = componentDeps
-					spaceliftConfig["deps_all"] = componentDepsAll
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
 					spaceliftConfig["base_component"] = baseComponentName

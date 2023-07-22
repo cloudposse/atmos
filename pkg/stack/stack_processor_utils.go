@@ -49,7 +49,7 @@ func FindComponentStacks(
 	return unique, nil
 }
 
-// FindComponentDependencies finds all imports where the component or the base component(s) are defined
+// FindComponentDependenciesLegacy finds all imports where the component or the base component(s) are defined
 // Component depends on the imported config file if any of the following conditions is true:
 //  1. The imported config file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
 //     `settings` or `vars` sections which are not empty.
@@ -58,7 +58,7 @@ func FindComponentStacks(
 //  3. The imported config file has the "components" section, which has the component type section, which has the component section.
 //  4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section,
 //     and the base component section is defined inline (not imported).
-func FindComponentDependencies(
+func FindComponentDependenciesLegacy(
 	stack string,
 	componentType string,
 	component string,

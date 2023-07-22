@@ -430,14 +430,6 @@ func ProcessStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
-	// `sources` (stack config files where the variables and other settings are defined)
-	sources, err := processConfigSources(configAndStacksInfo, rawStackConfigs)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	configAndStacksInfo.ComponentSection["sources"] = sources
-
 	// Add imports
 	configAndStacksInfo.ComponentSection["imports"] = configAndStacksInfo.ComponentImportsSection
 
@@ -507,8 +499,16 @@ func ProcessStacks(
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
-	// Process component dependencies
-	componentDeps, componentDepsAll, err := findComponentDependencies(configAndStacksInfo.StackFile, sources)
+	// `sources` (stack config files where the variables and other settings are defined)
+	sources, err := ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	configAndStacksInfo.ComponentSection["sources"] = sources
+
+	// Component dependencies
+	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -883,7 +883,7 @@ func removeTempDir(cliConfig schema.CliConfiguration, path string) {
 }
 
 // FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defind in
-func findComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
+func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
 	var deps []string
 	var depsAll []string
 
