@@ -85,16 +85,6 @@ func ProcessYAMLConfigFiles(
 			uniqueImports := u.UniqueStrings(imports)
 			sort.Strings(uniqueImports)
 
-			// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-			// TODO: review it to use the new `atmos.yaml CLI stackConfig
-			//if processStackDeps {
-			//	componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
-			//	if err != nil {
-			//		errorResult = err
-			//		return
-			//	}
-			//}
-
 			componentStackMap := map[string]map[string][]string{}
 
 			finalConfig, err := ProcessStackConfig(
