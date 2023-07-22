@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
@@ -506,6 +507,14 @@ func ProcessStacks(
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
+	// Process component dependencies
+	componentDeps, componentDepsAll, err := findComponentDependencies(configAndStacksInfo.StackFile, sources)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.ComponentSection["deps"] = componentDeps
+	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
+
 	return configAndStacksInfo, nil
 }
 
@@ -871,4 +880,30 @@ func removeTempDir(cliConfig schema.CliConfiguration, path string) {
 	if err != nil {
 		u.LogWarning(cliConfig, err.Error())
 	}
+}
+
+// FindComponentDependencies finds all imports that the component depends on
+func findComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
+	var deps []string
+	var depsAll []string
+
+	for _, source := range sources {
+		for _, v := range source {
+			for i, dep := range v.StackDependencies {
+				if dep.StackFile != "" {
+					depsAll = append(depsAll, dep.StackFile)
+					if i == 0 {
+						deps = append(deps, dep.StackFile)
+					}
+				}
+			}
+		}
+	}
+
+	depsAll = append(depsAll, currentStack)
+	unique := u.UniqueStrings(deps)
+	uniqueAll := u.UniqueStrings(depsAll)
+	sort.Strings(unique)
+	sort.Strings(uniqueAll)
+	return unique, uniqueAll, nil
 }

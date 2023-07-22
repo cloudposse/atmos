@@ -407,7 +407,7 @@ type Settings struct {
 	Spacelift SettingsSpacelift `yaml:"spacelift" json:"spacelift" mapstructure:"spacelift"`
 }
 
-// Config Sources
+// ConfigSourcesStackDependency defines schema for sources of config sections
 type ConfigSourcesStackDependency struct {
 	StackFile        string `yaml:"stack_file" json:"stack_file" mapstructure:"stack_file"`
 	StackFileSection string `yaml:"stack_file_section" json:"stack_file_section" mapstructure:"stack_file_section"`

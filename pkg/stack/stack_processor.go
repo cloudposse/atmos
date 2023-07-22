@@ -863,17 +863,15 @@ func ProcessStackConfig(
 				//	comp["stacks"] = []string{}
 				//}
 
-				if processComponentDeps {
-					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponents, importsConfig)
-					if err != nil {
-						return nil, err
-					}
-					comp["deps"] = componentDeps
-					comp["deps_all"] = componentDeps
-				} else {
-					comp["deps"] = []string{}
-					comp["deps_all"] = []string{}
-				}
+				//if processComponentDeps {
+				//	componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponents, importsConfig)
+				//	if err != nil {
+				//		return nil, err
+				//	}
+				//	comp["deps"] = componentDeps
+				//} else {
+				//	comp["deps"] = []string{}
+				//}
 
 				terraformComponents[component] = comp
 			}
@@ -1090,17 +1088,15 @@ func ProcessStackConfig(
 				//	comp["stacks"] = []string{}
 				//}
 
-				if processComponentDeps {
-					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponents, importsConfig)
-					if err != nil {
-						return nil, err
-					}
-					comp["deps"] = componentDeps
-					comp["deps_all"] = componentDeps
-				} else {
-					comp["deps"] = []string{}
-					comp["deps_all"] = []string{}
-				}
+				//if processComponentDeps {
+				//	componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponents, importsConfig)
+				//	if err != nil {
+				//		return nil, err
+				//	}
+				//	comp["deps"] = componentDeps
+				//} else {
+				//	comp["deps"] = []string{}
+				//}
 
 				helmfileComponents[component] = comp
 			}
