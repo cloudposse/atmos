@@ -299,8 +299,34 @@ component_info:
           line: 23
     diagnostics: [ ]
 deps:
+  - catalog/terraform/mixins/test-2
+  - catalog/terraform/services/service-1-override-2
+  - catalog/terraform/services/service-2-override-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override-3
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - orgs/cp/_defaults
+  - orgs/cp/tenant1/_defaults
+  - orgs/cp/tenant1/dev/us-east-2
+deps_all:
   - catalog/terraform/mixins/test-1
   - catalog/terraform/mixins/test-2
+  - catalog/terraform/services/service-1
+  - catalog/terraform/services/service-1-override
+  - catalog/terraform/services/service-1-override-2
+  - catalog/terraform/services/service-2
+  - catalog/terraform/services/service-2-override
+  - catalog/terraform/services/service-2-override-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/tenant1-ue2-dev
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+  - catalog/terraform/test-component-override-2
+  - catalog/terraform/test-component-override-3
+  - mixins/region/us-east-2
+  - mixins/stage/dev
   - orgs/cp/_defaults
   - orgs/cp/tenant1/_defaults
   - orgs/cp/tenant1/dev/us-east-2
@@ -309,6 +335,33 @@ env:
   TEST_ENV_VAR2: val2-override-3
   TEST_ENV_VAR3: val3-override-3
   TEST_ENV_VAR4: null
+imports:
+  - catalog/helmfile/echo-server
+  - catalog/helmfile/infra-server
+  - catalog/helmfile/infra-server-override
+  - catalog/terraform/mixins/test-1
+  - catalog/terraform/mixins/test-2
+  - catalog/terraform/services/service-1
+  - catalog/terraform/services/service-1-override
+  - catalog/terraform/services/service-1-override-2
+  - catalog/terraform/services/service-2
+  - catalog/terraform/services/service-2-override
+  - catalog/terraform/services/service-2-override-2
+  - catalog/terraform/services/top-level-service-1
+  - catalog/terraform/services/top-level-service-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/tenant1-ue2-dev
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+  - catalog/terraform/test-component-override-2
+  - catalog/terraform/test-component-override-3
+  - catalog/terraform/top-level-component1
+  - catalog/terraform/vpc
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - orgs/cp/_defaults
+  - orgs/cp/tenant1/_defaults
+  - orgs/cp/tenant1/dev/_defaults
 inheritance:
   - mixin/test-2
   - mixin/test-1

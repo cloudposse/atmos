@@ -841,16 +841,6 @@ func ProcessStackConfig(
 					comp["component"] = baseComponentName
 				}
 
-				//if processComponentDeps {
-				//	componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponents, importsConfig)
-				//	if err != nil {
-				//		return nil, err
-				//	}
-				//	comp["deps"] = componentDeps
-				//} else {
-				//	comp["deps"] = []string{}
-				//}
-
 				terraformComponents[component] = comp
 			}
 		}
@@ -1053,16 +1043,6 @@ func ProcessStackConfig(
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
 				}
-
-				//if processComponentDeps {
-				//	componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponents, importsConfig)
-				//	if err != nil {
-				//		return nil, err
-				//	}
-				//	comp["deps"] = componentDeps
-				//} else {
-				//	comp["deps"] = []string{}
-				//}
 
 				helmfileComponents[component] = comp
 			}
