@@ -130,7 +130,7 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
   This also can be useful in CI/CD systems and [OPA validation policies](/core-concepts/components/validation) to check whether a user or a team 
   is allowed to import a particular config file for the component in the stack
 
-- `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined.
+- `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined
   (after the deep-merging and processing all the inheritance chains and all the base components). This is useful in CI/CD systems (e.g. Spacelift)
   to detect all the affected files that the component depends on (and trigger the component's stack if any of the files is affected).
   `deps` is usually a much smaller list than `deps_all` and can differ from it in the following ways:
