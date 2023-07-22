@@ -160,7 +160,8 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
    ```
 
   - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the component does 
-    not directly depend on it (all values are coming from `derived-component-3`)
+    not directly depend on it (all values are coming from `derived-component-3`). This will help, for example, to not trigger the component's
+    Spacelift stack unnecessary if only the `base-component-4` changes, preventing the unrelated stack runs
 
   - In the above case, the `deps_all` output will include both `derived-component-3` and `base-component-4`, but the `deps` output will only include
     `derived-component-3`
