@@ -180,27 +180,12 @@ func TransformStackConfigToSpaceliftStacks(
 						contextPrefix = strings.Replace(stackName, "/", "-", -1)
 					}
 
-					// Component dependencies
-					configAndStacksInfo := schema.ConfigAndStacksInfo{}
-
-					sources, err := e.ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
-					if err != nil {
-						return nil, err
-					}
-
-					componentDeps, componentDepsAll, err := e.FindComponentDependencies(stackName, sources)
-					if err != nil {
-						return nil, err
-					}
-
 					spaceliftConfig["component"] = component
 					spaceliftConfig["stack"] = contextPrefix
 					spaceliftConfig["imports"] = imports
 					spaceliftConfig["vars"] = componentVars
 					spaceliftConfig["settings"] = componentSettings
 					spaceliftConfig["env"] = componentEnv
-					spaceliftConfig["deps"] = componentDeps
-					spaceliftConfig["deps_all"] = componentDepsAll
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
 					spaceliftConfig["base_component"] = baseComponentName
@@ -218,6 +203,28 @@ func TransformStackConfigToSpaceliftStacks(
 						componentBackend = i.(map[any]any)
 					}
 					spaceliftConfig["backend"] = componentBackend
+
+					// Component dependencies
+					configAndStacksInfo := schema.ConfigAndStacksInfo{
+						ComponentVarsSection:     componentVars,
+						ComponentEnvSection:      componentEnv,
+						ComponentSettingsSection: componentSettings,
+						ComponentBackendSection:  componentBackend,
+						ComponentBackendType:     backendTypeName,
+					}
+
+					sources, err := e.ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
+					if err != nil {
+						return nil, err
+					}
+
+					componentDeps, componentDepsAll, err := e.FindComponentDependencies(stackName, sources)
+					if err != nil {
+						return nil, err
+					}
+
+					spaceliftConfig["deps"] = componentDeps
+					spaceliftConfig["deps_all"] = componentDepsAll
 
 					// Terraform workspace
 					workspace, err := e.BuildTerraformWorkspace(
