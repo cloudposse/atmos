@@ -123,24 +123,24 @@ The output contains the following sections:
 
 The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
 
-- `imports` shows all imports in the stack for all components. This can be useful in GitHub actions (or other CI/CD systems) and 
+- `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and 
    in [OPA validation policies](/core-concepts/components/validation) to check whether an import is allowed in the stack or not
 
 - `deps_all` shows all component stack dependencies (imports and root-level stacks) where any configuration for the component is present.
-  This also can be useful in CI/CD systems and [OPA validation policies](/core-concepts/components/validation) to check whether a user or a team 
+  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/components/validation) to check whether a user or a team 
   is allowed to import a particular config file for the component in the stack
 
 - `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined
   (after the deep-merging and processing all the inheritance chains and all the base components). This is useful in CI/CD systems (e.g. Spacelift)
-  to detect all the affected files that the component depends on (and trigger the component's stack if any of the files is affected).
-  `deps` is usually a much smaller list than `deps_all` and can differ from it in the following ways:
+  to detect only the affected files that the component depends on. `deps` is usually a much smaller list than `deps_all` and can 
+  differ from it in the following ways:
 
-  - The component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/components/inheritance), and 
+  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/components/inheritance), and 
     import those base component configurations
 
-  - The component can override all the default variables from the base components, and the final values are not dependent on the base components 
-    config anymore. For example, `derived-component-3` import the base component `base-component-4` configuration,
-    inherits from it, and overrides all the variables:
+  - The component can override all the default variables from the base components, and the final values are not dependent on the base component 
+    configs anymore. For example, `derived-component-3` import the base component `base-component-4`, inherits from it, and overrides all 
+    the variables:
 
    ```yaml
    # Import the base component config
@@ -159,12 +159,12 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
            # Override all the variables from the base component
    ```
 
-  - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the component does 
-    not directly depend on it (all values are coming from `derived-component-3`). This will help, for example, to not trigger the component's
-    Spacelift stack unnecessary if only the `base-component-4` changes, preventing the unrelated stack runs
+  - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the `derived-component-3` 
+    does not directly depend on `base-component-4` (all values are coming from the `derived-component-3`). This will help, for example, 
+    prevent unrelated Spacelift stack triggering
 
-  - In the above case, the `deps_all` output will include both `derived-component-3` and `base-component-4`, but the `deps` output will only include
-    `derived-component-3`
+  - In the above case, the `deps_all` output will include both `derived-component-3` and `base-component-4`, but the `deps` output will not include
+    `base-component-4`
 
 ## Command example
 
@@ -250,17 +250,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/context.tf
           line: 127
-      namespace:
-        name: namespace
-        type: string
-        description: ID element. Usually an abbreviation of your organization name,
-          e.g. 'eg' or 'cp', to help ensure generated IDs are globally unique
-        default: null
-        required: false
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 103
       region:
         name: region
         type: string
@@ -292,17 +281,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/context.tf
           line: 121
-      tenant:
-        name: tenant
-        type: string
-        description: ID element _(Rarely used, not included by default)_. A customer
-          identifier, indicating who this instance of a resource is for
-        default: null
-        required: false
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 109
     outputs:
       service_1_id:
         name: service_1_id
@@ -335,13 +313,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/main.tf
           line: 10
-      this:
-        name: this
-        source: cloudposse/label/null
-        version: 0.25.0
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 23
     diagnostics: []
 deps:
   - catalog/terraform/mixins/test-2
@@ -381,9 +352,6 @@ env:
   TEST_ENV_VAR3: val3-override-3
   TEST_ENV_VAR4: null
 imports:
-  - catalog/helmfile/echo-server
-  - catalog/helmfile/infra-server
-  - catalog/helmfile/infra-server-override
   - catalog/terraform/mixins/test-1
   - catalog/terraform/mixins/test-2
   - catalog/terraform/services/service-1
@@ -437,18 +405,6 @@ settings:
     workspace_enabled: false
 sources:
   backend:
-    acl:
-      final_value: bucket-owner-full-control
-      name: acl
-      stack_dependencies:
-        - stack_file: catalog/terraform/spacelift-and-backend-override-1
-          stack_file_section: terraform.backend.s3
-          dependency_type: import
-          variable_value: bucket-owner-full-control
-        - stack_file: orgs/cp/_defaults
-          stack_file_section: terraform.backend.s3
-          dependency_type: import
-          variable_value: bucket-owner-full-control
     bucket:
       final_value: cp-ue2-root-tfstate
       name: bucket
