@@ -84,9 +84,10 @@ where:
 
 ## `Go` Templates in Imports
 
-Atmos supports all the functionality of the [Go templates](https://pkg.go.dev/text/template) in imported stack configurations (including
-[functions](https://pkg.go.dev/text/template#hdr-Functions)). Stack configurations can be templatized and then reused with different
-settings provided via the import `context` section.
+Atmos supports all the functionality of the [Go templates](https://pkg.go.dev/text/template) in imported stack configurations, including
+[functions](https://pkg.go.dev/text/template#hdr-Functions) and [Sprig functions](http://masterminds.github.io/sprig/). 
+
+Stack configurations can be templatized and then reused with different settings provided via the import `context` section.
 
 For example, we can define the following configuration for EKS Atmos components in the `catalog/terraform/eks_cluster_tmpl.yaml` template file:
 
