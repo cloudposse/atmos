@@ -183,12 +183,6 @@ atmos_cli_config:
       deploy_run_init: true
       init_run_reconfigure: true
       auto_generate_backend_file: false
-    helmfile:
-      base_path: components/helmfile
-      use_eks: true
-      kubeconfig_path: /dev/shm
-      helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
-      cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
   stacks:
     base_path: stacks
     included_paths:
@@ -226,17 +220,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/context.tf
           line: 97
-      environment:
-        name: environment
-        type: string
-        description: ID element. Usually used for region e.g. 'uw2', 'us-west-2',
-          OR role 'prod', 'staging', 'dev', 'UAT'
-        default: null
-        required: false
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 115
       name:
         name: name
         type: string
@@ -250,16 +233,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/context.tf
           line: 127
-      region:
-        name: region
-        type: string
-        description: Region
-        default: null
-        required: true
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/variables.tf
-          line: 1
       service_1_name:
         name: service_1_name
         type: string
@@ -270,17 +243,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/variables.tf
           line: 6
-      stage:
-        name: stage
-        type: string
-        description: ID element. Usually used to indicate role, e.g. 'prod', 'staging',
-          'source', 'build', 'test', 'deploy', 'release'
-        default: null
-        required: false
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 121
     outputs:
       service_1_id:
         name: service_1_id
@@ -296,8 +258,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/outputs.tf
           line: 6
-    requiredcore:
-      - '>= 1.0.0'
     modulecalls:
       service_1_label:
         name: service_1_label
@@ -306,13 +266,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/main.tf
           line: 1
-      service_2_label:
-        name: service_2_label
-        source: cloudposse/label/null
-        version: 0.25.0
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/main.tf
-          line: 10
     diagnostics: []
 deps:
   - catalog/terraform/mixins/test-2
@@ -429,50 +382,6 @@ sources:
           stack_file_section: terraform.backend.s3
           dependency_type: import
           variable_value: cp-ue2-root-tfstate-lock
-    key:
-      final_value: terraform.tfstate
-      name: key
-      stack_dependencies:
-        - stack_file: catalog/terraform/spacelift-and-backend-override-1
-          stack_file_section: terraform.backend.s3
-          dependency_type: import
-          variable_value: terraform.tfstate
-        - stack_file: orgs/cp/_defaults
-          stack_file_section: terraform.backend.s3
-          dependency_type: import
-          variable_value: terraform.tfstate
-    profile:
-      final_value: cp-gbl-root-tfstate
-      name: profile
-      stack_dependencies:
-        - stack_file: catalog/terraform/spacelift-and-backend-override-1
-          stack_file_section: terraform.backend.s3
-          dependency_type: import
-          variable_value: cp-gbl-root-tfstate
-    region:
-      final_value: us-east-2
-      name: region
-      stack_dependencies:
-        - stack_file: catalog/terraform/spacelift-and-backend-override-1
-          stack_file_section: terraform.backend.s3
-          dependency_type: import
-          variable_value: us-east-2
-        - stack_file: orgs/cp/_defaults
-          stack_file_section: terraform.backend.s3
-          dependency_type: import
-          variable_value: us-east-2
-    role_arn:
-      final_value: null
-      name: role_arn
-      stack_dependencies:
-        - stack_file: orgs/cp/_defaults
-          stack_file_section: terraform.backend.s3
-          dependency_type: import
-          variable_value: null
-    workspace_key_prefix:
-      final_value: test-test-component
-      name: workspace_key_prefix
-      stack_dependencies: []
   env:
     TEST_ENV_VAR1:
       final_value: val1-override-3
