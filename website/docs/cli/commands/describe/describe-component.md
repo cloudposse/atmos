@@ -90,8 +90,6 @@ The output contains the following sections:
     where the variables, outputs and child modules are defined are also included. Invalid Terraform configurations are also detected, and in case of
     any issues, the warnings and errors are shows in the `terraform_config.diagnostics` section
 
-- `deps` - a list of stack dependencies (stack config files where the component settings are defined, either inline or via imports)
-
 - `env` - a list of ENV variables defined for the Atmos component
 
 - `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
@@ -114,9 +112,61 @@ The output contains the following sections:
 
 - `workspace` - Terraform workspace for the Atmos component
 
-<br/>
+- `imports` - a list of all imports in the Atmos stack (this shows all imports in the stack, related to the component and not)
 
-For example:
+- `deps_all` - a list of all component stack dependencies (stack config files where the component settings are defined, either inline or via imports)
+
+- `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
+  (after the deep-merging and processing all the inheritance chains and all the base components)
+
+## Difference between `imports`, `deps_all` and `deps` outputs
+
+The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
+
+- `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and 
+   in [OPA validation policies](/core-concepts/components/validation) to check whether an import is allowed in the stack or not
+
+- `deps_all` shows all component stack dependencies (imports and root-level stacks) where any configuration for the component is present.
+  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/components/validation) to check whether a user or a team 
+  is allowed to import a particular config file for the component in the stack
+
+- `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined
+  (after the deep-merging and processing all the inheritance chains and all the base components). This is useful in CI/CD systems (e.g. Spacelift)
+  to detect only the affected files that the component depends on. `deps` is usually a much smaller list than `deps_all` and can 
+  differ from it in the following ways:
+
+  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/components/inheritance), and 
+    import those base component configurations
+
+  - The component can override all the default variables from the base components, and the final values are not dependent on the base component 
+    configs anymore. For example, `derived-component-3` import the base component `base-component-4`, inherits from it, and overrides all 
+    the variables:
+
+   ```yaml
+   # Import the base component config
+   import:
+     - catalog/terraform/base-component-4
+
+   components:
+     terraform:
+       derived-component-3:
+         metadata:
+           component: "test/test-component"  # Point to the Terraform component
+           inherits:
+             # Inherit all the values from the base component
+             - base-component-4
+         vars:
+           # Override all the variables from the base component
+   ```
+
+  - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the `derived-component-3` 
+    does not directly depend on `base-component-4` (all values are coming from the `derived-component-3`). This will help, for example, 
+    prevent unrelated Spacelift stack triggering
+
+  - In the above case, the `deps_all` output will include both `derived-component-3` and `base-component-4`, but the `deps` output will not include
+    `base-component-4`
+
+## Command example
 
 ```shell
 atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
@@ -133,12 +183,6 @@ atmos_cli_config:
       deploy_run_init: true
       init_run_reconfigure: true
       auto_generate_backend_file: false
-    helmfile:
-      base_path: components/helmfile
-      use_eks: true
-      kubeconfig_path: /dev/shm
-      helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
-      cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
   stacks:
     base_path: stacks
     included_paths:
@@ -176,17 +220,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/context.tf
           line: 97
-      environment:
-        name: environment
-        type: string
-        description: ID element. Usually used for region e.g. 'uw2', 'us-west-2',
-          OR role 'prod', 'staging', 'dev', 'UAT'
-        default: null
-        required: false
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 115
       name:
         name: name
         type: string
@@ -200,27 +233,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/context.tf
           line: 127
-      namespace:
-        name: namespace
-        type: string
-        description: ID element. Usually an abbreviation of your organization name,
-          e.g. 'eg' or 'cp', to help ensure generated IDs are globally unique
-        default: null
-        required: false
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 103
-      region:
-        name: region
-        type: string
-        description: Region
-        default: null
-        required: true
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/variables.tf
-          line: 1
       service_1_name:
         name: service_1_name
         type: string
@@ -231,28 +243,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/variables.tf
           line: 6
-      stage:
-        name: stage
-        type: string
-        description: ID element. Usually used to indicate role, e.g. 'prod', 'staging',
-          'source', 'build', 'test', 'deploy', 'release'
-        default: null
-        required: false
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 121
-      tenant:
-        name: tenant
-        type: string
-        description: ID element _(Rarely used, not included by default)_. A customer
-          identifier, indicating who this instance of a resource is for
-        default: null
-        required: false
-        sensitive: false
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 109
     outputs:
       service_1_id:
         name: service_1_id
@@ -268,8 +258,6 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/outputs.tf
           line: 6
-    requiredcore:
-      - '>= 1.0.0'
     modulecalls:
       service_1_label:
         name: service_1_label
@@ -278,24 +266,36 @@ component_info:
         pos:
           filename: examples/complete/components/terraform/test/test-component/main.tf
           line: 1
-      service_2_label:
-        name: service_2_label
-        source: cloudposse/label/null
-        version: 0.25.0
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/main.tf
-          line: 10
-      this:
-        name: this
-        source: cloudposse/label/null
-        version: 0.25.0
-        pos:
-          filename: examples/complete/components/terraform/test/test-component/context.tf
-          line: 23
     diagnostics: []
 deps:
+  - catalog/terraform/mixins/test-2
+  - catalog/terraform/services/service-1-override-2
+  - catalog/terraform/services/service-2-override-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override-3
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - orgs/cp/_defaults
+  - orgs/cp/tenant1/_defaults
+  - orgs/cp/tenant1/dev/us-east-2
+deps_all:
   - catalog/terraform/mixins/test-1
   - catalog/terraform/mixins/test-2
+  - catalog/terraform/services/service-1
+  - catalog/terraform/services/service-1-override
+  - catalog/terraform/services/service-1-override-2
+  - catalog/terraform/services/service-2
+  - catalog/terraform/services/service-2-override
+  - catalog/terraform/services/service-2-override-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/tenant1-ue2-dev
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+  - catalog/terraform/test-component-override-2
+  - catalog/terraform/test-component-override-3
+  - mixins/region/us-east-2
+  - mixins/stage/dev
   - orgs/cp/_defaults
   - orgs/cp/tenant1/_defaults
   - orgs/cp/tenant1/dev/us-east-2
@@ -304,6 +304,30 @@ env:
   TEST_ENV_VAR2: val2-override-3
   TEST_ENV_VAR3: val3-override-3
   TEST_ENV_VAR4: null
+imports:
+  - catalog/terraform/mixins/test-1
+  - catalog/terraform/mixins/test-2
+  - catalog/terraform/services/service-1
+  - catalog/terraform/services/service-1-override
+  - catalog/terraform/services/service-1-override-2
+  - catalog/terraform/services/service-2
+  - catalog/terraform/services/service-2-override
+  - catalog/terraform/services/service-2-override-2
+  - catalog/terraform/services/top-level-service-1
+  - catalog/terraform/services/top-level-service-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/tenant1-ue2-dev
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+  - catalog/terraform/test-component-override-2
+  - catalog/terraform/test-component-override-3
+  - catalog/terraform/top-level-component1
+  - catalog/terraform/vpc
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - orgs/cp/_defaults
+  - orgs/cp/tenant1/_defaults
+  - orgs/cp/tenant1/dev/_defaults
 inheritance:
   - mixin/test-2
   - mixin/test-1
@@ -333,6 +357,31 @@ settings:
     stack_name_pattern: '{tenant}-{environment}-{stage}-new-component'
     workspace_enabled: false
 sources:
+  backend:
+    bucket:
+      final_value: cp-ue2-root-tfstate
+      name: bucket
+      stack_dependencies:
+        - stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-ue2-root-tfstate
+        - stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-ue2-root-tfstate
+    dynamodb_table:
+      final_value: cp-ue2-root-tfstate-lock
+      name: dynamodb_table
+      stack_dependencies:
+        - stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-ue2-root-tfstate-lock
+        - stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          dependency_type: import
+          variable_value: cp-ue2-root-tfstate-lock
   env:
     TEST_ENV_VAR1:
       final_value: val1-override-3

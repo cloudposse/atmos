@@ -85,16 +85,6 @@ func ProcessYAMLConfigFiles(
 			uniqueImports := u.UniqueStrings(imports)
 			sort.Strings(uniqueImports)
 
-			// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-			// TODO: review it to use the new `atmos.yaml CLI stackConfig
-			//if processStackDeps {
-			//	componentStackMap, err = CreateComponentStackMap(stackBasePath, p)
-			//	if err != nil {
-			//		errorResult = err
-			//		return
-			//	}
-			//}
-
 			componentStackMap := map[string]map[string][]string{}
 
 			finalConfig, err := ProcessStackConfig(
@@ -130,6 +120,7 @@ func ProcessYAMLConfigFiles(
 			rawStackConfigs[stackFileName] = map[string]any{}
 			rawStackConfigs[stackFileName]["stack"] = stackConfig
 			rawStackConfigs[stackFileName]["imports"] = importsConfig
+			rawStackConfigs[stackFileName]["import_files"] = uniqueImports
 		}(i, filePath)
 	}
 
@@ -850,28 +841,6 @@ func ProcessStackConfig(
 					comp["component"] = baseComponentName
 				}
 
-				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-				// TODO: review it to use the new `atmos.yaml` CLI config
-				//if processStackDeps == true {
-				//	componentStacks, err := FindComponentStacks("terraform", component, baseComponentName, componentStackMap)
-				//	if err != nil {
-				//		return nil, err
-				//	}
-				//	comp["stacks"] = componentStacks
-				//} else {
-				//	comp["stacks"] = []string{}
-				//}
-
-				if processComponentDeps {
-					componentDeps, err := FindComponentDependencies(stackName, "terraform", component, baseComponents, importsConfig)
-					if err != nil {
-						return nil, err
-					}
-					comp["deps"] = componentDeps
-				} else {
-					comp["deps"] = []string{}
-				}
-
 				terraformComponents[component] = comp
 			}
 		}
@@ -1073,28 +1042,6 @@ func ProcessStackConfig(
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
-				}
-
-				// TODO: this feature is not used anywhere, it has old code and it has issues with some YAML stack configs
-				// TODO: review it to use the new `atmos.yaml` CLI config
-				//if processStackDeps == true {
-				//	componentStacks, err := FindComponentStacks("helmfile", component, baseComponentName, componentStackMap)
-				//	if err != nil {
-				//		return nil, err
-				//	}
-				//	comp["stacks"] = componentStacks
-				//} else {
-				//	comp["stacks"] = []string{}
-				//}
-
-				if processComponentDeps {
-					componentDeps, err := FindComponentDependencies(stackName, "helmfile", component, baseComponents, importsConfig)
-					if err != nil {
-						return nil, err
-					}
-					comp["deps"] = componentDeps
-				} else {
-					comp["deps"] = []string{}
 				}
 
 				helmfileComponents[component] = comp

@@ -3,11 +3,13 @@ package utils
 import (
 	"bytes"
 	"text/template"
+
+	"github.com/Masterminds/sprig/v3"
 )
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(tmplName string, tmplValue string, tmplData any) (string, error) {
-	t, err := template.New(tmplName).Parse(tmplValue)
+	t, err := template.New(tmplName).Funcs(sprig.FuncMap()).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}

@@ -23,10 +23,11 @@ func CreateSpaceliftStacks(
 	processStackDeps bool,
 	processComponentDeps bool,
 	processImports bool,
-	stackConfigPathTemplate string) (map[string]any, error) {
+	stackConfigPathTemplate string,
+) (map[string]any, error) {
 
 	if len(filePaths) > 0 {
-		_, stacks, _, err := s.ProcessYAMLConfigFiles(
+		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
 			stacksBasePath,
 			terraformComponentsBasePath,
 			helmfileComponentsBasePath,
@@ -40,7 +41,7 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
-		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports)
+		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports, rawStackConfigs)
 	} else {
 		cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
@@ -48,7 +49,7 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
-		_, stacks, _, err := s.ProcessYAMLConfigFiles(
+		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
 			cliConfig.StacksBaseAbsolutePath,
 			cliConfig.TerraformDirAbsolutePath,
 			cliConfig.HelmfileDirAbsolutePath,
@@ -62,7 +63,7 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
-		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, cliConfig.Stacks.NamePattern, processImports)
+		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, cliConfig.Stacks.NamePattern, processImports, rawStackConfigs)
 	}
 }
 
@@ -71,7 +72,9 @@ func TransformStackConfigToSpaceliftStacks(
 	stacks map[string]any,
 	stackConfigPathTemplate string,
 	stackNamePattern string,
-	processImports bool) (map[string]any, error) {
+	processImports bool,
+	rawStackConfigs map[string]map[string]any,
+) (map[string]any, error) {
 
 	var err error
 	res := map[string]any{}
@@ -144,11 +147,6 @@ func TransformStackConfigToSpaceliftStacks(
 						componentEnv = i.(map[any]any)
 					}
 
-					componentDeps := []string{}
-					if i, ok2 := componentMap["deps"]; ok2 {
-						componentDeps = i.([]string)
-					}
-
 					componentStacks := []string{}
 					if i, ok2 := componentMap["stacks"]; ok2 {
 						componentStacks = i.([]string)
@@ -188,7 +186,6 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["vars"] = componentVars
 					spaceliftConfig["settings"] = componentSettings
 					spaceliftConfig["env"] = componentEnv
-					spaceliftConfig["deps"] = componentDeps
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
 					spaceliftConfig["base_component"] = baseComponentName
@@ -206,6 +203,32 @@ func TransformStackConfigToSpaceliftStacks(
 						componentBackend = i.(map[any]any)
 					}
 					spaceliftConfig["backend"] = componentBackend
+
+					// Component dependencies
+					configAndStacksInfo := schema.ConfigAndStacksInfo{
+						ComponentFromArg:          component,
+						ComponentType:             "terraform",
+						StackFile:                 stackName,
+						ComponentVarsSection:      componentVars,
+						ComponentEnvSection:       componentEnv,
+						ComponentSettingsSection:  componentSettings,
+						ComponentBackendSection:   componentBackend,
+						ComponentBackendType:      backendTypeName,
+						ComponentInheritanceChain: componentInheritance,
+					}
+
+					sources, err := e.ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
+					if err != nil {
+						return nil, err
+					}
+
+					componentDeps, componentDepsAll, err := e.FindComponentDependencies(stackName, sources)
+					if err != nil {
+						return nil, err
+					}
+
+					spaceliftConfig["deps"] = componentDeps
+					spaceliftConfig["deps_all"] = componentDepsAll
 
 					// Terraform workspace
 					workspace, err := e.BuildTerraformWorkspace(

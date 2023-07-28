@@ -1,11 +1,13 @@
 package stack
 
 import (
-	c "github.com/cloudposse/atmos/pkg/convert"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v2"
-	"testing"
+
+	c "github.com/cloudposse/atmos/pkg/convert"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestStackProcessor(t *testing.T) {
@@ -161,43 +163,17 @@ func TestStackProcessor(t *testing.T) {
 
 	infraInfraServerOverrideComponent := helmfileComponents["infra/infra-server-override"].(map[any]any)
 	infraInfraServerOverrideComponentCommand := infraInfraServerOverrideComponent["command"]
-	infraInfraServerOverrideComponentDeps := infraInfraServerOverrideComponent["deps"].([]any)
 	infraInfraServerOverrideComponentVars := infraInfraServerOverrideComponent["vars"].(map[any]any)
 	infraInfraServerOverrideComponentVarsA := infraInfraServerOverrideComponentVars["a"]
 	infraInfraServerOverrideComponentInheritance := infraInfraServerOverrideComponent["inheritance"].([]any)
 	assert.Equal(t, "helmfile", infraInfraServerOverrideComponentCommand)
-	assert.Equal(t, "catalog/helmfile/infra-server", infraInfraServerOverrideComponentDeps[0])
-	assert.Equal(t, "catalog/helmfile/infra-server-override", infraInfraServerOverrideComponentDeps[1])
-	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", infraInfraServerOverrideComponentDeps[2])
-	assert.Equal(t, "mixins/region/us-east-2", infraInfraServerOverrideComponentDeps[3])
-	assert.Equal(t, "mixins/stage/dev", infraInfraServerOverrideComponentDeps[4])
-	assert.Equal(t, "orgs/cp/_defaults", infraInfraServerOverrideComponentDeps[5])
-	assert.Equal(t, "orgs/cp/tenant1/_defaults", infraInfraServerOverrideComponentDeps[6])
 	assert.Equal(t, "infra/infra-server", infraInfraServerOverrideComponentInheritance[0])
 	assert.Equal(t, "1_override", infraInfraServerOverrideComponentVarsA)
 
 	testTestComponentOverrideComponent3 := terraformComponents["test/test-component-override-3"].(map[any]any)
 	testTestComponentOverrideComponent3Metadata := testTestComponentOverrideComponent3["metadata"].(map[any]any)
 	testTestComponentOverrideComponent3TerraformWorkspace := testTestComponentOverrideComponent3Metadata["terraform_workspace"]
-	testTestComponentOverrideComponent3Deps := testTestComponentOverrideComponent3["deps"].([]any)
 	assert.Equal(t, "test-component-override-3-workspace", testTestComponentOverrideComponent3TerraformWorkspace)
-	assert.Equal(t, 16, len(testTestComponentOverrideComponent3Deps))
-	assert.Equal(t, "catalog/terraform/mixins/test-1", testTestComponentOverrideComponent3Deps[0])
-	assert.Equal(t, "catalog/terraform/mixins/test-2", testTestComponentOverrideComponent3Deps[1])
-	assert.Equal(t, "catalog/terraform/services/service-1", testTestComponentOverrideComponent3Deps[2])
-	assert.Equal(t, "catalog/terraform/services/service-1-override", testTestComponentOverrideComponent3Deps[3])
-	assert.Equal(t, "catalog/terraform/services/service-1-override-2", testTestComponentOverrideComponent3Deps[4])
-	assert.Equal(t, "catalog/terraform/services/service-2", testTestComponentOverrideComponent3Deps[5])
-	assert.Equal(t, "catalog/terraform/services/service-2-override", testTestComponentOverrideComponent3Deps[6])
-	assert.Equal(t, "catalog/terraform/services/service-2-override-2", testTestComponentOverrideComponent3Deps[7])
-	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", testTestComponentOverrideComponent3Deps[8])
-	assert.Equal(t, "catalog/terraform/tenant1-ue2-dev", testTestComponentOverrideComponent3Deps[9])
-	assert.Equal(t, "catalog/terraform/test-component-override-3", testTestComponentOverrideComponent3Deps[10])
-	assert.Equal(t, "mixins/region/us-east-2", testTestComponentOverrideComponent3Deps[11])
-	assert.Equal(t, "mixins/stage/dev", testTestComponentOverrideComponent3Deps[12])
-	assert.Equal(t, "orgs/cp/_defaults", testTestComponentOverrideComponent3Deps[13])
-	assert.Equal(t, "orgs/cp/tenant1/_defaults", testTestComponentOverrideComponent3Deps[14])
-	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", testTestComponentOverrideComponent3Deps[15])
 
 	yamlConfig, err := yaml.Marshal(mapConfig1)
 	assert.Nil(t, err)

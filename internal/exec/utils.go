@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -59,6 +61,7 @@ func FindComponentConfig(
 	var componentSection map[string]any
 	var componentVarsSection map[any]any
 	var componentSettingsSection map[any]any
+	var componentImportsSection []string
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
 	var componentBackendType string
@@ -95,6 +98,9 @@ func FindComponentConfig(
 	}
 	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
 		componentBackendType = ""
+	}
+	if componentImportsSection, ok = stackSection["imports"].([]string); !ok {
+		componentImportsSection = nil
 	}
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
@@ -134,6 +140,7 @@ func FindComponentConfig(
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
 	configAndStacksInfo.ComponentMetadataSection = componentMetadata
+	configAndStacksInfo.ComponentImportsSection = componentImportsSection
 
 	return nil
 }
@@ -227,10 +234,7 @@ func ProcessStacks(
 	cliConfig schema.CliConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
-) (
-	schema.ConfigAndStacksInfo,
-	error,
-) {
+) (schema.ConfigAndStacksInfo, error) {
 
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
@@ -286,6 +290,7 @@ func ProcessStacks(
 		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
 		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
 			cliConfig.Stacks.NamePattern,
@@ -423,13 +428,90 @@ func ProcessStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
-	// sources (stack config files where the variables and other settings are defined)
-	sources, err := processConfigSources(configAndStacksInfo, rawStackConfigs)
+	// Add imports
+	configAndStacksInfo.ComponentSection["imports"] = configAndStacksInfo.ComponentImportsSection
+
+	// Add Atmos component and stack
+	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
+
+	// Add Atmos CLI config
+	atmosCliConfig := map[string]any{}
+	atmosCliConfig["base_path"] = cliConfig.BasePath
+	atmosCliConfig["components"] = cliConfig.Components
+	atmosCliConfig["stacks"] = cliConfig.Stacks
+	atmosCliConfig["workflows"] = cliConfig.Workflows
+	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
+
+	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
+	if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
+		configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
+	}
+
+	// Spacelift stack
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
+		cliConfig,
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.Stack,
+		configAndStacksInfo.ComponentSettingsSection,
+		configAndStacksInfo.ComponentVarsSection,
+	)
+
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	// Atlantis project
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
+		cliConfig,
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.ComponentSettingsSection,
+		configAndStacksInfo.ComponentVarsSection,
+	)
+
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
+	// Add component info, including Terraform config
+	componentInfo := map[string]any{}
+	componentInfo["component_type"] = configAndStacksInfo.ComponentType
+
+	if configAndStacksInfo.ComponentType == "terraform" {
+		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
+		componentInfo["component_path"] = componentPath
+		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+		componentInfo["terraform_config"] = terraformConfiguration
+	} else if configAndStacksInfo.ComponentType == "helmfile" {
+		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
+	}
+
+	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
+
+	// `sources` (stack config files where the variables and other settings are defined)
+	sources, err := ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
 	configAndStacksInfo.ComponentSection["sources"] = sources
+
+	// Component dependencies
+	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.ComponentSection["deps"] = componentDeps
+	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
 	return configAndStacksInfo, nil
 }
@@ -796,4 +878,30 @@ func removeTempDir(cliConfig schema.CliConfiguration, path string) {
 	if err != nil {
 		u.LogWarning(cliConfig, err.Error())
 	}
+}
+
+// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defind in
+func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
+	var deps []string
+	var depsAll []string
+
+	for _, source := range sources {
+		for _, v := range source {
+			for i, dep := range v.StackDependencies {
+				if dep.StackFile != "" {
+					depsAll = append(depsAll, dep.StackFile)
+					if i == 0 {
+						deps = append(deps, dep.StackFile)
+					}
+				}
+			}
+		}
+	}
+
+	depsAll = append(depsAll, currentStack)
+	unique := u.UniqueStrings(deps)
+	uniqueAll := u.UniqueStrings(depsAll)
+	sort.Strings(unique)
+	sort.Strings(uniqueAll)
+	return unique, uniqueAll, nil
 }
