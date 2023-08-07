@@ -31,7 +31,7 @@ func processHelp(componentType string, command string) error {
 			u.PrintMessage(" - 'atmos terraform apply' and 'atmos terraform deploy' commands commands support '--planfile' flag to specify the path " +
 				"to a planfile. The '--planfile' flag should be used instead of the planfile argument in the native 'terraform apply <planfile>' command")
 			u.PrintMessage(" - 'atmos terraform clean' command deletes the '.terraform' folder, '.terraform.lock.hcl' lock file, " +
-				"and the previously generated 'planfile' and 'varfile' for the specified component and stack")
+				"and the previously generated 'planfile' and 'varfile' for the specified component and stack. Use --skip-lock-file flag to skip deleting the lock file.")
 			u.PrintMessage(" - 'atmos terraform workspace' command first runs 'terraform init -reconfigure', then 'terraform workspace select', " +
 				"and if the workspace was not created before, it then runs 'terraform workspace new'")
 			u.PrintMessage(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, " +
