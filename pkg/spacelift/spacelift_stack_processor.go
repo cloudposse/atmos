@@ -307,15 +307,20 @@ func TransformStackConfigToSpaceliftStacks(
 							stackComponentSettingsDependsOnContext.Stage = context.Stage
 						}
 
-						contextPrefixDependsOn, err := cfg.GetContextPrefix(
-							stackName,
-							stackComponentSettingsDependsOnContext,
-							stackNamePattern,
-							stackName,
-						)
-						if err != nil {
-							u.LogError(err)
-							return nil, err
+						var contextPrefixDependsOn string
+
+						if stackNamePattern != "" {
+							contextPrefixDependsOn, err = cfg.GetContextPrefix(
+								stackName,
+								stackComponentSettingsDependsOnContext,
+								stackNamePattern,
+								stackName,
+							)
+							if err != nil {
+								return nil, err
+							}
+						} else {
+							contextPrefixDependsOn = strings.Replace(stackName, "/", "-", -1)
 						}
 
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
