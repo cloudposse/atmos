@@ -51,8 +51,7 @@ Use [mixins](/core-concepts/stacks/mixins) for reusable snippets of configuratio
 
 ## Imports Schema
 
-The `import` section supports the following two formats (note that only one format is supported in a stack config file, but different stack
-configs can use one format or the other):
+The `import` section supports the following two formats:
 
 - a list of paths to the imported files, for example:
 
@@ -82,10 +81,35 @@ where:
 - `context` - an optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
   a [Go template](https://pkg.go.dev/text/template))
 
+<br/>
+
+:::note
+
+In a stack config file, you can use only one of the supported formats. Using the two formats at the same time in a single stack config file is not
+currently supported. If you are importing a template file and providing a `context` to it, you have to use the same schema with the `path` to the
+files to import all other configs even if they don't use templates and don't require a `context`.
+
+:::
+
+For example:
+
+```yaml
+  import:
+    - path: catalog/terraform/eks_cluster_tmpl
+      context:
+        flavor: "blue"
+        enabled: true
+        service_1_name: "blue-service-1"
+        service_2_name: "blue-service-2"
+    - path: catalog/terraform/test-component
+    - path: catalog/terraform/vpc
+    - path: catalog/helmfile/echo-server
+```
+
 ## `Go` Templates in Imports
 
-Atmos supports all the functionality of the [Go templates](https://pkg.go.dev/text/template) in imported stack configurations, including
-[functions](https://pkg.go.dev/text/template#hdr-Functions) and [Sprig functions](http://masterminds.github.io/sprig/). 
+Atmos supports all the functionality of [Go templates](https://pkg.go.dev/text/template) in imported stack configurations, including
+[functions](https://pkg.go.dev/text/template#hdr-Functions) and [Sprig functions](http://masterminds.github.io/sprig/).
 
 Stack configurations can be templatized and then reused with different settings provided via the import `context` section.
 
@@ -93,7 +117,7 @@ For example, we can define the following configuration for EKS Atmos components 
 
 ```yaml title=stacks/catalog/terraform/eks_cluster_tmpl.yaml
 # Imports can also be parameterized using `Go` templates
-import: []
+import: [ ]
 
 components:
   terraform:
@@ -293,7 +317,7 @@ atmos terraform apply eks-blue/cluster -s tenant1-uw1-test-1
 atmos terraform apply eks-green/cluster -s tenant1-uw1-test-1
 ```
 
-All the parameterized variables get their values from the all the hierarchical `context` settings:
+All the parameterized variables get their values from the hierarchical `context` settings:
 
 ```yaml title="atmos describe component eks-blue/cluster -s tenant1-uw1-test-1"
 vars:
@@ -309,6 +333,48 @@ vars:
     flavor: blue
   tenant: tenant1
 ```
+
+<br/>
+
+## Advanced Examples of Templates in Atmos Configurations
+
+Atmos supports all the functionality of [Go templates](https://pkg.go.dev/text/template), including [functions](https://pkg.go.dev/text/template#hdr-Functions) and [Sprig functions](http://masterminds.github.io/sprig/).
+The Sprig library provides over 70 template functions for `Go's` template language.
+
+The following example shows how to dynamically include a variable in the Atmos component configuration by using the `hasKey` Sprig function.
+The hasKey function returns `true` if the given dictionary contains the given key.
+
+```yaml
+components:
+  terraform:
+    eks/iam-role/{{ .app_name }}/{{ .service_environment }}:
+      metadata:
+        component: eks/iam-role
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        enabled: {{ .enabled }}
+        tags:
+          Service: {{ .app_name }}
+        service_account_name: {{ .app_name }}
+        service_account_namespace: {{ .service_account_namespace }}
+        {{ if hasKey . "iam_managed_policy_arns" }}
+        iam_managed_policy_arns:
+          {{ range $i, $iam_managed_policy_arn := .iam_managed_policy_arns }}
+          - '{{ $iam_managed_policy_arn }}'
+          {{ end }}
+        {{- end }}
+        {{ if hasKey . "iam_source_policy_documents" }}
+        iam_source_policy_documents:
+          {{ range $i, $iam_source_policy_document := .iam_source_policy_documents }}
+          - '{{ $iam_source_policy_document }}'
+          {{ end }}
+        {{- end }}
+```
+
+The `iam_managed_policy_arns` and `iam_source_policy_documents` variables will be included in the component configuration only if the 
+provided `context` object has the `iam_managed_policy_arns` and `iam_source_policy_documents` fields. 
 
 ## Summary
 
