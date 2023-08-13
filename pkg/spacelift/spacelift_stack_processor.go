@@ -129,11 +129,6 @@ func TransformStackConfigToSpaceliftStacks(
 						spaceliftExplicitLabels = i.([]any)
 					}
 
-					spaceliftDependsOn := []any{}
-					if i, ok2 := spaceliftSettings["depends_on"]; ok2 {
-						spaceliftDependsOn = i.([]any)
-					}
-
 					spaceliftConfig := map[string]any{}
 					spaceliftConfig["enabled"] = spaceliftWorkspaceEnabled
 
@@ -264,9 +259,21 @@ func TransformStackConfigToSpaceliftStacks(
 						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.Replace(v, "/", "-", -1))
 					}
 
-					for _, v := range spaceliftDependsOn {
+					// Legacy/deprecated `settings.spacelift.depends_on`
+					spaceliftDependsOn := []any{}
+					if i, ok2 := spaceliftSettings["depends_on"]; ok2 {
+						spaceliftDependsOn = i.([]any)
+					}
+
+					// Recommended `settings.depends_on`
+					componentDependsOn := map[string]any{}
+					if i, ok2 := componentSettings["depends_on"]; ok2 {
+						componentDependsOn = i.(map[string]any)
+					}
+
+					for _, dep := range spaceliftDependsOn {
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
-							v.(string),
+							dep.(string),
 							allStackNames,
 							contextPrefix,
 							terraformComponentNamesInCurrentStack,
@@ -278,6 +285,7 @@ func TransformStackConfigToSpaceliftStacks(
 						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
 					}
 
+					// Add `component` and `folder` labels
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
 					labels = append(labels, fmt.Sprintf("folder:%s", strings.Replace(contextPrefix, "-", "/", -1)))
 

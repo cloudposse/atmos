@@ -160,7 +160,7 @@ func ExecuteDescribeDependents(
 					return nil, err
 				}
 
-				// Skip if the stack component has an empty `settings.dependencies.depends_on` section
+				// Skip if the stack component has an empty `settings.depends_on` section
 				if reflect.ValueOf(stackComponentSettings).IsZero() ||
 					reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
 					continue
