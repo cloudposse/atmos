@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -63,7 +64,13 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
-		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, cliConfig.Stacks.NamePattern, processImports, rawStackConfigs)
+		return TransformStackConfigToSpaceliftStacks(
+			stacks,
+			stackConfigPathTemplate,
+			cliConfig.Stacks.NamePattern,
+			processImports,
+			rawStackConfigs,
+		)
 	}
 }
 
@@ -265,17 +272,56 @@ func TransformStackConfigToSpaceliftStacks(
 						spaceliftDependsOn = i.([]any)
 					}
 
-					// Recommended `settings.depends_on`
-					componentDependsOn := map[string]any{}
-					if i, ok2 := componentSettings["depends_on"]; ok2 {
-						componentDependsOn = i.(map[string]any)
-					}
-
 					for _, dep := range spaceliftDependsOn {
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
 							dep.(string),
 							allStackNames,
 							contextPrefix,
+							terraformComponentNamesInCurrentStack,
+							component)
+						if err != nil {
+							u.LogError(err)
+							return nil, err
+						}
+						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
+					}
+
+					// Recommended `settings.depends_on`
+					var stackComponentSettingsDependsOn schema.Settings
+					err = mapstructure.Decode(componentSettings, &stackComponentSettingsDependsOn)
+					if err != nil {
+						return nil, err
+					}
+
+					for _, stackComponentSettingsDependsOnContext := range stackComponentSettingsDependsOn.DependsOn {
+						if stackComponentSettingsDependsOnContext.Namespace == "" {
+							stackComponentSettingsDependsOnContext.Namespace = context.Namespace
+						}
+						if stackComponentSettingsDependsOnContext.Tenant == "" {
+							stackComponentSettingsDependsOnContext.Tenant = context.Tenant
+						}
+						if stackComponentSettingsDependsOnContext.Environment == "" {
+							stackComponentSettingsDependsOnContext.Environment = context.Environment
+						}
+						if stackComponentSettingsDependsOnContext.Stage == "" {
+							stackComponentSettingsDependsOnContext.Stage = context.Stage
+						}
+
+						contextPrefixDependsOn, err := cfg.GetContextPrefix(
+							stackName,
+							stackComponentSettingsDependsOnContext,
+							stackNamePattern,
+							stackName,
+						)
+						if err != nil {
+							u.LogError(err)
+							return nil, err
+						}
+
+						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
+							stackComponentSettingsDependsOnContext.Component,
+							allStackNames,
+							contextPrefixDependsOn,
 							terraformComponentNamesInCurrentStack,
 							component)
 						if err != nil {
