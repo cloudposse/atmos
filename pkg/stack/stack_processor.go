@@ -216,12 +216,14 @@ func ProcessYAMLConfigFile(
 				errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
 					imp,
 					relativeFilePath,
-					err)
+					err,
+				)
 				return nil, nil, nil, errors.New(errorMessage)
 			} else if importMatches == nil {
 				errorMessage := fmt.Sprintf("invalid import in the file '%s'\nNo matches found for the import '%s'",
 					relativeFilePath,
-					imp)
+					imp,
+				)
 				return nil, nil, nil, errors.New(errorMessage)
 			}
 		}
