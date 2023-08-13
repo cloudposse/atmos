@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"text/template"
+	"text/template/parse"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -211,20 +213,42 @@ func ProcessYAMLConfigFile(
 		if err != nil || len(importMatches) == 0 {
 			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
 			// TODO: review `doublestar` library
+
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
-			if err != nil {
-				errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
-					imp,
-					relativeFilePath,
-					err,
-				)
-				return nil, nil, nil, errors.New(errorMessage)
-			} else if importMatches == nil {
-				errorMessage := fmt.Sprintf("invalid import in the file '%s'\nNo matches found for the import '%s'",
-					relativeFilePath,
-					imp,
-				)
-				return nil, nil, nil, errors.New(errorMessage)
+			if err != nil || len(importMatches) == 0 {
+				// The import was not found -> check if the import is a Go template; if not, return the error
+				t, err2 := template.New(imp).Parse(imp)
+				if err2 != nil {
+					return nil, nil, nil, err2
+				}
+
+				isGoTemplate := false
+
+				// Iterate over all nodes in the template and check if any of them is of type `NodeAction` (field evaluation)
+				for _, node := range t.Root.Nodes {
+					if node.Type() == parse.NodeAction {
+						isGoTemplate = true
+						break
+					}
+				}
+
+				// If the import is not a Go template, return the error
+				if !isGoTemplate {
+					if err != nil {
+						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
+							imp,
+							relativeFilePath,
+							err,
+						)
+						return nil, nil, nil, errors.New(errorMessage)
+					} else if importMatches == nil {
+						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
+							imp,
+							relativeFilePath,
+						)
+						return nil, nil, nil, errors.New(errorMessage)
+					}
+				}
 			}
 		}
 
