@@ -1,10 +1,10 @@
 package spacelift
 
 import (
-	"gopkg.in/yaml.v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v2"
 )
 
 func TestSpaceliftStackProcessor(t *testing.T) {
