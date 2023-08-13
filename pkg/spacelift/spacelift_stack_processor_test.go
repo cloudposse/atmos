@@ -91,6 +91,17 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	newTenant1Ue2Test1TestTestComponentOverrideComponent2InfrastructureStackName := newTenant1Ue2Test1TestTestComponentOverrideComponent2["stack"].(string)
 	assert.Equal(t, "tenant1-ue2-test-1", newTenant1Ue2Test1TestTestComponentOverrideComponent2InfrastructureStackName)
 
+	// Test `settings.depends_on`
+	tenant1Ue2ProdTopLevelComponent1 := spaceliftStacks["tenant1-ue2-prod-top-level-component1"].(map[string]any)
+	tenant1Ue2ProdTopLevelComponent1Labels := tenant1Ue2ProdTopLevelComponent1["labels"].([]string)
+	assert.Equal(t, "depends-on:tenant1-ue2-prod-test-test-component-override", tenant1Ue2ProdTopLevelComponent1Labels[35])
+	assert.Equal(t, "depends-on:tenant1-ue2-dev-test-test-component", tenant1Ue2ProdTopLevelComponent1Labels[36])
+
+	tenant1Ue2DevTopLevelComponent1 := spaceliftStacks["tenant1-ue2-dev-top-level-component1"].(map[string]any)
+	tenant1Ue2DevTopLevelComponent1Labels := tenant1Ue2DevTopLevelComponent1["labels"].([]string)
+	assert.Equal(t, "depends-on:tenant1-ue2-dev-test-test-component-override", tenant1Ue2DevTopLevelComponent1Labels[35])
+	assert.Equal(t, "depends-on:tenant1-ue2-dev-test-test-component", tenant1Ue2DevTopLevelComponent1Labels[36])
+
 	yamlSpaceliftStacks, err := yaml.Marshal(spaceliftStacks)
 	assert.Nil(t, err)
 	t.Log(string(yamlSpaceliftStacks))
