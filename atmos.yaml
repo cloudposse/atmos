@@ -195,7 +195,7 @@ commands:
           List all Atmos stacks.
         steps:
           - >
-            atmos describe stacks --sections none | grep -e "^\S" | sed s/://g
+              
       - name: components
         description: |
           List all Atmos components in all stacks or in a single stack.
@@ -204,14 +204,29 @@ commands:
             atmos list components
             atmos list components -s tenant1-ue1-dev
             atmos list components --stack tenant2-uw2-prod
+            atmos list components --stack tenant2-ue1-stage --enabled true
         flags:
           - name: stack
             shorthand: s
             description: Name of the stack
             required: false
+          - name: enabled
+            shorthand: e
+            description: Enabled components
+            required: false
         steps:
           - >
+            {{ if eq .Flags.enabled "true" }}
             {{ if .Flags.stack }}
+            atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r .key
+            {{ else }}
+            {{ end }}
+            {{ else if eq .Flags.enabled "false" }}
+            {{ if .Flags.stack }}
+            atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r .key
+            {{ else }}
+            {{ end }}
+            {{ else if .Flags.stack }}
             atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
             {{ else }}
             atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
