@@ -23,7 +23,7 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.16.0
 	github.com/stretchr/testify v1.8.3
-	github.com/zclconf/go-cty v1.13.2
+	github.com/zclconf/go-cty v1.13.3
 	gopkg.in/yaml.v2 v2.4.0
 	mvdan.cc/sh/v3 v3.7.0
 )
