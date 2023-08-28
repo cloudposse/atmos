@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/go-getter v1.7.2
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.17.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20230808231734-f15f31bf62b3
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20230825013512-b800820f61b8
 	github.com/imdario/mergo v0.3.13
 	github.com/json-iterator/go v1.1.12
 	github.com/mitchellh/go-homedir v1.1.0
@@ -23,7 +23,7 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.16.0
 	github.com/stretchr/testify v1.8.3
-	github.com/zclconf/go-cty v1.13.2
+	github.com/zclconf/go-cty v1.13.3
 	gopkg.in/yaml.v2 v2.4.0
 	mvdan.cc/sh/v3 v3.7.0
 )
