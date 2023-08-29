@@ -69,6 +69,8 @@ type Context struct {
 	ComponentPath string   `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
 	Workspace     string   `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
 	Attributes    []string `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
+	File          string   `yaml:"file" json:"file" mapstructure:"file"`
+	Folder        string   `yaml:"folder" json:"folder" mapstructure:"folder"`
 }
 
 type ArgsAndFlagsInfo struct {
