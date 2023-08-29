@@ -17,10 +17,10 @@ components:
           {{ range $i, $iam_managed_policy_arn := .iam_managed_policy_arns }}
           - '{{ $iam_managed_policy_arn }}'
           {{ end }}
-        {{ - end }}
+        {{ end }}
         {{ if hasKey . "iam_source_policy_documents" }}
         iam_source_policy_documents:
           {{ range $i, $iam_source_policy_document := .iam_source_policy_documents }}
           - '{{ $iam_source_policy_document }}'
           {{ end }}
-        {{ - end }}
+        {{ end }}
