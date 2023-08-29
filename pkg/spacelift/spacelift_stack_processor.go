@@ -2,6 +2,7 @@ package spacelift
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -272,6 +273,8 @@ func TransformStackConfigToSpaceliftStacks(
 						spaceliftDependsOn = i.([]any)
 					}
 
+					var spaceliftStackNameDependsOnLabels1 []string
+
 					for _, dep := range spaceliftDependsOn {
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
 							dep.(string),
@@ -283,8 +286,11 @@ func TransformStackConfigToSpaceliftStacks(
 							u.LogError(err)
 							return nil, err
 						}
-						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
+						spaceliftStackNameDependsOnLabels1 = append(spaceliftStackNameDependsOnLabels1, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
 					}
+
+					sort.Strings(spaceliftStackNameDependsOnLabels1)
+					labels = append(labels, spaceliftStackNameDependsOnLabels1...)
 
 					// Recommended `settings.depends_on`
 					var stackComponentSettingsDependsOn schema.Settings
@@ -292,6 +298,8 @@ func TransformStackConfigToSpaceliftStacks(
 					if err != nil {
 						return nil, err
 					}
+
+					var spaceliftStackNameDependsOnLabels2 []string
 
 					for _, stackComponentSettingsDependsOnContext := range stackComponentSettingsDependsOn.DependsOn {
 						if stackComponentSettingsDependsOnContext.Namespace == "" {
@@ -333,8 +341,11 @@ func TransformStackConfigToSpaceliftStacks(
 							u.LogError(err)
 							return nil, err
 						}
-						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
+						spaceliftStackNameDependsOnLabels2 = append(spaceliftStackNameDependsOnLabels2, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
 					}
+
+					sort.Strings(spaceliftStackNameDependsOnLabels2)
+					labels = append(labels, spaceliftStackNameDependsOnLabels2...)
 
 					// Add `component` and `folder` labels
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
