@@ -42,8 +42,8 @@ func TestDescribeComponent2(t *testing.T) {
 }
 
 func TestDescribeComponent3(t *testing.T) {
-	component := "derived-component-3"
-	stack := "tenant1-ue2-test-1"
+	component := "service-iam-role/webservices/prod"
+	stack := "tenant2-ue2-prod"
 
 	componentSection, err := e.ExecuteDescribeComponent(component, stack)
 	assert.Nil(t, err)
