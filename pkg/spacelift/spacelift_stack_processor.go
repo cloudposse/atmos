@@ -302,6 +302,10 @@ func TransformStackConfigToSpaceliftStacks(
 					var spaceliftStackNameDependsOnLabels2 []string
 
 					for _, stackComponentSettingsDependsOnContext := range stackComponentSettingsDependsOn.DependsOn {
+						if stackComponentSettingsDependsOnContext.Component == "" {
+							continue
+						}
+
 						if stackComponentSettingsDependsOnContext.Namespace == "" {
 							stackComponentSettingsDependsOnContext.Namespace = context.Namespace
 						}
