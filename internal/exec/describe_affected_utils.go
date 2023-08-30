@@ -553,6 +553,26 @@ func findAffected(
 									}
 									continue
 								}
+
+								// Check `settings.depends_on.file` and `settings.depends_on.folder`
+								// Convert the `settings` section to the `Settings` structure
+								var stackComponentSettings schema.Settings
+								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
+								if err != nil {
+									return nil, err
+								}
+
+								// Skip if the stack component has an empty `settings.depends_on` section
+								if reflect.ValueOf(stackComponentSettings).IsZero() ||
+									reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+									continue
+								}
+
+								for _, stackComponentSettingsContext := range stackComponentSettings.DependsOn {
+									if stackComponentSettingsContext.File == "" || stackComponentSettingsContext.Folder == "" {
+										continue
+									}
+								}
 							}
 						}
 					}
