@@ -3,6 +3,7 @@ import:
   - orgs/cp/tenant1/test1/_defaults
   - catalog/terraform/top-level-component1
   - catalog/terraform/top-level-component2
+  - catalog/terraform/top-level-component3
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
   - catalog/terraform/test-component-override-2
