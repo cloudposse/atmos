@@ -568,17 +568,33 @@ func findAffected(
 									continue
 								}
 
-								folderOrFileChanged, changedType, err := isComponentDependentFolderOrFileChanged(changedFiles, stackComponentSettings.DependsOn)
+								isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChanged(
+									changedFiles,
+									stackComponentSettings.DependsOn,
+								)
+
 								if err != nil {
 									return nil, err
 								}
 
-								if folderOrFileChanged {
+								if isFolderOrFileChanged {
+									changedFile := ""
+									if changedType == "file" {
+										changedFile = changedFileOrFolder
+									}
+
+									changedFolder := ""
+									if changedType == "folder" {
+										changedFolder = changedFileOrFolder
+									}
+
 									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      changedType,
+										File:          changedFile,
+										Folder:        changedFolder,
 									}
 									res, err = appendToAffected(
 										cliConfig,
@@ -756,17 +772,33 @@ func findAffected(
 									continue
 								}
 
-								folderOrFileChanged, changedType, err := isComponentDependentFolderOrFileChanged(changedFiles, stackComponentSettings.DependsOn)
+								isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChanged(
+									changedFiles,
+									stackComponentSettings.DependsOn,
+								)
+
 								if err != nil {
 									return nil, err
 								}
 
-								if folderOrFileChanged {
+								if isFolderOrFileChanged {
+									changedFile := ""
+									if changedType == "file" {
+										changedFile = changedFileOrFolder
+									}
+
+									changedFolder := ""
+									if changedType == "folder" {
+										changedFolder = changedFileOrFolder
+									}
+
 									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      changedType,
+										File:          changedFile,
+										Folder:        changedFolder,
 									}
 									res, err = appendToAffected(
 										cliConfig,
@@ -899,7 +931,7 @@ func isEqual(
 func isComponentDependentFolderOrFileChanged(
 	changedFiles []string,
 	deps schema.DependsOn,
-) (bool, string, error) {
+) (bool, string, string, error) {
 
 	for _, stackComponentSettingsContext := range deps {
 		if stackComponentSettingsContext.File == "" || stackComponentSettingsContext.Folder == "" {
@@ -907,7 +939,7 @@ func isComponentDependentFolderOrFileChanged(
 		}
 	}
 
-	return false, "file", nil
+	return true, "file", "", nil
 }
 
 // isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders)
