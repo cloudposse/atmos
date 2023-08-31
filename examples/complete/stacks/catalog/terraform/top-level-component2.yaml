@@ -18,9 +18,5 @@ components:
             # If the `context` (namespace, tenant, environment, stage) is not provided,
             # the `component` is from the same Atmos stack as this component
             component: "test/test2/test-component-2"
-          3:
-            folder: "examples/complete/components/helmfile/infra/infra-server"
-          4:
-            file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
       vars:
         enabled: true
