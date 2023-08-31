@@ -19,8 +19,8 @@ components:
             # the `component` is from the same Atmos stack as this component
             component: "test/test2/test-component-2"
           3:
-            file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
-          4:
             folder: "examples/complete/components/helmfile/infra/infra-server"
+          4:
+            file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
       vars:
         enabled: true
