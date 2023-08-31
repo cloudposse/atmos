@@ -933,13 +933,17 @@ func isComponentDependentFolderOrFileChanged(
 	deps schema.DependsOn,
 ) (bool, string, string, error) {
 
+	isChanged := false
+	changedType := ""
+	fileOrFolder := ""
+
 	for _, stackComponentSettingsContext := range deps {
 		if stackComponentSettingsContext.File == "" || stackComponentSettingsContext.Folder == "" {
 			continue
 		}
 	}
 
-	return true, "file", "", nil
+	return isChanged, changedType, fileOrFolder, nil
 }
 
 // isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders)
