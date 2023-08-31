@@ -933,17 +933,57 @@ func isComponentDependentFolderOrFileChanged(
 	deps schema.DependsOn,
 ) (bool, string, string, error) {
 
+	hasDependencies := false
 	isChanged := false
 	changedType := ""
-	fileOrFolder := ""
+	changedFileOrFolder := ""
+	pathPatternSuffix := ""
 
-	for _, stackComponentSettingsContext := range deps {
-		if stackComponentSettingsContext.File == "" || stackComponentSettingsContext.Folder == "" {
-			continue
+	for _, dep := range deps {
+		if isChanged {
+			break
+		}
+
+		if dep.File != "" {
+			changedType = "file"
+			changedFileOrFolder = dep.File
+			pathPatternSuffix = ""
+			hasDependencies = true
+		} else if dep.Folder != "" {
+			changedType = "folder"
+			changedFileOrFolder = dep.Folder
+			pathPatternSuffix = "/**"
+			hasDependencies = true
+		}
+
+		if hasDependencies {
+			changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+			if err != nil {
+				return false, "", "", err
+			}
+
+			pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+
+			for _, changedFile := range changedFiles {
+				changedFileAbs, err := filepath.Abs(changedFile)
+				if err != nil {
+					return false, "", "", err
+				}
+
+				match, err := u.PathMatch(pathPattern, changedFileAbs)
+				if err != nil {
+					return false, "", "", err
+				}
+
+				if match {
+					isChanged = true
+					break
+				}
+			}
 		}
 	}
 
-	return isChanged, changedType, fileOrFolder, nil
+	return isChanged, changedType, changedFileOrFolder, nil
 }
 
 // isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders)
