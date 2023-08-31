@@ -568,10 +568,32 @@ func findAffected(
 									continue
 								}
 
-								for _, stackComponentSettingsContext := range stackComponentSettings.DependsOn {
-									if stackComponentSettingsContext.File == "" || stackComponentSettingsContext.Folder == "" {
-										continue
+								folderOrFileChanged, changedType, err := isComponentDependentFolderOrFileChanged(changedFiles, stackComponentSettings.DependsOn)
+								if err != nil {
+									return nil, err
+								}
+
+								if folderOrFileChanged {
+									affected := schema.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      changedType,
 									}
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
+									if err != nil {
+										return nil, err
+									}
+									continue
 								}
 							}
 						}
@@ -719,6 +741,48 @@ func findAffected(
 									}
 									continue
 								}
+
+								// Check `settings.depends_on.file` and `settings.depends_on.folder`
+								// Convert the `settings` section to the `Settings` structure
+								var stackComponentSettings schema.Settings
+								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
+								if err != nil {
+									return nil, err
+								}
+
+								// Skip if the stack component has an empty `settings.depends_on` section
+								if reflect.ValueOf(stackComponentSettings).IsZero() ||
+									reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+									continue
+								}
+
+								folderOrFileChanged, changedType, err := isComponentDependentFolderOrFileChanged(changedFiles, stackComponentSettings.DependsOn)
+								if err != nil {
+									return nil, err
+								}
+
+								if folderOrFileChanged {
+									affected := schema.Affected{
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      changedType,
+									}
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
+									if err != nil {
+										return nil, err
+									}
+									continue
+								}
 							}
 						}
 					}
@@ -831,7 +895,22 @@ func isEqual(
 	return false
 }
 
-// isComponentFolderChanged checks if a component folder changed (has changed files in the folder or its sub-folders)
+// isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed
+func isComponentDependentFolderOrFileChanged(
+	changedFiles []string,
+	deps schema.DependsOn,
+) (bool, string, error) {
+
+	for _, stackComponentSettingsContext := range deps {
+		if stackComponentSettingsContext.File == "" || stackComponentSettingsContext.Folder == "" {
+			continue
+		}
+	}
+
+	return false, "file", nil
+}
+
+// isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders)
 func isComponentFolderChanged(
 	component string,
 	componentType string,

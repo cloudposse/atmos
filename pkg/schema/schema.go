@@ -360,6 +360,8 @@ type Affected struct {
 	SpaceliftStack  string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject string `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
 	Affected        string `yaml:"affected" json:"affected" mapstructure:"affected"`
+	File            string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	Folder          string `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
 }
 
 type BaseComponentConfig struct {
