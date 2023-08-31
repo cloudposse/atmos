@@ -104,7 +104,27 @@ Affected components and stacks:
       "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
       "atlantis_project": "tenant1-ue2-staging-infra-vpc",
       "affected": "component"
-   }
+   },
+     {
+    "component": "top-level-component3",
+    "component_type": "terraform",
+    "component_path": "components/terraform/top-level-component1",
+    "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+    "affected": "file",
+    "file": "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+  },
+  {
+    "component": "top-level-component3",
+    "component_type": "terraform",
+    "component_path": "components/terraform/top-level-component1",
+    "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+    "affected": "folder",
+    "folder": "examples/complete/components/helmfile/infra/infra-server"
+  }
 ]
 ```
 
@@ -168,7 +188,9 @@ Each object has the following schema:
   "stack_slug": "....",
   "spacelift_stack": ".....",
   "atlantis_project": ".....",
-  "affected": "....."
+  "affected": ".....",
+  "file": ".....",
+  "folder": "....."
 }
 ```
 
@@ -239,7 +261,7 @@ where:
     The `label` module is not in the stack config of the `top-level-component1` component (not in the YAML stack config files), but Atmos
     understands Terraform dependencies (using a Terraform parser from HashiCorp), and can automatically detect any changes to the module.
 
-    For example, if you make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a 
+    For example, if you make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a
     Terraform dependency of the `top-level-component1` component, Atmos will mark the component as affected with the `affected` attribute
     set to `component.module`:
 
@@ -373,6 +395,26 @@ atmos describe affected --include-spacelift-admin-stacks=true
     "stack_slug": "tenant1-ue2-prod-test-test-component-override-3",
     "atlantis_project": "tenant1-ue2-prod-test-test-component-override-3",
     "affected": "stack.env"
+  },
+  {
+    "component": "top-level-component3",
+    "component_type": "terraform",
+    "component_path": "components/terraform/top-level-component1",
+    "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+    "affected": "file",
+    "file": "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+  },
+  {
+    "component": "top-level-component3",
+    "component_type": "terraform",
+    "component_path": "components/terraform/top-level-component1",
+    "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+    "affected": "folder",
+    "folder": "examples/complete/components/helmfile/infra/infra-server"
   }
 ]
 ```
