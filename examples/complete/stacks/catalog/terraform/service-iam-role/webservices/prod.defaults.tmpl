@@ -1,0 +1,39 @@
+import:
+  - path: catalog/terraform/service-iam-role/webservices/defaults.tmpl
+    context:
+      iam_managed_policy_arns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/AmazonECS_FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/AWSDataPipeline_FullAccess
+        - arn:aws:iam::aws:policy/CloudFrontFullAccess
+      iam_source_policy_documents:
+        - '{
+              "Version": "2012-10-17",
+              "Statement": [
+                  {
+                      "Sid": "",
+                      "Effect": "Allow",
+                      "Action": "execute-api:Invoke",
+                      "Resource": [
+                          "arn:aws:execute-api:us-east-2:xxxxxxxxxx:xxxxxxxxx/v1/*/scheduledtask/*",
+                      ]
+                  }
+              ]
+          }'
+        - '{ 
+              "Version": "2012-10-17",
+              "Statement": [
+                  {
+                      "Effect": "Allow",
+                      "Action": [
+                          "sts:AssumeRole"
+                      ],
+                      "Resource": "arn:aws:iam::xxxxxxxxxx:role/xxxxxxxxxx"
+                  }
+              ]
+          }'        

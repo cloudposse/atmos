@@ -40,3 +40,15 @@ func TestDescribeComponent2(t *testing.T) {
 	assert.Nil(t, err)
 	t.Log(string(componentSectionYaml))
 }
+
+func TestDescribeComponent3(t *testing.T) {
+	component := "service-iam-role/webservices/prod"
+	stack := "tenant2-ue2-prod"
+
+	componentSection, err := e.ExecuteDescribeComponent(component, stack)
+	assert.Nil(t, err)
+
+	componentSectionYaml, err := yaml.Marshal(componentSection)
+	assert.Nil(t, err)
+	t.Log(string(componentSectionYaml))
+}
