@@ -11,6 +11,7 @@ import:
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
   - catalog/terraform/spacelift/infrastructure-tenant2
+  - catalog/terraform/service-iam-role/webservices/prod
 
 components:
   terraform:

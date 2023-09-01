@@ -2,8 +2,10 @@ package spacelift
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -63,7 +65,13 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
-		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, cliConfig.Stacks.NamePattern, processImports, rawStackConfigs)
+		return TransformStackConfigToSpaceliftStacks(
+			stacks,
+			stackConfigPathTemplate,
+			cliConfig.Stacks.NamePattern,
+			processImports,
+			rawStackConfigs,
+		)
 	}
 }
 
@@ -127,11 +135,6 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftExplicitLabels := []any{}
 					if i, ok2 := spaceliftSettings["labels"]; ok2 {
 						spaceliftExplicitLabels = i.([]any)
-					}
-
-					spaceliftDependsOn := []any{}
-					if i, ok2 := spaceliftSettings["depends_on"]; ok2 {
-						spaceliftDependsOn = i.([]any)
 					}
 
 					spaceliftConfig := map[string]any{}
@@ -264,9 +267,17 @@ func TransformStackConfigToSpaceliftStacks(
 						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.Replace(v, "/", "-", -1))
 					}
 
-					for _, v := range spaceliftDependsOn {
+					// Legacy/deprecated `settings.spacelift.depends_on`
+					spaceliftDependsOn := []any{}
+					if i, ok2 := spaceliftSettings["depends_on"]; ok2 {
+						spaceliftDependsOn = i.([]any)
+					}
+
+					var spaceliftStackNameDependsOnLabels1 []string
+
+					for _, dep := range spaceliftDependsOn {
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
-							v.(string),
+							dep.(string),
 							allStackNames,
 							contextPrefix,
 							terraformComponentNamesInCurrentStack,
@@ -275,9 +286,72 @@ func TransformStackConfigToSpaceliftStacks(
 							u.LogError(err)
 							return nil, err
 						}
-						labels = append(labels, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
+						spaceliftStackNameDependsOnLabels1 = append(spaceliftStackNameDependsOnLabels1, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
 					}
 
+					sort.Strings(spaceliftStackNameDependsOnLabels1)
+					labels = append(labels, spaceliftStackNameDependsOnLabels1...)
+
+					// Recommended `settings.depends_on`
+					var stackComponentSettingsDependsOn schema.Settings
+					err = mapstructure.Decode(componentSettings, &stackComponentSettingsDependsOn)
+					if err != nil {
+						return nil, err
+					}
+
+					var spaceliftStackNameDependsOnLabels2 []string
+
+					for _, stackComponentSettingsDependsOnContext := range stackComponentSettingsDependsOn.DependsOn {
+						if stackComponentSettingsDependsOnContext.Component == "" {
+							continue
+						}
+
+						if stackComponentSettingsDependsOnContext.Namespace == "" {
+							stackComponentSettingsDependsOnContext.Namespace = context.Namespace
+						}
+						if stackComponentSettingsDependsOnContext.Tenant == "" {
+							stackComponentSettingsDependsOnContext.Tenant = context.Tenant
+						}
+						if stackComponentSettingsDependsOnContext.Environment == "" {
+							stackComponentSettingsDependsOnContext.Environment = context.Environment
+						}
+						if stackComponentSettingsDependsOnContext.Stage == "" {
+							stackComponentSettingsDependsOnContext.Stage = context.Stage
+						}
+
+						var contextPrefixDependsOn string
+
+						if stackNamePattern != "" {
+							contextPrefixDependsOn, err = cfg.GetContextPrefix(
+								stackName,
+								stackComponentSettingsDependsOnContext,
+								stackNamePattern,
+								stackName,
+							)
+							if err != nil {
+								return nil, err
+							}
+						} else {
+							contextPrefixDependsOn = strings.Replace(stackName, "/", "-", -1)
+						}
+
+						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
+							stackComponentSettingsDependsOnContext.Component,
+							allStackNames,
+							contextPrefixDependsOn,
+							terraformComponentNamesInCurrentStack,
+							component)
+						if err != nil {
+							u.LogError(err)
+							return nil, err
+						}
+						spaceliftStackNameDependsOnLabels2 = append(spaceliftStackNameDependsOnLabels2, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
+					}
+
+					sort.Strings(spaceliftStackNameDependsOnLabels2)
+					labels = append(labels, spaceliftStackNameDependsOnLabels2...)
+
+					// Add `component` and `folder` labels
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
 					labels = append(labels, fmt.Sprintf("folder:%s", strings.Replace(contextPrefix, "-", "/", -1)))
 

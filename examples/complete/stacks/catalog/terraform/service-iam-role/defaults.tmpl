@@ -1,0 +1,26 @@
+components:
+  terraform:
+    service-iam-role/{{ .app_name }}/{{ .service_environment }}:
+      metadata:
+        component: infra/service-iam-role
+      settings:
+        spacelift:
+          workspace_enabled: false
+      vars:
+        enabled: {{ .enabled }}
+        tags:
+          Service: {{ .app_name }}
+        service_account_name: {{ .app_name }}
+        service_account_namespace: {{ .service_account_namespace }}
+        {{ if hasKey . "iam_managed_policy_arns" }}
+        iam_managed_policy_arns:
+          {{ range $i, $iam_managed_policy_arn := .iam_managed_policy_arns }}
+          - '{{ $iam_managed_policy_arn }}'
+          {{ end }}
+        {{ end }}
+        {{ if hasKey . "iam_source_policy_documents" }}
+        iam_source_policy_documents:
+          {{ range $i, $iam_source_policy_document := .iam_source_policy_documents }}
+          - '{{ $iam_source_policy_document }}'
+          {{ end }}
+        {{ end }}

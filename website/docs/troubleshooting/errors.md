@@ -11,7 +11,7 @@ sidebar_label: Errors
 
 ## Common Errors
 
-Here are some common errors that come up.
+Here are some common errors that can come up.
 
 ### Error: `stack name pattern must be provided`
 
@@ -26,15 +26,74 @@ stacks:
   name_pattern: "{tenant}-{environment}-{stage}"
 ```
 
+<br/>
+
 ### Error: `The stack name pattern ... does not have a tenant defined`
 
 ```console
 The stack name pattern '{tenant}-{environment}-{stage}' specifies 'tenant', but the stack ue1-prod does not have a tenant defined
 ```
 
-This means that your `name_pattern` declares a `tenant` is required, but not specified in the Stack configurations. Either specify a `tenant` in your `vars` for the Stack configuration, or remove the `{tenant}` from the `name_pattern`.
+This means that your `name_pattern` declares a `tenant` is required, but not specified in the Stack configurations. Either specify a `tenant` in
+your `vars` for the Stack configuration, or remove the `{tenant}` from the `name_pattern`.
 
 ```yaml
 stacks:
   name_pattern: "{tenant}-{environment}-{stage}"
 ```
+
+<br/>
+
+### Error: `depends_on expected a map, got slice`
+
+```console
+decoding: depends_on expected a map, got slice
+```
+
+The `depends_on` functionality originally existed only under `settings.spacelift.depends_on` and was a list of other components that the current
+component depends on.
+
+We have since updated `depends_on` to be more generic and be directly under `settings.depends_on` (so it can also be used in GitHub Actions and other
+tools).
+
+The updated key is now a map (rather than a list). If you see this error, it means that someone put a `depends_on`
+block directly under `settings` but added it as a list (rather than a map as the new config requires).
+
+The solution is to move it under `settings.spacelift.depends_on` (legacy, deprecated, not recommended) or update the dependencies to be a map.
+
+```yaml
+components:
+  terraform:
+    top-level-component2:
+      metadata:
+        component: "top-level-component1"
+      settings:
+        spacelift:
+          workspace_enabled: false
+        depends_on:
+          1:
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test-component"
+          2:
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test2/test-component-2"
+          3:
+            file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+          4:
+            folder: "examples/complete/components/helmfile/infra/infra-server"
+      vars:
+        enabled: true
+```
+
+<br/>
+
+:::tip
+
+For more information, refer to:
+
+- [`atmos describe affected` CLI command](/cli/commands/describe/affected)
+- [`atmos describe dependents` CLI command](/cli/commands/describe/dependents)
+
+:::
