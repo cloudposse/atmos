@@ -45,4 +45,4 @@ jobs:
           # A PR will be sent to github.com/Homebrew/homebrew-core to update this formula:
           formula-name: atmos
         env:
-          COMMITTER_TOKEN: ${{ secrets.PUBLIC_REPO_ACCESS_TOKEN }}
+          COMMITTER_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
