@@ -44,5 +44,6 @@ jobs:
         with:
           # A PR will be sent to github.com/Homebrew/homebrew-core to update this formula:
           formula-name: atmos
+          formula-path: Formula/a/atmos.rb
         env:
           COMMITTER_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
