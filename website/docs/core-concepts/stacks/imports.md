@@ -338,11 +338,11 @@ vars:
 
 :::warning With great power comes great responsibility
 
-`Go` templating provides an enormous capability for Atmos configuration generation and should always be used with caution. By design, Stack configuration should be easy to read and understand, yet advanced `Go` templating breaks this principal. 
+`Go` templating provides an enormous capability for Atmos configuration generation and should always be used with caution. Stack configuration should be easy to read and understand by design, yet advanced `Go` templating breaks this principle. 
 
-Templated components cannot be easily searched, and conditionals, loops, functions, and dynamic variables are not easy to follow. Yes templating will creater DRYer code, but with configuration often a little repetition is helpful for clarity. However when code duplication scales beyond simple repetition, templating may be necessary.
+Templated components cannot be easily searched, and conditionals, loops, functions, and dynamic variables are difficult to follow. Yes, templating will create DRYer code, but with configuration often a little repetition is helpful for clarity. However when code duplication scales beyond simple repetition, templating may be necessary.
 
-Be sure to consider value added against configuration complexity before using advanced `go` templates in Atmos.
+Consider value added against configuration complexity before using advanced `go` templates in Atmos.
 
 :::
 
