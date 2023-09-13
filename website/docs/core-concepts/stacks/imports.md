@@ -336,6 +336,16 @@ vars:
 
 <br/>
 
+:::warning With great power comes great responsibility
+
+`Go` templating provides an enormous capability for Atmos configuration generation and should always be used with caution. By design, Stack configuration should be easy to read and understand, yet advanced `Go` templating breaks this principal. 
+
+Templated components cannot be easily searched, and conditionals, loops, functions, and dynamic variables are not easy to follow. Yes templating will creater DRYer code, but with configuration often a little repetition is helpful for clarity. However when code duplication scales beyond simple repetition, templating may be necessary.
+
+Be sure to consider value added against configuration complexity before using advanced `go` templates in Atmos.
+
+:::
+
 ## Advanced Examples of Templates in Atmos Configurations
 
 Atmos supports all the functionality of [Go templates](https://pkg.go.dev/text/template), including [functions](https://pkg.go.dev/text/template#hdr-Functions) and [Sprig functions](http://masterminds.github.io/sprig/).
