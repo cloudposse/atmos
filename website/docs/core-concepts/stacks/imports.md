@@ -342,7 +342,7 @@ vars:
 
 Templated components cannot be easily searched, and conditionals, loops, functions, and dynamic variables are difficult to follow. Yes, templating will create DRYer code, but with configuration often a little repetition is helpful for clarity. However when code duplication scales beyond simple repetition, templating may be necessary.
 
-Consider value added against configuration complexity before using advanced `go` templates in Atmos.
+Consider value added against configuration complexity before using advanced `Go` templates in Atmos.
 
 :::
 
