@@ -336,6 +336,16 @@ vars:
 
 <br/>
 
+:::warning Handle with Care
+
+Leveraging Go templating for Atmos stack generation grants significant power but demands equal responsibility. It can easily defy the principle of creating stack configurations that are straightforward and intuitive to read.
+
+While templating fosters DRYer code, it comes at the expense of searchable components and introduces elements like conditionals, loops, and dynamic variables that impede understandability. It's a tool not for regular use, but for instances where code duplication becomes excessively cumbersome.
+
+Before resorting to advanced Go templates in Atmos, rigorously evaluate the trade-off between the value added and the complexity introduced.
+
+:::
+
 ## Advanced Examples of Templates in Atmos Configurations
 
 Atmos supports all the functionality of [Go templates](https://pkg.go.dev/text/template), including [functions](https://pkg.go.dev/text/template#hdr-Functions) and [Sprig functions](http://masterminds.github.io/sprig/).
