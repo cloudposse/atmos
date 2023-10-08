@@ -12,6 +12,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
@@ -153,7 +154,7 @@ func ExecuteComponentVendorCommandInternal(
 
 		// Parse 'uri' template
 		if vendorComponentSpec.Source.Version != "" {
-			t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Parse(vendorComponentSpec.Source.Uri)
+			t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Parse(vendorComponentSpec.Source.Uri)
 			if err != nil {
 				return err
 			}
@@ -294,7 +295,7 @@ func ExecuteComponentVendorCommandInternal(
 
 				// Parse 'uri' template
 				if mixin.Version != "" {
-					t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Parse(mixin.Uri)
+					t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Funcs(sprig.FuncMap()).Parse(mixin.Uri)
 					if err != nil {
 						return err
 					}

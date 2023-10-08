@@ -10,6 +10,7 @@ import (
 	"text/template"
 	"text/template/parse"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
@@ -217,7 +218,7 @@ func ProcessYAMLConfigFile(
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
 				// The import was not found -> check if the import is a Go template; if not, return the error
-				t, err2 := template.New(imp).Parse(imp)
+				t, err2 := template.New(imp).Funcs(sprig.FuncMap()).Parse(imp)
 				if err2 != nil {
 					return nil, nil, nil, err2
 				}
