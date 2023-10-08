@@ -95,31 +95,6 @@ where:
   is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file,
   while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values
 
-<br/>
-
-:::note
-
-In a stack config file, you can use only one of the supported formats. Using the two formats at the same time in a single stack config file is not
-currently supported. If you are importing a template file and providing a `context` to it, you have to use the same schema with the `path` to the
-files to import all other configs even if they don't use templates and don't require a `context`.
-
-:::
-
-For example:
-
-```yaml
-  import:
-    - path: catalog/terraform/eks_cluster_tmpl
-      context:
-        flavor: "blue"
-        enabled: true
-        service_1_name: "blue-service-1"
-        service_2_name: "blue-service-2"
-    - path: catalog/terraform/test-component
-    - path: catalog/terraform/vpc
-    - path: catalog/helmfile/echo-server
-```
-
 ## `Go` Templates in Imports
 
 Atmos supports all the functionality of [Go templates](https://pkg.go.dev/text/template) in imported stack configurations, including

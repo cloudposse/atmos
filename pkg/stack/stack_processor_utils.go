@@ -3,7 +3,6 @@ package stack
 import (
 	"errors"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/mitchellh/mapstructure"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
@@ -167,30 +168,43 @@ func FindComponentDependenciesLegacy(
 }
 
 // processImportSection processes the `import` section in stack config files
-// The `import` section` can be of two different types:
+// The `import` section` can be of the following types:
 // 1. list of `StackImport` structs
 // 2. list of strings
+// 3. List of strings and `StackImport` structs in the same file
 func processImportSection(stackMap map[any]any, filePath string) ([]schema.StackImport, error) {
-	if imports, ok := stackMap[cfg.ImportSectionName]; ok && imports != nil {
-		var structImports []schema.StackImport
-		err := mapstructure.Decode(imports, &structImports)
-		if err == nil && len(structImports) > 0 {
-			return structImports, nil
+	if stackImports, ok := stackMap[cfg.ImportSectionName]; ok && stackImports != nil {
+		imports, ok := stackImports.([]any)
+
+		if !ok {
+			return nil, fmt.Errorf("invalid 'import' section in the file '%s'", filePath)
 		}
 
-		if stringImports, ok := imports.([]any); ok && len(stringImports) > 0 {
-			var structImports []schema.StackImport
-			for _, i := range stringImports {
+		if len(imports) == 0 {
+			return nil, nil
+		}
+
+		var result []schema.StackImport
+
+		for _, i := range imports {
+			if i == nil {
+				return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+			}
+
+			var structImport schema.StackImport
+			err := mapstructure.Decode(i, &structImport)
+			if err == nil {
+				result = append(result, structImport)
+			} else {
 				if s, ok := i.(string); ok {
-					structImports = append(structImports, schema.StackImport{Path: s})
-				} else if i == nil {
-					return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+					result = append(result, schema.StackImport{Path: s})
 				} else {
 					return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
 				}
 			}
-			return structImports, nil
 		}
+
+		return result, nil
 	}
 
 	return nil, nil
