@@ -167,29 +167,29 @@ func FindComponentDependenciesLegacy(
 }
 
 // processImportSection processes the `import` section in stack config files
-// The `import` section` can be of two different type:
+// The `import` section` can be of two different types:
 // 1. list of `StackImport` structs
 // 2. list of strings
 func processImportSection(stackMap map[any]any, filePath string) ([]schema.StackImport, error) {
 	if imports, ok := stackMap[cfg.ImportSectionName]; ok && imports != nil {
-		var res1 []schema.StackImport
-		err := mapstructure.Decode(imports, &res1)
-		if err == nil && len(res1) > 0 {
-			return res1, nil
+		var structImports []schema.StackImport
+		err := mapstructure.Decode(imports, &structImports)
+		if err == nil && len(structImports) > 0 {
+			return structImports, nil
 		}
 
 		if stringImports, ok := imports.([]any); ok && len(stringImports) > 0 {
-			var res2 []schema.StackImport
+			var structImports []schema.StackImport
 			for _, i := range stringImports {
 				if s, ok := i.(string); ok {
-					res2 = append(res2, schema.StackImport{Path: s})
+					structImports = append(structImports, schema.StackImport{Path: s})
 				} else if i == nil {
 					return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 				} else {
 					return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
 				}
 			}
-			return res2, nil
+			return structImports, nil
 		}
 	}
 
