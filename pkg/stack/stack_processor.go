@@ -73,6 +73,8 @@ func ProcessYAMLConfigFiles(
 				map[string]map[any]any{},
 				nil,
 				ignoreMissingFiles,
+				false,
+				false,
 			)
 
 			if err != nil {
@@ -145,6 +147,8 @@ func ProcessYAMLConfigFile(
 	importsConfig map[string]map[any]any,
 	context map[string]any,
 	ignoreMissingFiles bool,
+	skipTemplatesProcessingInImports bool,
+	ignoreMissingTemplateValues bool,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -166,8 +170,8 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Process `Go` templates in the stack config file using the provided context
-	if len(context) > 0 {
-		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context)
+	if !skipTemplatesProcessingInImports && len(context) > 0 {
+		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -254,8 +258,8 @@ func ProcessYAMLConfigFile(
 		}
 
 		// Support `context` in hierarchical imports.
-		// Deep-merge the parent `context` with the current `context` and propagate the result to the entire imports chain.
-		// The current `context` takes precedence over the parent `context` and will override items with the same keys.
+		// Deep-merge the parent `context` with the current `context` and propagate the result to the entire chain of imports.
+		// The parent `context` takes precedence over the current (imported) `context` and will override items with the same keys.
 		// TODO: instead of calling the conversion functions, we need to switch to generics and update everything to support it
 		listOfMaps := []map[any]any{c.MapsOfStringsToMapsOfInterfaces(importStruct.Context), c.MapsOfStringsToMapsOfInterfaces(context)}
 		mergedContext, err := m.Merge(listOfMaps)
@@ -270,6 +274,8 @@ func ProcessYAMLConfigFile(
 				importsConfig,
 				c.MapsOfInterfacesToMapsOfStrings(mergedContext),
 				ignoreMissingFiles,
+				importStruct.SkipTemplatesProcessing,
+				importStruct.IgnoreMissingTemplateValues,
 			)
 			if err != nil {
 				return nil, nil, nil, err

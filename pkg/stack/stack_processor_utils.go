@@ -245,7 +245,15 @@ func CreateComponentStackMap(
 			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[any]any{}, nil, false)
+				config, _, _, err := ProcessYAMLConfigFile(
+					stacksBasePath,
+					p,
+					map[string]map[any]any{},
+					nil,
+					false,
+					false,
+					false,
+				)
 				if err != nil {
 					return err
 				}
