@@ -71,15 +71,29 @@ The `import` section supports the following two formats:
   import:
     - path: "<path_to_imported_file>"
       context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: false
     - path: "<path_to_imported_file>"
       context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: true
   ```
 
 where:
 
-- `path` - the path to the imported file
-- `context` - an optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
+- `path` - (string) The path to the imported file
+
+- `context` - (map) An optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
   a [Go template](https://pkg.go.dev/text/template))
+
+- `skip_templates_processing` - (boolean) Skip template processing for the imported file. Can be used if the imported file uses `Go` templates 
+  to configure external systems, e.g. Datadog
+
+- `ignore_missing_template_values` - (boolean) Ignore the missing template values in the imported file. Can be used if the imported file uses `Go` 
+  templates to configure external systems, e.g. Datadog. In this case, Atmos will process all template values that are provided in the `context`, 
+  and will skip the missing values in the templates for the external systems without throwing an error. The `ignore_missing_template_values` setting 
+  is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file,
+  while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values
 
 <br/>
 
