@@ -370,7 +370,7 @@ func ExecuteComponentVendorCommandInternal(
 	return nil
 }
 
-// ExecuteStackVendorCommandInternal executes a stack vendor command
+// ExecuteStackVendorCommandInternal executes the command to vendor an Atmos stack
 // TODO: implement this
 func ExecuteStackVendorCommandInternal(
 	stack string,
