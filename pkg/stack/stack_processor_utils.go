@@ -173,41 +173,47 @@ func FindComponentDependenciesLegacy(
 // 2. list of strings
 // 3. List of strings and `StackImport` structs in the same file
 func processImportSection(stackMap map[any]any, filePath string) ([]schema.StackImport, error) {
-	if stackImports, ok := stackMap[cfg.ImportSectionName]; ok && stackImports != nil {
-		imports, ok := stackImports.([]any)
+	stackImports, ok := stackMap[cfg.ImportSectionName]
 
-		if !ok {
-			return nil, fmt.Errorf("invalid 'import' section in the file '%s'", filePath)
-		}
-
-		if len(imports) == 0 {
-			return nil, nil
-		}
-
-		var result []schema.StackImport
-
-		for _, i := range imports {
-			if i == nil {
-				return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
-			}
-
-			var structImport schema.StackImport
-			err := mapstructure.Decode(i, &structImport)
-			if err == nil {
-				result = append(result, structImport)
-			} else {
-				if s, ok := i.(string); ok {
-					result = append(result, schema.StackImport{Path: s})
-				} else {
-					return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
-				}
-			}
-		}
-
-		return result, nil
+	// If the stack file does not have the `import` section, return
+	if !ok || stackImports == nil {
+		return nil, nil
 	}
 
-	return nil, nil
+	// Check if the `import` section is a list of objects
+	importsList, ok := stackImports.([]any)
+	if !ok || len(importsList) == 0 {
+		return nil, fmt.Errorf("invalid 'import' section in the file '%s'", filePath)
+	}
+
+	var result []schema.StackImport
+
+	for _, imp := range importsList {
+		if imp == nil {
+			return nil, fmt.Errorf("invalid import in the file '%s'", filePath)
+		}
+
+		// 1. Try to decode the import as the `StackImport` struct
+		var importObj schema.StackImport
+		err := mapstructure.Decode(imp, &importObj)
+		if err == nil {
+			result = append(result, importObj)
+			continue
+		}
+
+		// 2. Try to cast the import to a string
+		s, ok := imp.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid import '%v' in the file '%s'", imp, filePath)
+		}
+		if s == "" {
+			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+		}
+
+		result = append(result, schema.StackImport{Path: s})
+	}
+
+	return result, nil
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
