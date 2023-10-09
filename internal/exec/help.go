@@ -82,15 +82,15 @@ func processHelp(componentType string, command string) error {
 			"argument in the native 'terraform apply <planfile>' command.\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/deploy\n")
 	} else if componentType == "terraform" && command == "shell" {
-		u.PrintMessage("\n'atmos terraform clean' command deletes the following folders and files from the component's directory:\n\n" +
-			" - '.terraform' folder\n" +
-			" - folder that the 'TF_DATA_DIR' ENV var points to\n" +
-			" - '.terraform.lock.hcl' file\n" +
-			" - generated varfile for the component in the stack\n" +
-			" - generated planfile for the component in the stack\n" +
-			" - generated 'backend.tf.json' file\n\n" +
-			"Usage: atmos terraform clean <component> -s <stack> <flags>\n\n" +
-			"Use '--skip-lock-file' flag to skip deleting the lock file.\n\n" +
+		u.PrintMessage("\n'atmos terraform shell' command starts a new SHELL configured with the environment for an Atmos component " +
+			"in a Stack to allow executing all native terraform commands\ninside the shell without using the atmos-specific arguments and flags.\n\n" +
+			"Usage: atmos terraform shell <component> -s <stack>\n\n" +
+			"The command does the following:\n\n" +
+			" - Processes the stack config files, generates the required variables for the Atmos component in the stack, and writes them to a file in the component's folder\n" +
+			" - Generates a backend config file for the Atmos component in the stack and writes it to a file in the component's folder (or as specified by the Atmos configuration setting)\n" +
+			" - Creates a Terraform workspace for the component in the stack\n" +
+			" - Drops the user into a separate shell (process) with all the required paths and ENV vars set\n" +
+			" - Inside the shell, the user can execute all Terraform commands using the native syntax\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/shell\n")
 	} else {
 		u.PrintMessage(fmt.Sprintf("'atmos' supports native '%s %s' command with all the options, arguments and flags.\n", componentType, command))
