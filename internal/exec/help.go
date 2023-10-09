@@ -10,7 +10,6 @@ import (
 // processHelp processes help commands
 func processHelp(componentType string, command string) error {
 	cliConfig := schema.CliConfiguration{}
-	cliConfig.Logs.Level = u.LogLevelTrace
 
 	if len(command) == 0 {
 		u.PrintMessage(fmt.Sprintf("'atmos' supports all native '%s' commands.\n", componentType))
@@ -58,6 +57,21 @@ func processHelp(componentType string, command string) error {
 		if err != nil {
 			return err
 		}
+
+	} else if componentType == "terraform" && command == "clean" {
+		u.PrintMessage("\n'atmos terraform clean' command deletes the following folders and files from the component's directory:\n\n" +
+			" - '.terraform' folder\n" +
+			" - folder that the 'TF_DATA_DIR' ENV var points to\n" +
+			" - '.terraform.lock.hcl' file\n" +
+			" - generated varfile for the component in the stack\n" +
+			" - generated planfile for the component in the stack\n" +
+			" - generated 'backend.tf.json' file\n\n" +
+			"Usage: atmos terraform clean <component> -s <stack>\n\n" +
+			"For more details refer to https://atmos.tools/cli/commands/terraform/clean\n")
+	} else if componentType == "terraform" && command == "deploy" {
+
+	} else if componentType == "terraform" && command == "shell" {
+
 	} else {
 		u.PrintMessage(fmt.Sprintf("'atmos' supports native '%s %s' command with all the options, arguments and flags.\n", componentType, command))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
