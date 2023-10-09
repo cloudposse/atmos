@@ -92,6 +92,12 @@ func processHelp(componentType string, command string) error {
 			" - Drops the user into a separate shell (process) with all the required paths and ENV vars set\n" +
 			" - Inside the shell, the user can execute all Terraform commands using the native syntax\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/shell\n")
+	} else if componentType == "terraform" && command == "workspace" {
+		u.PrintMessage("\n'atmos terraform workspace' command calculates the Terraform workspace for an Atmos component,\n" +
+			"and then executes 'terraform init -reconfigure' and selects the Terraform workspace by executing the 'terraform workspace select' command.\n" +
+			"If the workspace does not exist, the command creates it by executing the 'terraform workspace new' command.\n\n" +
+			"Usage: atmos terraform workspace <component> -s <stack>\n\n" +
+			"For more details refer to https://atmos.tools/cli/commands/terraform/workspace\n")
 	} else {
 		u.PrintMessage(fmt.Sprintf("'atmos' supports native '%s %s' command with all the options, arguments and flags.\n", componentType, command))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
