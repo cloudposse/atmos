@@ -338,10 +338,12 @@ func ProcessStackConfig(
 	terraformVars := map[any]any{}
 	terraformSettings := map[any]any{}
 	terraformEnv := map[any]any{}
+	terraformCommand := ""
 
 	helmfileVars := map[any]any{}
 	helmfileSettings := map[any]any{}
 	helmfileEnv := map[any]any{}
+	helmfileCommand := ""
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
@@ -391,6 +393,13 @@ func ProcessStackConfig(
 	}
 
 	// Terraform section
+	if i, ok := globalTerraformSection["command"]; ok {
+		terraformCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.command' section in the file '%s'", stackName)
+		}
+	}
+
 	if i, ok := globalTerraformSection["vars"]; ok {
 		terraformVars, ok = i.(map[any]any)
 		if !ok {
@@ -464,6 +473,13 @@ func ProcessStackConfig(
 	}
 
 	// Helmfile section
+	if i, ok := globalHelmfileSection["command"]; ok {
+		helmfileCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'helmfile.command' section in the file '%s'", stackName)
+		}
+	}
+
 	if i, ok := globalHelmfileSection["vars"]; ok {
 		helmfileVars, ok = i.(map[any]any)
 		if !ok {
@@ -829,6 +845,9 @@ func ProcessStackConfig(
 
 				// Final binary to execute
 				finalComponentTerraformCommand := "terraform"
+				if len(terraformCommand) > 0 {
+					finalComponentTerraformCommand = terraformCommand
+				}
 				if len(baseComponentTerraformCommand) > 0 {
 					finalComponentTerraformCommand = baseComponentTerraformCommand
 				}
@@ -1058,6 +1077,9 @@ func ProcessStackConfig(
 
 				// Final binary to execute
 				finalComponentHelmfileCommand := "helmfile"
+				if len(helmfileCommand) > 0 {
+					finalComponentHelmfileCommand = helmfileCommand
+				}
 				if len(baseComponentHelmfileCommand) > 0 {
 					finalComponentHelmfileCommand = baseComponentHelmfileCommand
 				}
