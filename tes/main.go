@@ -1,14 +1,9 @@
-// https://opencontainers.org/
-// https://github.com/google/go-containerregistry
-// https://github.com/google/go-containerregistry/blob/main/pkg/v1/remote/README.md
-// https://www.reddit.com/r/golang/comments/mdn6db/get_oci_image_config_programmatically_using
-// https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html
-
-package exec
+package main
 
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"io"
 	"log"
 	"os"
@@ -16,6 +11,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	_ "github.com/google/go-containerregistry/pkg/v1/tarball"
 )
 
 func main() {
@@ -53,4 +49,6 @@ func main() {
 	prettyJSON, err := json.MarshalIndent(configFile, "", "    ")
 
 	_, _ = io.Copy(os.Stdout, bytes.NewBuffer(prettyJSON))
+
+	_ = tarball.WriteToFile("1.tar", ref, image)
 }
