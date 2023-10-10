@@ -3,6 +3,7 @@
 // https://github.com/google/go-containerregistry/blob/main/pkg/v1/remote/README.md
 // https://www.reddit.com/r/golang/comments/mdn6db/get_oci_image_config_programmatically_using
 // https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html
+// https://www.ibm.com/docs/en/idr/11.4.0?topic=components-extracting-importing-container-image-docker
 
 package exec
 
