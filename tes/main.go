@@ -40,7 +40,7 @@ func extractTar(tarFileName string, dstDir string) error {
 	sem := Semaphore{}
 	sem.Ch = make(chan int, grMax)
 
-	if err := untar(dstDir, f, &sem, true); err != nil {
+	if err = untar(dstDir, f, &sem, true); err != nil {
 		return err
 	}
 
@@ -83,12 +83,13 @@ func untar(dst string, r io.Reader, sem *Semaphore, godeep bool) error {
 			ext := filepath.Ext(target)
 
 			// if it's tar file and we are on top level, extract it
-			if ext == ".tar" && godeep {
+			if (ext == ".tar" || ext == ".gz") && godeep {
 				sem.Wg.Add(1)
 				// A buffered channel is used to limit the number of simultaneously running goroutines
 				sem.Ch <- 1
+				f := strings.TrimSuffix(strings.TrimSuffix(header.Name, ".tar"), ".gz")
 				// the file is unpacked to a directory with the file name (without extension)
-				newDir := filepath.Join(dst, strings.TrimSuffix(header.Name, ".tar"))
+				newDir := filepath.Join(dst, f)
 				if err := os.Mkdir(newDir, 0755); err != nil {
 					return err
 				}
@@ -97,15 +98,13 @@ func untar(dst string, r io.Reader, sem *Semaphore, godeep bool) error {
 					fmt.Println("START:", target)
 					defer sem.Wg.Done()
 					defer func() { <-sem.Ch }()
-					// the internal tar file opens
 					ft, err := os.Open(target)
 					if err != nil {
 						fmt.Println(err)
 						return
 					}
 					defer ft.Close()
-					// the godeep parameter is false here to avoid unpacking archives inside the current archive.
-					if err := untar(newDir, ft, sem, false); err != nil {
+					if err := untar(newDir, ft, sem, true); err != nil {
 						fmt.Println(err)
 						return
 					}

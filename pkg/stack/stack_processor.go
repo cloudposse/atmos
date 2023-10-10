@@ -829,8 +829,10 @@ func ProcessStackConfig(
 
 				// Merge `backend` and `remote_state_backend` sections
 				// This will allow keeping `remote_state_backend` section DRY
-				finalComponentRemoteStateBackendSectionMerged, err := m.Merge([]map[any]any{finalComponentBackendSection,
-					finalComponentRemoteStateBackendSection})
+				finalComponentRemoteStateBackendSectionMerged, err := m.Merge([]map[any]any{
+					finalComponentBackendSection,
+					finalComponentRemoteStateBackendSection,
+				})
 				if err != nil {
 					return nil, err
 				}
