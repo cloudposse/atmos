@@ -2,175 +2,186 @@ package main
 
 import (
 	"archive/tar"
-	"bytes"
-	"encoding/json"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
+	"time"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-type Semaphore struct {
-	Wg sync.WaitGroup
-	Ch chan int
-}
-
-// Limit on the number of simultaneously running goroutines.
-// Depends on the number of processor cores, storage performance, amount of RAM, etc.
-const grMax = 10
 
 const imageName = "public.ecr.aws/r7v2l4o9/vpc:latest"
 const tarFileName = "vpc.tar"
-const dstDir = "2"
+const dstDir = "/Users/andriyknysh/Documents/Projects/Go/src/github.com/cloudposse/atmos/tes/2"
 
-func extractTar(tarFileName string, dstDir string) error {
-	f, err := os.Open(tarFileName)
+func extractTarball(sourceFile, extractPath string) error {
+	file, err := os.Open(sourceFile)
 	if err != nil {
 		return err
 	}
 
-	sem := Semaphore{}
-	sem.Ch = make(chan int, grMax)
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			u.LogError(fmt.Errorf("\nerror closing the file %s: %v\n", sourceFile, err))
+		}
+	}(file)
 
-	if err = untar(dstDir, f, &sem, true); err != nil {
-		return err
-	}
+	var fileReader io.ReadCloser = file
 
-	fmt.Println("extractTar: wait for complete")
-	sem.Wg.Wait()
-	return nil
-}
-
-func untar(dst string, r io.Reader, sem *Semaphore, godeep bool) error {
-	tr := tar.NewReader(r)
-
-	for {
-		header, err := tr.Next()
-
-		switch {
-		case err == io.EOF:
-			return nil
-		case err != nil:
+	if strings.HasSuffix(sourceFile, ".gz") {
+		if fileReader, err = gzip.NewReader(file); err != nil {
 			return err
 		}
 
-		// the target location where the dir/file should be created
-		target := filepath.Join(dst, header.Name)
+		defer func(fileReader io.ReadCloser) {
+			err := fileReader.Close()
+			if err != nil {
+				u.LogError(fmt.Errorf("\nerror closing the file %s: %v\n", sourceFile, err))
+			}
+		}(fileReader)
+	}
+
+	tarBallReader := tar.NewReader(fileReader)
+
+	for {
+		header, err := tarBallReader.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		filename := filepath.Join(extractPath, filepath.FromSlash(header.Name))
 
 		switch header.Typeflag {
-
-		// if it's a dir and it doesn't exist create it
 		case tar.TypeDir:
-			if _, err := os.Stat(target); err != nil {
-				if err := os.MkdirAll(target, 0755); err != nil {
-					return err
-				}
-			}
-
-		// if it's a file create it
-		case tar.TypeReg:
-			if err := saveFile(tr, target, os.FileMode(header.Mode)); err != nil {
+			err = os.MkdirAll(filename, os.FileMode(header.Mode))
+			if err != nil {
 				return err
 			}
-			ext := filepath.Ext(target)
 
-			// if it's tar file and we are on top level, extract it
-			if (ext == ".tar" || ext == ".gz") && godeep {
-				sem.Wg.Add(1)
-				// A buffered channel is used to limit the number of simultaneously running goroutines
-				sem.Ch <- 1
-				f := strings.TrimSuffix(strings.TrimSuffix(header.Name, ".tar"), ".gz")
-				// the file is unpacked to a directory with the file name (without extension)
-				newDir := filepath.Join(dst, f)
-				if err := os.Mkdir(newDir, 0755); err != nil {
-					return err
-				}
-				go func(target string, newDir string, sem *Semaphore) {
-					fmt.Println("start goroutine, chan length:", len(sem.Ch))
-					fmt.Println("START:", target)
-					defer sem.Wg.Done()
-					defer func() { <-sem.Ch }()
-					ft, err := os.Open(target)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					defer ft.Close()
-					if err := untar(newDir, ft, sem, true); err != nil {
-						fmt.Println(err)
-						return
-					}
-					fmt.Println("DONE:", target)
-				}(target, newDir, sem)
+		case tar.TypeReg:
+			err := u.EnsureDir(filename)
+			if err != nil {
+				return err
+			}
+
+			writer, err := os.Create(filename)
+			if err != nil {
+				return err
+			}
+
+			_, err = io.Copy(writer, tarBallReader)
+			if err != nil {
+				return err
+			}
+
+			err = os.Chmod(filename, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+
+			err = writer.Close()
+			if err != nil {
+				return err
 			}
 		}
 	}
-	return nil
-}
-
-func saveFile(r io.Reader, target string, mode os.FileMode) error {
-	f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, mode)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if _, err := io.Copy(f, r); err != nil {
-		return err
-	}
-
 	return nil
 }
 
 func main() {
-	basicAuthn := &authn.Basic{
-		Username: os.Getenv("DOCKER_USERNAME"),
-		Password: os.Getenv("DOCKER_PASSWORD"),
+	// Temp directory for the tarball files
+	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+	if err != nil {
+		log.Fatalf(err.Error())
 	}
 
-	withAuthOption := remote.WithAuth(basicAuthn)
-	options := []remote.Option{withAuthOption}
+	defer func(path string) {
+		err := os.RemoveAll(path)
+		if err != nil {
+			u.LogError(err)
+		}
+	}(tempDir)
 
+	// Temp tarball file name
+	tempTarFileName := path.Join(tempDir, tarFileName)
+
+	// Get the image reference from the OCI registry
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		log.Fatalf("cannot parse reference of the image %s , detail: %v", imageName, err)
 	}
 
-	descriptor, err := remote.Get(ref, options...)
+	// Get the image descriptor
+	descriptor, err := remote.Get(ref)
 	if err != nil {
 		log.Fatalf("cannot get image %s , detail: %v", imageName, err)
 	}
 
+	// Download the image from the OCI registry
 	image, err := descriptor.Image()
-
 	if err != nil {
-		log.Fatalf("cannot convert image %s descriptor to v1.Image, detail: %v", imageName, err)
+		log.Fatalf("cannot get a descriptor for the OCI image %s. Error: %v", imageName, err)
 	}
 
-	configFile, err := image.ConfigFile()
+	// Write the image tarball to the temp directory
+	err = tarball.WriteToFile(tempTarFileName, ref, image)
 	if err != nil {
-		log.Fatalf("cannot extract config file of image %s, detail: %v", imageName, err)
+		log.Fatalf(err.Error())
 	}
 
-	prettyJSON, err := json.MarshalIndent(configFile, "", "    ")
-
-	_, _ = io.Copy(os.Stdout, bytes.NewBuffer(prettyJSON))
-
-	err = tarball.WriteToFile(tarFileName, ref, image)
+	// Get the tarball manifest
+	m, err := tarball.LoadManifest(func() (io.ReadCloser, error) {
+		f, err := os.Open(tempTarFileName)
+		if err != nil {
+			u.LogError(err)
+			return nil, err
+		}
+		return f, nil
+	})
 	if err != nil {
-		fmt.Println(err)
+		log.Fatalf(err.Error())
 	}
 
-	err = extractTar(tarFileName, dstDir)
+	if len(m) == 0 {
+		log.Fatalf("the OCI image '%s' does not have a correct manifest. Refer to https://docs.docker.com/registry/spec/manifest-v2-2",
+			imageName)
+	}
+
+	manifest := m[0]
+
+	// Check the tarball layers
+	if len(manifest.Layers) == 0 {
+		log.Fatalf("the OCI image '%s' does not have layers", imageName)
+	}
+
+	// Extract the tarball layers into the temp directory
+	// The tarball layers are tarballs themselves
+	err = extractTarball(tempTarFileName, tempDir)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatalf(err.Error())
+	}
+
+	// Extract the layers into the destination directory
+	for _, l := range manifest.Layers {
+		layerPath := path.Join(tempDir, l)
+
+		err = extractTarball(layerPath, dstDir)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
 	}
 }
