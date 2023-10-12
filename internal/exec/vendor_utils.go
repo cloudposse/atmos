@@ -128,11 +128,14 @@ func ReadAndProcessComponentConfigFile(cliConfig schema.CliConfiguration, compon
 	return componentConfig, componentPath, nil
 }
 
-// ExecuteComponentVendorCommandInternal executes a component vendor command
+// ExecuteComponentVendorCommandInternal executes the 'atmos vendor pull' command for a component
 // Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
 // URL and archive formats described in https://github.com/hashicorp/go-getter
 // https://www.allee.xyz/en/posts/getting-started-with-go-getter
 // https://github.com/otiai10/copy
+// https://opencontainers.org/
+// https://github.com/google/go-containerregistry
+// https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html
 func ExecuteComponentVendorCommandInternal(
 	cliConfig schema.CliConfiguration,
 	vendorComponentSpec schema.VendorComponentSpec,
@@ -188,7 +191,6 @@ func ExecuteComponentVendorCommandInternal(
 			// We are using a temp folder for the following reasons:
 			// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
 			// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-			// ioutil.TempDir is deprecated. As of Go 1.17, this function simply calls os.MkdirTemp
 			tempDir, err = os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 			if err != nil {
 				return err
