@@ -55,7 +55,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 	}
 
 	if component != "" && stack != "" {
-		return fmt.Errorf("either '--component' or '--stack' parameter needs to be provided, but not both")
+		return fmt.Errorf("either '--component' or '--stack' flag needs to be provided, but not both")
 	}
 
 	if component != "" {
@@ -80,8 +80,13 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 		return ExecuteStackVendorCommandInternal(stack, dryRun, vendorCommand)
 	}
 
-	return fmt.Errorf("to vendor a component, '--component' (shorthand '-c') parameter needs to be provided.\n" +
-		"Example: atmos vendor pull -c <component>")
+	q := ""
+	if len(args) > 0 {
+		q = fmt.Sprintf("Did you mean 'atmos vendor pull -c %s'?", args[0])
+	}
+
+	return fmt.Errorf("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
+		"Example: atmos vendor pull -c <component>\n" + q)
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
