@@ -23,6 +23,4 @@ spec:
     # https://en.wikipedia.org/wiki/Glob_(programming)
     # https://github.com/bmatcuk/doublestar#patterns
     included_paths:
-      - "**/*.tf"
-      - "**/*.tfvars"
-      - "**/*.md"
+      - "**/*.*"

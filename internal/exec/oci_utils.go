@@ -18,7 +18,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func ProcessOciImage(imageName string, destDir string) error {
+// processOciImage downloads an Image from an OCI-compatible registry, extracts the layers from the tarball, and writes to the destination directory
+func processOciImage(imageName string, destDir string) error {
 	// Temp directory for the tarball files
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
 	if err != nil {

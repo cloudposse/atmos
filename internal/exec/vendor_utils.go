@@ -173,14 +173,23 @@ func ExecuteComponentVendorCommandInternal(
 			uri = vendorComponentSpec.Source.Uri
 		}
 
+		// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
+		useOciScheme := false
+		if strings.HasPrefix(uri, "oci://") {
+			useOciScheme = true
+			uri = strings.TrimPrefix(uri, "oci://")
+		}
+
 		// Check if `uri` is a file path.
 		// If it's a file path, check if it's an absolute path.
 		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
-		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
-			uri = absPath
+		if !useOciScheme {
+			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+				uri = absPath
+			}
 		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
+		u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
 			component,
 			uri,
 			componentPath,
@@ -198,24 +207,32 @@ func ExecuteComponentVendorCommandInternal(
 
 			defer removeTempDir(cliConfig, tempDir)
 
-			// Download the source into the temp folder
-			client := &getter.Client{
-				Ctx: context.Background(),
-				// Define the destination to where the files will be stored. This will create the directory if it doesn't exist
-				Dst: tempDir,
-				// Source
-				Src:  uri,
-				Mode: getter.ClientModeDir,
+			// Download the source into the temp directory
+			if !useOciScheme {
+				client := &getter.Client{
+					Ctx: context.Background(),
+					// Define the destination where the files will be stored. This will create the directory if it doesn't exist
+					Dst: tempDir,
+					// Source
+					Src:  uri,
+					Mode: getter.ClientModeDir,
+				}
+
+				if err = client.Get(); err != nil {
+					return err
+				}
+			} else {
+				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+				err = processOciImage(uri, tempDir)
+				if err != nil {
+					return err
+				}
 			}
 
-			if err = client.Get(); err != nil {
-				return err
-			}
-
-			// Copy from the temp folder to the destination folder with skipping of some files
+			// Copy from the temp folder to the destination folder and skip the excluded files
 			copyOptions := cp.Options{
 				// Skip specifies which files should be skipped
-				Skip: func(srcinfo os.FileInfo, src, dest string) (bool, error) {
+				Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 					if strings.HasSuffix(src, ".git") {
 						return true, nil
 					}
@@ -313,14 +330,24 @@ func ExecuteComponentVendorCommandInternal(
 					uri = mixin.Uri
 				}
 
+				// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
+				useOciScheme = false
+				if strings.HasPrefix(uri, "oci://") {
+					useOciScheme = true
+					uri = strings.TrimPrefix(uri, "oci://")
+				}
+
 				// Check if `uri` is a file path.
 				// If it's a file path, check if it's an absolute path.
 				// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
-				if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
-					uri = absPath
+				if !useOciScheme {
+					if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+						uri = absPath
+					}
 				}
 
-				u.LogTrace(cliConfig, fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
+				u.LogInfo(cliConfig, fmt.Sprintf(
+					"Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
 					uri,
 					component,
 					path.Join(componentPath, mixin.Filename),
@@ -333,15 +360,23 @@ func ExecuteComponentVendorCommandInternal(
 					}
 
 					// Download the mixin into the temp file
-					client := &getter.Client{
-						Ctx:  context.Background(),
-						Dst:  path.Join(tempDir, mixin.Filename),
-						Src:  uri,
-						Mode: getter.ClientModeFile,
-					}
+					if !useOciScheme {
+						client := &getter.Client{
+							Ctx:  context.Background(),
+							Dst:  path.Join(tempDir, mixin.Filename),
+							Src:  uri,
+							Mode: getter.ClientModeFile,
+						}
 
-					if err = client.Get(); err != nil {
-						return err
+						if err = client.Get(); err != nil {
+							return err
+						}
+					} else {
+						// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+						err = processOciImage(uri, tempDir)
+						if err != nil {
+							return err
+						}
 					}
 
 					// Copy from the temp folder to the destination folder
