@@ -22,7 +22,7 @@ func extractTarball(sourceFile, extractPath string) error {
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
-			u.LogError(fmt.Errorf("\nerror closing the file %s: %v\n", sourceFile, err))
+			u.LogError(fmt.Errorf("\nerror closing the file '%s': %v\n", sourceFile, err))
 		}
 	}(file)
 
@@ -36,7 +36,7 @@ func extractTarball(sourceFile, extractPath string) error {
 		defer func(fileReader io.ReadCloser) {
 			err := fileReader.Close()
 			if err != nil {
-				u.LogError(fmt.Errorf("\nerror closing the file %s: %v\n", sourceFile, err))
+				u.LogError(fmt.Errorf("\nerror closing the file '%s': %v\n", sourceFile, err))
 			}
 		}(fileReader)
 	}
