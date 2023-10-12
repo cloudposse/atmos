@@ -75,10 +75,13 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 		}
 
 		return ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
-	} else {
+	} else if stack != "" {
 		// Process stack vendoring
 		return ExecuteStackVendorCommandInternal(stack, dryRun, vendorCommand)
 	}
+
+	return fmt.Errorf("to vendor a component, '--component' (shorthand '-c') parameter needs to be provided.\n" +
+		"Example: atmos vendor pull -c <component>")
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
