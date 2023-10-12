@@ -8,50 +8,102 @@
 package exec
 
 import (
-	"bytes"
-	"encoding/json"
+	"fmt"
 	"io"
-	"log"
 	"os"
+	"path"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/google/uuid"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func main() {
-	basicAuthn := &authn.Basic{
-		Username: os.Getenv("DOCKER_USERNAME"),
-		Password: os.Getenv("DOCKER_PASSWORD"),
+func ProcessOciImage(imageName string, destDir string) error {
+	// Temp directory for the tarball files
+	tempDir, err := os.MkdirTemp("", uuid.New().String())
+	if err != nil {
+		return err
 	}
 
-	withAuthOption := remote.WithAuth(basicAuthn)
-	options := []remote.Option{withAuthOption}
+	defer func(tempDir string) {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			u.LogError(err)
+		}
+	}(tempDir)
 
-	imageName := os.Args[1]
+	// Temp tarball file name
+	tempTarFileName := path.Join(tempDir, uuid.New().String()) + ".tar"
 
+	// Get the image reference from the OCI registry
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
-		log.Fatalf("cannot parse reference of the image %s , detail: %v", imageName, err)
+		return fmt.Errorf("cannot parse reference of the image '%s'. Error: %v", imageName, err)
 	}
 
-	descriptor, err := remote.Get(ref, options...)
+	// Get the image descriptor
+	descriptor, err := remote.Get(ref)
 	if err != nil {
-		log.Fatalf("cannot get image %s , detail: %v", imageName, err)
+		return fmt.Errorf("cannot get image '%s'. Error: %v", imageName, err)
 	}
 
+	// Download the image from the OCI registry
 	image, err := descriptor.Image()
-
 	if err != nil {
-		log.Fatalf("cannot convert image %s descriptor to v1.Image, detail: %v", imageName, err)
+		return fmt.Errorf("cannot get a descriptor for the OCI image '%s'. Error: %v", imageName, err)
 	}
 
-	configFile, err := image.ConfigFile()
+	// Write the image tarball to the temp directory
+	err = tarball.WriteToFile(tempTarFileName, ref, image)
 	if err != nil {
-		log.Fatalf("cannot extract config file of image %s, detail: %v", imageName, err)
+		return err
 	}
 
-	prettyJSON, err := json.MarshalIndent(configFile, "", "    ")
+	// Get the tarball manifest
+	m, err := tarball.LoadManifest(func() (io.ReadCloser, error) {
+		f, err := os.Open(tempTarFileName)
+		if err != nil {
+			u.LogError(err)
+			return nil, err
+		}
+		return f, nil
+	})
+	if err != nil {
+		return err
+	}
 
-	_, _ = io.Copy(os.Stdout, bytes.NewBuffer(prettyJSON))
+	if len(m) == 0 {
+		return fmt.Errorf(
+			"the OCI image '%s' does not have a manifest. Refer to https://docs.docker.com/registry/spec/manifest-v2-2",
+			imageName)
+	}
+
+	manifest := m[0]
+
+	// Check the tarball layers
+	if len(manifest.Layers) == 0 {
+		return fmt.Errorf("the OCI image '%s' does not have layers", imageName)
+	}
+
+	// Extract the tarball layers into the temp directory
+	// The tarball layers are tarballs themselves
+	err = extractTarball(tempTarFileName, tempDir)
+	if err != nil {
+		return err
+	}
+
+	// Extract the layers into the destination directory
+	for _, l := range manifest.Layers {
+		layerPath := path.Join(tempDir, l)
+
+		err = extractTarball(layerPath, destDir)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
