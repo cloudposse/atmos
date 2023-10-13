@@ -10,7 +10,6 @@
 package atmos
 
 # Function `object_has_key` checks if an object has the specified key with a string value
-# https://blog.kenev.net/posts/check-if-key-exists-in-object-in-rego-42pp/
 # https://www.openpolicyagent.org/docs/latest/policy-reference/#types
 object_has_key(o, k) {
     some item
@@ -18,7 +17,7 @@ object_has_key(o, k) {
     type_name(item) == "string"
 }
 
-# Check the app hostname
+# Check the app hostname usign Regex
 errors[message] {
     not re_match("^([a-z0-9]+([\\-a-z0-9]*[a-z0-9]+)?\\.){1,}([a-z0-9]+([\\-a-z0-9]*[a-z0-9]+)?){1,63}(\\.[a-z0-9]{2,7})+$", input.vars.app_config.hostname)
     message = "'app_config.hostname' must contain at least a subdomain and a top level domain. Example: subDomain1.topLevelDomain.com"
