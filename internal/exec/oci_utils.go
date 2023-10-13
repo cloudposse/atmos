@@ -83,7 +83,7 @@ func processOciImage(imageName string, destDir string) error {
 
 	// Check the tarball layers
 	if len(manifest.Layers) == 0 {
-		return fmt.Errorf("the OCI image '%s' does not have layers", imageName)
+		return fmt.Errorf("the OCI image '%s' does not have any layers", imageName)
 	}
 
 	// Extract the tarball layers into the temp directory
