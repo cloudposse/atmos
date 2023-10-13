@@ -93,8 +93,7 @@ errors[message] {
     stack_dependencies := input.sources.vars.foo.stack_dependencies
     # Check if the 'foo' variable is defined in the 'stack1.yaml' stack config file
     stack1_dependency := endswith(stack_dependencies[0].stack_file, "stack1")
-    # Check if `stack1_dependency` is not empty
-    stack1_dependency != ""
+    stack1_dependency == true
     # Get all stack dependencies of the 'foo' variable where 'stack_file' ends with 'stack2' (this means that the variable is redefined in one of the files 'stack2')
     stack2_dependencies := {stack_dependency | some stack_dependency in stack_dependencies; endswith(stack_dependency.stack_file, "stack2")}
     # Check the count of the stack dependencies of the 'foo' variable where 'stack_file' ends with 'stack2'
