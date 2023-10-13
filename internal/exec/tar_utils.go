@@ -9,11 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // extractTarball extracts the tarball file into the destination directory
-func extractTarball(sourceFile, extractPath string) error {
+func extractTarball(cliConfig schema.CliConfiguration, sourceFile, extractPath string) error {
 	file, err := os.Open(sourceFile)
 	if err != nil {
 		return err
@@ -86,6 +87,11 @@ func extractTarball(sourceFile, extractPath string) error {
 			if err != nil {
 				return err
 			}
+
+		default:
+			u.LogTrace(cliConfig, fmt.Sprintf("the header '%s' in the tarball '%s' has unsupported header type '%v'. "+
+				"Supported header types are 'Directory' and 'File'",
+				header.Name, sourceFile, header.Typeflag))
 		}
 	}
 	return nil

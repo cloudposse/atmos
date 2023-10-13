@@ -197,7 +197,7 @@ func ExecuteComponentVendorCommandInternal(
 			}
 		}
 
-		u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
+		u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'\n",
 			component,
 			uri,
 			componentPath,
@@ -231,7 +231,7 @@ func ExecuteComponentVendorCommandInternal(
 				}
 			} else {
 				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-				err = processOciImage(uri, tempDir)
+				err = processOciImage(cliConfig, uri, tempDir)
 				if err != nil {
 					return err
 				}
@@ -355,7 +355,7 @@ func ExecuteComponentVendorCommandInternal(
 				}
 
 				u.LogInfo(cliConfig, fmt.Sprintf(
-					"Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
+					"Pulling the mixin '%s' for the component '%s' into '%s'\n",
 					uri,
 					component,
 					path.Join(componentPath, mixin.Filename),
@@ -381,7 +381,7 @@ func ExecuteComponentVendorCommandInternal(
 						}
 					} else {
 						// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-						err = processOciImage(uri, tempDir)
+						err = processOciImage(cliConfig, uri, tempDir)
 						if err != nil {
 							return err
 						}

@@ -15,11 +15,12 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/google/uuid"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // processOciImage downloads an Image from an OCI-compatible registry, extracts the layers from the tarball, and writes to the destination directory
-func processOciImage(imageName string, destDir string) error {
+func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDir string) error {
 	// Temp directory for the tarball files
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
 	if err != nil {
@@ -88,7 +89,7 @@ func processOciImage(imageName string, destDir string) error {
 
 	// Extract the tarball layers into the temp directory
 	// The tarball layers are tarballs themselves
-	err = extractTarball(tempTarFileName, tempDir)
+	err = extractTarball(cliConfig, tempTarFileName, tempDir)
 	if err != nil {
 		return err
 	}
@@ -97,7 +98,7 @@ func processOciImage(imageName string, destDir string) error {
 	for _, l := range manifest.Layers {
 		layerPath := path.Join(tempDir, l)
 
-		err = extractTarball(layerPath, destDir)
+		err = extractTarball(cliConfig, layerPath, destDir)
 		if err != nil {
 			return err
 		}

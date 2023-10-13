@@ -1,4 +1,3 @@
-# 'vpc2' component vendoring config
 # This is an example of how to download a Terraform component from an OCI registry (https://opencontainers.org), e.g. AWS Public ECR
 
 # 'component.yaml' in the component folder is processed by the 'atmos' commands
@@ -7,8 +6,8 @@
 apiVersion: atmos/v1
 kind: ComponentVendorConfig
 metadata:
-  name: vpc2-vendor-config
-  description: Config for vendoring of 'vpc2' component
+  name: stable/aws/vpc
+  description: Config for vendoring of 'stable/aws/vpc' component
 spec:
   source:
     # Source 'uri' supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
