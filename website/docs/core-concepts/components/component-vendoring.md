@@ -116,17 +116,17 @@ uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest
 The schema of a `component.yaml` file is as follows:
 
 ```yaml
-# 'vpc2' component vendoring config
+# 'vpc' component vendoring config
 # This is an example of how to download a Terraform component from an OCI registry (https://opencontainers.org), e.g. AWS Public ECR
 
-# 'component.yaml' in the component folder is processed by the 'atmos' commands
-# 'atmos vendor pull -c infra/vpc2' or 'atmos vendor pull --component infra/vpc2'
+# 'component.yaml' in the component folder is processed by the 'atmos' commands:
+# 'atmos vendor pull -c infra/vpc' or 'atmos vendor pull --component infra/vpc'
 
 apiVersion: atmos/v1
 kind: ComponentVendorConfig
 metadata:
-  name: vpc2-vendor-config
-  description: Config for vendoring of 'vpc2' component
+  name: vpc-vendor-config
+  description: Config for vendoring of the 'vpc' component
 spec:
   source:
     # Source 'uri' supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
