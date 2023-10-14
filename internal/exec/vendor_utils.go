@@ -12,6 +12,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
@@ -54,7 +55,7 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 	}
 
 	if component != "" && stack != "" {
-		return fmt.Errorf("either '--component' or '--stack' parameter needs to be provided, but not both")
+		return fmt.Errorf("either '--component' or '--stack' flag needs to be provided, but not both")
 	}
 
 	if component != "" {
@@ -74,10 +75,18 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 		}
 
 		return ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
-	} else {
+	} else if stack != "" {
 		// Process stack vendoring
 		return ExecuteStackVendorCommandInternal(stack, dryRun, vendorCommand)
 	}
+
+	q := ""
+	if len(args) > 0 {
+		q = fmt.Sprintf("Did you mean 'atmos vendor pull -c %s'?", args[0])
+	}
+
+	return fmt.Errorf("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
+		"Example: atmos vendor pull -c <component>\n" + q)
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
@@ -127,11 +136,14 @@ func ReadAndProcessComponentConfigFile(cliConfig schema.CliConfiguration, compon
 	return componentConfig, componentPath, nil
 }
 
-// ExecuteComponentVendorCommandInternal executes a component vendor command
+// ExecuteComponentVendorCommandInternal executes the 'atmos vendor pull' command for a component
 // Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP),
 // URL and archive formats described in https://github.com/hashicorp/go-getter
 // https://www.allee.xyz/en/posts/getting-started-with-go-getter
 // https://github.com/otiai10/copy
+// https://opencontainers.org/
+// https://github.com/google/go-containerregistry
+// https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html
 func ExecuteComponentVendorCommandInternal(
 	cliConfig schema.CliConfiguration,
 	vendorComponentSpec schema.VendorComponentSpec,
@@ -153,7 +165,7 @@ func ExecuteComponentVendorCommandInternal(
 
 		// Parse 'uri' template
 		if vendorComponentSpec.Source.Version != "" {
-			t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Parse(vendorComponentSpec.Source.Uri)
+			t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Parse(vendorComponentSpec.Source.Uri)
 			if err != nil {
 				return err
 			}
@@ -169,14 +181,23 @@ func ExecuteComponentVendorCommandInternal(
 			uri = vendorComponentSpec.Source.Uri
 		}
 
+		// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
+		useOciScheme := false
+		if strings.HasPrefix(uri, "oci://") {
+			useOciScheme = true
+			uri = strings.TrimPrefix(uri, "oci://")
+		}
+
 		// Check if `uri` is a file path.
 		// If it's a file path, check if it's an absolute path.
 		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
-		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
-			uri = absPath
+		if !useOciScheme {
+			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+				uri = absPath
+			}
 		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' and writing to '%s'\n",
+		u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'\n",
 			component,
 			uri,
 			componentPath,
@@ -187,7 +208,6 @@ func ExecuteComponentVendorCommandInternal(
 			// We are using a temp folder for the following reasons:
 			// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
 			// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-			// ioutil.TempDir is deprecated. As of Go 1.17, this function simply calls os.MkdirTemp
 			tempDir, err = os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 			if err != nil {
 				return err
@@ -195,24 +215,32 @@ func ExecuteComponentVendorCommandInternal(
 
 			defer removeTempDir(cliConfig, tempDir)
 
-			// Download the source into the temp folder
-			client := &getter.Client{
-				Ctx: context.Background(),
-				// Define the destination to where the files will be stored. This will create the directory if it doesn't exist
-				Dst: tempDir,
-				// Source
-				Src:  uri,
-				Mode: getter.ClientModeDir,
+			// Download the source into the temp directory
+			if !useOciScheme {
+				client := &getter.Client{
+					Ctx: context.Background(),
+					// Define the destination where the files will be stored. This will create the directory if it doesn't exist
+					Dst: tempDir,
+					// Source
+					Src:  uri,
+					Mode: getter.ClientModeDir,
+				}
+
+				if err = client.Get(); err != nil {
+					return err
+				}
+			} else {
+				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+				err = processOciImage(cliConfig, uri, tempDir)
+				if err != nil {
+					return err
+				}
 			}
 
-			if err = client.Get(); err != nil {
-				return err
-			}
-
-			// Copy from the temp folder to the destination folder with skipping of some files
+			// Copy from the temp folder to the destination folder and skip the excluded files
 			copyOptions := cp.Options{
 				// Skip specifies which files should be skipped
-				Skip: func(srcinfo os.FileInfo, src, dest string) (bool, error) {
+				Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 					if strings.HasSuffix(src, ".git") {
 						return true, nil
 					}
@@ -294,7 +322,7 @@ func ExecuteComponentVendorCommandInternal(
 
 				// Parse 'uri' template
 				if mixin.Version != "" {
-					t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Parse(mixin.Uri)
+					t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Funcs(sprig.FuncMap()).Parse(mixin.Uri)
 					if err != nil {
 						return err
 					}
@@ -310,14 +338,24 @@ func ExecuteComponentVendorCommandInternal(
 					uri = mixin.Uri
 				}
 
+				// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
+				useOciScheme = false
+				if strings.HasPrefix(uri, "oci://") {
+					useOciScheme = true
+					uri = strings.TrimPrefix(uri, "oci://")
+				}
+
 				// Check if `uri` is a file path.
 				// If it's a file path, check if it's an absolute path.
 				// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
-				if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
-					uri = absPath
+				if !useOciScheme {
+					if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+						uri = absPath
+					}
 				}
 
-				u.LogTrace(cliConfig, fmt.Sprintf("Pulling the mixin '%s' for the component '%s' and writing to '%s'\n",
+				u.LogInfo(cliConfig, fmt.Sprintf(
+					"Pulling the mixin '%s' for the component '%s' into '%s'\n",
 					uri,
 					component,
 					path.Join(componentPath, mixin.Filename),
@@ -330,15 +368,23 @@ func ExecuteComponentVendorCommandInternal(
 					}
 
 					// Download the mixin into the temp file
-					client := &getter.Client{
-						Ctx:  context.Background(),
-						Dst:  path.Join(tempDir, mixin.Filename),
-						Src:  uri,
-						Mode: getter.ClientModeFile,
-					}
+					if !useOciScheme {
+						client := &getter.Client{
+							Ctx:  context.Background(),
+							Dst:  path.Join(tempDir, mixin.Filename),
+							Src:  uri,
+							Mode: getter.ClientModeFile,
+						}
 
-					if err = client.Get(); err != nil {
-						return err
+						if err = client.Get(); err != nil {
+							return err
+						}
+					} else {
+						// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+						err = processOciImage(cliConfig, uri, tempDir)
+						if err != nil {
+							return err
+						}
 					}
 
 					// Copy from the temp folder to the destination folder
@@ -369,7 +415,7 @@ func ExecuteComponentVendorCommandInternal(
 	return nil
 }
 
-// ExecuteStackVendorCommandInternal executes a stack vendor command
+// ExecuteStackVendorCommandInternal executes the command to vendor an Atmos stack
 // TODO: implement this
 func ExecuteStackVendorCommandInternal(
 	stack string,

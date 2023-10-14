@@ -82,7 +82,7 @@ go install github.com/cloudposse/atmos
 Get a specific version
 
 ```shell
-go install github.com/cloudposse/atmos@v1.20.0
+go install github.com/cloudposse/atmos@v1.46.0
 ```
 
 <br/>

@@ -77,26 +77,26 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	planFile := constructTerraformComponentPlanfileName(info)
 
 	if info.SubCommand == "clean" {
-		u.LogTrace(cliConfig, "Deleting '.terraform' folder")
+		u.LogInfo(cliConfig, "Deleting '.terraform' folder")
 		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
 		if err != nil {
 			u.LogWarning(cliConfig, err.Error())
 		}
 
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
-			u.LogTrace(cliConfig, "Deleting '.terraform.lock.hcl' file")
+			u.LogInfo(cliConfig, "Deleting '.terraform.lock.hcl' file")
 			_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
 		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s\n", varFile))
+		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s", varFile))
 		_ = os.Remove(path.Join(componentPath, varFile))
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s\n", planFile))
+		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s", planFile))
 		_ = os.Remove(path.Join(componentPath, planFile))
 
 		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
 		if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-			u.LogTrace(cliConfig, "Deleting 'backend.tf.json' file")
+			u.LogInfo(cliConfig, "Deleting 'backend.tf.json' file")
 			_ = os.Remove(path.Join(componentPath, "backend.tf.json"))
 		}
 
