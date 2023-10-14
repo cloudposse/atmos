@@ -169,7 +169,7 @@ func executeCustomCommand(
 		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
-			component, err := u.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data)
+			component, err := u.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
@@ -179,7 +179,7 @@ func executeCustomCommand(
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
-			stack, err := u.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data)
+			stack, err := u.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
@@ -221,7 +221,7 @@ func executeCustomCommand(
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data)
+				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
@@ -243,7 +243,7 @@ func executeCustomCommand(
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := u.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data)
+		commandToRun, err := u.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}

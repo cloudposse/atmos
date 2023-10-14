@@ -380,8 +380,10 @@ type BaseComponentConfig struct {
 // Stack imports (`import` section)
 
 type StackImport struct {
-	Path    string         `yaml:"path" json:"path" mapstructure:"path"`
-	Context map[string]any `yaml:"context" json:"context" mapstructure:"context"`
+	Path                        string         `yaml:"path" json:"path" mapstructure:"path"`
+	Context                     map[string]any `yaml:"context" json:"context" mapstructure:"context"`
+	SkipTemplatesProcessing     bool           `yaml:"skip_templates_processing" json:"skip_templates_processing" mapstructure:"skip_templates_processing"`
+	IgnoreMissingTemplateValues bool           `yaml:"ignore_missing_template_values" json:"ignore_missing_template_values" mapstructure:"ignore_missing_template_values"`
 }
 
 // Dependencies
