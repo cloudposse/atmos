@@ -437,11 +437,12 @@ type AtmosVendorSource struct {
 	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
 	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
 	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`
-	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+	IncludedPaths []string `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
 }
 
 type AtmosVendorSpec struct {
+	Imports []string            `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
 	Sources []AtmosVendorSource `yaml:"sources" json:"sources" mapstructure:"sources"`
 }
 
