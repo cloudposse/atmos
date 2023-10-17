@@ -430,3 +430,29 @@ type ConfigSourcesItem struct {
 }
 
 type ConfigSources map[string]map[string]ConfigSourcesItem
+
+// Atmos vendoring (`vendor.yaml` file)
+
+type AtmosVendorSource struct {
+	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
+	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
+	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+}
+
+type AtmosVendorSpec struct {
+	Sources []AtmosVendorSource `yaml:"sources" json:"sources" mapstructure:"sources"`
+}
+
+type AtmosVendorMetadata struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type AtmosVendorConfig struct {
+	ApiVersion string `yaml:"apiVersion" json:"apiVersion" mapstructure:"apiVersion"`
+	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Metadata   AtmosVendorMetadata
+	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
+}
