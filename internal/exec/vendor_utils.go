@@ -90,7 +90,11 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
-func ReadAndProcessComponentConfigFile(cliConfig schema.CliConfiguration, component string, componentType string) (schema.VendorComponentConfig, string, error) {
+func ReadAndProcessComponentConfigFile(
+	cliConfig schema.CliConfiguration,
+	component string,
+	componentType string,
+) (schema.VendorComponentConfig, string, error) {
 	var componentBasePath string
 	var componentConfig schema.VendorComponentConfig
 
