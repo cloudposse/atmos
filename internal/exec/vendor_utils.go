@@ -23,8 +23,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteVendorCommand executes `atmos vendor` commands
-func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand string) error {
+// ExecuteVendorPullCommand executes `atmos vendor` commands
+func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("terraform", cmd, args)
 	if err != nil {
 		return err
@@ -74,10 +74,10 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 			return err
 		}
 
-		return ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, dryRun, vendorCommand)
+		return ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, dryRun)
 	} else if stack != "" {
 		// Process stack vendoring
-		return ExecuteStackVendorCommandInternal(stack, dryRun, vendorCommand)
+		return ExecuteStackVendorCommandInternal(stack, dryRun)
 	}
 
 	q := ""
@@ -86,7 +86,8 @@ func ExecuteVendorCommand(cmd *cobra.Command, args []string, vendorCommand strin
 	}
 
 	return fmt.Errorf("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
-		"Example: atmos vendor pull -c <component>\n" + q)
+		"Example: atmos vendor pull -c <component>\n" +
+		q)
 }
 
 // ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
@@ -154,7 +155,6 @@ func ExecuteComponentVendorCommandInternal(
 	component string,
 	componentPath string,
 	dryRun bool,
-	vendorCommand string,
 ) error {
 
 	var tempDir string
@@ -162,255 +162,253 @@ func ExecuteComponentVendorCommandInternal(
 	var t *template.Template
 	var uri string
 
-	if vendorCommand == "pull" {
-		if vendorComponentSpec.Source.Uri == "" {
-			return errors.New("'uri' must be specified in 'source.uri' in the 'component.yaml' file")
+	if vendorComponentSpec.Source.Uri == "" {
+		return errors.New("'uri' must be specified in 'source.uri' in the 'component.yaml' file")
+	}
+
+	// Parse 'uri' template
+	if vendorComponentSpec.Source.Version != "" {
+		t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Parse(vendorComponentSpec.Source.Uri)
+		if err != nil {
+			return err
 		}
 
-		// Parse 'uri' template
-		if vendorComponentSpec.Source.Version != "" {
-			t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Parse(vendorComponentSpec.Source.Uri)
-			if err != nil {
-				return err
-			}
-
-			var tpl bytes.Buffer
-			err = t.Execute(&tpl, vendorComponentSpec.Source)
-			if err != nil {
-				return err
-			}
-
-			uri = tpl.String()
-		} else {
-			uri = vendorComponentSpec.Source.Uri
+		var tpl bytes.Buffer
+		err = t.Execute(&tpl, vendorComponentSpec.Source)
+		if err != nil {
+			return err
 		}
 
-		// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
-		useOciScheme := false
-		if strings.HasPrefix(uri, "oci://") {
-			useOciScheme = true
-			uri = strings.TrimPrefix(uri, "oci://")
+		uri = tpl.String()
+	} else {
+		uri = vendorComponentSpec.Source.Uri
+	}
+
+	// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
+	useOciScheme := false
+	if strings.HasPrefix(uri, "oci://") {
+		useOciScheme = true
+		uri = strings.TrimPrefix(uri, "oci://")
+	}
+
+	// Check if `uri` is a file path.
+	// If it's a file path, check if it's an absolute path.
+	// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
+	if !useOciScheme {
+		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+			uri = absPath
+		}
+	}
+
+	u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'\n",
+		component,
+		uri,
+		componentPath,
+	))
+
+	if !dryRun {
+		// Create temp folder
+		// We are using a temp folder for the following reasons:
+		// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
+		// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
+		tempDir, err = os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+		if err != nil {
+			return err
 		}
 
-		// Check if `uri` is a file path.
-		// If it's a file path, check if it's an absolute path.
-		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
+		defer removeTempDir(cliConfig, tempDir)
+
+		// Download the source into the temp directory
 		if !useOciScheme {
-			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
-				uri = absPath
+			client := &getter.Client{
+				Ctx: context.Background(),
+				// Define the destination where the files will be stored. This will create the directory if it doesn't exist
+				Dst: tempDir,
+				// Source
+				Src:  uri,
+				Mode: getter.ClientModeDir,
 			}
-		}
 
-		u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'\n",
-			component,
-			uri,
-			componentPath,
-		))
-
-		if !dryRun {
-			// Create temp folder
-			// We are using a temp folder for the following reasons:
-			// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
-			// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-			tempDir, err = os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+			if err = client.Get(); err != nil {
+				return err
+			}
+		} else {
+			// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+			err = processOciImage(cliConfig, uri, tempDir)
 			if err != nil {
 				return err
 			}
+		}
 
-			defer removeTempDir(cliConfig, tempDir)
-
-			// Download the source into the temp directory
-			if !useOciScheme {
-				client := &getter.Client{
-					Ctx: context.Background(),
-					// Define the destination where the files will be stored. This will create the directory if it doesn't exist
-					Dst: tempDir,
-					// Source
-					Src:  uri,
-					Mode: getter.ClientModeDir,
+		// Copy from the temp folder to the destination folder and skip the excluded files
+		copyOptions := cp.Options{
+			// Skip specifies which files should be skipped
+			Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+				if strings.HasSuffix(src, ".git") {
+					return true, nil
 				}
 
-				if err = client.Get(); err != nil {
-					return err
+				trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
+
+				// Exclude the files that match the 'excluded_paths' patterns
+				// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+				// https://en.wikipedia.org/wiki/Glob_(programming)
+				// https://github.com/bmatcuk/doublestar#patterns
+				for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
+					excludeMatch, err := u.PathMatch(excludePath, src)
+					if err != nil {
+						return true, err
+					} else if excludeMatch {
+						// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+						u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+							trimmedSrc,
+							excludePath,
+						))
+						return true, nil
+					}
 				}
-			} else {
-				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-				err = processOciImage(cliConfig, uri, tempDir)
+
+				// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+				if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
+					anyMatches := false
+					for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
+						includeMatch, err := u.PathMatch(includePath, src)
+						if err != nil {
+							return true, err
+						} else if includeMatch {
+							// If the file matches ANY of the 'included_paths' patterns, include the file
+							u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+								trimmedSrc,
+								includePath,
+							))
+							anyMatches = true
+							break
+						}
+					}
+
+					if anyMatches {
+						return false, nil
+					} else {
+						u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+						return true, nil
+					}
+				}
+
+				// If 'included_paths' is not provided, include all files that were not excluded
+				u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+				return false, nil
+			},
+
+			// Preserve the atime and the mtime of the entries
+			// On linux we can preserve only up to 1 millisecond accuracy
+			PreserveTimes: false,
+
+			// Preserve the uid and the gid of all entries
+			PreserveOwner: false,
+		}
+
+		if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
+			return err
+		}
+	}
+
+	// Process mixins
+	if len(vendorComponentSpec.Mixins) > 0 {
+		for _, mixin := range vendorComponentSpec.Mixins {
+			if mixin.Uri == "" {
+				return errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
+			}
+
+			if mixin.Filename == "" {
+				return errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
+			}
+
+			// Parse 'uri' template
+			if mixin.Version != "" {
+				t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Funcs(sprig.FuncMap()).Parse(mixin.Uri)
 				if err != nil {
 					return err
 				}
+
+				var tpl bytes.Buffer
+				err = t.Execute(&tpl, mixin)
+				if err != nil {
+					return err
+				}
+
+				uri = tpl.String()
+			} else {
+				uri = mixin.Uri
 			}
 
-			// Copy from the temp folder to the destination folder and skip the excluded files
-			copyOptions := cp.Options{
-				// Skip specifies which files should be skipped
-				Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-					if strings.HasSuffix(src, ".git") {
-						return true, nil
-					}
-
-					trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-					// Exclude the files that match the 'excluded_paths' patterns
-					// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
-					// https://en.wikipedia.org/wiki/Glob_(programming)
-					// https://github.com/bmatcuk/doublestar#patterns
-					for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
-						excludeMatch, err := u.PathMatch(excludePath, src)
-						if err != nil {
-							return true, err
-						} else if excludeMatch {
-							// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-							u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
-								trimmedSrc,
-								excludePath,
-							))
-							return true, nil
-						}
-					}
-
-					// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-					if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
-						anyMatches := false
-						for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
-							includeMatch, err := u.PathMatch(includePath, src)
-							if err != nil {
-								return true, err
-							} else if includeMatch {
-								// If the file matches ANY of the 'included_paths' patterns, include the file
-								u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
-									trimmedSrc,
-									includePath,
-								))
-								anyMatches = true
-								break
-							}
-						}
-
-						if anyMatches {
-							return false, nil
-						} else {
-							u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
-							return true, nil
-						}
-					}
-
-					// If 'included_paths' is not provided, include all files that were not excluded
-					u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
-					return false, nil
-				},
-
-				// Preserve the atime and the mtime of the entries
-				// On linux we can preserve only up to 1 millisecond accuracy
-				PreserveTimes: false,
-
-				// Preserve the uid and the gid of all entries
-				PreserveOwner: false,
+			// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
+			useOciScheme = false
+			if strings.HasPrefix(uri, "oci://") {
+				useOciScheme = true
+				uri = strings.TrimPrefix(uri, "oci://")
 			}
 
-			if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
-				return err
+			// Check if `uri` is a file path.
+			// If it's a file path, check if it's an absolute path.
+			// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
+			if !useOciScheme {
+				if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+					uri = absPath
+				}
 			}
-		}
 
-		// Process mixins
-		if len(vendorComponentSpec.Mixins) > 0 {
-			for _, mixin := range vendorComponentSpec.Mixins {
-				if mixin.Uri == "" {
-					return errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
+			u.LogInfo(cliConfig, fmt.Sprintf(
+				"Pulling the mixin '%s' for the component '%s' into '%s'\n",
+				uri,
+				component,
+				path.Join(componentPath, mixin.Filename),
+			))
+
+			if !dryRun {
+				err = os.RemoveAll(tempDir)
+				if err != nil {
+					return err
 				}
 
-				if mixin.Filename == "" {
-					return errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
-				}
-
-				// Parse 'uri' template
-				if mixin.Version != "" {
-					t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Funcs(sprig.FuncMap()).Parse(mixin.Uri)
-					if err != nil {
-						return err
-					}
-
-					var tpl bytes.Buffer
-					err = t.Execute(&tpl, mixin)
-					if err != nil {
-						return err
-					}
-
-					uri = tpl.String()
-				} else {
-					uri = mixin.Uri
-				}
-
-				// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
-				useOciScheme = false
-				if strings.HasPrefix(uri, "oci://") {
-					useOciScheme = true
-					uri = strings.TrimPrefix(uri, "oci://")
-				}
-
-				// Check if `uri` is a file path.
-				// If it's a file path, check if it's an absolute path.
-				// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
+				// Download the mixin into the temp file
 				if !useOciScheme {
-					if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
-						uri = absPath
+					client := &getter.Client{
+						Ctx:  context.Background(),
+						Dst:  path.Join(tempDir, mixin.Filename),
+						Src:  uri,
+						Mode: getter.ClientModeFile,
 					}
-				}
 
-				u.LogInfo(cliConfig, fmt.Sprintf(
-					"Pulling the mixin '%s' for the component '%s' into '%s'\n",
-					uri,
-					component,
-					path.Join(componentPath, mixin.Filename),
-				))
-
-				if !dryRun {
-					err = os.RemoveAll(tempDir)
+					if err = client.Get(); err != nil {
+						return err
+					}
+				} else {
+					// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+					err = processOciImage(cliConfig, uri, tempDir)
 					if err != nil {
 						return err
 					}
+				}
 
-					// Download the mixin into the temp file
-					if !useOciScheme {
-						client := &getter.Client{
-							Ctx:  context.Background(),
-							Dst:  path.Join(tempDir, mixin.Filename),
-							Src:  uri,
-							Mode: getter.ClientModeFile,
-						}
+				// Copy from the temp folder to the destination folder
+				copyOptions := cp.Options{
+					// Preserve the atime and the mtime of the entries
+					PreserveTimes: false,
 
-						if err = client.Get(); err != nil {
-							return err
-						}
-					} else {
-						// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-						err = processOciImage(cliConfig, uri, tempDir)
-						if err != nil {
-							return err
-						}
-					}
+					// Preserve the uid and the gid of all entries
+					PreserveOwner: false,
 
-					// Copy from the temp folder to the destination folder
-					copyOptions := cp.Options{
-						// Preserve the atime and the mtime of the entries
-						PreserveTimes: false,
+					// OnSymlink specifies what to do on symlink
+					// Override the destination file if it already exists
+					// Prevent the error:
+					// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
+					OnSymlink: func(src string) cp.SymlinkAction {
+						return cp.Deep
+					},
+				}
 
-						// Preserve the uid and the gid of all entries
-						PreserveOwner: false,
-
-						// OnSymlink specifies what to do on symlink
-						// Override the destination file if it already exists
-						// Prevent the error:
-						// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
-						OnSymlink: func(src string) cp.SymlinkAction {
-							return cp.Deep
-						},
-					}
-
-					if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
-						return err
-					}
+				if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
+					return err
 				}
 			}
 		}
@@ -424,7 +422,6 @@ func ExecuteComponentVendorCommandInternal(
 func ExecuteStackVendorCommandInternal(
 	stack string,
 	dryRun bool,
-	vendorCommand string,
 ) error {
-	return fmt.Errorf("command 'atmos vendor %s --stack <stack>' is not implemented yet", vendorCommand)
+	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not implemented yet")
 }

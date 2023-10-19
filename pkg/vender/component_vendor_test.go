@@ -16,15 +16,16 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
+	cliConfig.Logs.Level = "Trace"
+
 	componentType := "terraform"
-	vendorCommand := "pull"
 
 	// Test 'infra/vpc-flow-logs-bucket' component
 	component := "infra/vpc-flow-logs-bucket"
 	componentConfig, componentPath, err := e.ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
 	assert.Nil(t, err)
 
-	err = e.ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, false, vendorCommand)
+	err = e.ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
@@ -40,7 +41,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	componentConfig, componentPath, err = e.ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
 	assert.Nil(t, err)
 
-	err = e.ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, false, vendorCommand)
+	err = e.ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
