@@ -434,6 +434,7 @@ type ConfigSources map[string]map[string]ConfigSourcesItem
 // Atmos vendoring (`vendor.yaml` file)
 
 type AtmosVendorSource struct {
+	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
 	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
 	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
 	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`

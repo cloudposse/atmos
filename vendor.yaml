@@ -10,7 +10,8 @@ spec:
     # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
     # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
-    - source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+    - component: "vpc"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
       version: "latest"
       targets:
         - components/terraform/infra/vpc2
@@ -23,10 +24,11 @@ spec:
         - "**/*.tf"
         - "**/*.tfvars"
         - "**/*.md"
-    - source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
-      version: "latest"
+    - component: "vpc-flow-logs-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      version: "1.323.0"
       target:
-        - components/terraform/vpc3/{{.Version}}
+        - components/terraform/vpc-flow-logs-bucket/{{.Version}}
       excluded_paths:
         - "**/*.yaml"
         - "**/*.yml"
