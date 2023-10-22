@@ -25,7 +25,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	componentConfig, componentPath, err := e.ReadAndProcessComponentVendorConfigFile(cliConfig, component, componentType)
 	assert.Nil(t, err)
 
-	err = e.ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
@@ -41,7 +41,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	componentConfig, componentPath, err = e.ReadAndProcessComponentVendorConfigFile(cliConfig, component, componentType)
 	assert.Nil(t, err)
 
-	err = e.ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
