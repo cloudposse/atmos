@@ -136,7 +136,7 @@ func ReadAndProcessComponentVendorConfigFile(
 	}
 
 	if componentConfig.Kind != "ComponentVendorConfig" {
-		return componentConfig, "", fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'ComponentVendorConfig'",
+		return componentConfig, "", fmt.Errorf("invalid 'kind: %s' in the component vendoring config file '%s'. Supported kinds: 'ComponentVendorConfig'",
 			componentConfig.Kind,
 			cfg.ComponentVendorConfigFileName)
 	}
@@ -147,32 +147,34 @@ func ReadAndProcessComponentVendorConfigFile(
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
 func ReadAndProcessVendorConfigFile(
 	cliConfig schema.CliConfiguration,
-) (schema.AtmosVendorConfig, error) {
+) (schema.AtmosVendorConfig, bool, error) {
 	var vendorConfig schema.AtmosVendorConfig
+	vendorConfigFileExists := true
 
 	vendorConfigFile := cfg.AtmosVendorConfigFileName
 	if !u.FileExists(vendorConfigFile) {
-		return vendorConfig, fmt.Errorf("vendor config file '%s' does not exist",
-			cfg.AtmosVendorConfigFileName,
-		)
+		vendorConfigFileExists = false
+		return vendorConfig, vendorConfigFileExists, fmt.Errorf("vendor config file '%s' does not exist", vendorConfigFile)
 	}
 
 	vendorConfigFileContent, err := os.ReadFile(vendorConfigFile)
 	if err != nil {
-		return vendorConfig, err
+		return vendorConfig, vendorConfigFileExists, err
 	}
 
 	if err = yaml.Unmarshal(vendorConfigFileContent, &vendorConfig); err != nil {
-		return vendorConfig, err
+		return vendorConfig, vendorConfigFileExists, err
 	}
 
 	if vendorConfig.Kind != "AtmosVendorConfig" {
-		return vendorConfig, fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'AtmosVendorConfig'",
-			vendorConfig.Kind,
-			cfg.ComponentVendorConfigFileName)
+		return vendorConfig, vendorConfigFileExists,
+			fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'AtmosVendorConfig'",
+				vendorConfig.Kind,
+				cfg.ComponentVendorConfigFileName,
+			)
 	}
 
-	return vendorConfig, nil
+	return vendorConfig, vendorConfigFileExists, nil
 }
 
 // ExecuteComponentVendorCommandInternal executes the 'atmos vendor pull' command for a component
