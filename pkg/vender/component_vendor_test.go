@@ -22,7 +22,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Test 'infra/vpc-flow-logs-bucket' component
 	component := "infra/vpc-flow-logs-bucket"
-	componentConfig, componentPath, err := e.ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
+	componentConfig, componentPath, err := e.ReadAndProcessComponentVendorConfigFile(cliConfig, component, componentType)
 	assert.Nil(t, err)
 
 	err = e.ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
@@ -38,7 +38,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Test 'infra/account-map' component
 	component = "infra/account-map"
-	componentConfig, componentPath, err = e.ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
+	componentConfig, componentPath, err = e.ReadAndProcessComponentVendorConfigFile(cliConfig, component, componentType)
 	assert.Nil(t, err)
 
 	err = e.ExecuteComponentVendorCommandInternal(cliConfig, componentConfig.Spec, component, componentPath, false)

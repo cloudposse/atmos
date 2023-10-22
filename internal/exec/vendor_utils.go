@@ -69,7 +69,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 			componentType = "terraform"
 		}
 
-		componentConfig, componentPath, err := ReadAndProcessComponentConfigFile(cliConfig, component, componentType)
+		componentConfig, componentPath, err := ReadAndProcessComponentVendorConfigFile(cliConfig, component, componentType)
 		if err != nil {
 			return err
 		}
@@ -90,8 +90,8 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		q)
 }
 
-// ReadAndProcessComponentConfigFile reads and processes `component.yaml` vendor config file
-func ReadAndProcessComponentConfigFile(
+// ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`
+func ReadAndProcessComponentVendorConfigFile(
 	cliConfig schema.CliConfiguration,
 	component string,
 	componentType string,
@@ -118,9 +118,12 @@ func ReadAndProcessComponentConfigFile(
 		return componentConfig, "", fmt.Errorf("folder '%s' does not exist", componentPath)
 	}
 
-	componentConfigFile := path.Join(componentPath, cfg.ComponentConfigFileName)
+	componentConfigFile := path.Join(componentPath, cfg.ComponentVendorConfigFileName)
 	if !u.FileExists(componentConfigFile) {
-		return componentConfig, "", fmt.Errorf("vendor config file '%s' does not exist in the '%s' folder", cfg.ComponentConfigFileName, componentPath)
+		return componentConfig, "", fmt.Errorf("component vendoring config file '%s' does not exist in the '%s' folder",
+			cfg.ComponentVendorConfigFileName,
+			componentPath,
+		)
 	}
 
 	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
@@ -135,10 +138,41 @@ func ReadAndProcessComponentConfigFile(
 	if componentConfig.Kind != "ComponentVendorConfig" {
 		return componentConfig, "", fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'ComponentVendorConfig'",
 			componentConfig.Kind,
-			cfg.ComponentConfigFileName)
+			cfg.ComponentVendorConfigFileName)
 	}
 
 	return componentConfig, componentPath, nil
+}
+
+// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
+func ReadAndProcessVendorConfigFile(
+	cliConfig schema.CliConfiguration,
+) (schema.AtmosVendorConfig, error) {
+	var vendorConfig schema.AtmosVendorConfig
+
+	vendorConfigFile := cfg.AtmosVendorConfigFileName
+	if !u.FileExists(vendorConfigFile) {
+		return vendorConfig, fmt.Errorf("vendor config file '%s' does not exist",
+			cfg.AtmosVendorConfigFileName,
+		)
+	}
+
+	vendorConfigFileContent, err := os.ReadFile(vendorConfigFile)
+	if err != nil {
+		return vendorConfig, err
+	}
+
+	if err = yaml.Unmarshal(vendorConfigFileContent, &vendorConfig); err != nil {
+		return vendorConfig, err
+	}
+
+	if vendorConfig.Kind != "AtmosVendorConfig" {
+		return vendorConfig, fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'AtmosVendorConfig'",
+			vendorConfig.Kind,
+			cfg.ComponentVendorConfigFileName)
+	}
+
+	return vendorConfig, nil
 }
 
 // ExecuteComponentVendorCommandInternal executes the 'atmos vendor pull' command for a component

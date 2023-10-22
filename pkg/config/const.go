@@ -34,7 +34,8 @@ const (
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
 
-	ComponentConfigFileName = "component.yaml"
+	ComponentVendorConfigFileName = "component.yaml"
+	AtmosVendorConfigFileName     = "vendor.yaml"
 
 	ImportSectionName = "import"
 )
