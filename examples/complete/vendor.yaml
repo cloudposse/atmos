@@ -14,7 +14,7 @@ spec:
       source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
       version: "latest"
       targets:
-        - "components/terraform/infra/vpc2"
+        - "components/terraform/infra/vpc3"
       # Only include the files that match the 'included_paths' patterns.
       # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
       # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
@@ -27,8 +27,8 @@ spec:
     - component: "vpc-flow-logs-bucket"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
       version: "1.323.0"
-      target:
-        - "components/terraform/vpc-flow-logs-bucket/{{.Version}}"
+      targets:
+        - "components/terraform/infra/vpc-flow-logs-bucket/{{.Version}}"
       excluded_paths:
         - "**/*.yaml"
         - "**/*.yml"

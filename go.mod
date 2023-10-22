@@ -7,11 +7,11 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.6.0
 	github.com/fatih/color v1.15.0
 	github.com/go-git/go-git/v5 v5.9.0
-	github.com/google/go-containerregistry v0.16.1
+	github.com/google/go-containerregistry v0.14.0
 	github.com/google/uuid v1.3.1
-	github.com/hashicorp/go-getter v1.7.2
+	github.com/hashicorp/go-getter v1.7.3
 	github.com/hashicorp/hcl v1.0.0
-	github.com/hashicorp/hcl/v2 v2.18.1
+	github.com/hashicorp/hcl/v2 v2.19.1
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20230925220900-5a6f8d18746d
 	github.com/imdario/mergo v0.3.13
 	github.com/json-iterator/go v1.1.12
@@ -58,9 +58,9 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/docker/cli v24.0.0+incompatible // indirect
-	github.com/docker/distribution v2.8.2+incompatible // indirect
-	github.com/docker/docker v24.0.0+incompatible // indirect
+	github.com/docker/cli v23.0.3+incompatible // indirect
+	github.com/docker/distribution v2.8.1+incompatible // indirect
+	github.com/docker/docker v23.0.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
@@ -120,7 +120,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/ulikunitz/xz v0.5.10 // indirect
-	github.com/vbatts/tar-split v0.11.3 // indirect
+	github.com/vbatts/tar-split v0.11.2 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect

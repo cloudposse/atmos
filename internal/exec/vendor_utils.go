@@ -488,6 +488,15 @@ func ExecuteAtmosVendorInternal(
 		return "", false
 	})
 
+	duplicatedComponents := lo.FindDuplicates(components)
+
+	if len(duplicatedComponents) > 0 {
+		return fmt.Errorf("dublicated components %v in the vendor config file '%s'",
+			duplicatedComponents,
+			cfg.AtmosVendorConfigFileName,
+		)
+	}
+
 	if component != "" && !u.SliceContainsString(components, component) {
 		return fmt.Errorf("the flag '--component %s' is passed, but the component is not defined in any of the `sources` in the vendor config file '%s'",
 			component,
@@ -495,11 +504,15 @@ func ExecuteAtmosVendorInternal(
 		)
 	}
 
-	duplicatedComponents := lo.FindDuplicates(components)
+	targets := lo.FlatMap(atmosVendorSpec.Sources, func(s schema.AtmosVendorSource, index int) []string {
+		return s.Targets
+	})
 
-	if len(duplicatedComponents) > 0 {
-		return fmt.Errorf("dublicated components %v in `sources` in the vendor config file '%s'",
-			duplicatedComponents,
+	duplicatedTargets := lo.FindDuplicates(targets)
+
+	if len(duplicatedTargets) > 0 {
+		return fmt.Errorf("dublicated targets %v in the vendor config file '%s'",
+			duplicatedTargets,
 			cfg.AtmosVendorConfigFileName,
 		)
 	}
@@ -524,7 +537,7 @@ func ExecuteAtmosVendorInternal(
 
 		// Parse 'source' template
 		if s.Version != "" {
-			uri, err = u.ProcessTmpl(fmt.Sprintf("source-%s", s.Version), s.Source, s.Source, false)
+			uri, err = u.ProcessTmpl(fmt.Sprintf("source-%s", s.Version), s.Source, s, false)
 			if err != nil {
 				return err
 			}
@@ -544,7 +557,7 @@ func ExecuteAtmosVendorInternal(
 			var target string
 			// Parse 'target' template
 			if s.Version != "" {
-				target, err = u.ProcessTmpl(fmt.Sprintf("target-%s", s.Version), tgt, tgt, false)
+				target, err = u.ProcessTmpl(fmt.Sprintf("target-%s", s.Version), tgt, s, false)
 				if err != nil {
 					return err
 				}
