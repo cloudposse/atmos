@@ -519,7 +519,7 @@ func ExecuteAtmosVendorInternal(
 		)
 	}
 
-	for _, s := range atmosVendorSpec.Sources {
+	for indexSource, s := range atmosVendorSpec.Sources {
 		if component != "" && s.Component != component {
 			continue
 		}
@@ -539,7 +539,7 @@ func ExecuteAtmosVendorInternal(
 
 		// Parse 'source' template
 		if s.Version != "" {
-			uri, err = u.ProcessTmpl(fmt.Sprintf("source-%s", s.Version), s.Source, s, false)
+			uri, err = u.ProcessTmpl(fmt.Sprintf("source-%d-%s", indexSource, s.Version), s.Source, s, false)
 			if err != nil {
 				return err
 			}
@@ -555,11 +555,11 @@ func ExecuteAtmosVendorInternal(
 		}
 
 		// Iterate over the targets
-		for _, tgt := range s.Targets {
+		for indexTarget, tgt := range s.Targets {
 			var target string
 			// Parse 'target' template
 			if s.Version != "" {
-				target, err = u.ProcessTmpl(fmt.Sprintf("target-%s", s.Version), tgt, s, false)
+				target, err = u.ProcessTmpl(fmt.Sprintf("target-%d-%d-%s", indexSource, indexTarget, s.Version), tgt, s, false)
 				if err != nil {
 					return err
 				}
