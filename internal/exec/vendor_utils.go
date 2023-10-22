@@ -59,6 +59,11 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("either '--component' or '--stack' flag needs to be provided, but not both")
 	}
 
+	if stack != "" {
+		// Process stack vendoring
+		return ExecuteStackVendorInternal(stack, dryRun)
+	}
+
 	// Check and process `vendor.yaml`
 	vendorConfig, vendorConfigExists, err := ReadAndProcessVendorConfigFile(cliConfig)
 	if vendorConfigExists && err != nil {
@@ -86,9 +91,6 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 			}
 
 			return ExecuteComponentVendorInternal(cliConfig, componentConfig.Spec, component, componentPath, dryRun)
-		} else if stack != "" {
-			// Process stack vendoring
-			return ExecuteStackVendorInternal(stack, dryRun)
 		}
 	}
 
@@ -488,11 +490,11 @@ func ExecuteAtmosVendorInternal(
 		return "", false
 	})
 
-	duplicatedComponents := lo.FindDuplicates(components)
+	duplicateComponents := lo.FindDuplicates(components)
 
-	if len(duplicatedComponents) > 0 {
-		return fmt.Errorf("dublicated components %v in the vendor config file '%s'",
-			duplicatedComponents,
+	if len(duplicateComponents) > 0 {
+		return fmt.Errorf("dublicate component names %v in the vendor config file '%s'",
+			duplicateComponents,
 			cfg.AtmosVendorConfigFileName,
 		)
 	}
@@ -508,11 +510,11 @@ func ExecuteAtmosVendorInternal(
 		return s.Targets
 	})
 
-	duplicatedTargets := lo.FindDuplicates(targets)
+	duplicateTargets := lo.FindDuplicates(targets)
 
-	if len(duplicatedTargets) > 0 {
-		return fmt.Errorf("dublicated targets %v in the vendor config file '%s'",
-			duplicatedTargets,
+	if len(duplicateTargets) > 0 {
+		return fmt.Errorf("dublicate targets %v in the vendor config file '%s'",
+			duplicateTargets,
 			cfg.AtmosVendorConfigFileName,
 		)
 	}
@@ -702,5 +704,5 @@ func ExecuteStackVendorInternal(
 	stack string,
 	dryRun bool,
 ) error {
-	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not implemented yet")
+	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not supported yet")
 }
