@@ -188,21 +188,33 @@ func ExecuteAtmosVendorInternal(
 		)
 	}
 
-	for indexSource, s := range atmosVendorSpec.Sources {
+	// Process imports and return all sources from all the imports and from `vendor.yaml`
+	sources, err := processVendorImports(atmosVendorSpec.Imports, atmosVendorSpec.Sources)
+
+	if err != nil {
+		return err
+	}
+
+	// Process sources
+	for indexSource, s := range sources {
 		if component != "" && s.Component != component {
 			continue
 		}
 
+		if s.File == "" {
+			s.File = cfg.AtmosVendorConfigFileName
+		}
+
 		if s.Source == "" {
 			return fmt.Errorf("'source' must be specified in 'sources' in the vendor config file '%s'",
-				cfg.AtmosVendorConfigFileName,
+				s.File,
 			)
 		}
 
 		if len(s.Targets) == 0 {
 			return fmt.Errorf("'targets' must be specified for the source '%s' in the vendor config file '%s'",
 				s.Source,
-				cfg.AtmosVendorConfigFileName,
+				s.File,
 			)
 		}
 
@@ -257,112 +269,118 @@ func ExecuteAtmosVendorInternal(
 				))
 			}
 
-			if !dryRun {
-				// Create temp folder
-				// We are using a temp folder for the following reasons:
-				// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
-				// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-				tempDir, err = os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+			if dryRun {
+				return nil
+			}
+
+			// Create temp folder
+			// We are using a temp folder for the following reasons:
+			// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
+			// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
+			tempDir, err = os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+			if err != nil {
+				return err
+			}
+
+			defer removeTempDir(cliConfig, tempDir)
+
+			// Download the source into the temp directory
+			if !useOciScheme {
+				client := &getter.Client{
+					Ctx: context.Background(),
+					// Define the destination where the files will be stored. This will create the directory if it doesn't exist
+					Dst: tempDir,
+					// Source
+					Src:  uri,
+					Mode: getter.ClientModeDir,
+				}
+
+				if err = client.Get(); err != nil {
+					return err
+				}
+			} else {
+				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+				err = processOciImage(cliConfig, uri, tempDir)
 				if err != nil {
 					return err
 				}
+			}
 
-				defer removeTempDir(cliConfig, tempDir)
-
-				// Download the source into the temp directory
-				if !useOciScheme {
-					client := &getter.Client{
-						Ctx: context.Background(),
-						// Define the destination where the files will be stored. This will create the directory if it doesn't exist
-						Dst: tempDir,
-						// Source
-						Src:  uri,
-						Mode: getter.ClientModeDir,
+			// Copy from the temp folder to the destination folder and skip the excluded files
+			copyOptions := cp.Options{
+				// Skip specifies which files should be skipped
+				Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+					if strings.HasSuffix(src, ".git") {
+						return true, nil
 					}
 
-					if err = client.Get(); err != nil {
-						return err
-					}
-				} else {
-					// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-					err = processOciImage(cliConfig, uri, tempDir)
-					if err != nil {
-						return err
-					}
-				}
+					trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
-				// Copy from the temp folder to the destination folder and skip the excluded files
-				copyOptions := cp.Options{
-					// Skip specifies which files should be skipped
-					Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-						if strings.HasSuffix(src, ".git") {
+					// Exclude the files that match the 'excluded_paths' patterns
+					// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+					// https://en.wikipedia.org/wiki/Glob_(programming)
+					// https://github.com/bmatcuk/doublestar#patterns
+					for _, excludePath := range s.ExcludedPaths {
+						excludeMatch, err := u.PathMatch(excludePath, src)
+						if err != nil {
+							return true, err
+						} else if excludeMatch {
+							// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+							u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+								trimmedSrc,
+								excludePath,
+							))
 							return true, nil
 						}
+					}
 
-						trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-						// Exclude the files that match the 'excluded_paths' patterns
-						// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
-						// https://en.wikipedia.org/wiki/Glob_(programming)
-						// https://github.com/bmatcuk/doublestar#patterns
-						for _, excludePath := range s.ExcludedPaths {
-							excludeMatch, err := u.PathMatch(excludePath, src)
+					// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+					if len(s.IncludedPaths) > 0 {
+						anyMatches := false
+						for _, includePath := range s.IncludedPaths {
+							includeMatch, err := u.PathMatch(includePath, src)
 							if err != nil {
 								return true, err
-							} else if excludeMatch {
-								// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-								u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+							} else if includeMatch {
+								// If the file matches ANY of the 'included_paths' patterns, include the file
+								u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 									trimmedSrc,
-									excludePath,
+									includePath,
 								))
-								return true, nil
+								anyMatches = true
+								break
 							}
 						}
 
-						// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-						if len(s.IncludedPaths) > 0 {
-							anyMatches := false
-							for _, includePath := range s.IncludedPaths {
-								includeMatch, err := u.PathMatch(includePath, src)
-								if err != nil {
-									return true, err
-								} else if includeMatch {
-									// If the file matches ANY of the 'included_paths' patterns, include the file
-									u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
-										trimmedSrc,
-										includePath,
-									))
-									anyMatches = true
-									break
-								}
-							}
-
-							if anyMatches {
-								return false, nil
-							} else {
-								u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
-								return true, nil
-							}
+						if anyMatches {
+							return false, nil
+						} else {
+							u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+							return true, nil
 						}
+					}
 
-						// If 'included_paths' is not provided, include all files that were not excluded
-						u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
-						return false, nil
-					},
+					// If 'included_paths' is not provided, include all files that were not excluded
+					u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+					return false, nil
+				},
 
-					// Preserve the atime and the mtime of the entries
-					// On linux we can preserve only up to 1 millisecond accuracy
-					PreserveTimes: false,
+				// Preserve the atime and the mtime of the entries
+				// On linux we can preserve only up to 1 millisecond accuracy
+				PreserveTimes: false,
 
-					// Preserve the uid and the gid of all entries
-					PreserveOwner: false,
-				}
+				// Preserve the uid and the gid of all entries
+				PreserveOwner: false,
+			}
 
-				if err = cp.Copy(tempDir, target, copyOptions); err != nil {
-					return err
-				}
+			if err = cp.Copy(tempDir, target, copyOptions); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
+}
+
+func processVendorImports(imports []string, sources []schema.AtmosVendorSource) ([]schema.AtmosVendorSource, error) {
+	return sources, nil
 }

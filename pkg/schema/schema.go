@@ -437,6 +437,7 @@ type AtmosVendorSource struct {
 	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
 	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
 	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
+	File          string   `yaml:"file" json:"file" mapstructure:"file"`
 	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`
 	IncludedPaths []string `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
 	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
