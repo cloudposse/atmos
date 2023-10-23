@@ -24,21 +24,21 @@ atmos vendor pull -c <component> [options]
 
 Atmos supports two different ways of vendoring components, stacks and other artifacts:
 
-- Using `vendor.yaml` file
-- Using `component.yaml` file
+- Using `vendor.yaml` vendoring manifest
+- Using `component.yaml` vendoring manifest
 
-The `component.yaml` file can be used to vendor components from remote repositories and is not recommended for new setup.
+The `component.yaml` vendoring manifest can be used to vendor components from remote repositories and is not recommended for a new setup.
 One `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
 It's maintained for backwards compatibility.
 
-The `vendor.yaml` provides more functionality than using `component.yaml` files.
+The `vendor.yaml` vendoring manifest provides more functionality than using `component.yaml` files.
 It's used to describe vendoring config for all components, stacks and other artifacts for the entire infrastructure.
 The file is placed into the directory from which the `atmos vendor pull` command is executed. It's the recommended way to describe vendoring
 configurations.
 
-## Vendoring using `vendor.yaml` file
+## Vendoring using `vendor.yaml` manifest
 
-- The `vendor.yaml` vendor config file supports Kubernetes-style YAML config to describe vendoring configuration for Atmos components, stacks,
+- The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
   and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo)
 
 - The sources in `vendor.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
@@ -54,9 +54,9 @@ configurations.
 Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details.
 :::
 
-## Vendoring using `component.yaml` file
+## Vendoring using `component.yaml` manifest
 
-- The `component.yaml` config file supports Kubernetes-style YAML config to describe Atmos component vendoring configuration.
+- The `component.yaml` vendoring manifest supports Kubernetes-style YAML config to describe component vendoring configuration.
   The file is placed into the component's folder
 
 - The URIs (`uri`) in `component.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
