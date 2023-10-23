@@ -109,12 +109,12 @@ atmos vendor pull -c infra/account-map --dry-run
 
 When executing the `atmos vendor pull` command, Atmos performs the following steps to decide which vendoring manifest to use:
 
-- If `vendor.yaml` manifest is found, Atmos will parse the file and execute the command against it. If the flag `--component` is not specified,
-  Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest. If the flag `--component` is passed in, Atmos will vendor only that
-  component
+- If `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the command 
+  against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest. 
+  If the flag `--component` is passed in, Atmos will vendor only that component
 
 - If `vendor.yaml` is not found, Atmos will look for the `component.yaml` manifest in the component's folder. If `component.yaml` is not found, 
-  an error will be thrown. If the flag `--component` is passed in, Atmos will vendor the component. Otherwise, an error will be thrown
+  an error will be thrown. The flag `--component` is required in this case
 
 :::
 
