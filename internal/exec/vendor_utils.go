@@ -60,7 +60,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check and process `vendor.yaml`
-	vendorConfig, vendorConfigExists, err := ReadAndProcessVendorConfigFile(cliConfig)
+	vendorConfig, vendorConfigExists, err := ReadAndProcessVendorConfigFile(cfg.AtmosVendorConfigFileName)
 	if vendorConfigExists && err != nil {
 		return err
 	}
@@ -100,13 +100,10 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 }
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
-func ReadAndProcessVendorConfigFile(
-	cliConfig schema.CliConfiguration,
-) (schema.AtmosVendorConfig, bool, error) {
+func ReadAndProcessVendorConfigFile(vendorConfigFile string) (schema.AtmosVendorConfig, bool, error) {
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfigFileExists := true
 
-	vendorConfigFile := cfg.AtmosVendorConfigFileName
 	if !u.FileExists(vendorConfigFile) {
 		vendorConfigFileExists = false
 		return vendorConfig, vendorConfigFileExists, fmt.Errorf("vendor config file '%s' does not exist", vendorConfigFile)
@@ -125,7 +122,7 @@ func ReadAndProcessVendorConfigFile(
 		return vendorConfig, vendorConfigFileExists,
 			fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'AtmosVendorConfig'",
 				vendorConfig.Kind,
-				cfg.ComponentVendorConfigFileName,
+				vendorConfigFile,
 			)
 	}
 
@@ -144,15 +141,21 @@ func ExecuteAtmosVendorInternal(
 	var err error
 	var uri string
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'\n",
+	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'",
 		cfg.AtmosVendorConfigFileName,
 	))
 
-	if len(atmosVendorSpec.Sources) == 0 {
-		return fmt.Errorf("'spec.sources' is empty in the vendor config file '%s'", cfg.AtmosVendorConfigFileName)
+	// Process imports and return all sources from all the imports and from `vendor.yaml`
+	sources, err := processVendorImports(atmosVendorSpec.Imports, atmosVendorSpec.Sources)
+	if err != nil {
+		return err
 	}
 
-	components := lo.FilterMap(atmosVendorSpec.Sources, func(s schema.AtmosVendorSource, index int) (string, bool) {
+	if len(sources) == 0 {
+		return fmt.Errorf("'spec.sources' is empty in the vendor config file '%s' and the imports", cfg.AtmosVendorConfigFileName)
+	}
+
+	components := lo.FilterMap(sources, func(s schema.AtmosVendorSource, index int) (string, bool) {
 		if s.Component != "" {
 			return s.Component, true
 		}
@@ -162,37 +165,30 @@ func ExecuteAtmosVendorInternal(
 	duplicateComponents := lo.FindDuplicates(components)
 
 	if len(duplicateComponents) > 0 {
-		return fmt.Errorf("dublicate component names %v in the vendor config file '%s'",
+		return fmt.Errorf("dublicate component names %v in the vendor config file '%s' and the imports",
 			duplicateComponents,
 			cfg.AtmosVendorConfigFileName,
 		)
 	}
 
 	if component != "" && !u.SliceContainsString(components, component) {
-		return fmt.Errorf("the flag '--component %s' is passed, but the component is not defined in any of the `sources` in the vendor config file '%s'",
+		return fmt.Errorf("the flag '--component %s' is passed, but the component is not defined in any of the `sources` in the vendor config file '%s' and the imports",
 			component,
 			cfg.AtmosVendorConfigFileName,
 		)
 	}
 
-	targets := lo.FlatMap(atmosVendorSpec.Sources, func(s schema.AtmosVendorSource, index int) []string {
+	targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
 		return s.Targets
 	})
 
 	duplicateTargets := lo.FindDuplicates(targets)
 
 	if len(duplicateTargets) > 0 {
-		return fmt.Errorf("dublicate targets %v in the vendor config file '%s'",
+		return fmt.Errorf("dublicate targets %v in the vendor config file '%s' and the imports",
 			duplicateTargets,
 			cfg.AtmosVendorConfigFileName,
 		)
-	}
-
-	// Process imports and return all sources from all the imports and from `vendor.yaml`
-	sources, err := processVendorImports(atmosVendorSpec.Imports, atmosVendorSpec.Sources)
-
-	if err != nil {
-		return err
 	}
 
 	// Process sources
@@ -248,22 +244,14 @@ func ExecuteAtmosVendorInternal(
 				target = tgt
 			}
 
-			// Check if `target` is a file path.
-			// If it's a file path, check if it's an absolute path.
-			if !useOciScheme {
-				if absPath, err := u.JoinAbsolutePathWithPath(".", target); err == nil {
-					target = absPath
-				}
-			}
-
 			if s.Component != "" {
-				u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'\n",
+				u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'",
 					s.Component,
 					uri,
 					target,
 				))
 			} else {
-				u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources from '%s' into '%s'\n",
+				u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources from '%s' into '%s'",
 					uri,
 					target,
 				))
@@ -271,6 +259,14 @@ func ExecuteAtmosVendorInternal(
 
 			if dryRun {
 				return nil
+			}
+
+			// Check if `target` is a file path.
+			// If it's a file path, check if it's an absolute path.
+			if !useOciScheme {
+				if absPath, err := u.JoinAbsolutePathWithPath(".", target); err == nil {
+					target = absPath
+				}
 			}
 
 			// Create temp folder
@@ -381,6 +377,23 @@ func ExecuteAtmosVendorInternal(
 	return nil
 }
 
+// processVendorImports processes all imports recursively and returns a list of sources
 func processVendorImports(imports []string, sources []schema.AtmosVendorSource) ([]schema.AtmosVendorSource, error) {
-	return sources, nil
+	var mergedSources []schema.AtmosVendorSource
+
+	for _, imp := range imports {
+		vendorConfig, _, err := ReadAndProcessVendorConfigFile(imp)
+		if err != nil {
+			return mergedSources, err
+		}
+
+		mergedSources = append(mergedSources, vendorConfig.Spec.Sources...)
+
+		_, err = processVendorImports(vendorConfig.Spec.Imports, mergedSources)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return append(mergedSources, sources...), nil
 }
