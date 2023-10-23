@@ -141,9 +141,11 @@ func ExecuteAtmosVendorInternal(
 	var err error
 	var uri string
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'",
-		cfg.AtmosVendorConfigFileName,
-	))
+	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'", cfg.AtmosVendorConfigFileName))
+
+	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
+		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", cfg.AtmosVendorConfigFileName)
+	}
 
 	// Process imports and return all sources from all the imports and from `vendor.yaml`
 	sources, err := processVendorImports(atmosVendorSpec.Imports, atmosVendorSpec.Sources)
