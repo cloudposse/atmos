@@ -114,7 +114,7 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
   component
 
 - If `vendor.yaml` is not found, Atmos will look for the `component.yaml` manifest in the component's folder. If `component.yaml` is not found, 
-  an error will be thrown. If the flag `--component` is passed in Atmos will vendor the component. Otherwise, an error will be thrown
+  an error will be thrown. If the flag `--component` is passed in, Atmos will vendor the component. Otherwise, an error will be thrown
 
 :::
 
