@@ -24,7 +24,7 @@ var (
 	getFileContentSyncMap = sync.Map{}
 )
 
-// FindComponentStacks finds all infrastructure stack config files where the component or the base component is defined
+// FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined
 func FindComponentStacks(
 	componentType string,
 	component string,
@@ -167,7 +167,7 @@ func FindComponentDependenciesLegacy(
 	return unique, nil
 }
 
-// processImportSection processes the `import` section in stack config files
+// processImportSection processes the `import` section in stack manifests
 // The `import` section` can be of the following types:
 // 1. list of `StackImport` structs
 // 2. list of strings

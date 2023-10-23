@@ -26,7 +26,7 @@ var (
 	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
-// ProcessYAMLConfigFiles takes a list of paths to stack config files, processes and deep-merges all imports,
+// ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
 // and returns a list of stack configs
 func ProcessYAMLConfigFiles(
 	stacksBasePath string,
@@ -138,7 +138,7 @@ func ProcessYAMLConfigFiles(
 	return listResult, mapResult, rawStackConfigs, nil
 }
 
-// ProcessYAMLConfigFile takes a path to a YAML stack config file,
+// ProcessYAMLConfigFile takes a path to a YAML stack manifest,
 // recursively processes and deep-merges all imports,
 // and returns the final stack config
 func ProcessYAMLConfigFile(
@@ -163,13 +163,13 @@ func ProcessYAMLConfigFile(
 
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
 	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
-	// If we add a new stack config file with some component configurations to the current branch, then the new file will not be present in
+	// If we add a new stack manifest with some component configurations to the current branch, then the new file will not be present in
 	// the remote branch (with which the current branch is compared), and `atmos` would throw an error.
 	if err != nil && !ignoreMissingFiles {
 		return nil, nil, nil, err
 	}
 
-	// Process `Go` templates in the stack config file using the provided context
+	// Process `Go` templates in the stack manifest using the provided context
 	if !skipTemplatesProcessingInImports && len(context) > 0 {
 		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
@@ -179,7 +179,7 @@ func ProcessYAMLConfigFile(
 
 	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
-		e := fmt.Errorf("invalid stack config file '%s'\n%v", relativeFilePath, err)
+		e := fmt.Errorf("invalid stack manifest '%s'\n%v", relativeFilePath, err)
 		return nil, nil, nil, e
 	}
 
@@ -296,7 +296,7 @@ func ProcessYAMLConfigFile(
 		stackConfigs = append(stackConfigs, stackConfigMap)
 	}
 
-	// Deep-merge the stack config file and all the imports
+	// Deep-merge the stack manifest and all the imports
 	stackConfigsDeepMerged, err := m.Merge(stackConfigs)
 	if err != nil {
 		return nil, nil, nil, err
@@ -305,7 +305,7 @@ func ProcessYAMLConfigFile(
 	return stackConfigsDeepMerged, importsConfig, stackConfigMap, nil
 }
 
-// ProcessStackConfig takes a raw stack config, deep-merges all variables, settings, environments and backends,
+// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends,
 // and returns the final stack configuration for all Terraform and helmfile components
 func ProcessStackConfig(
 	stacksBasePath string,
