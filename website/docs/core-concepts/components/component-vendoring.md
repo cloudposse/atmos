@@ -10,7 +10,7 @@ Atmos natively supports the concept of "vendoring", which is making a copy of th
 primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir). While Atmos does not
 call `vendir`, it functions and supports a configuration that is very similar.
 
-After defining the `component.yaml` configuration, the remote component can be downloaded by running the following command:
+After defining the `component.yaml` vendoring manifest, the remote component can be downloaded by running the following command:
 
 ```bash
 atmos vendor pull -c components/terraform/vpc
