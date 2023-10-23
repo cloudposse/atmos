@@ -140,21 +140,27 @@ func ExecuteAtmosVendorInternal(
 	var tempDir string
 	var err error
 	var uri string
+	vendorConfigFileName := cfg.AtmosVendorConfigFileName
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'", cfg.AtmosVendorConfigFileName))
+	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName))
 
 	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
-		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", cfg.AtmosVendorConfigFileName)
+		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
 	}
 
 	// Process imports and return all sources from all the imports and from `vendor.yaml`
-	sources, err := processVendorImports(atmosVendorSpec.Imports, atmosVendorSpec.Sources)
+	sources, _, err := processVendorImports(
+		vendorConfigFileName,
+		atmosVendorSpec.Imports,
+		atmosVendorSpec.Sources,
+		[]string{vendorConfigFileName},
+	)
 	if err != nil {
 		return err
 	}
 
 	if len(sources) == 0 {
-		return fmt.Errorf("'spec.sources' is empty in the vendor config file '%s' and the imports", cfg.AtmosVendorConfigFileName)
+		return fmt.Errorf("'spec.sources' is empty in the vendor config file '%s' and the imports", vendorConfigFileName)
 	}
 
 	components := lo.FilterMap(sources, func(s schema.AtmosVendorSource, index int) (string, bool) {
@@ -169,14 +175,14 @@ func ExecuteAtmosVendorInternal(
 	if len(duplicateComponents) > 0 {
 		return fmt.Errorf("dublicate component names %v in the vendor config file '%s' and the imports",
 			duplicateComponents,
-			cfg.AtmosVendorConfigFileName,
+			vendorConfigFileName,
 		)
 	}
 
 	if component != "" && !u.SliceContainsString(components, component) {
 		return fmt.Errorf("the flag '--component %s' is passed, but the component is not defined in any of the 'sources' in the vendor config file '%s' and the imports",
 			component,
-			cfg.AtmosVendorConfigFileName,
+			vendorConfigFileName,
 		)
 	}
 
@@ -189,7 +195,7 @@ func ExecuteAtmosVendorInternal(
 	if len(duplicateTargets) > 0 {
 		return fmt.Errorf("dublicate targets %v in the vendor config file '%s' and the imports",
 			duplicateTargets,
-			cfg.AtmosVendorConfigFileName,
+			vendorConfigFileName,
 		)
 	}
 
@@ -200,7 +206,7 @@ func ExecuteAtmosVendorInternal(
 		}
 
 		if s.File == "" {
-			s.File = cfg.AtmosVendorConfigFileName
+			s.File = vendorConfigFileName
 		}
 
 		if s.Source == "" {
@@ -380,26 +386,40 @@ func ExecuteAtmosVendorInternal(
 }
 
 // processVendorImports processes all imports recursively and returns a list of sources
-func processVendorImports(imports []string, sources []schema.AtmosVendorSource) ([]schema.AtmosVendorSource, error) {
+func processVendorImports(
+	vendorConfigFile string,
+	imports []string,
+	sources []schema.AtmosVendorSource,
+	allImports []string,
+) ([]schema.AtmosVendorSource, []string, error) {
 	var mergedSources []schema.AtmosVendorSource
 
 	for _, imp := range imports {
+		if u.SliceContainsString(allImports, imp) {
+			return nil, nil, fmt.Errorf("duplicate import '%s' in the vendor config file '%s'. It was already imported in the import chain",
+				imp,
+				vendorConfigFile,
+			)
+		}
+
+		allImports = append(allImports, imp)
+
 		vendorConfig, _, err := ReadAndProcessVendorConfigFile(imp)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if u.SliceContainsString(vendorConfig.Spec.Imports, imp) {
-			return nil, fmt.Errorf("vendor config file '%s' imports itself in 'spec.imports'", imp)
+			return nil, nil, fmt.Errorf("vendor config file '%s' imports itself in 'spec.imports'", imp)
 		}
 
 		if len(vendorConfig.Spec.Sources) == 0 && len(vendorConfig.Spec.Imports) == 0 {
-			return nil, fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", imp)
+			return nil, nil, fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", imp)
 		}
 
-		mergedSources, err = processVendorImports(vendorConfig.Spec.Imports, mergedSources)
+		mergedSources, _, err = processVendorImports(imp, vendorConfig.Spec.Imports, mergedSources, allImports)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		for i, _ := range vendorConfig.Spec.Sources {
@@ -409,5 +429,5 @@ func processVendorImports(imports []string, sources []schema.AtmosVendorSource) 
 		mergedSources = append(mergedSources, vendorConfig.Spec.Sources...)
 	}
 
-	return append(mergedSources, sources...), nil
+	return append(mergedSources, sources...), allImports, nil
 }
