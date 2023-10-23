@@ -4,6 +4,11 @@ metadata:
   name: atmos-vendor-config
   description: Atmos vendoring configuration
 spec:
+  # Either `imports` or `sources` (or both) must be defined in a vendor config file
+  imports:
+    - "vendor/vendor2.yaml"
+    - "vendor/vendor3.yaml"
+
   sources:
     # `source` supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
     # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.

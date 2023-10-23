@@ -172,7 +172,7 @@ func ExecuteAtmosVendorInternal(
 	}
 
 	if component != "" && !u.SliceContainsString(components, component) {
-		return fmt.Errorf("the flag '--component %s' is passed, but the component is not defined in any of the `sources` in the vendor config file '%s' and the imports",
+		return fmt.Errorf("the flag '--component %s' is passed, but the component is not defined in any of the 'sources' in the vendor config file '%s' and the imports",
 			component,
 			cfg.AtmosVendorConfigFileName,
 		)
@@ -384,15 +384,27 @@ func processVendorImports(imports []string, sources []schema.AtmosVendorSource) 
 	for _, imp := range imports {
 		vendorConfig, _, err := ReadAndProcessVendorConfigFile(imp)
 		if err != nil {
-			return mergedSources, err
+			return nil, err
 		}
 
-		mergedSources = append(mergedSources, vendorConfig.Spec.Sources...)
+		if u.SliceContainsString(vendorConfig.Spec.Imports, imp) {
+			return nil, fmt.Errorf("vendor config file '%s' imports itself in 'spec.imports'", imp)
+		}
 
-		_, err = processVendorImports(vendorConfig.Spec.Imports, mergedSources)
+		if len(vendorConfig.Spec.Sources) == 0 && len(vendorConfig.Spec.Imports) == 0 {
+			return nil, fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", imp)
+		}
+
+		mergedSources, err = processVendorImports(vendorConfig.Spec.Imports, mergedSources)
 		if err != nil {
 			return nil, err
 		}
+
+		for i, _ := range vendorConfig.Spec.Sources {
+			vendorConfig.Spec.Sources[i].File = imp
+		}
+
+		mergedSources = append(mergedSources, vendorConfig.Spec.Sources...)
 	}
 
 	return append(mergedSources, sources...), nil
