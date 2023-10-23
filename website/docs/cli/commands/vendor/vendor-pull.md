@@ -3,11 +3,11 @@ title: atmos vendor pull
 sidebar_label: pull
 sidebar_class_name: command
 id: pull
-description: Use this command to pull sources and mixins from remote repositories for a Terraform or Helmfile component.
+description: Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components.
 ---
 
 :::note Purpose
-Use this command to pull sources and mixins from remote repositories for a Terraform or Helmfile component.
+Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components.
 :::
 
 ## Usage
@@ -15,6 +15,7 @@ Use this command to pull sources and mixins from remote repositories for a Terra
 Execute the `vendor pull` command like this:
 
 ```shell
+atmos vendor pull
 atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
 ```
@@ -25,8 +26,8 @@ This command pulls sources and mixins from remote repositories for a Terraform o
   folder
 
 - The URIs (`uri`) in `component.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
-  archive formats as described in https://github.com/hashicorp/go-getter, and also the `oci://` scheme to download components from 
-  [OCI registries](https://opencontainers.org). For example, the following config can be used to download the `vpc` component from an 
+  archive formats as described in https://github.com/hashicorp/go-getter, and also the `oci://` scheme to download artifacts from
+  [OCI registries](https://opencontainers.org). For example, the following config can be used to download the `vpc` component from an
   AWS public ECR registry:
 
   ```yaml
@@ -64,6 +65,6 @@ atmos vendor pull -c infra/account-map --dry-run
 
 | Flag          | Description                                                        | Alias | Required |
 |:--------------|:-------------------------------------------------------------------|:------|:---------|
-| `--component` | Atmos component to pull sources and mixins for                     | `-c`  | yes      |
+| `--component` | Atmos component to pull sources and mixins for                     | `-c`  | no       |
 | `--type`      | Component type: `terraform` or `helmfile` (`terraform` is default) | `-t`  | no       |
 | `--dry-run`   | Dry run                                                            |       | no       |
