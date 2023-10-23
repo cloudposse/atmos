@@ -417,7 +417,7 @@ func processVendorImports(
 			return nil, nil, fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", imp)
 		}
 
-		mergedSources, _, err = processVendorImports(imp, vendorConfig.Spec.Imports, mergedSources, allImports)
+		mergedSources, allImports, err = processVendorImports(imp, vendorConfig.Spec.Imports, mergedSources, allImports)
 		if err != nil {
 			return nil, nil, err
 		}
