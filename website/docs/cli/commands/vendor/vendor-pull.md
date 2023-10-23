@@ -3,11 +3,11 @@ title: atmos vendor pull
 sidebar_label: pull
 sidebar_class_name: command
 id: pull
-description: Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components.
+description: Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
 ---
 
 :::note Purpose
-Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components.
+Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
 :::
 
 ## Usage
@@ -20,15 +20,59 @@ atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
 ```
 
-This command pulls sources and mixins from remote repositories for a Terraform or Helmfile component.
+## Description
 
-- Supports Kubernetes-style YAML config (file `component.yaml`) to describe component vendoring configuration. The file is placed into the component's
-  folder
+Atmos supports two different ways of vendoring components, stacks and other artifacts:
+
+- Using `vendor.yaml` file
+- Using `component.yaml` file
+
+The `component.yaml` file can be used to vendor components from remote repositories and is not recommended for new setup.
+One `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
+It's maintained for backwards compatibility.
+
+The `vendor.yaml` provides more functionality than using `component.yaml` files.
+It's used to describe vendoring config for all components, stacks and other artifacts for the entire infrastructure.
+The file is placed into the directory from which the `atmos vendor pull` command is executed. It's the recommended way to describe vendoring
+configurations.
+
+## Vendoring using `vendor.yaml` file
+
+- The `vendor.yaml` vendor config file supports Kubernetes-style YAML config to describe vendoring configuration for Atmos components, stacks,
+  and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo)
+
+- The sources in `vendor.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
+  archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
+  [OCI registries](https://opencontainers.org).
+
+- The targets in `vendor.yaml` support absolute and relative paths (relative to the directory where the command is executed)
+
+- `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for file names/paths
+  (double-star/globstar `**` is supported as well)
+
+:::tip
+Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details.
+:::
+
+## Vendoring using `component.yaml` file
+
+- The `component.yaml` config file supports Kubernetes-style YAML config to describe Atmos component vendoring configuration.
+  The file is placed into the component's folder
 
 - The URIs (`uri`) in `component.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
-  archive formats as described in https://github.com/hashicorp/go-getter, and also the `oci://` scheme to download artifacts from
-  [OCI registries](https://opencontainers.org). For example, the following config can be used to download the `vpc` component from an
-  AWS public ECR registry:
+  archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
+  [OCI registries](https://opencontainers.org).
+
+- `included_paths` and `excluded_paths` in `component.yaml` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for
+  file names/paths (double-star/globstar `**` is supported as well)
+
+:::tip
+Refer to [`Atmos Component Vendoring`](/core-concepts/components/vendoring) for more details.
+:::
+
+## Vendoring from OCI Registries
+
+The following config can be used to download the `vpc` component from an AWS public ECR registry:
 
   ```yaml
   apiVersion: atmos/v1
@@ -42,9 +86,6 @@ This command pulls sources and mixins from remote repositories for a Terraform o
       uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
       version: "latest"
   ```
-
-- `included_paths` and `excluded_paths` in `component.yaml` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for
-  file names/paths (double-star/globstar `**` is supported as well)
 
 <br/>
 
