@@ -123,7 +123,7 @@ Hierarchical imports are supported at many levels. For example, consider the fol
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
-  name: atmos-vendor-config
+  name: example-vendor-config
   description: Atmos vendoring manifest
 spec:
   imports:
