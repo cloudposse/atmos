@@ -2,7 +2,7 @@ apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
   name: atmos-vendor-config-2
-  description: Atmos vendoring configuration
+  description: Atmos vendoring manifest
 spec:
   imports:
     - "vendor/vendor4.yaml"
@@ -14,7 +14,7 @@ spec:
       targets:
         - "components/terraform/infra/my-vpc1"
     - component: "my-vpc2"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-      version: "1.323.0"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
+      version: "1.320.0"
       targets:
         - "components/terraform/infra/my-vpc2"

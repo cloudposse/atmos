@@ -2,7 +2,7 @@ apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
   name: atmos-vendor-config-3
-  description: Atmos vendoring configuration
+  description: Atmos vendoring manifest
 spec:
   imports:
     - "vendor/vendor6.yaml"

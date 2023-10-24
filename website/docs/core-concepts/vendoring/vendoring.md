@@ -38,9 +38,9 @@ apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
   name: atmos-vendor-config
-  description: Atmos vendoring configuration
+  description: Atmos vendoring manifest
 spec:
-  # Either `imports` or `sources` (or both) must be defined in a vendor config file
+  # `imports` or `sources` (or both) must be defined in a vendoring manifest
   imports:
     - "vendor/vendor2.yaml"
     - "vendor/vendor3.yaml"
@@ -78,7 +78,7 @@ spec:
 <br/>
 
 - The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
-  and other artifacts
+  and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo)
 
 - The `sources` in `vendor.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
@@ -95,12 +95,114 @@ spec:
 
 - The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template)
   and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the artifact
-  version defined in the `version` attribute
+  versions specified in the `version` attribute
 
 - The `imports` section defines the additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported
-  at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all 
-  sources in the imported manifests in the order they are defined. Use `imports` to split the main `vendor.yaml` manifest into smaller files for 
-  maintainability, or by their roles in the infrastructure (e.g. import separate manifest for networking, security, data management, etc.)
+  at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all
+  sources in the imported manifests in the order they are defined
+
+## Hierarchical Imports in Vendoring Manifest
+
+Use `imports` to split the main `vendor.yaml` manifest into smaller files for maintainability, or by their roles in the infrastructure.
+
+For example, import separate manifests for networking, security, data management, CI/CD, and other layers:
+
+```yaml
+imports:
+  - "layers/networking.yaml"
+  - "layers/security.yaml"
+  - "layers/data.yaml"
+  - "layers/analytics.yaml"
+  - "layers/firewalls.yaml"
+  - "layers/cicd.yaml"
+```
+
+Hierarchical imports are supported at many levels. For example, consider the following vendoring configurations:
+
+```yaml title="vendor.yaml"
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: atmos-vendor-config
+  description: Atmos vendoring manifest
+spec:
+  imports:
+    - "vendor/vendor2.yaml"
+    - "vendor/vendor3.yaml"
+
+  sources:
+    - component: "vpc"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      version: "latest"
+      targets:
+        - "components/terraform/infra/vpc3"
+    - component: "vpc-flow-logs-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      version: "1.323.0"
+      targets:
+        - "components/terraform/infra/vpc-flow-logs-bucket/{{.Version}}"
+```
+
+```yaml title="vendor/vendor2.yaml"
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: atmos-vendor-config-2
+  description: Atmos vendoring manifest
+spec:
+  imports:
+    - "vendor/vendor4.yaml"
+
+  sources:
+    - component: "my-vpc1"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      version: "1.0.2"
+      targets:
+        - "components/terraform/infra/my-vpc1"
+```
+
+```yaml title="vendor/vendor4.yaml"
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: atmos-vendor-config-4
+  description: Atmos vendoring manifest
+spec:
+  imports:
+    - "vendor/vendor5.yaml"
+
+  sources:
+    - component: "my-vpc4"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
+      version: "1.319.0"
+      targets:
+        - "components/terraform/infra/my-vpc4"
+```
+
+When you execute the `atmos vendor pull` command, Atmos processes the import chain and the sources in the imported manifests in the order they
+are defined:
+
+- The `vendor/vendor2.yaml` and `vendor/vendor3.yaml` manifests (defined in the main `vendor.yaml` file) are imported
+- The `vendor/vendor2.yaml` file is processed, and the `vendor/vendor4.yaml` manifest is imported
+- The `vendor/vendor4.yaml` file is processed, and the `vendor/vendor5.yaml` manifest is imported
+- Etc.
+- Then all the sources from all the imported manifests are processed and the artifacts are downloaded into the paths defined by the `targets`
+
+<br/>
+
+```bash
+> atmos vendor pull
+
+Processing vendor config file 'vendor.yaml'
+Pulling sources for the component 'my-vpc6' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.315.0' into 'components/terraform/infra/my-vpc6'
+Pulling sources for the component 'my-vpc5' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.317.0' into 'components/terraform/infra/my-vpc5'
+Pulling sources for the component 'my-vpc4' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.319.0' into 'components/terraform/infra/my-vpc4'
+Pulling sources for the component 'my-vpc1' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:1.0.2' into 'components/terraform/infra/my-vpc1'
+Pulling sources for the component 'my-vpc2' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.320.0' into 'components/terraform/infra/my-vpc2'
+Pulling sources for the component 'vpc' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest' into 'components/terraform/infra/vpc3'
+Pulling sources for the component 'vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.323.0' into 'components/terraform/infra/vpc-flow-logs-bucket/1.323.0'
+
+```
 
 ## Vendoring from OCI Registries
 
@@ -127,7 +229,7 @@ apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
   name: atmos-vendor-config
-  description: Atmos vendoring configuration
+  description: Atmos vendoring manifest
 spec:
   sources:
     - component: "vpc"
@@ -135,9 +237,6 @@ spec:
       version: "latest"
       targets:
         - "components/terraform/infra/vpc3"
-      # Only include the files that match the 'included_paths' patterns.
-      # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
-      # 'included_paths' and 'excluded_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
       included_paths:
         - "**/*.tf"
         - "**/*.tfvars"

@@ -2,9 +2,9 @@ apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
   name: atmos-vendor-config
-  description: Atmos vendoring configuration
+  description: Atmos vendoring manifest
 spec:
-  # Either `imports` or `sources` (or both) must be defined in a vendor config file
+  # `imports` or `sources` (or both) must be defined in a vendoring manifest
   imports:
     - "vendor/vendor2.yaml"
     - "vendor/vendor3.yaml"
