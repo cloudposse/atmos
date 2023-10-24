@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -60,13 +61,13 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check and process `vendor.yaml`
-	vendorConfig, vendorConfigExists, err := ReadAndProcessVendorConfigFile(cfg.AtmosVendorConfigFileName)
+	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName)
 	if vendorConfigExists && err != nil {
 		return err
 	}
 
 	if vendorConfigExists {
-		return ExecuteAtmosVendorInternal(cliConfig, vendorConfig.Spec, component, dryRun)
+		return ExecuteAtmosVendorInternal(cliConfig, foundVendorConfigFile, vendorConfig.Spec, component, dryRun)
 	} else {
 		// Check and process `component.yaml`
 		if component != "" {
@@ -100,38 +101,58 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 }
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
-func ReadAndProcessVendorConfigFile(vendorConfigFile string) (schema.AtmosVendorConfig, bool, error) {
+func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorConfigFile string) (
+	schema.AtmosVendorConfig,
+	bool,
+	string,
+	error,
+) {
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfigFileExists := true
+	foundVendorConfigFile := vendorConfigFile
 
+	// Look for the vendoring manifest in the current directory
 	if !u.FileExists(vendorConfigFile) {
-		vendorConfigFileExists = false
-		return vendorConfig, vendorConfigFileExists, fmt.Errorf("vendor config file '%s' does not exist", vendorConfigFile)
+		// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`
+		pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
+
+		if !u.FileExists(pathToVendorConfig) {
+			vendorConfigFileExists = false
+			return vendorConfig, vendorConfigFileExists, "",
+				fmt.Errorf("vendor config file '%s' does not exist.\n"+
+					"Atmos looks for the vendoring manifest in two different places:\n"+
+					"- In the directory from which the 'atmos vendor pull' command is executed, usually in the root of the repo\n"+
+					"- In the directory pointed to by the 'base_path' setting in 'atmos.yaml' CLI config file\n",
+					cfg.AtmosVendorConfigFileName)
+		}
+
+		foundVendorConfigFile = pathToVendorConfig
 	}
 
-	vendorConfigFileContent, err := os.ReadFile(vendorConfigFile)
+	vendorConfigFileContent, err := os.ReadFile(foundVendorConfigFile)
 	if err != nil {
-		return vendorConfig, vendorConfigFileExists, err
+		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
 	if err = yaml.Unmarshal(vendorConfigFileContent, &vendorConfig); err != nil {
-		return vendorConfig, vendorConfigFileExists, err
+		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
 	if vendorConfig.Kind != "AtmosVendorConfig" {
-		return vendorConfig, vendorConfigFileExists,
+		return vendorConfig, vendorConfigFileExists, "",
 			fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'AtmosVendorConfig'",
 				vendorConfig.Kind,
-				vendorConfigFile,
+				foundVendorConfigFile,
 			)
 	}
 
-	return vendorConfig, vendorConfigFileExists, nil
+	return vendorConfig, vendorConfigFileExists, foundVendorConfigFile, nil
 }
 
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets
 func ExecuteAtmosVendorInternal(
 	cliConfig schema.CliConfiguration,
+	vendorConfigFileName string,
 	atmosVendorSpec schema.AtmosVendorSpec,
 	component string,
 	dryRun bool,
@@ -140,7 +161,6 @@ func ExecuteAtmosVendorInternal(
 	var tempDir string
 	var err error
 	var uri string
-	vendorConfigFileName := cfg.AtmosVendorConfigFileName
 
 	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName))
 
@@ -150,6 +170,7 @@ func ExecuteAtmosVendorInternal(
 
 	// Process imports and return all sources from all the imports and from `vendor.yaml`
 	sources, _, err := processVendorImports(
+		cliConfig,
 		vendorConfigFileName,
 		atmosVendorSpec.Imports,
 		atmosVendorSpec.Sources,
@@ -387,6 +408,7 @@ func ExecuteAtmosVendorInternal(
 
 // processVendorImports processes all imports recursively and returns a list of sources
 func processVendorImports(
+	cliConfig schema.CliConfiguration,
 	vendorConfigFile string,
 	imports []string,
 	sources []schema.AtmosVendorSource,
@@ -404,7 +426,7 @@ func processVendorImports(
 
 		allImports = append(allImports, imp)
 
-		vendorConfig, _, err := ReadAndProcessVendorConfigFile(imp)
+		vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(cliConfig, imp)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -417,7 +439,7 @@ func processVendorImports(
 			return nil, nil, fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", imp)
 		}
 
-		mergedSources, allImports, err = processVendorImports(imp, vendorConfig.Spec.Imports, mergedSources, allImports)
+		mergedSources, allImports, err = processVendorImports(cliConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
 		if err != nil {
 			return nil, nil, err
 		}
