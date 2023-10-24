@@ -8,11 +8,12 @@ id: vendoring
 
 Atmos natively supports the concept of "vendoring", which is making copies of the 3rd party components, stacks, and other artifacts in your own repo.
 
-The vendoring configuration is defined in the `vendor.yaml` manifest. Atmos looks for the `vendor.yaml` file in two different places:
+The vendoring configuration is defined in the `vendor.yaml` manifest. 
+Atmos looks for the `vendor.yaml` file in two different places, and uses the first one found:
 
 - In the directory from which the `atmos vendor pull` command is executed, usually in the root of the infrastructure repo
 
-- In the directory specified by the [`base_path`](/cli/configuration#base-path) setting in the [`atmos.yaml`](/cli/configuration) CLI config file
+- In the directory pointed to by the [`base_path`](/cli/configuration#base-path) setting in the [`atmos.yaml`](/cli/configuration) CLI config file
 
 After defining the `vendor.yaml` manifest, all the remote artifacts can be downloaded by running the following command:
 
