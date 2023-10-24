@@ -6,7 +6,7 @@ sidebar_label: Vendoring
 id: vendoring
 ---
 
-Atmos natively supports the concept of "vendoring", which is making a copy of the 3rd party componentsstacks, and other artifacts in your own repo. 
+Atmos natively supports the concept of "vendoring", which is making a copy of the 3rd party components, stacks, and other artifacts in your own repo. 
 
 After defining the `component.yaml` vendoring manifest, the remote component can be downloaded by running the following command:
 
