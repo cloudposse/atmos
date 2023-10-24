@@ -1,6 +1,7 @@
 ---
 title: CLI Configuration
 sidebar_position: 1
+id: configuration
 description: Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI.
 ---
 

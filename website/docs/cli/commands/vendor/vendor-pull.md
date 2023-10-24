@@ -39,7 +39,7 @@ configurations.
 ## Vendoring using `vendor.yaml` manifest
 
 - The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
-  and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo)
+  and other artifacts
 
 - The `sources` in `vendor.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
