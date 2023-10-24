@@ -7,7 +7,7 @@ description: Use this command to pull sources and mixins from remote repositorie
 ---
 
 :::note Purpose
-Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
+This command implements [Atmos Vendoring](/core-concepts/vendoring/). Use this command to download all sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
 :::
 
 ## Usage
