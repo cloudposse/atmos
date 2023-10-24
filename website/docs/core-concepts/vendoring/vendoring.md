@@ -37,7 +37,7 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
-  name: atmos-vendor-config
+  name: example-vendor-config
   description: Atmos vendoring manifest
 spec:
   # `imports` or `sources` (or both) must be defined in a vendoring manifest
@@ -147,7 +147,7 @@ spec:
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
-  name: atmos-vendor-config-2
+  name: example-vendor-config-2
   description: Atmos vendoring manifest
 spec:
   imports:
@@ -165,7 +165,7 @@ spec:
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
-  name: atmos-vendor-config-4
+  name: example-vendor-config-4
   description: Atmos vendoring manifest
 spec:
   imports:
@@ -228,7 +228,7 @@ The schema of a `vendor.yaml` manifest is as follows:
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
-  name: atmos-vendor-config
+  name: example-vendor-config
   description: Atmos vendoring manifest
 spec:
   sources:
