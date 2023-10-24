@@ -101,7 +101,7 @@ spec:
   at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all
   sources in the imported manifests in the order they are defined
 
-## Hierarchical Imports in Vendoring Manifest
+## Hierarchical Imports in Vendoring Manifests
 
 Use `imports` to split the main `vendor.yaml` manifest into smaller files for maintainability, or by their roles in the infrastructure.
 
