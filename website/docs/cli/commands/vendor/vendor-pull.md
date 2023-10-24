@@ -41,13 +41,13 @@ configurations.
 - The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
   and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo)
 
-- The sources in `vendor.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
+- The `sources` in `vendor.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
   [OCI registries](https://opencontainers.org).
 
-- The targets in `vendor.yaml` support absolute and relative paths (relative to the directory where the command is executed)
+- The `targets` in the sources support absolute and relative paths (relative to the directory where the command is executed)
 
-- `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for file names/paths
+- `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
   (double-star/globstar `**` is supported as well)
 
 :::tip
@@ -109,11 +109,11 @@ atmos vendor pull -c infra/account-map --dry-run
 
 When executing the `atmos vendor pull` command, Atmos performs the following steps to decide which vendoring manifest to use:
 
-- If `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the command 
-  against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest. 
+- If `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the command
+  against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest.
   If the flag `--component` is passed in, Atmos will vendor only that component
 
-- If `vendor.yaml` is not found, Atmos will look for the `component.yaml` manifest in the component's folder. If `component.yaml` is not found, 
+- If `vendor.yaml` is not found, Atmos will look for the `component.yaml` manifest in the component's folder. If `component.yaml` is not found,
   an error will be thrown. The flag `--component` is required in this case
 
 :::

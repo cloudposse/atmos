@@ -75,6 +75,33 @@ spec:
         - "**/*.yml"
 ```
 
+<br/>
+
+- The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
+  and other artifacts
+
+- The `sources` in `vendor.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
+  archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
+  [OCI registries](https://opencontainers.org).
+
+- The `targets` in the sources support absolute and relative paths (relative to the directory where the command is executed)
+
+- `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
+  (double-star/globstar `**` is supported as well)
+
+- The `component` attribute in each source is optional. It's used in the `atmos vendor pull -- component <component` command if the component is
+  passed in. In this case, Atmos will vendor only the specified component instead of vendoring all the artifacts configured in the `vendor.yaml`
+  manifest
+
+- The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template)
+  and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the artifact
+  version defined in the `version` attribute
+
+- The `imports` section defines the additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported
+  at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all 
+  sources in the imported manifests in the order they are defined. Use `imports` to split the main `vendor.yaml` manifest into smaller files for 
+  maintainability, or by their roles in the infrastructure (e.g. import separate manifest for networking, security, data management, etc.)
+
 ## Vendoring from OCI Registries
 
 Atmos supports vendoring from [OCI registries](https://opencontainers.org).
@@ -115,7 +142,7 @@ spec:
         - "**/*.tf"
         - "**/*.tfvars"
         - "**/*.md"
-      excluded_paths: []
+      excluded_paths: [ ]
 ```
 
 To vendor the `vpc` component, execute the following command:
