@@ -6,13 +6,24 @@ sidebar_label: Vendoring
 id: vendoring
 ---
 
-Atmos natively supports the concept of "vendoring", which is making a copy of the 3rd party components, stacks, and other artifacts in your own repo. 
+Atmos natively supports the concept of "vendoring", which is making copies of the 3rd party components, stacks, and other artifacts in your own repo. 
 
-After defining the `component.yaml` vendoring manifest, the remote component can be downloaded by running the following command:
+The vendoring configuration is described in the `vendor.yaml` manifest, which should be placed in the directory from which the `atmos vendor pull`
+command is executed, usually in the root of the infrastructure repo.
+
+After defining the `vendor.yaml` manifest, all the remote artifacts can be downloaded by running the following command:
 
 ```bash
-atmos vendor pull -c components/terraform/vpc
+atmos vendor pull
 ```
+
+To vendor a particular component or other artifact, execute the following command:
+
+```bash
+atmos vendor pull -c <component>
+```
+
+<br/>
 
 :::tip
 Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more details

@@ -350,16 +350,21 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
-			y, _ := u.ConvertToYAML(cliConfig)
+			cliConfigYaml := ""
+
+			if cliConfig.Logs.Level == u.LogLevelTrace {
+				y, _ := u.ConvertToYAML(cliConfig)
+				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
+			}
 
 			return configAndStacksInfo,
 				fmt.Errorf("\nSearched all stack YAML files, but could not find config for the component '%s' in the stack '%s'.\n"+
 					"Check that all variables in the stack name pattern '%s' are correctly defined in the stack config files.\n"+
-					"Are the component and stack names correct? Did you forget an import?\n\n\nCLI config:\n\n%v",
+					"Are the component and stack names correct? Did you forget an import?%v\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					cliConfig.Stacks.NamePattern,
-					y)
+					cliConfigYaml)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
 				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
