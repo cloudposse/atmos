@@ -214,10 +214,10 @@ Artifacts from OCI repositories are downloaded as Docker image tarballs, then al
 and the files are written into the directories specified by the `targets` attribute of each `source`.
 
 For example, to vendor the `vpc` component from the `public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc`
-[AWS public ECR registry](https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html), use the following `uri`:
+[AWS public ECR registry](https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html), use the following `source`:
 
 ```yaml
-uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest"
+source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest"
 ```
 
 The schema of a `vendor.yaml` manifest is as follows:
