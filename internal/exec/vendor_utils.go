@@ -161,6 +161,7 @@ func ExecuteAtmosVendorInternal(
 	var tempDir string
 	var err error
 	var uri string
+	vendorConfigFilePath := path.Dir(vendorConfigFileName)
 
 	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName))
 
@@ -273,16 +274,18 @@ func ExecuteAtmosVendorInternal(
 				target = tgt
 			}
 
+			targetPath := path.Join(vendorConfigFilePath, target)
+
 			if s.Component != "" {
 				u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'",
 					s.Component,
 					uri,
-					target,
+					targetPath,
 				))
 			} else {
 				u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources from '%s' into '%s'",
 					uri,
-					target,
+					targetPath,
 				))
 			}
 
@@ -293,7 +296,7 @@ func ExecuteAtmosVendorInternal(
 			// Check if `target` is a file path.
 			// If it's a file path, check if it's an absolute path.
 			if !useOciScheme {
-				if absPath, err := u.JoinAbsolutePathWithPath(".", target); err == nil {
+				if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, target); err == nil {
 					target = absPath
 				}
 			}
