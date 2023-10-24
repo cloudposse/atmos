@@ -27,9 +27,9 @@ Atmos supports two different ways of vendoring components, stacks and other arti
 - Using `vendor.yaml` vendoring manifest
 - Using `component.yaml` vendoring manifest
 
-The `component.yaml` vendoring manifest can be used to vendor components from remote repositories and is not recommended for a new setup.
-One `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
-It's maintained for backwards compatibility.
+The `component.yaml` vendoring manifest can be used to vendor components from remote repositories.
+A `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
+Using `component.yaml` is not recommended, and it's maintained for backwards compatibility.
 
 The `vendor.yaml` vendoring manifest provides more functionality than using `component.yaml` files.
 It's used to describe vendoring config for all components, stacks and other artifacts for the entire infrastructure.
@@ -51,7 +51,7 @@ configurations.
   (double-star/globstar `**` is supported as well)
 
 :::tip
-Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details.
+Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
 :::
 
 ## Vendoring using `component.yaml` manifest
@@ -67,7 +67,7 @@ Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details.
   file names/paths (double-star/globstar `**` is supported as well)
 
 :::tip
-Refer to [`Atmos Component Vendoring`](/core-concepts/components/vendoring) for more details.
+Refer to [`Atmos Component Vendoring`](/core-concepts/components/vendoring) for more details
 :::
 
 ## Vendoring from OCI Registries

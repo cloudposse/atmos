@@ -2,7 +2,7 @@
 title: Component Vendoring
 sidebar_position: 3
 sidebar_label: Vendoring
-description: Use Component Vendoring to make a copy of 3rd-party components in your own repo.
+description: Use Component Vendoring to make copies of 3rd-party components in your own repo.
 id: vendoring
 ---
 
@@ -15,6 +15,10 @@ After defining the `component.yaml` vendoring manifest, the remote component can
 ```bash
 atmos vendor pull -c components/terraform/vpc
 ```
+
+:::tip
+Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more details
+:::
 
 ## Vendoring Components from a Monorepo
 
@@ -72,10 +76,11 @@ generation ([`auto_generate_backend_file` is `true`](/cli/configuration/#compone
 directly, without needing to wrap it in a component to add additional functionality. This is essentially treating a terraform child module as a root
 module.
 
-To vendor a module as a component, simply create a component.yaml file stored inside the `components/_type_/_name_/` folder
-(e.g. `components/terraform/ec2-instance/`). Note the usage of the `///`, which is to vendor from the root of the remote repository.
+To vendor a module as a component, simply create a `component.yaml` file stored inside the `components/_type_/_name_/` folder
+(e.g. `components/terraform/ec2-instance/component.yaml`).
 
-The schema of a `component.yaml` file for a module is as follows:
+The schema of a `component.yaml` file for a module is as follows.
+Note the usage of the `///` in the `uri`, which is to vendor from the root of the remote repository.
 
 ```yaml
 apiVersion: atmos/v1

@@ -1,381 +1,148 @@
 ---
 title: Vendoring
+description: Use Atmos vendoring to make copies of 3rd-party components, stacks, and other artifacts in your own repo.
 sidebar_position: 14
 sidebar_label: Vendoring
+id: vendoring
 ---
 
-Workflows are a way of combining multiple commands into one executable unit of work.
+Atmos natively supports the concept of "vendoring", which is making a copy of the 3rd party componentsstacks, and other artifacts in your own repo. 
 
-## Simple Example
+After defining the `component.yaml` vendoring manifest, the remote component can be downloaded by running the following command:
 
-Here's an example workflow called `eks-up` which runs a few commands that will bring up the EKS cluster:
-
-```yaml title=stacks/workflows/workflow1.yaml
-workflows:
-  eks-up:
-    description: |
-      Bring up the EKS cluster.
-    steps:
-      - command: terraform apply vpc -auto-approve
-      - command: terraform apply eks/cluster -auto-approve
-      - command: terraform apply eks/alb-controller -auto-approve
+```bash
+atmos vendor pull -c components/terraform/vpc
 ```
-
-<br/>
-
-:::note
-
-The workflow name can be anything you want, and the workflows can also be parameterized.
-
-:::
-
-<br/>
-
-If you define this workflow in the file `workflow1.yaml`, it can we executed like this to provision
-the `vpc`, `eks/cluster` and `eks/alb-controller` [Atmos Components](/core-concepts/components) into
-the `tenant1-ue2-dev` [Atmos Stack](/core-concepts/stacks):
-
-```shell
-atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
-```
-
-<br/>
 
 :::tip
-
-Refer to [`atmos workflow`](/cli/commands/workflow) for the complete description of the CLI command
-
+Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more details
 :::
 
-## Configuration
+## Vendoring Components from a Monorepo
 
-To configure and execute Atmos workflows, follow these steps:
+To vendor a component, create a `component.yaml` file stored inside the `components/_type_/_name_/` folder (e.g. `components/terraform/vpc/`).
 
-- Configure workflows in [`atmos.yaml` CLI config file](/cli/configuration)
-- Create workflow files and define workflows using the workflow schema
-
-### Configure Workflows in `atmos.yaml`
-
-In `atmos.yaml` CLI config file, add the following sections related to Atmos workflows:
+The schema of a `component.yaml` file is as follows:
 
 ```yaml
-# Base path for components, stacks and workflows configurations.
-# Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
-# Supports both absolute and relative paths.
-# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
-# and 'workflows.base_path' are independent settings (supporting both absolute and relative paths).
-# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
-# and 'workflows.base_path' are considered paths relative to 'base_path'.
-base_path: ""
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: vpc-flow-logs-bucket-vendor-config
+  description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
+spec:
+  source:
+    # Source 'uri' supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter
+    # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
+    # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
+    # To vendor a module from a Git repo, use the following format: 'github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
+    version: 0.194.0
 
-workflows:
-  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
-  # Supports both absolute and relative paths
-  base_path: "stacks/workflows"
+    # Only include the files that match the 'included_paths' patterns
+    # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
+    # 'included_paths' support POSIX-style Globs for file names/paths (double-star/globstar `**` is supported)
+    # https://en.wikipedia.org/wiki/Glob_(programming)
+    # https://github.com/bmatcuk/doublestar#patterns
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+
+    # Exclude the files that match any of the 'excluded_paths' patterns
+    # Note that we are excluding 'context.tf' since a newer version of it will be downloaded using 'mixins'
+    # 'excluded_paths' support POSIX-style Globs for file names/paths (double-star/globstar `**` is supported)
+    excluded_paths:
+      - "**/context.tf"
+
+  # Mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
+  # All mixins are processed in the order they are declared in the list.
+  mixins:
+    # https://github.com/hashicorp/go-getter/issues/98
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
+      filename: context.tf
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
+      version: 0.194.0
+      filename: introspection.mixin.tf
 ```
 
-where:
+## Vendoring Modules as Components
 
-- `base_path` - the base path for components, stacks and workflows configurations
+Any terraform module can also be used as a component, provided that Atmos backend
+generation ([`auto_generate_backend_file` is `true`](/cli/configuration/#components)) is enabled. Use this strategy when you want to use the module
+directly, without needing to wrap it in a component to add additional functionality. This is essentially treating a terraform child module as a root
+module.
 
-- `workflows.base_path` - the base path to Atmos workflow files
+To vendor a module as a component, simply create a `component.yaml` file stored inside the `components/_type_/_name_/` folder
+(e.g. `components/terraform/ec2-instance/component.yaml`).
 
-### Create Workflow Files and Define Workflows
-
-In `atmos.yaml`, we set `workflows.base_path` to `stacks/workflows`. The folder is relative to the root of the repository.
-
-Refer to [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml) for an example.
-
-We put the workflow files into the folder. The workflow file names can be anything you want, but we recommend naming them according to the functions
-they perform, e.g. create separate workflow files per environment, account, team, or service.
-
-For example, you can have a workflow file `stacks/workflows/workflows-eks.yaml` to define all EKS-related workflows.
-
-Or, you can have a workflow file `stacks/workflows/workflows-dev.yaml` to define all workflows to provision resources into the `dev` account.
-Similarly, you can create a workflow file `stacks/workflows/workflows-prod.yaml` to define all workflows to provision resources into the `prod`
-account.
-
-You can segregate the workflow files even further, e.g. per account and service. For example, in the workflow
-file `stacks/workflows/workflows-dev-eks.yaml` you can define all EKS-related workflows for the `dev` account.
-
-Workflow files must confirm to the following schema:
+The schema of a `component.yaml` file for a module is as follows.
+Note the usage of the `///` in the `uri`, which is to vendor from the root of the remote repository.
 
 ```yaml
-workflows:
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: ec2-instance
+  description: Source for vendoring of 'ec2-instance' module as a component
+spec:
+  source:
+    # To vendor a module from a Git repo, use the following format: 'github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
+    uri: github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
+    version: 0.47.1
 
-  workflow-1:
-    description: "Description of Workflow #1"
-    steps: []
-
-  workflow-2:
-    description: "Description of Workflow #2"
-    steps: []
+    # Only include the files that match the 'included_paths' patterns
+    # 'included_paths' support POSIX-style Globs for file names/paths (double-star/globstar `**` is supported)
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
 ```
 
-Each workflow file must have the `workflows:` top-level section with a map of workflow definitions.
+## Vendoring Components from OCI Registries
 
-Each workflow definition must confirm to the following schema:
+Atmos supports vendoring components from [OCI registries](https://opencontainers.org).
+
+To specify a repository in an OCI registry, use the `oci://<registry>/<repository>:tag` scheme in the `sources` and `mixins`.
+
+Components from OCI repositories are downloaded as Docker image tarballs, then all the layers are processed, un-tarred and un-compressed,
+and the component's source files are written into the component's directory.
+
+For example, to vendor the `vpc` component from the `public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc`
+[AWS public ECR registry](https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html), use the following `uri`:
 
 ```yaml
-  workflow-1:
-    description: "Description of Workflow #1"
-    stack: <Atmos stack> # optional
-    steps:
-      - command: <Atmos command to execute>
-        name: <step name>>  # optional
-        type: atmos  # optional
-        stack: <Atmos stack> # optional
-      - command: <Atmos command to execute>
-        name: <step name>>  # optional
-        stack: <Atmos stack> # optional
-      - command: <shell script>
-        name: <step name>>  # optional
-        type: shell  # required for the steps of type `shell`
+uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest"
 ```
 
-where:
+The schema of a `component.yaml` file is as follows:
 
-- `description` - the workflow description
+```yaml
+# This is an example of how to download a Terraform component from an OCI registry (https://opencontainers.org), e.g. AWS Public ECR
 
-- `stack` - workflow-level Atmos stack (optional). If specified, all workflow steps of type `atmos` will be executed for this Atmos stack. It can be
-  overridden in each step or on the command line by using the `--stack` flag (`-s` for shorthand)
+# 'component.yaml' in the component folder is processed by the 'atmos' commands:
+# 'atmos vendor pull -c infra/vpc' or 'atmos vendor pull --component infra/vpc'
 
-- `steps` - a list of workflow steps which are executed sequentially in the order they are specified
-
-Each step is configured using the following attributes:
-
-- `command` - the command to execute. Can be either an Atmos [CLI command](/category/commands-1) (without the `atmos` binary name in front of it,
-  for example `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute
-
-- `name` - step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step`
-  is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the index of the
-  step (the index starts with 1, so the first generated step name would be `step1`).
-
-- `type` - the type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command`
-  is an Atmos [CLI command](/category/commands-1). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
-  Atmos prepends the `atmos` binary name to the provided command before executing it
-
-- `stack` - step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the
-  workflow-level  `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)
-
-<br/>
-
-:::note
-
-A workflow command of type `shell` can be any simple or complex shell command or script.
-You can use [YAML Multiline Strings](https://yaml-multiline.info/) to create complex multi-line shell scripts.
-
-:::
-
-## Executing Workflow from a Named Step
-
-Each workflow step can be given an arbitrary name (step's identifier) using the `name` attribute. For example:
-
-```yaml title=stacks/workflows/workflow1.yaml
-workflows:
-  test-1:
-    description: "Test workflow"
-    steps:
-      - command: echo Command 1
-        name: step1
-        type: shell
-      - command: echo Command 2
-        name: step2
-        type: shell
-      - command: echo Command 3
-        name: step3
-        type: shell
-      - command: echo Command 4
-        type: shell
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: stable/aws/vpc
+  description: Config for vendoring of the 'stable/aws/vpc' component
+spec:
+  source:
+    # Source 'uri' supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter
+    # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
+    # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
+    # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html)
+    uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+    version: "latest"
+    # Only include the files that match the 'included_paths' patterns
+    # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
+    # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)
+    # https://en.wikipedia.org/wiki/Glob_(programming)
+    # https://github.com/bmatcuk/doublestar#patterns
+    included_paths:
+      - "**/*.*"
 ```
-
-The step's name can be used in the `--from-step` command-line flag to start the workflow execution from the step.
-
-For example, the following command will skip the first two steps and will start executing the workflow from `step3`:
-
-```console
-atmos workflow test-1 -f workflow1 --from-step step3
-```
-
-This is useful when you want to restart the workflow from a particular step.
-
-For example:
-
-- You run the workflow first time with the command `atmos workflow test-1 -f workflow1`
-- `step1` and `step2` succeed, but `step3` fails
-- You fix the issue with the `step3` command
-- You don't want to execute `step1` and `step2` again (to not spend time on it, or if they are
-  not [idempotent](https://en.wikipedia.org/wiki/Idempotence))
-- You run the command `atmos workflow test-1 -f workflow1 --from-step step3` to restart the workflow from `step3`
-
-If the `name` attribute in a workflow step is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the
-index of the step. The index starts with 1, so the first generated step name would be `step1`.
-
-The `test-1` workflow defined above does not have the `name` attribute for the last workflow step.
-When we execute the `atmos workflow` commands, Atmos automatically generates the names for the steps where the `name` attribute is omitted.
-In this case, the generated name for the last step will be `step4`.
-
-For example:
-
-```console
-> atmos workflow test-1 -f workflow1 --from-step step4
-
-Executing the workflow 'test-1' from 'examples/complete/stacks/workflows/workflow1.yaml'
-
-description: Test workflow
-steps:
-- name: step1
-  command: echo Command 1
-  type: shell
-- name: step2
-  command: echo Command 2
-  type: shell
-- name: step3
-  command: echo Command 3
-  type: shell
-- name: step4
-  command: echo Command 4
-  type: shell
-
-Executing workflow step: echo Command 4
-
-Executing command: echo Command 4
-Command 4
-
-Executing workflow step: echo Command 5
-
-Executing command: echo Command 5
-Command 5
-```
-
-## Workflow Examples
-
-The following workflow defines four steps of type `atmos` (implicit type) without specifying the workflow-level or step-level `stack` attribute.
-Since the workflow does not specify the stack, it's generic and can be executed for any Atmos stack.
-In this case, the stack needs to be provided on the command line.
-
-```yaml title=stacks/workflows/workflow1.yaml
-workflows:
-  terraform-plan-all-test-components:
-    description: |
-      Run 'terraform plan' on 'test/test-component' and all its derived components.
-      The stack must be provided on the command line: 
-      `atmos workflow terraform-plan-all-test-components -f workflow1 -s <stack>`
-    steps:
-      # Inline scripts are also supported
-      # Refer to https://yaml-multiline.info for more details
-      - type: shell
-        command: |
-          echo "Starting the workflow execution..."
-          read -p "Press any key to continue... " -n1 -s
-      - command: terraform plan test/test-component
-      - command: terraform plan test/test-component-override
-      - command: terraform plan test/test-component-override-2
-      - command: terraform plan test/test-component-override-3
-      - type: shell
-        command: >-
-          echo "All done!"
-```
-
-To run this workflow for the `tenant1-ue2-dev` stack, execute the following command:
-
-```console
-atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev
-```
-
-<br/>
-
-The following workflow executes `terraform plan` on `test/test-component-override-2` component in all stacks.
-In this case, the stack is specified inline for each workflow command.
-
-```yaml title=stacks/workflows/workflow1.yaml
-workflows:
-  terraform-plan-test-component-override-2-all-stacks:
-    description: Run 'terraform plan' on 'test/test-component-override-2' component in all stacks
-    steps:
-      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-dev
-      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-staging
-      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-prod
-      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-dev
-      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-staging
-      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-prod
-      - type: shell
-        command: echo "All done!"
-```
-
-To run this workflow, execute the following command:
-
-```console
-atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1
-```
-
-<br/>
-
-The following workflow is similar to the above, but the stack for each command is specified in the step-level `stack` attribute.
-
-```yaml title=stacks/workflows/workflow1.yaml
-workflows:
-  terraform-plan-test-component-override-3-all-stacks:
-    description: Run 'terraform plan' on 'test/test-component-override-3' component in all stacks
-    steps:
-      - command: terraform plan test/test-component-override-3
-        stack: tenant1-ue2-dev
-      - command: terraform plan test/test-component-override-3
-        stack: tenant1-ue2-staging
-      - command: terraform plan test/test-component-override-3
-        stack: tenant1-ue2-prod
-      - command: terraform plan test/test-component-override-3
-        stack: tenant2-ue2-dev
-      - command: terraform plan test/test-component-override-3
-        stack: tenant2-ue2-staging
-      - command: terraform plan test/test-component-override-3
-        stack: tenant2-ue2-prod
-```
-
-To run this workflow, execute the following command:
-
-```console
-atmos workflow terraform-plan-test-component-override-3-all-stacks -f workflow1
-```
-
-## Atmos Stacks in Workflows
-
-Atmos stack for the workflow commands of type `atmos` can be specified in four different ways:
-
-- Inline in the command itself
-  ```yaml
-  steps:
-    - command: terraform plan test/test-component-override-2 -s tenant1-ue2-dev
-  ```
-
-- In the workflow-level `stack` attribute
-  ```yaml
-  workflows:
-    my-workflow:
-    stack: tenant1-ue2-dev
-    steps:
-      - command: terraform plan test/test-component
-  ```
-
-- In the step-level `stack` attribute
-  ```yaml
-  steps:
-    - command: terraform plan test/test-component
-      stack: tenant1-ue2-dev
-  ```
-
-- On the command line
-  ```console
-  atmos workflow my-workflow -f workflow1 -s tenant1-ue2-dev
-  ```
-
-<br/>
-
-The stack defined inline in the command itself has the lowest priority, it can and will be overridden by any other stack definition.
-The step-level stack will override the workflow-level stack. The command line `--stack` option will override all other stacks defined in the workflow
-itself. You can also use any combinations of the above (e.g. specify the stack at the workflow level, then override it at the step level for some
-commands, etc.).
-
-While this provides a great flexibility in defining the stack for workflow commands, we recommend creating generic workflows without defining
-stacks in the workflow itself (the stack should be provided on the command line). This way, the workflow can be executed for any stack without any
-modifications and without dealing with multiple workflows that are similar but differ only by the environment where the resources are provisioned.
