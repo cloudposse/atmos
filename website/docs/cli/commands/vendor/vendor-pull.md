@@ -47,7 +47,7 @@ configurations.
 
 - The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths 
   are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths 
-  will be considered relative to the `base_path`
+  will be considered relative to the `base_path`. Multiple targets can be specified
 
 - `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
   (double-star/globstar `**` is supported as well)

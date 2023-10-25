@@ -33,7 +33,7 @@ to configuration, enabling you to model configuration in a way that makes sense 
 | [Vendoring](/core-concepts/components/vendoring)                                                      | A mechanism of making a copy of the 3rd party components in your repository.                                                                                                        |
 | [Namespace](/core-concepts/stacks)                                                                    | A prefix for all resources in a Stack                                                                                                                                               |
 | [Tenant](/core-concepts/stacks)                                                                       | A logical grouping of resources. In AWS we use the Tenant to represent the Organizational Unit (OU).                                                                                |
-| [Environment](/core-concepts/stacks)                                                                  | A location where resources are deployed (e.g. `us-east-1`). [See Disambiguation](#disambiguation)                                                                                   |
+| [Environment](/core-concepts/stacks)                                                                  | A location where resources are deployed (e.g. `us-east-1`). See [Disambiguation](#disambiguation)                                                                                   |
 
 # Disambiguation
 
