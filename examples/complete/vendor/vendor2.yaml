@@ -5,7 +5,7 @@ metadata:
   description: Atmos vendoring manifest
 spec:
   imports:
-    - "vendor/vendor4.yaml"
+    - "vendor/vendor4"
 
   sources:
     - component: "my-vpc1"

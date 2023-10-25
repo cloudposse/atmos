@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -109,6 +110,12 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 ) {
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfigFileExists := true
+
+	// If the vendoring manifest is specified without an extension, use the default extension
+	if filepath.Ext(vendorConfigFile) == "" {
+		vendorConfigFile = vendorConfigFile + cfg.DefaultVendoringManifestFileExtension
+	}
+
 	foundVendorConfigFile := vendorConfigFile
 
 	// Look for the vendoring manifest in the current directory
@@ -118,12 +125,7 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 
 		if !u.FileExists(pathToVendorConfig) {
 			vendorConfigFileExists = false
-			return vendorConfig, vendorConfigFileExists, "",
-				fmt.Errorf("vendor config file '%s' does not exist.\n"+
-					"Atmos looks for the vendoring manifest in two different places:\n"+
-					"- In the directory from which the 'atmos vendor pull' command is executed, usually in the root of the repo\n"+
-					"- In the directory pointed to by the 'base_path' setting in 'atmos.yaml' CLI config file\n",
-					cfg.AtmosVendorConfigFileName)
+			return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", pathToVendorConfig)
 		}
 
 		foundVendorConfigFile = pathToVendorConfig

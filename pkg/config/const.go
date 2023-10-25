@@ -1,10 +1,11 @@
 package config
 
 const (
-	DefaultStackConfigFileExtension = ".yaml"
-	CliConfigFileName               = "atmos.yaml"
-	SystemDirConfigFilePath         = "/usr/local/etc/atmos"
-	WindowsAppDataEnvVar            = "LOCALAPPDATA"
+	DefaultStackConfigFileExtension       = ".yaml"
+	DefaultVendoringManifestFileExtension = ".yaml"
+	CliConfigFileName                     = "atmos.yaml"
+	SystemDirConfigFilePath               = "/usr/local/etc/atmos"
+	WindowsAppDataEnvVar                  = "LOCALAPPDATA"
 
 	// GlobalOptionsFlag is a custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference

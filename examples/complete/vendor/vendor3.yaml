@@ -5,4 +5,4 @@ metadata:
   description: Atmos vendoring manifest
 spec:
   imports:
-    - "vendor/vendor6.yaml"
+    - "vendor/vendor6"

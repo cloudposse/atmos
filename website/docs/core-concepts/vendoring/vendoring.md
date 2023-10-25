@@ -8,8 +8,9 @@ id: vendoring
 
 Atmos natively supports the concept of "vendoring", which is making copies of the 3rd party components, stacks, and other artifacts in your own repo.
 
-The vendoring configuration is defined in the `vendor.yaml` manifest. 
-Atmos looks for the `vendor.yaml` file in two different places, and uses the first one found:
+The vendoring configuration is defined in the `vendor.yaml` manifest (vendor config file).
+
+Atmos searches for the vendoring manifest in the following locations, and uses the first one found:
 
 - In the directory from which the `atmos vendor pull` command is executed, usually in the root of the infrastructure repo
 
@@ -37,7 +38,7 @@ Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more d
 
 To vendor remote artifacts, create a `vendor.yaml` file similar to the example below:
 
-```yaml
+```yaml title="vendor.yaml"
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -47,7 +48,7 @@ spec:
   # `imports` or `sources` (or both) must be defined in a vendoring manifest
   imports:
     - "vendor/vendor2.yaml"
-    - "vendor/vendor3.yaml"
+    - "vendor/vendor3"
 
   sources:
     # `source` supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
@@ -86,7 +87,8 @@ spec:
 
 - The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
-  [OCI registries](https://opencontainers.org). 
+  [OCI registries](https://opencontainers.org).
+
   **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
   For example:
 
@@ -121,6 +123,9 @@ spec:
   at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all
   sources in the imported manifests in the order they are defined.
 
+  **NOTE:** The imported file extensions are optional. If an import is defined without an extension, the `.yaml` extension is assumed and used
+  by default.
+
 ## Hierarchical Imports in Vendoring Manifests
 
 Use `imports` to split the main `vendor.yaml` manifest into smaller files for maintainability, or by their roles in the infrastructure.
@@ -129,12 +134,12 @@ For example, import separate manifests for networking, security, data management
 
 ```yaml
 imports:
-  - "layers/networking.yaml"
-  - "layers/security.yaml"
-  - "layers/data.yaml"
-  - "layers/analytics.yaml"
-  - "layers/firewalls.yaml"
-  - "layers/cicd.yaml"
+  - "layers/networking"
+  - "layers/security"
+  - "layers/data"
+  - "layers/analytics"
+  - "layers/firewalls"
+  - "layers/cicd"
 ```
 
 Hierarchical imports are supported at many levels. For example, consider the following vendoring configurations:
@@ -147,8 +152,8 @@ metadata:
   description: Atmos vendoring manifest
 spec:
   imports:
-    - "vendor/vendor2.yaml"
-    - "vendor/vendor3.yaml"
+    - "vendor/vendor2"
+    - "vendor/vendor3"
 
   sources:
     - component: "vpc"
@@ -171,7 +176,7 @@ metadata:
   description: Atmos vendoring manifest
 spec:
   imports:
-    - "vendor/vendor4.yaml"
+    - "vendor/vendor4"
 
   sources:
     - component: "my-vpc1"
@@ -189,7 +194,7 @@ metadata:
   description: Atmos vendoring manifest
 spec:
   imports:
-    - "vendor/vendor5.yaml"
+    - "vendor/vendor5"
 
   sources:
     - component: "my-vpc4"
@@ -203,9 +208,9 @@ When you execute the `atmos vendor pull` command, Atmos processes the import cha
 are defined:
 
 - First, the main `vendor.yaml` file is read based on search paths
-- The `vendor/vendor2.yaml` and `vendor/vendor3.yaml` manifests (defined in the main `vendor.yaml` file) are imported
-- The `vendor/vendor2.yaml` file is processed, and the `vendor/vendor4.yaml` manifest is imported
-- The `vendor/vendor4.yaml` file is processed, and the `vendor/vendor5.yaml` manifest is imported
+- The `vendor/vendor2` and `vendor/vendor3` manifests (defined in the main `vendor.yaml` file) are imported
+- The `vendor/vendor2` file is processed, and the `vendor/vendor4` manifest is imported
+- The `vendor/vendor4` file is processed, and the `vendor/vendor5` manifest is imported
 - Etc.
 - Then all the sources from all the imported manifests are processed and the artifacts are downloaded into the paths defined by the `targets`
 
