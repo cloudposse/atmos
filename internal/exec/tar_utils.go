@@ -20,12 +20,7 @@ func extractTarball(cliConfig schema.CliConfiguration, sourceFile, extractPath s
 		return err
 	}
 
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			u.LogError(fmt.Errorf("error closing the file '%s': %v", sourceFile, err))
-		}
-	}(file)
+	defer closeFile(sourceFile, file)
 
 	var fileReader io.ReadCloser = file
 
@@ -33,13 +28,6 @@ func extractTarball(cliConfig schema.CliConfiguration, sourceFile, extractPath s
 		if fileReader, err = gzip.NewReader(file); err != nil {
 			return err
 		}
-
-		defer func(fileReader io.ReadCloser) {
-			err := fileReader.Close()
-			if err != nil {
-				u.LogError(fmt.Errorf("error closing the file '%s': %v", sourceFile, err))
-			}
-		}(fileReader)
 	}
 
 	tarBallReader := tar.NewReader(fileReader)
