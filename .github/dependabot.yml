@@ -24,3 +24,14 @@ updates:
   schedule:
     interval: weekly
     day: sunday
+
+- package-ecosystem: npm
+  open-pull-requests-limit: 3
+  directory: /
+  labels:
+    - dependencies
+    - javascript
+    - patch
+  schedule:
+    interval: weekly
+    day: sunday
