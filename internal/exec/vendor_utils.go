@@ -261,6 +261,12 @@ func ExecuteAtmosVendorInternal(
 			uri = strings.TrimPrefix(uri, "oci://")
 		}
 
+		if !useOciScheme {
+			if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, uri); err == nil {
+				uri = absPath
+			}
+		}
+
 		// Iterate over the targets
 		for indexTarget, tgt := range s.Targets {
 			var target string
@@ -291,14 +297,6 @@ func ExecuteAtmosVendorInternal(
 
 			if dryRun {
 				return nil
-			}
-
-			// Check if `target` is a file path.
-			// If it's a file path, check if it's an absolute path.
-			if !useOciScheme {
-				if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, target); err == nil {
-					target = absPath
-				}
 			}
 
 			// Create temp folder
@@ -401,7 +399,7 @@ func ExecuteAtmosVendorInternal(
 				PreserveOwner: false,
 			}
 
-			if err = cp.Copy(tempDir, target, copyOptions); err != nil {
+			if err = cp.Copy(tempDir, targetPath, copyOptions); err != nil {
 				return err
 			}
 		}
