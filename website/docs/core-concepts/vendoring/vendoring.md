@@ -48,6 +48,8 @@ spec:
   # `imports` or `sources` (or both) must be defined in a vendoring manifest
   imports:
     - "vendor/vendor2.yaml"
+    # The imported file extension is optional. 
+    # If an import is defined without an extension, the `.yaml` extension is assumed and used by default.
     - "vendor/vendor3"
 
   sources:
