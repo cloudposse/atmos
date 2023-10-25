@@ -82,7 +82,7 @@ spec:
 <br/>
 
 - The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
-  and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo)
+  and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo).
 
 - The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
@@ -90,22 +90,30 @@ spec:
 
 - The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
   are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
-  will be considered relative to the `base_path`. Multiple targets can be specified
+  will be considered relative to the `base_path`. Multiple targets can be specified.
 
 - `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
-  (double-star/globstar `**` is supported as well)
+  (double-star/globstar `**` is supported as well).
 
-- The `component` attribute in each source is optional. It's used in the `atmos vendor pull -- component <component` command if the component is
+- The `component` attribute in each source is optional. It's used in the `atmos vendor pull -- component <component>` command if the component is
   passed in. In this case, Atmos will vendor only the specified component instead of vendoring all the artifacts configured in the `vendor.yaml`
-  manifest
+  manifest.
 
 - The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template)
   and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the artifact
-  versions specified in the `version` attribute
+  versions specified in the `version` attribute.
+
+  Here's an advanced example showcasing how templates and Sprig functions can be used together with `targets`:
+
+  ```yaml
+  targets:
+    # Vendor a component into a major-minor versioned folder like 1.2
+    - "components/terraform/infra/vpc-flow-logs-bucket/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
+  ```
 
 - The `imports` section defines the additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported
   at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all
-  sources in the imported manifests in the order they are defined
+  sources in the imported manifests in the order they are defined.
 
 ## Hierarchical Imports in Vendoring Manifests
 

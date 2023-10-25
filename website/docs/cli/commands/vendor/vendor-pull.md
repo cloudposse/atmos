@@ -39,7 +39,7 @@ configurations.
 ## Vendoring using `vendor.yaml` manifest
 
 - The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
-  and other artifacts
+  and other artifacts.
 
 - The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
@@ -47,10 +47,10 @@ configurations.
 
 - The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths 
   are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths 
-  will be considered relative to the `base_path`. Multiple targets can be specified
+  will be considered relative to the `base_path`. Multiple targets can be specified.
 
 - `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
-  (double-star/globstar `**` is supported as well)
+  (double-star/globstar `**` is supported as well).
 
 :::tip
 Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
@@ -59,14 +59,14 @@ Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
 ## Vendoring using `component.yaml` manifest
 
 - The `component.yaml` vendoring manifest supports Kubernetes-style YAML config to describe component vendoring configuration.
-  The file is placed into the component's folder
+  The file is placed into the component's folder.
 
 - The URIs (`uri`) in `component.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
   [OCI registries](https://opencontainers.org).
 
 - `included_paths` and `excluded_paths` in `component.yaml` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for
-  file names/paths (double-star/globstar `**` is supported as well)
+  file names/paths (double-star/globstar `**` is supported as well).
 
 :::tip
 Refer to [`Atmos Component Vendoring`](/core-concepts/components/vendoring) for more details
