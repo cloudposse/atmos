@@ -51,7 +51,7 @@ spec:
 
   sources:
     # `source` supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
-    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
+    # and all the URL and archive formats as described in https://github.com/hashicorp/go-getter.
     # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
     # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
@@ -84,9 +84,15 @@ spec:
 - The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
   and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo).
 
-- The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
+- The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
-  [OCI registries](https://opencontainers.org).
+  [OCI registries](https://opencontainers.org). 
+  **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
+  For example:
+
+  ```yaml
+  source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+  ```
 
 - The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
   are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
