@@ -188,6 +188,7 @@ spec:
 When you execute the `atmos vendor pull` command, Atmos processes the import chain and the sources in the imported manifests in the order they
 are defined:
 
+- First, the main `vendor.yaml` file is read based on search paths
 - The `vendor/vendor2.yaml` and `vendor/vendor3.yaml` manifests (defined in the main `vendor.yaml` file) are imported
 - The `vendor/vendor2.yaml` file is processed, and the `vendor/vendor4.yaml` manifest is imported
 - The `vendor/vendor4.yaml` file is processed, and the `vendor/vendor5.yaml` manifest is imported
