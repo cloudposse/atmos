@@ -117,6 +117,7 @@ type ConfigAndStacksInfo struct {
 	ComponentSection              map[string]any
 	ComponentVarsSection          map[any]any
 	ComponentSettingsSection      map[any]any
+	ComponentOverridesSection     map[any]any
 	ComponentEnvSection           map[any]any
 	ComponentEnvList              []string
 	ComponentBackendSection       map[any]any
