@@ -400,7 +400,7 @@ func GetContextFromVars(vars map[any]any) schema.Context {
 		context.Region = region
 	}
 
-	if attributes, ok := vars["attributes"].([]string); ok {
+	if attributes, ok := vars["attributes"].([]any); ok {
 		context.Attributes = attributes
 	}
 
@@ -492,7 +492,7 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 		"{tenant}", context.Tenant,
 		"{stage}", context.Stage,
 		"{workspace}", context.Workspace,
-		"{attributes}", strings.Join(context.Attributes, "-"),
+		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOdStrings(context.Attributes), "-"),
 	)
 	return r.Replace(pattern)
 }
