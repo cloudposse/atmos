@@ -26,8 +26,8 @@ jobs:
         github_access_token: "${{ secrets.REPO_ACCESS_TOKEN }}"
 
     - uses: mszostok/codeowners-validator@v0.7.1
-      # This condition verifies that the PR repo does NOT equal the Github Repo and it's NOT dependabot
-      if: ${{ (github.event.pull_request.head.repo.full_name != github.repository) && (github.actor != 'dependabot[bot]') }}
+      # This condition verifies that the PR repo does NOT equal the Github Repo
+      if: github.event.pull_request.head.repo.full_name != github.repository
       name: "Syntax check of CODEOWNERS"
       with:
         checks: "syntax,duppatterns"
