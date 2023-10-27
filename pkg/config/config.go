@@ -199,7 +199,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	cliConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	if processStacks {
-		// If the specified stack name is a logical name, find all stack config files in the provided paths
+		// If the specified stack name is a logical name, find all stack manifests in the provided paths
 		stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
 			cliConfig,
 			configAndStacksInfo.Stack,
@@ -216,7 +216,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			if err != nil {
 				return cliConfig, err
 			}
-			errorMessage := fmt.Sprintf("\nNo stack config files found in the provided "+
+			errorMessage := fmt.Sprintf("\nno stack manifests found in the provided "+
 				"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
 				"files or ENV vars.", j)
 			return cliConfig, errors.New(errorMessage)
@@ -226,7 +226,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		cliConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 		if stackIsPhysicalPath {
-			u.LogTrace(cliConfig, fmt.Sprintf("\nThe stack '%s' matches the stack config file %s\n",
+			u.LogTrace(cliConfig, fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
 				configAndStacksInfo.Stack,
 				stackConfigFilesRelativePaths[0]),
 			)

@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -28,7 +30,7 @@ func init() {
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil && err != cfg.NotFound {
+	if err != nil && !errors.Is(err, cfg.NotFound) {
 		u.LogErrorAndExit(err)
 	}
 

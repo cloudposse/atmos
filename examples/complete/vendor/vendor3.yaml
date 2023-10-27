@@ -1,0 +1,8 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config-3
+  description: Atmos vendoring manifest
+spec:
+  imports:
+    - "vendor/vendor6"

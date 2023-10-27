@@ -1,6 +1,7 @@
 ---
 title: CLI Configuration
 sidebar_position: 1
+id: configuration
 description: Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI.
 ---
 
@@ -478,8 +479,8 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH             | components.helmfile.kubeconfig_path             | Path to write the `kubeconfig` file when executing `aws eks update-kubeconfig` command                                                                                                                                      |
 | ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN    | components.helmfile.helm_aws_profile_pattern    | Pattern for AWS profile to use when executing `atmos helmfile` commands                                                                                                                                                     |
 | ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_pattern        | Pattern for EKS cluster name to use when executing `atmos helmfile` commands                                                                                                                                                |
-| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to Atmos stack configs                                                                                                                                                                                            |
-| ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack configs                                                                                                                                                                             |
+| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to Atmos stack manifests                                                                                                                                                                                          |
+| ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack manifests                                                                                                                                                                           |
 | ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           | List of paths to not consider as top-level stacks                                                                                                                                                                           |
 | ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as Atmos stack names                                                                                                                                                                              |
 | ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                                                                                                                |

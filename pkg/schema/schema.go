@@ -430,3 +430,32 @@ type ConfigSourcesItem struct {
 }
 
 type ConfigSources map[string]map[string]ConfigSourcesItem
+
+// Atmos vendoring (`vendor.yaml` file)
+
+type AtmosVendorSource struct {
+	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
+	File          string   `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+}
+
+type AtmosVendorSpec struct {
+	Imports []string            `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
+	Sources []AtmosVendorSource `yaml:"sources" json:"sources" mapstructure:"sources"`
+}
+
+type AtmosVendorMetadata struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type AtmosVendorConfig struct {
+	ApiVersion string `yaml:"apiVersion" json:"apiVersion" mapstructure:"apiVersion"`
+	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Metadata   AtmosVendorMetadata
+	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
+}
