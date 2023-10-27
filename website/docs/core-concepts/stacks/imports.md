@@ -71,40 +71,29 @@ The `import` section supports the following two formats:
   import:
     - path: "<path_to_imported_file>"
       context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: false
     - path: "<path_to_imported_file>"
       context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: true
   ```
 
 where:
 
-- `path` - the path to the imported file
-- `context` - an optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
+- `path` - (string) The path to the imported file
+
+- `context` - (map) An optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
   a [Go template](https://pkg.go.dev/text/template))
 
-<br/>
+- `skip_templates_processing` - (boolean) Skip template processing for the imported file. Can be used if the imported file uses `Go` templates 
+  to configure external systems, e.g. Datadog
 
-:::note
-
-In a stack config file, you can use only one of the supported formats. Using the two formats at the same time in a single stack config file is not
-currently supported. If you are importing a template file and providing a `context` to it, you have to use the same schema with the `path` to the
-files to import all other configs even if they don't use templates and don't require a `context`.
-
-:::
-
-For example:
-
-```yaml
-  import:
-    - path: catalog/terraform/eks_cluster_tmpl
-      context:
-        flavor: "blue"
-        enabled: true
-        service_1_name: "blue-service-1"
-        service_2_name: "blue-service-2"
-    - path: catalog/terraform/test-component
-    - path: catalog/terraform/vpc
-    - path: catalog/helmfile/echo-server
-```
+- `ignore_missing_template_values` - (boolean) Ignore the missing template values in the imported file. Can be used if the imported file uses `Go` 
+  templates to configure external systems, e.g. Datadog. In this case, Atmos will process all template values that are provided in the `context`, 
+  and will skip the missing values in the templates for the external systems without throwing an error. The `ignore_missing_template_values` setting 
+  is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file,
+  while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values
 
 ## `Go` Templates in Imports
 

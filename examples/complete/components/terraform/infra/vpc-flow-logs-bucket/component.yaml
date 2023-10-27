@@ -5,7 +5,7 @@
 
 # > atmos vendor pull -c infra/vpc-flow-logs-bucket
 # Pulling sources for the component 'infra/vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.194.0'
-#  and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
+#  into 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
 #
 #  Including the file 'README.md' since it matches the '**/*.md' pattern from 'included_paths'
 #  Excluding the file 'context.tf' since it matches the '**/context.tf' pattern from 'excluded_paths'
@@ -17,9 +17,9 @@
 #  Including the file 'versions.tf' since it matches the '**/*.tf' pattern from 'included_paths'
 #
 # Pulling the mixin 'https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf'
-#  for the component 'infra/vpc-flow-logs-bucket' and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
+#  for the component 'infra/vpc-flow-logs-bucket' into 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
 # Pulling the mixin 'https://raw.githubusercontent.com/cloudposse/terraform-aws-components/0.194.0/modules/datadog-agent/introspection.mixin.tf'
-#  for the component 'infra/vpc-flow-logs-bucket' and writing to 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
+#  for the component 'infra/vpc-flow-logs-bucket' into 'examples/complete/components/terraform/infra/vpc-flow-logs-bucket'
 
 apiVersion: atmos/v1
 kind: ComponentVendorConfig
@@ -33,7 +33,7 @@ spec:
     # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
     uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
-    version: 1.240.0
+    version: 1.323.0
     # Only include the files that match the 'included_paths' patterns
     # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
     # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported)

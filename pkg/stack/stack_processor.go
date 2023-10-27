@@ -10,6 +10,7 @@ import (
 	"text/template"
 	"text/template/parse"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
@@ -25,7 +26,7 @@ var (
 	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
-// ProcessYAMLConfigFiles takes a list of paths to stack config files, processes and deep-merges all imports,
+// ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
 // and returns a list of stack configs
 func ProcessYAMLConfigFiles(
 	stacksBasePath string,
@@ -72,6 +73,8 @@ func ProcessYAMLConfigFiles(
 				map[string]map[any]any{},
 				nil,
 				ignoreMissingFiles,
+				false,
+				false,
 			)
 
 			if err != nil {
@@ -135,7 +138,7 @@ func ProcessYAMLConfigFiles(
 	return listResult, mapResult, rawStackConfigs, nil
 }
 
-// ProcessYAMLConfigFile takes a path to a YAML stack config file,
+// ProcessYAMLConfigFile takes a path to a YAML stack manifest,
 // recursively processes and deep-merges all imports,
 // and returns the final stack config
 func ProcessYAMLConfigFile(
@@ -144,6 +147,8 @@ func ProcessYAMLConfigFile(
 	importsConfig map[string]map[any]any,
 	context map[string]any,
 	ignoreMissingFiles bool,
+	skipTemplatesProcessingInImports bool,
+	ignoreMissingTemplateValues bool,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -158,15 +163,15 @@ func ProcessYAMLConfigFile(
 
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
 	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
-	// If we add a new stack config file with some component configurations to the current branch, then the new file will not be present in
+	// If we add a new stack manifest with some component configurations to the current branch, then the new file will not be present in
 	// the remote branch (with which the current branch is compared), and `atmos` would throw an error.
 	if err != nil && !ignoreMissingFiles {
 		return nil, nil, nil, err
 	}
 
-	// Process `Go` templates in the stack config file using the provided context
-	if len(context) > 0 {
-		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context)
+	// Process `Go` templates in the stack manifest using the provided context
+	if !skipTemplatesProcessingInImports && len(context) > 0 {
+		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -174,7 +179,7 @@ func ProcessYAMLConfigFile(
 
 	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
 	if err != nil {
-		e := fmt.Errorf("invalid stack config file '%s'\n%v", relativeFilePath, err)
+		e := fmt.Errorf("invalid stack manifest '%s'\n%v", relativeFilePath, err)
 		return nil, nil, nil, e
 	}
 
@@ -217,7 +222,7 @@ func ProcessYAMLConfigFile(
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
 				// The import was not found -> check if the import is a Go template; if not, return the error
-				t, err2 := template.New(imp).Parse(imp)
+				t, err2 := template.New(imp).Funcs(sprig.FuncMap()).Parse(imp)
 				if err2 != nil {
 					return nil, nil, nil, err2
 				}
@@ -253,11 +258,9 @@ func ProcessYAMLConfigFile(
 		}
 
 		// Support `context` in hierarchical imports.
-		// Deep-merge the parent `context` with the current `context` and propagate the result to the entire imports chain.
-		// The current `context` takes precedence over the parent `context` and will override items with the same keys.
+		// Deep-merge the parent `context` with the current `context` and propagate the result to the entire chain of imports.
+		// The parent `context` takes precedence over the current (imported) `context` and will override items with the same keys.
 		// TODO: instead of calling the conversion functions, we need to switch to generics and update everything to support it
-
-		// The `context` from a higher-level import overrides the `context` from the lower-level import
 		listOfMaps := []map[any]any{c.MapsOfStringsToMapsOfInterfaces(importStruct.Context), c.MapsOfStringsToMapsOfInterfaces(context)}
 		mergedContext, err := m.Merge(listOfMaps)
 		if err != nil {
@@ -271,6 +274,8 @@ func ProcessYAMLConfigFile(
 				importsConfig,
 				c.MapsOfInterfacesToMapsOfStrings(mergedContext),
 				ignoreMissingFiles,
+				importStruct.SkipTemplatesProcessing,
+				importStruct.IgnoreMissingTemplateValues,
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -291,7 +296,7 @@ func ProcessYAMLConfigFile(
 		stackConfigs = append(stackConfigs, stackConfigMap)
 	}
 
-	// Deep-merge the stack config file and all the imports
+	// Deep-merge the stack manifest and all the imports
 	stackConfigsDeepMerged, err := m.Merge(stackConfigs)
 	if err != nil {
 		return nil, nil, nil, err
@@ -300,7 +305,7 @@ func ProcessYAMLConfigFile(
 	return stackConfigsDeepMerged, importsConfig, stackConfigMap, nil
 }
 
-// ProcessStackConfig takes a raw stack config, deep-merges all variables, settings, environments and backends,
+// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends,
 // and returns the final stack configuration for all Terraform and helmfile components
 func ProcessStackConfig(
 	stacksBasePath string,
@@ -333,10 +338,12 @@ func ProcessStackConfig(
 	terraformVars := map[any]any{}
 	terraformSettings := map[any]any{}
 	terraformEnv := map[any]any{}
+	terraformCommand := ""
 
 	helmfileVars := map[any]any{}
 	helmfileSettings := map[any]any{}
 	helmfileEnv := map[any]any{}
+	helmfileCommand := ""
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
@@ -386,6 +393,13 @@ func ProcessStackConfig(
 	}
 
 	// Terraform section
+	if i, ok := globalTerraformSection["command"]; ok {
+		terraformCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.command' section in the file '%s'", stackName)
+		}
+	}
+
 	if i, ok := globalTerraformSection["vars"]; ok {
 		terraformVars, ok = i.(map[any]any)
 		if !ok {
@@ -459,6 +473,13 @@ func ProcessStackConfig(
 	}
 
 	// Helmfile section
+	if i, ok := globalHelmfileSection["command"]; ok {
+		helmfileCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'helmfile.command' section in the file '%s'", stackName)
+		}
+	}
+
 	if i, ok := globalHelmfileSection["vars"]; ok {
 		helmfileVars, ok = i.(map[any]any)
 		if !ok {
@@ -808,8 +829,10 @@ func ProcessStackConfig(
 
 				// Merge `backend` and `remote_state_backend` sections
 				// This will allow keeping `remote_state_backend` section DRY
-				finalComponentRemoteStateBackendSectionMerged, err := m.Merge([]map[any]any{finalComponentBackendSection,
-					finalComponentRemoteStateBackendSection})
+				finalComponentRemoteStateBackendSectionMerged, err := m.Merge([]map[any]any{
+					finalComponentBackendSection,
+					finalComponentRemoteStateBackendSection,
+				})
 				if err != nil {
 					return nil, err
 				}
@@ -824,6 +847,9 @@ func ProcessStackConfig(
 
 				// Final binary to execute
 				finalComponentTerraformCommand := "terraform"
+				if len(terraformCommand) > 0 {
+					finalComponentTerraformCommand = terraformCommand
+				}
 				if len(baseComponentTerraformCommand) > 0 {
 					finalComponentTerraformCommand = baseComponentTerraformCommand
 				}
@@ -1053,6 +1079,9 @@ func ProcessStackConfig(
 
 				// Final binary to execute
 				finalComponentHelmfileCommand := "helmfile"
+				if len(helmfileCommand) > 0 {
+					finalComponentHelmfileCommand = helmfileCommand
+				}
 				if len(baseComponentHelmfileCommand) > 0 {
 					finalComponentHelmfileCommand = baseComponentHelmfileCommand
 				}

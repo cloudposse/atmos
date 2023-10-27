@@ -3,7 +3,6 @@ package stack
 import (
 	"errors"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/mitchellh/mapstructure"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
@@ -23,7 +24,7 @@ var (
 	getFileContentSyncMap = sync.Map{}
 )
 
-// FindComponentStacks finds all infrastructure stack config files where the component or the base component is defined
+// FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined
 func FindComponentStacks(
 	componentType string,
 	component string,
@@ -166,34 +167,53 @@ func FindComponentDependenciesLegacy(
 	return unique, nil
 }
 
-// processImportSection processes the `import` section in stack config files
-// The `import` section` can be of two different type:
+// processImportSection processes the `import` section in stack manifests
+// The `import` section` can be of the following types:
 // 1. list of `StackImport` structs
 // 2. list of strings
+// 3. List of strings and `StackImport` structs in the same file
 func processImportSection(stackMap map[any]any, filePath string) ([]schema.StackImport, error) {
-	if imports, ok := stackMap[cfg.ImportSectionName]; ok && imports != nil {
-		var res1 []schema.StackImport
-		err := mapstructure.Decode(imports, &res1)
-		if err == nil && len(res1) > 0 {
-			return res1, nil
-		}
+	stackImports, ok := stackMap[cfg.ImportSectionName]
 
-		if stringImports, ok := imports.([]any); ok && len(stringImports) > 0 {
-			var res2 []schema.StackImport
-			for _, i := range stringImports {
-				if s, ok := i.(string); ok {
-					res2 = append(res2, schema.StackImport{Path: s})
-				} else if i == nil {
-					return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
-				} else {
-					return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
-				}
-			}
-			return res2, nil
-		}
+	// If the stack file does not have the `import` section, return
+	if !ok || stackImports == nil {
+		return nil, nil
 	}
 
-	return nil, nil
+	// Check if the `import` section is a list of objects
+	importsList, ok := stackImports.([]any)
+	if !ok || len(importsList) == 0 {
+		return nil, fmt.Errorf("invalid 'import' section in the file '%s'", filePath)
+	}
+
+	var result []schema.StackImport
+
+	for _, imp := range importsList {
+		if imp == nil {
+			return nil, fmt.Errorf("invalid import in the file '%s'", filePath)
+		}
+
+		// 1. Try to decode the import as the `StackImport` struct
+		var importObj schema.StackImport
+		err := mapstructure.Decode(imp, &importObj)
+		if err == nil {
+			result = append(result, importObj)
+			continue
+		}
+
+		// 2. Try to cast the import to a string
+		s, ok := imp.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid import '%v' in the file '%s'", imp, filePath)
+		}
+		if s == "" {
+			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+		}
+
+		result = append(result, schema.StackImport{Path: s})
+	}
+
+	return result, nil
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
@@ -245,7 +265,15 @@ func CreateComponentStackMap(
 			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[any]any{}, nil, false)
+				config, _, _, err := ProcessYAMLConfigFile(
+					stacksBasePath,
+					p,
+					map[string]map[any]any{},
+					nil,
+					false,
+					false,
+					false,
+				)
 				if err != nil {
 					return err
 				}

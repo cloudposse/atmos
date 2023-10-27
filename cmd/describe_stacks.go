@@ -29,7 +29,7 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().StringP("stack", "s", "",
 		"Filter by a specific stack: atmos describe stacks -s <stack>\n"+
-			"The filter supports names of the top-level stack config files (including subfolder paths), and 'atmos' stack names (derived from the context vars)",
+			"The filter supports names of the top-level stack manifests (including subfolder paths), and 'atmos' stack names (derived from the context vars)",
 	)
 
 	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific 'atmos' components: atmos describe stacks --components=<component1>,<component2>")

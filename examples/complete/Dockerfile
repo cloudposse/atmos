@@ -1,16 +1,16 @@
 # Geodesic: https://github.com/cloudposse/geodesic/
-ARG GEODESIC_VERSION=2.2.4
+ARG GEODESIC_VERSION=2.7.0
 ARG GEODESIC_OS=debian
 
 # atmos: https://github.com/cloudposse/atmos
-ARG ATMOS_VERSION=1.45.0
+ARG ATMOS_VERSION=1.47.0
 
 # Terraform: https://github.com/hashicorp/terraform/releases
-ARG TF_VERSION=1.5.6
+ARG TF_VERSION=1.6.2
 
 FROM cloudposse/geodesic:${GEODESIC_VERSION}-${GEODESIC_OS}
 
-# Geodesic message of the Day
+# Geodesic message of the day
 ENV MOTD_URL="https://geodesic.sh/motd"
 
 # Geodesic banner message
