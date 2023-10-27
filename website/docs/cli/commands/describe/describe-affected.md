@@ -104,7 +104,27 @@ Affected components and stacks:
       "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
       "atlantis_project": "tenant1-ue2-staging-infra-vpc",
       "affected": "component"
-   }
+   },
+     {
+    "component": "top-level-component3",
+    "component_type": "terraform",
+    "component_path": "components/terraform/top-level-component1",
+    "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+    "affected": "file",
+    "file": "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+  },
+  {
+    "component": "top-level-component3",
+    "component_type": "terraform",
+    "component_path": "components/terraform/top-level-component1",
+    "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+    "affected": "folder",
+    "folder": "examples/complete/components/helmfile/infra/infra-server"
+  }
 ]
 ```
 
@@ -168,7 +188,9 @@ Each object has the following schema:
   "stack_slug": "....",
   "spacelift_stack": ".....",
   "atlantis_project": ".....",
-  "affected": "....."
+  "affected": ".....",
+  "file": ".....",
+  "folder": "....."
 }
 ```
 
@@ -191,6 +213,12 @@ where:
 - `atlantis_project` - the affected Atlantis project name. It will be included only if the Atlantis integration is configured in
   the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
 
+- `file` - if the Atmos component depends on an external file, and the file was changed (see `affected.file` below),
+  the `file` attributes shows the modified file
+
+- `folder` - if the Atmos component depends on an external folder, and any file in the folder was changed (see `affected.folder` below),
+  the `folder` attributes shows the modified folder
+
 - `affected` - shows what was changed for the component. The possible values are:
 
   - `stack.vars` - the `vars` component section in the stack config has been modified
@@ -209,7 +237,7 @@ where:
     For example, let's suppose that we have a catalog of reusable Terraform modules in the `modules` folder (outside the `components` folder), and
     we have defined the following `label` Terraform module in `modules/label`:
 
-      ```hcl title="modules/label"
+    ```hcl title="modules/label"
       module "label" {
         source  = "cloudposse/label/null"
         version = "0.25.0"
@@ -224,7 +252,7 @@ where:
 
     We then use the Terraform module in the `components/terraform/top-level-component1` component:
 
-      ```hcl title="components/terraform/top-level-component1"
+    ```hcl title="components/terraform/top-level-component1"
       module "service_2_label" {
         source  = "../../../modules/label"
         context = module.this.context
@@ -239,7 +267,7 @@ where:
     The `label` module is not in the stack config of the `top-level-component1` component (not in the YAML stack config files), but Atmos
     understands Terraform dependencies (using a Terraform parser from HashiCorp), and can automatically detect any changes to the module.
 
-    For example, if you make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a 
+    For example, if you make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a
     Terraform dependency of the `top-level-component1` component, Atmos will mark the component as affected with the `affected` attribute
     set to `component.module`:
 
@@ -274,8 +302,8 @@ where:
 
     - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
 
-    - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_selector` pointing to the Spacelift admin stack
-      that manages the components. For example:
+    - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_selector` pointing to the Spacelift admin
+      stack that manages the components. For example:
 
       ```yaml title="stacks/orgs/cp/tenant1/_defaults.yaml"
       settings:
@@ -306,7 +334,81 @@ where:
             settings:
               spacelift:
                 workspace_enabled: true
-        ```
+      ```
+
+  - `file` - an external file on the local filesystem that the Atmos component depends on was changed.
+
+    Dependencies on external files (not in the component's folder) are defined using the `file` attribute in the `settings.depends_on` map.
+    For example:
+
+    ```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
+    components:
+      terraform:
+        top-level-component3:
+          metadata:
+            component: "top-level-component1"
+          settings:
+            depends_on:
+              1:
+                file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+    ```
+
+    In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
+    `examples/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
+    the component `top-level-component3` will be included in the `atmos describe affected` command output. For example:
+
+    ```json
+      [
+        {
+          "component": "top-level-component3",
+          "component_type": "terraform",
+          "component_path": "components/terraform/top-level-component1",
+          "stack": "tenant1-ue2-test-1",
+          "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+          "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+          "affected": "file",
+          "file": "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+        }
+      ]
+    ```
+
+  - `folder` - any file in an external folder that the Atmos component depends on was changed.
+
+    Dependencies on external folders are defined using the `folder` attribute in the `settings.depends_on` map.
+    For example:
+
+    ```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
+    components:
+      terraform:
+        top-level-component3:
+          metadata:
+            component: "top-level-component1"
+          settings:
+            depends_on:
+              1:
+                file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+              2:
+                folder: "examples/complete/components/helmfile/infra/infra-server"
+    ```
+
+    In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
+    `examples/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
+    the component `top-level-component3` will be included in the `atmos describe affected` command output. For example:
+
+    ```json
+      [
+        {
+          "component": "top-level-component3",
+          "component_type": "terraform",
+          "component_path": "components/terraform/top-level-component1",
+          "stack": "tenant1-ue2-test-1",
+          "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+          "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+          "affected": "folder",
+          "folder": "examples/complete/components/helmfile/infra/infra-server"
+        }
+      ]
+    ```
 
 <br/>
 
@@ -373,6 +475,26 @@ atmos describe affected --include-spacelift-admin-stacks=true
     "stack_slug": "tenant1-ue2-prod-test-test-component-override-3",
     "atlantis_project": "tenant1-ue2-prod-test-test-component-override-3",
     "affected": "stack.env"
+  },
+  {
+    "component": "top-level-component3",
+    "component_type": "terraform",
+    "component_path": "components/terraform/top-level-component1",
+    "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+    "affected": "file",
+    "file": "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+  },
+  {
+    "component": "top-level-component3",
+    "component_type": "terraform",
+    "component_path": "components/terraform/top-level-component1",
+    "stack": "tenant1-ue2-test-1",
+    "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+    "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+    "affected": "folder",
+    "folder": "examples/complete/components/helmfile/infra/infra-server"
   }
 ]
 ```

@@ -258,7 +258,7 @@ where:
   section or via inheritance)
 
 - `atlantis_project` - the dependent Atlantis project name. It will be included only if the Atlantis integration is configured in
-  the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
+  the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
 
 <br/>
 

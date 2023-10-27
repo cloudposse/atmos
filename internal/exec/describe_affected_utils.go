@@ -27,7 +27,7 @@ var (
 	remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 )
 
-// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, processes stack configs
+// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, and processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoClone(
 	cliConfig schema.CliConfiguration,
@@ -188,7 +188,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	return affected, nil
 }
 
-// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, processes stack configs
+// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoPath(
 	cliConfig schema.CliConfiguration,
@@ -421,7 +421,7 @@ func findAffected(
 
 							// Check the Terraform configuration of the component
 							if component, ok := componentSection["component"].(string); ok && component != "" {
-								// Check if the component uses some external modules (but on the local filesystem) that have changed
+								// Check if the component uses some external modules (on the local filesystem) that have changed
 								changed, err := areTerraformComponentModulesChanged(component, cliConfig, changedFiles)
 								if err != nil {
 									return nil, err
@@ -553,6 +553,64 @@ func findAffected(
 									}
 									continue
 								}
+
+								// Check `settings.depends_on.file` and `settings.depends_on.folder`
+								// Convert the `settings` section to the `Settings` structure
+								var stackComponentSettings schema.Settings
+								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
+								if err != nil {
+									return nil, err
+								}
+
+								// Skip if the stack component has an empty `settings.depends_on` section
+								if reflect.ValueOf(stackComponentSettings).IsZero() ||
+									reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+									continue
+								}
+
+								isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChanged(
+									changedFiles,
+									stackComponentSettings.DependsOn,
+								)
+
+								if err != nil {
+									return nil, err
+								}
+
+								if isFolderOrFileChanged {
+									changedFile := ""
+									if changedType == "file" {
+										changedFile = changedFileOrFolder
+									}
+
+									changedFolder := ""
+									if changedType == "folder" {
+										changedFolder = changedFileOrFolder
+									}
+
+									affected := schema.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      changedType,
+										File:          changedFile,
+										Folder:        changedFolder,
+									}
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
+									if err != nil {
+										return nil, err
+									}
+									continue
+								}
 							}
 						}
 					}
@@ -593,6 +651,7 @@ func findAffected(
 									continue
 								}
 							}
+
 							// Check the Helmfile configuration of the component
 							if component, ok := componentSection["component"].(string); ok && component != "" {
 								// Check if any files in the component's folder have changed
@@ -692,6 +751,64 @@ func findAffected(
 										affected,
 										false,
 										nil,
+									)
+									if err != nil {
+										return nil, err
+									}
+									continue
+								}
+
+								// Check `settings.depends_on.file` and `settings.depends_on.folder`
+								// Convert the `settings` section to the `Settings` structure
+								var stackComponentSettings schema.Settings
+								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
+								if err != nil {
+									return nil, err
+								}
+
+								// Skip if the stack component has an empty `settings.depends_on` section
+								if reflect.ValueOf(stackComponentSettings).IsZero() ||
+									reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+									continue
+								}
+
+								isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChanged(
+									changedFiles,
+									stackComponentSettings.DependsOn,
+								)
+
+								if err != nil {
+									return nil, err
+								}
+
+								if isFolderOrFileChanged {
+									changedFile := ""
+									if changedType == "file" {
+										changedFile = changedFileOrFolder
+									}
+
+									changedFolder := ""
+									if changedType == "folder" {
+										changedFolder = changedFileOrFolder
+									}
+
+									affected := schema.Affected{
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      changedType,
+										File:          changedFile,
+										Folder:        changedFolder,
+									}
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
 									)
 									if err != nil {
 										return nil, err
@@ -810,7 +927,66 @@ func isEqual(
 	return false
 }
 
-// isComponentFolderChanged checks if a component folder changed (has changed files in the folder or its sub-folders)
+// isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed
+func isComponentDependentFolderOrFileChanged(
+	changedFiles []string,
+	deps schema.DependsOn,
+) (bool, string, string, error) {
+
+	hasDependencies := false
+	isChanged := false
+	changedType := ""
+	changedFileOrFolder := ""
+	pathPatternSuffix := ""
+
+	for _, dep := range deps {
+		if isChanged {
+			break
+		}
+
+		if dep.File != "" {
+			changedType = "file"
+			changedFileOrFolder = dep.File
+			pathPatternSuffix = ""
+			hasDependencies = true
+		} else if dep.Folder != "" {
+			changedType = "folder"
+			changedFileOrFolder = dep.Folder
+			pathPatternSuffix = "/**"
+			hasDependencies = true
+		}
+
+		if hasDependencies {
+			changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+			if err != nil {
+				return false, "", "", err
+			}
+
+			pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+
+			for _, changedFile := range changedFiles {
+				changedFileAbs, err := filepath.Abs(changedFile)
+				if err != nil {
+					return false, "", "", err
+				}
+
+				match, err := u.PathMatch(pathPattern, changedFileAbs)
+				if err != nil {
+					return false, "", "", err
+				}
+
+				if match {
+					isChanged = true
+					break
+				}
+			}
+		}
+	}
+
+	return isChanged, changedType, changedFileOrFolder, nil
+}
+
+// isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders)
 func isComponentFolderChanged(
 	component string,
 	componentType string,

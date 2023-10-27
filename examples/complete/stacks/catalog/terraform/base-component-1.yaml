@@ -3,9 +3,18 @@ components:
     base-component-1:
       metadata:
         type: abstract
+        component: "test/test-component"
       settings:
         spacelift:
           workspace_enabled: false
+        # Validation
+        # All validation steps must succeed to allow the component to be provisioned
+        validation:
+          check-test-component-config-with-opa-policy:
+            schema_type: opa
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
+            schema_path: "test-component/validate-test-component.rego"
+            description: Check 'test/test-component' configuration using OPA policy
       vars:
         enabled: false
         service_1_name: "base-component-1-service-1"

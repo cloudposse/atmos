@@ -2,11 +2,12 @@ package exec
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,9 +15,10 @@ import (
 )
 
 const (
-	autoApproveFlag = "-auto-approve"
-	outFlag         = "-out"
-	varFileFlag     = "-var-file"
+	autoApproveFlag           = "-auto-approve"
+	outFlag                   = "-out"
+	varFileFlag               = "-var-file"
+	skipTerraformLockFileFlag = "--skip-lock-file"
 )
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
@@ -75,24 +77,26 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	planFile := constructTerraformComponentPlanfileName(info)
 
 	if info.SubCommand == "clean" {
-		u.LogTrace(cliConfig, "Deleting '.terraform' folder")
+		u.LogInfo(cliConfig, "Deleting '.terraform' folder")
 		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
 		if err != nil {
 			u.LogWarning(cliConfig, err.Error())
 		}
 
-		u.LogTrace(cliConfig, "Deleting '.terraform.lock.hcl' file")
-		_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
+		if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
+			u.LogInfo(cliConfig, "Deleting '.terraform.lock.hcl' file")
+			_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
+		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s\n", varFile))
+		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s", varFile))
 		_ = os.Remove(path.Join(componentPath, varFile))
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s\n", planFile))
+		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s", planFile))
 		_ = os.Remove(path.Join(componentPath, planFile))
 
 		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
 		if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-			u.LogTrace(cliConfig, "Deleting 'backend.tf.json' file")
+			u.LogInfo(cliConfig, "Deleting 'backend.tf.json' file")
 			_ = os.Remove(path.Join(componentPath, "backend.tf.json"))
 		}
 
