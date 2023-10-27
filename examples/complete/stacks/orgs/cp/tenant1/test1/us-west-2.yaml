@@ -5,6 +5,7 @@ import:
   # This import with the provided context will dynamically generate
   # a new Atmos component `eks-blue/cluster` in the current stack
   - path: catalog/terraform/eks_cluster_tmpl
+    ignore_missing_template_values: true
     context:
       flavor: "blue"
       enabled: true
@@ -14,6 +15,7 @@ import:
   # This import with the provided context will dynamically generate
   # a new Atmos component `eks-green/cluster` in the current stack
   - path: catalog/terraform/eks_cluster_tmpl
+    ignore_missing_template_values: true
     context:
       flavor: "green"
       enabled: false

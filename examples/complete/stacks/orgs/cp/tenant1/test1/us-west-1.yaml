@@ -1,7 +1,7 @@
 import:
 
   # This import with the provided hierarchical context will dynamically generate
-  # a new Atmos component `eks-blue/cluster` in the `tenant1-uw1-test1` stack
+  # a new Atmos component `eks-blue/cluster` in the `tenant1-uw1-test-1` stack
   - path: catalog/terraform/eks_cluster_tmpl_hierarchical
     context:
       # Context variables for the EKS component
@@ -17,7 +17,7 @@ import:
       stage: "test1"
 
   # This import with the provided hierarchical context will dynamically generate
-  # a new Atmos component `eks-green/cluster` in the `tenant1-uw1-test1` stack
+  # a new Atmos component `eks-green/cluster` in the `tenant1-uw1-test-1` stack
   - path: catalog/terraform/eks_cluster_tmpl_hierarchical
     context:
       # Context variables for the EKS component
