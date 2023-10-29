@@ -12,7 +12,7 @@ jobs:
       uses: actions/checkout@v4
 
     # Leave pinned at 0.7.1 until https://github.com/mszostok/codeowners-validator/issues/173 is resolved
-    - uses: mszostok/codeowners-validator@v0.7.1
+    - uses: mszostok/codeowners-validator@v0.7.4
       # This condition verifies that the PR repo equals the Github Repo and it's NOT dependabot
       if: ${{ (github.event.pull_request.head.repo.full_name == github.repository) && (github.actor != 'dependabot[bot]') }}
       name: "Full check of CODEOWNERS"
@@ -25,7 +25,7 @@ jobs:
         # GitHub access token is required only if the `owners` check is enabled
         github_access_token: "${{ secrets.REPO_ACCESS_TOKEN }}"
 
-    - uses: mszostok/codeowners-validator@v0.7.1
+    - uses: mszostok/codeowners-validator@v0.7.4
       # This condition verifies that the PR repo does NOT equal the Github Repo
       if: github.event.pull_request.head.repo.full_name != github.repository
       name: "Syntax check of CODEOWNERS"
