@@ -3,12 +3,25 @@ import:
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
 
+# Global overrides
 # Override the variables, env, and settings only in the components that the `testing` team manages
 overrides:
-  settings:
-    spacelift:
-      autodeploy: true
   env:
     TEST_ENV_VAR1: "test-env-var1-value"
-  vars:
-    test_1: 1
+
+# Terraform overrides
+# Override the variables, env, and settings only in the Terraform components that the `testing` team manages
+# The Terraform overrides are deep-merged with the global overrides
+terraform:
+  overrides:
+    settings:
+      spacelift:
+        autodeploy: true
+    vars:
+      test_1: 1
+
+# Helmfile overrides
+# Override the variables, env, and settings only in the Helmfile components that the `testing` team manages
+# The Helmfile overrides are deep-merged with the global overrides
+helmfile:
+  overrides: {}
