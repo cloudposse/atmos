@@ -330,6 +330,7 @@ func ProcessStackConfig(
 
 	globalVarsSection := map[any]any{}
 	globalSettingsSection := map[any]any{}
+	globalOverridesSection := map[any]any{}
 	globalEnvSection := map[any]any{}
 	globalTerraformSection := map[any]any{}
 	globalHelmfileSection := map[any]any{}
@@ -337,11 +338,13 @@ func ProcessStackConfig(
 
 	terraformVars := map[any]any{}
 	terraformSettings := map[any]any{}
+	terraformOverrides := map[any]any{}
 	terraformEnv := map[any]any{}
 	terraformCommand := ""
 
 	helmfileVars := map[any]any{}
 	helmfileSettings := map[any]any{}
+	helmfileOverrides := map[any]any{}
 	helmfileEnv := map[any]any{}
 	helmfileCommand := ""
 
@@ -361,6 +364,13 @@ func ProcessStackConfig(
 		globalSettingsSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'settings' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := config["overrides"]; ok {
+		globalOverridesSection, ok = i.(map[any]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'overrides' section in the file '%s'", stackName)
 		}
 	}
 
@@ -419,7 +429,19 @@ func ProcessStackConfig(
 		}
 	}
 
+	if i, ok := globalTerraformSection["overrides"]; ok {
+		terraformOverrides, ok = i.(map[any]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.overrides' section in the file '%s'", stackName)
+		}
+	}
+
 	globalAndTerraformSettings, err := m.Merge([]map[any]any{globalSettingsSection, terraformSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	globalAndTerraformOverrides, err := m.Merge([]map[any]any{globalOverridesSection, terraformOverrides})
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +521,19 @@ func ProcessStackConfig(
 		}
 	}
 
+	if i, ok := globalHelmfileSection["overrides"]; ok {
+		helmfileOverrides, ok = i.(map[any]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'helmfile.overrides' section in the file '%s'", stackName)
+		}
+	}
+
 	globalAndHelmfileSettings, err := m.Merge([]map[any]any{globalSettingsSection, helmfileSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	globalAndHelmfileOverrides, err := m.Merge([]map[any]any{globalOverridesSection, helmfileOverrides})
 	if err != nil {
 		return nil, err
 	}
@@ -882,6 +916,7 @@ func ProcessStackConfig(
 				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
+				comp["overrides"] = globalAndTerraformOverrides
 				comp["env"] = finalComponentEnv
 				comp["backend_type"] = finalComponentBackendType
 				comp["backend"] = finalComponentBackend
@@ -1092,6 +1127,7 @@ func ProcessStackConfig(
 				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
+				comp["overrides"] = globalAndHelmfileOverrides
 				comp["env"] = finalComponentEnv
 				comp["command"] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
