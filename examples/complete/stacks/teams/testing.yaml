@@ -1,0 +1,14 @@
+# The `testing` Team manages the following components:
+import:
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+
+# Override the variables, env, and settings only in the components that the `testing` team manages
+overrides:
+  settings:
+    spacelift:
+      autodeploy: true
+  env:
+    TEST_ENV_VAR1: "test-env-var1-value"
+  vars:
+    test_1: 1

@@ -1,0 +1,3 @@
+# The `devops` Team manages the following components:
+import:
+  - catalog/terraform/top-level-component1
