@@ -1,0 +1,18 @@
+import:
+  - mixins/region/us-west-2
+  - orgs/cp/tenant1/dev/_defaults
+  - catalog/terraform/top-level-component1
+  - catalog/terraform/test-component
+  - catalog/terraform/test-component-override
+
+components:
+  terraform: {}
+
+overrides:
+  settings:
+    spacelift:
+      autodeploy: true
+  env:
+    TEST_ENV_VAR1: "test-env-var1-value"
+  vars:
+    test_1: 1
