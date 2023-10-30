@@ -370,7 +370,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	if i, ok := config["overrides"]; ok {
+	if i, ok := config[cfg.OverridesSectionName]; ok {
 		globalOverridesSection, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'overrides' section in the file '%s'", stackName)
@@ -432,7 +432,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	if i, ok := globalTerraformSection["overrides"]; ok {
+	if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
 		terraformOverrides, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.overrides' section in the file '%s'", stackName)
@@ -524,7 +524,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	if i, ok := globalHelmfileSection["overrides"]; ok {
+	if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
 		helmfileOverrides, ok = i.(map[any]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'helmfile.overrides' section in the file '%s'", stackName)
@@ -919,7 +919,7 @@ func ProcessStackConfig(
 				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
-				comp["overrides"] = globalAndTerraformOverrides
+				comp[cfg.OverridesSectionName] = globalAndTerraformOverrides
 				comp["env"] = finalComponentEnv
 				comp["backend_type"] = finalComponentBackendType
 				comp["backend"] = finalComponentBackend
@@ -1130,7 +1130,7 @@ func ProcessStackConfig(
 				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
-				comp["overrides"] = globalAndHelmfileOverrides
+				comp[cfg.OverridesSectionName] = globalAndHelmfileOverrides
 				comp["env"] = finalComponentEnv
 				comp["command"] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
