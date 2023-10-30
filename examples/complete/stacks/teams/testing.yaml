@@ -4,13 +4,13 @@ import:
   - catalog/terraform/test-component-override
 
 # Global overrides
-# Override the variables, env, and settings only in the components that the `testing` team manages
+# Override the variables, env, and settings ONLY in the components that the `testing` team manages
 overrides:
   env:
     TEST_ENV_VAR1: "test-env-var1-value"
 
 # Terraform overrides
-# Override the variables, env, and settings only in the Terraform components that the `testing` team manages
+# Override the variables, env, and settings ONLY in the Terraform components that the `testing` team manages
 # The Terraform overrides are deep-merged with the global overrides
 terraform:
   overrides:
@@ -21,7 +21,7 @@ terraform:
       test_1: 1
 
 # Helmfile overrides
-# Override the variables, env, and settings only in the Helmfile components that the `testing` team manages
+# Override the variables, env, and settings ONLY in the Helmfile components that the `testing` team manages
 # The Helmfile overrides are deep-merged with the global overrides
 helmfile:
   overrides: {}
