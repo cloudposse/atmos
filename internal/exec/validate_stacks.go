@@ -51,7 +51,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 			false,
 			false,
 			false,
-			map[any]any{},
+			false,
 		)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())

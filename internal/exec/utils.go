@@ -111,7 +111,7 @@ func FindComponentConfig(
 	if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
 		componentSettingsSection = map[any]any{}
 	}
-	if componentOverridesSection, ok = componentSection["overrides"].(map[any]any); !ok {
+	if componentOverridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
 		componentOverridesSection = map[any]any{}
 	}
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {

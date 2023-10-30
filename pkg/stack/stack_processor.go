@@ -75,7 +75,7 @@ func ProcessYAMLConfigFiles(
 				ignoreMissingFiles,
 				false,
 				false,
-				map[any]any{},
+				false,
 			)
 
 			if err != nil {
@@ -150,7 +150,7 @@ func ProcessYAMLConfigFile(
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
-	overrides map[any]any,
+	processOverrides bool,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -278,7 +278,7 @@ func ProcessYAMLConfigFile(
 				ignoreMissingFiles,
 				importStruct.SkipTemplatesProcessing,
 				importStruct.IgnoreMissingTemplateValues,
-				overrides,
+				processOverrides,
 			)
 			if err != nil {
 				return nil, nil, nil, err
