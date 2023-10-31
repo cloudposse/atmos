@@ -992,7 +992,6 @@ func ProcessStackConfig(
 				if i, ok := componentMap["overrides_enabled"]; ok {
 					if overridesEnabled, ok := i.(bool); ok && overridesEnabled {
 						comp[cfg.OverridesSectionName] = globalAndTerraformOverrides
-						comp["overrides_enabled"] = true
 					}
 				}
 
@@ -1206,7 +1205,6 @@ func ProcessStackConfig(
 				if i, ok := componentMap["overrides_enabled"]; ok {
 					if overridesEnabled, ok := i.(bool); ok && overridesEnabled {
 						comp[cfg.OverridesSectionName] = globalAndHelmfileOverrides
-						comp["overrides_enabled"] = true
 					}
 				}
 
