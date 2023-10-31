@@ -213,6 +213,33 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
+	// Enable overrides from the `overrides` section for all components in this manifest
+	if processTerraformOverrides || processHelmfileOverrides {
+		if componentsSection, ok := stackConfigMap["components"].(map[any]any); ok {
+			// Terraform
+			if processTerraformOverrides {
+				if terraformSection, ok := componentsSection["terraform"].(map[any]any); ok {
+					for _, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[any]any); ok {
+							componentSection["overrides_enabled"] = true
+						}
+					}
+				}
+			}
+
+			// Helmfile
+			if processHelmfileOverrides {
+				if helmfileSection, ok := componentsSection["helmfile"].(map[any]any); ok {
+					for _, compSection := range helmfileSection {
+						if componentSection, ok := compSection.(map[any]any); ok {
+							componentSection["overrides_enabled"] = true
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Find and process all imports
 	importStructs, err := processImportSection(stackConfigMap, relativeFilePath)
 	if err != nil {
@@ -948,7 +975,6 @@ func ProcessStackConfig(
 				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
-				comp[cfg.OverridesSectionName] = globalAndTerraformOverrides
 				comp["env"] = finalComponentEnv
 				comp["backend_type"] = finalComponentBackendType
 				comp["backend"] = finalComponentBackend
@@ -960,6 +986,14 @@ func ProcessStackConfig(
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
+				}
+
+				// Overrides section
+				if i, ok := componentMap["overrides_enabled"]; ok {
+					if overridesEnabled, ok := i.(bool); ok && overridesEnabled {
+						comp[cfg.OverridesSectionName] = globalAndTerraformOverrides
+						comp["overrides_enabled"] = true
+					}
 				}
 
 				terraformComponents[component] = comp
@@ -1159,7 +1193,6 @@ func ProcessStackConfig(
 				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
 				comp["settings"] = finalComponentSettings
-				comp[cfg.OverridesSectionName] = globalAndHelmfileOverrides
 				comp["env"] = finalComponentEnv
 				comp["command"] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
@@ -1167,6 +1200,14 @@ func ProcessStackConfig(
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
+				}
+
+				// Overrides section
+				if i, ok := componentMap["overrides_enabled"]; ok {
+					if overridesEnabled, ok := i.(bool); ok && overridesEnabled {
+						comp[cfg.OverridesSectionName] = globalAndHelmfileOverrides
+						comp["overrides_enabled"] = true
+					}
 				}
 
 				helmfileComponents[component] = comp
