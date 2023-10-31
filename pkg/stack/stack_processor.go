@@ -663,13 +663,6 @@ func ProcessStackConfig(
 					}
 				}
 
-				componentOverrides := map[any]any{}
-				if i, ok := componentMap["overrides"]; ok {
-					if componentOverrides, ok = i.(map[any]any); !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides' section in the file '%s'", component, stackName)
-					}
-				}
-
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[any]any{}
@@ -721,6 +714,13 @@ func ProcessStackConfig(
 					componentTerraformCommand, ok = i.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.command' attribute in the file '%s'", component, stackName)
+					}
+				}
+
+				componentOverrides := map[any]any{}
+				if i, ok := componentMap["overrides"]; ok {
+					if componentOverrides, ok = i.(map[any]any); !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides' section in the file '%s'", component, stackName)
 					}
 				}
 
@@ -841,6 +841,7 @@ func ProcessStackConfig(
 				baseComponents = u.UniqueStrings(baseComponents)
 				sort.Strings(baseComponents)
 
+				// Final configs
 				finalComponentVars, err := m.Merge([]map[any]any{globalAndTerraformVars, baseComponentVars, componentVars})
 				if err != nil {
 					return nil, err
@@ -1048,13 +1049,6 @@ func ProcessStackConfig(
 					}
 				}
 
-				componentOverrides := map[any]any{}
-				if i, ok := componentMap["overrides"]; ok {
-					if componentOverrides, ok = i.(map[any]any); !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides' section in the file '%s'", component, stackName)
-					}
-				}
-
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[any]any{}
@@ -1070,6 +1064,13 @@ func ProcessStackConfig(
 					componentHelmfileCommand, ok = i.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.command' attribute in the file '%s'", component, stackName)
+					}
+				}
+
+				componentOverrides := map[any]any{}
+				if i, ok := componentMap["overrides"]; ok {
+					if componentOverrides, ok = i.(map[any]any); !ok {
+						return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides' section in the file '%s'", component, stackName)
 					}
 				}
 
@@ -1176,6 +1177,10 @@ func ProcessStackConfig(
 					}
 				}
 
+				baseComponents = u.UniqueStrings(baseComponents)
+				sort.Strings(baseComponents)
+
+				// Final configs
 				finalComponentVars, err := m.Merge([]map[any]any{globalAndHelmfileVars, baseComponentVars, componentVars})
 				if err != nil {
 					return nil, err
