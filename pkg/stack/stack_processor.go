@@ -726,7 +726,31 @@ func ProcessStackConfig(
 
 				if i, ok := componentMap["overrides"]; ok {
 					if componentOverrides, ok = i.(map[any]any); !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides' section in the file '%s'", component, stackName)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides' in the manifest '%s'", component, stackName)
+					}
+
+					if i, ok = componentOverrides["vars"]; ok {
+						if componentOverridesVars, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.vars' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["settings"]; ok {
+						if componentOverridesSettings, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.settings' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["env"]; ok {
+						if componentOverridesEnv, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.env' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["command"]; ok {
+						if componentOverridesTerraformCommand, ok = i.(string); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.command' in the manifest '%s'", component, stackName)
+						}
 					}
 				}
 
@@ -1104,7 +1128,31 @@ func ProcessStackConfig(
 
 				if i, ok := componentMap["overrides"]; ok {
 					if componentOverrides, ok = i.(map[any]any); !ok {
-						return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides' section in the file '%s'", component, stackName)
+						return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides' in the manifest '%s'", component, stackName)
+					}
+
+					if i, ok = componentOverrides["vars"]; ok {
+						if componentOverridesVars, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.vars' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["settings"]; ok {
+						if componentOverridesSettings, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.settings' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["env"]; ok {
+						if componentOverridesEnv, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.env' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["command"]; ok {
+						if componentOverridesHelmfileCommand, ok = i.(string); !ok {
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.command' in the manifest '%s'", component, stackName)
+						}
 					}
 				}
 
