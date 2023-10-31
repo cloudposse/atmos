@@ -187,29 +187,27 @@ func ProcessYAMLConfigFile(
 		return nil, nil, nil, e
 	}
 
-	// Check if we need to process overrides for the components in this stack manifest
-	if !processTerraformOverrides && !processHelmfileOverrides {
-		if _, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
-			processTerraformOverrides = true
-			processHelmfileOverrides = true
-		}
+	// Check if we need to process overrides for the components in this stack manifest and its imports
+	if _, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
+		processTerraformOverrides = true
+		processHelmfileOverrides = true
+	}
 
-		if !processTerraformOverrides {
-			if terraformSection, ok := stackConfigMap["terraform"]; ok {
-				if terraformSectionMap, ok := terraformSection.(map[any]any); ok {
-					if _, ok := terraformSectionMap[cfg.OverridesSectionName]; ok {
-						processTerraformOverrides = true
-					}
+	if !processTerraformOverrides {
+		if terraformSection, ok := stackConfigMap["terraform"]; ok {
+			if terraformSectionMap, ok := terraformSection.(map[any]any); ok {
+				if _, ok := terraformSectionMap[cfg.OverridesSectionName]; ok {
+					processTerraformOverrides = true
 				}
 			}
 		}
+	}
 
-		if !processHelmfileOverrides {
-			if helmfileSection, ok := stackConfigMap["helmfile"]; ok {
-				if helmfileSectionMap, ok := helmfileSection.(map[any]any); ok {
-					if _, ok := helmfileSectionMap[cfg.OverridesSectionName]; ok {
-						processHelmfileOverrides = true
-					}
+	if !processHelmfileOverrides {
+		if helmfileSection, ok := stackConfigMap["helmfile"]; ok {
+			if helmfileSectionMap, ok := helmfileSection.(map[any]any); ok {
+				if _, ok := helmfileSectionMap[cfg.OverridesSectionName]; ok {
+					processHelmfileOverrides = true
 				}
 			}
 		}
