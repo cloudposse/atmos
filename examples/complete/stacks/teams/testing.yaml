@@ -8,6 +8,8 @@ import:
 overrides:
   env:
     TEST_ENV_VAR1: "test-env-var1-value"
+  settings: { }
+  vars: { }
 
 # Terraform overrides
 # Override the variables, env, and settings ONLY in the Terraform components that the `testing` team manages
@@ -16,15 +18,19 @@ terraform:
   overrides:
     settings:
       spacelift:
+        # All the components that the `testing` Team manages will have the Spacelift stacks auto-applied
+        # if the planning phase was successful and there are no plan policy warnings
+        # https://docs.spacelift.io/concepts/stack/stack-settings#autodeploy
         autodeploy: true
     vars:
       test_1: 1
-    # The `testing` Team uses the `tofu` instead of `terraform`
-    # https://opentofu.org/
+    # The `testing` Team uses `tofu` instead of `terraform`
+    # https://opentofu.org
+    # The commands `atmos terraform ...` will execute the `tofu` binary
     command: tofu
 
 # Helmfile overrides
 # Override the variables, env, and settings ONLY in the Helmfile components that the `testing` team manages
 # The Helmfile overrides are deep-merged with the global overrides
 helmfile:
-  overrides: {}
+  overrides: { }
