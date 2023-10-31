@@ -76,6 +76,7 @@ func ProcessYAMLConfigFiles(
 				false,
 				false,
 				false,
+				false,
 			)
 
 			if err != nil {
@@ -150,7 +151,8 @@ func ProcessYAMLConfigFile(
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
-	processOverrides bool,
+	processTerraformOverrides bool,
+	processHelmfileOverrides bool,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -183,6 +185,34 @@ func ProcessYAMLConfigFile(
 	if err != nil {
 		e := fmt.Errorf("invalid stack manifest '%s'\n%v", relativeFilePath, err)
 		return nil, nil, nil, e
+	}
+
+	// Check if we need to process overrides for the components in this stack manifest
+	if !processTerraformOverrides && !processHelmfileOverrides {
+		if _, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
+			processTerraformOverrides = true
+			processHelmfileOverrides = true
+		}
+
+		if !processTerraformOverrides {
+			if terraformSection, ok := stackConfigMap["terraform"]; ok {
+				if terraformSectionMap, ok := terraformSection.(map[any]any); ok {
+					if _, ok := terraformSectionMap[cfg.OverridesSectionName]; ok {
+						processTerraformOverrides = true
+					}
+				}
+			}
+		}
+
+		if !processHelmfileOverrides {
+			if helmfileSection, ok := stackConfigMap["helmfile"]; ok {
+				if helmfileSectionMap, ok := helmfileSection.(map[any]any); ok {
+					if _, ok := helmfileSectionMap[cfg.OverridesSectionName]; ok {
+						processHelmfileOverrides = true
+					}
+				}
+			}
+		}
 	}
 
 	// Find and process all imports
@@ -278,7 +308,8 @@ func ProcessYAMLConfigFile(
 				ignoreMissingFiles,
 				importStruct.SkipTemplatesProcessing,
 				importStruct.IgnoreMissingTemplateValues,
-				processOverrides,
+				processTerraformOverrides,
+				processHelmfileOverrides,
 			)
 			if err != nil {
 				return nil, nil, nil, err
