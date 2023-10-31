@@ -19,6 +19,9 @@ terraform:
         autodeploy: true
     vars:
       test_1: 1
+    # The `testing` Team uses the `tofu` instead of `terraform`
+    # https://opentofu.org/
+    command: tofu
 
 # Helmfile overrides
 # Override the variables, env, and settings ONLY in the Helmfile components that the `testing` team manages

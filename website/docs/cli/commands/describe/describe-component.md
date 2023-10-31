@@ -119,6 +119,8 @@ The output contains the following sections:
 - `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
   (after the deep-merging and processing all the inheritance chains and all the base components)
 
+- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/components/overrides) for more details
+
 ## Difference between `imports`, `deps_all` and `deps` outputs
 
 The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
