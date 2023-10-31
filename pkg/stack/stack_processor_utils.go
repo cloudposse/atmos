@@ -273,8 +273,8 @@ func CreateComponentStackMap(
 					false,
 					false,
 					false,
-					false,
-					false,
+					map[any]any{},
+					map[any]any{},
 				)
 				if err != nil {
 					return err
