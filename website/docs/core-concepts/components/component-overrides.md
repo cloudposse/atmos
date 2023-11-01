@@ -104,9 +104,9 @@ import:
 ```
 
 Now suppose that we want to change some variables in the `vars` section and some config in the `settings` section for all the components that the 
-`testing` Team manges, but we don't want to affect any component that the `devops` Team manages. If we add a global or Terraform level `vars` and
-`settings` section to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml` or to the Team manifest `stacks/teams/testing.yaml`, then
-all the components in the `tenant1/dev/us-west-2` top-level stack will be modified, including those managed by the `devops` Team.
+`testing` Team manges, but we don't want to affect any component that the `devops` Team manages. If we added a global or Terraform level `vars` and
+`settings` sections to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml` or to the Team manifest `stacks/teams/testing.yaml`, then
+all the components in the `tenant1/dev/us-west-2` top-level stack would be modified, including those managed by the `devops` Team.
 
 We could individually modify the `vars` and `settings` sections in all the components that the `testing` Team manages, but the entire configuration
 would not be DRY and reusable. To make it DRY and configured only in one place, use the __overrides__ pattern and the `overrides` section.
