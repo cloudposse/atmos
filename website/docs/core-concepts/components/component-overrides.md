@@ -241,7 +241,7 @@ You should see the following output:
 command: terraform
 
 # The component does not get the `overrides` section since it's not defined 
-# for all components managed by the `devops` Team
+# for the components managed by the `devops` Team
 overrides: {}
 
 vars:
