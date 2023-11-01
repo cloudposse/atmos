@@ -2,7 +2,7 @@
 title: Component Overrides
 sidebar_position: 9
 sidebar_label: Overrides
-description: Use the 'overrides' pattern to modify component(s) configuration and behavior.
+description: Use the 'overrides' pattern to modify component(s) configuration and behavior in the current scope.
 id: overrides
 ---
 
