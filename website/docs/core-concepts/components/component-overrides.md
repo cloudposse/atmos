@@ -15,7 +15,7 @@ You can override the following sections in the component(s) configuration:
 - `env`
 - `command`
 
-The `overrides` section can be used at the global level or at the Terraform and Helmfile levels.
+The `overrides` section can be used in the global scope or in the Terraform and Helmfile scopes.
 
 ## Overrides Schema
 
