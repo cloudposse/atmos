@@ -61,7 +61,7 @@ Refer to [Atmos Component Inheritance](/core-concepts/components/inheritance) fo
 supported by Atmos
 :::
 
-## Overrides for Teams
+## Use-case: Overrides for Teams
 
 The __overrides__ pattern is used to override the components only in a particular Atmos stack manifest and all the imported
 manifests. This is different from the other configuration sections (e.g. `vars`, `settings`, `env`). If we define a `vars`, `settings` or `env`
