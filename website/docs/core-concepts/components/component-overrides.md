@@ -19,7 +19,7 @@ The `overrides` section can be used in the global scope or in the Terraform and 
 
 ## Overrides Schema
 
-The `overrides` section schema at the global level is as follows:
+The `overrides` section schema at the global scope is as follows:
 
 ```yaml
 overrides:
