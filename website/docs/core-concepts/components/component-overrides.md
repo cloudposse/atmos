@@ -237,7 +237,21 @@ atmos atmos describe component top-level-component1 -s tenant1-uw2-dev
 You should see the following output:
 
 ```yaml
+# The `command` is not overridden
+command: terraform
+
+# The component does not get the `overrides` section since it's not defined 
+# for all components managed by the `devops` Team
 overrides: {}
+
+vars:
+  <variables for 'top-level-component1' in the stack 'tenant1-uw2-dev'>
+
+env:
+  <ENV variables for 'top-level-component1' in the stack 'tenant1-uw2-dev'>
+
+settings:
+  <settings for 'top-level-component1' in the stack 'tenant1-uw2-dev'>
 ```
 
 The `top-level-component1` component managed by the `devops` Team does not get affected by the `overrides` sections for the `testing` Team,
