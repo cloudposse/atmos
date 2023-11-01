@@ -69,7 +69,7 @@ section at the global, Terraform or Helmfile levels, all the components in the t
 the other hand, if we define an `overrides` section in a stack manifest, only the components directly defined in the manifest and its imports will get
 the overridden values, not all the components in the top-level Atmos stack.
 
-This is especially useful when you have Atmos stack manifests split per Teams, each Team manages a set of components, and you need to define a common
+This is especially useful when you have Atmos stack manifests split per Teams; each Team manages a set of components, and you need to define a common
 configuration (or override the existing one) for the components that only a particular Team manages.
 
 For example, we have two Teams: `devops` and `testing`.
