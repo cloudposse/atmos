@@ -24,11 +24,11 @@ The `overrides` section schema at the global level is as follows:
 ```yaml
 overrides:
   # Override the ENV variables for the components in the current stack manifest and all its imports
-  env: { }
+  env: {}
   # Override the settings for the components in the current stack manifest and all its imports
-  settings: { }
+  settings: {}
   # Override the variables for the components in the current stack manifest and all its imports
-  vars: { }
+  vars: {}
   # Override the command to execute for the components in the current stack manifest and all its imports
   command: "<command to execute>"
 ```
@@ -38,16 +38,16 @@ The `overrides` section schemas at the Terraform and Helmfile levels are as foll
 ```yaml
 terraform:
   overrides:
-    env: { }
-    settings: { }
-    vars: { }
+    env: {}
+    settings: {}
+    vars: {}
     command: "<command to execute>"
 
 helmfile:
   overrides:
-    env: { }
-    settings: { }
-    vars: { }
+    env: {}
+    settings: {}
+    vars: {}
     command: "<command to execute>"
 ```
 
@@ -128,8 +128,8 @@ overrides:
   env:
     # This ENV variable will be added or overridden in all the components managed by the `testing` Team
     TEST_ENV_VAR1: "test-env-var1-overridden"
-  settings: { }
-  vars: { }
+  settings: {}
+  vars: {}
 
 # Terraform overrides.
 # Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
