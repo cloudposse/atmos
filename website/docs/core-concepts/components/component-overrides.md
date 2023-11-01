@@ -119,8 +119,8 @@ configured only in one place, use the `overrides` section.
 For example, we want to override some values in the `env`, `vars` and `setings` sections for all the components managed by the `testing` Team:
 
 ```yaml title="stacks/teams/testing.yaml"
-# The `testing` Team manages the following components:
 import:
+  # The `testing` Team manages all the components defined in the following stack manifests:
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
 
