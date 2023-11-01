@@ -14,7 +14,7 @@ overrides:
 
 # Terraform overrides.
 # Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
-# The Terraform `overrides` are deep-merged with the global overrides
+# The Terraform `overrides` are deep-merged with the global `overrides`
 # and takes higher priority (it will override the same keys from the global `overrides`).
 terraform:
   overrides:
@@ -29,12 +29,12 @@ terraform:
       test_1: 1
     # The `testing` Team uses `tofu` instead of `terraform`
     # https://opentofu.org
-    # The commands `atmos terraform ...` will execute the `tofu` binary
+    # The commands `atmos terraform <sub-command> ...` will execute the `tofu` binary
     command: tofu
 
 # Helmfile overrides.
 # Override the variables, env, command and settings ONLY in the Helmfile components managed by the `testing` Team.
-# The Helmfile `overrides` are deep-merged with the global overrides
+# The Helmfile `overrides` are deep-merged with the global `overrides`
 # and takes higher priority (it will override the same keys from the global `overrides`).
 helmfile:
   overrides:

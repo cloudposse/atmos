@@ -133,7 +133,7 @@ overrides:
 
 # Terraform overrides.
 # Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
-# The Terraform `overrides` are deep-merged with the global overrides
+# The Terraform `overrides` are deep-merged with the global `overrides`
 # and takes higher priority (it will override the same keys from the global `overrides`).
 terraform:
   overrides:
@@ -148,12 +148,12 @@ terraform:
       test_1: 1
     # The `testing` Team uses `tofu` instead of `terraform`
     # https://opentofu.org
-    # The commands `atmos terraform ...` will execute the `tofu` binary
+    # The commands `atmos terraform <sub-command> ...` will execute the `tofu` binary
     command: tofu
 
 # Helmfile overrides.
 # Override the variables, env, command and settings ONLY in the Helmfile components managed by the `testing` Team.
-# The Helmfile `overrides` are deep-merged with the global overrides
+# The Helmfile `overrides` are deep-merged with the global `overrides`
 # and takes higher priority (it will override the same keys from the global `overrides`).
 helmfile:
   overrides:
@@ -165,14 +165,83 @@ helmfile:
 In the manifest above, we configure the following:
 
 - The global `overrides` section to override the `TEST_ENV_VAR1` ENV variable in the `env` section. All the Terraform and Helmfile components
-  managed by the `testing` Team will get the ENV vars updated to `test-env-var1-overridden`
+  managed by the `testing` Team will get the ENV vars updated to `test-env-var1-overridden`.
 
 - The Terraform-level `terraform.overrides` section to override some Spacelift configuration in the `settings` section, a variable in the `vars`
   section, and the `tofu` command to execute instead of `terraform` in the `command` section. All the Terraform components managed by the `testing`
-  Team will be affected by the new values (but not the Helmfile components)
+  Team will be affected by the new values (but not the Helmfile components). The Terraform `overrides` are deep-merged with the global `overrides`
+  and takes higher priority (it will override the same keys from the global `overrides`).
 
 - The Helmfile-level `helmfile.overrides` section to override an ENV variable in the `env` section. All the Helmfile components managed by 
-  the `testing` Team will get the new ENV variable value (but not the Terraform components)
+  the `testing` Team will get the new ENV variable value (but not the Terraform components). The Helmfile `overrides` are deep-merged with the 
+  global `overrides` and takes higher priority (it will override the same keys from the global `overrides`).
+
+<br/>
+
+To confirm that the components managed by the `testing` Team get the new values from the `overrides` sections, execute the following
+commands:
+
+```shell
+atmos atmos describe component test/test-component -s tenant1-uw2-dev
+atmos atmos describe component test/test-component-override -s tenant1-uw2-dev
+```
+
+You should see the following output:
+
+```yaml
+# Final deep-merged `overrides` from all the global `overrides` and Terraform `overrides` sections
+overrides:
+  command: tofu
+  env:
+    TEST_ENV_VAR1: test-env-var1-overridden
+  settings:
+    spacelift:
+      autodeploy: true
+  vars:
+    test_1: 1
+
+# The `command` was overridden with the value from `terraform.overrides.command`
+command: tofu
+
+env:
+  # The `TEST_ENV_VAR1` ENV variable was overridden with the value from `overrides.env.TEST_ENV_VAR1`
+  TEST_ENV_VAR1: test-env-var1-overridden
+  TEST_ENV_VAR2: val2
+
+settings:
+  spacelift:
+    # The `autodeploy` setting was overridden with the value 
+    # from `terraform.overrides.settings.spacelift.autodeploy`
+    autodeploy: true
+    workspace_enabled: true
+
+vars:
+  environment: uw2
+  namespace: cp
+  region: us-west-2
+  stage: dev
+  tenant: tenant1
+  # The `test_1` variable was overridden with the value from `terraform.overrides.vars.test_1`
+  test_1: 1
+```
+
+<br/>
+
+To confirm that the components managed by the `devops` Team are not affected by the `overrides` for the `testing` Team, execute the following
+command:
+
+```shell
+atmos atmos describe component top-level-component1 -s tenant1-uw2-dev
+```
+
+You should see the following output:
+
+```yaml
+overrides: {}
+```
+
+The `top-level-component1` component managed by the `devops` Team does not get affected by the `overrides` sections for the `testing` Team,
+and the sections `vars`, `env`, `settings` and `command` are not updated with the values from the `overrides` configuration.
 
 <br/>
 
