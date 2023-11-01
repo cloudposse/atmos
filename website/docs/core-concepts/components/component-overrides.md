@@ -76,19 +76,19 @@ configuration (or override the existing one) for the components that only a part
 
 For example, we have two Teams: `devops` and `testing`.
 
-The `devops` Team manifest is defined in `stacks/teams/devops.yaml` and the Team manages the following components:
+The `devops` Team manifest is defined in `stacks/teams/devops.yaml`:
 
 ```yaml title="stacks/teams/devops.yaml"
-# The `devops` Team manages the following components:
 import:
+  # The `devops` Team manages all the components defined in the following stack manifests:
   - catalog/terraform/top-level-component1
 ```
 
-The `testing` Team manifest is defined in `stacks/teams/testing.yaml` and the Team manages the following components:
+The `testing` Team manifest is defined in `stacks/teams/testing.yaml`:
 
 ```yaml title="stacks/teams/testing.yaml"
-# The `testing` Team manages the following components:
 import:
+  # The `testing` Team manages all the components defined in the following stack manifests:
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
 ```
