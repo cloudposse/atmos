@@ -51,8 +51,7 @@ helmfile:
     command: "<command to execute>"
 ```
 
-You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance
-to override the configuration of all the Atmos components defined inline in the manifest and all its imports.
+You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance. The scope of the `override` configuration is limited to all of the Atmos components defined within the manifest and all its imports up until that point.
 
 <br/>
 
