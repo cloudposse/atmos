@@ -52,7 +52,7 @@ helmfile:
 ```
 
 You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance
-to override the configuration of all the Atmos components defined inline in the manifest and in all its imports.
+to override the configuration of all the Atmos components defined inline in the manifest and all its imports.
 
 <br/>
 
@@ -61,16 +61,16 @@ Refer to [Atmos Component Inheritance](/core-concepts/components/inheritance) fo
 supported by Atmos
 :::
 
-## Advanced Example
+## Overrides for Teams
 
 The __overrides__ pattern is used to override the components only in a particular Atmos stack manifest and all the imported
-manifests. This is different from the other configuration sections (e.g. `vars`, `settings`). If we define a `vars` or `settings` section at the 
-global, Terraform or Helmfile levels, all the components in the top-level stack will get the `vars` and `settings` configurations. On the other hand,
-If we define an `overrides` section in a stack manifest, only the components directly defined in the manifest and its imports will get the overridden 
-values, not all the components in a top-level Atmos stack.
+manifests. This is different from the other configuration sections (e.g. `vars`, `settings`, `env`). If we define a `vars`, `settings` or `env`
+section at the global, Terraform or Helmfile levels, all the components in the top-level stack will get the updated configurations. On
+the other hand, if we define an `overrides` section in a stack manifest, only the components directly defined in the manifest and its imports will get
+the overridden values, not all the components in the top-level Atmos stack.
 
 This is especially useful when you have Atmos stack manifests split per Teams, each Team manages a set of components, and you need to define a common
-configuration (or override the existing one) for the components that only a particular Team manages. 
+configuration (or override the existing one) for the components that only a particular Team manages.
 
 For example, we have two Teams: `devops` and `testing`.
 
@@ -99,19 +99,22 @@ import:
   - orgs/cp/tenant1/dev/_defaults
   # Import all components that the `devops` Team manages
   - teams/devops
-  # Import all components that the `testing` Team manages
+  # Import all components managed by the `testing` Team
   - teams/testing
 ```
 
-Now suppose that we want to change some variables in the `vars` section and some config in the `settings` section for all the components that the 
-`testing` Team manges, but we don't want to affect any component that the `devops` Team manages. If we added a global or Terraform level `vars` and
-`settings` sections to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml` or to the Team manifest `stacks/teams/testing.yaml`, then
-all the components in the `tenant1/dev/us-west-2` top-level stack would be modified, including those managed by the `devops` Team.
+Suppose that we want to change some variables in the `vars` and `env` sections and some config in the `settings` section for all the components
+that the `testing` Team manges, but we don't want to affect any components that the `devops` Team manages.
 
-We could individually modify the `vars` and `settings` sections in all the components that the `testing` Team manages, but the entire configuration
-would not be DRY and reusable. To make it DRY and configured only in one place, use the __overrides__ pattern and the `overrides` section.
+If we added a global or Terraform level `vars`, `env` or `settings` sections to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml`
+or to the Team manifest `stacks/teams/testing.yaml`, then all the components in the `tenant1/dev/us-west-2` top-level stack would be modified,
+including those managed by the `devops` Team.
 
-For example:
+To solve this, we could individually modify the `vars`, `env` and `settings` sections in all the components managed by the `testing` Team,
+but the entire configuration would not be DRY and reusable. That's where the __overrides__ pattern comes into play. To make the configuration DRY and
+configured only in one place, use the `overrides` section.
+
+For example, we want to override some values in the `env`, `vars` and `setings` sections for all the components managed by the `testing` Team:
 
 ```yaml title="stacks/teams/testing.yaml"
 # The `testing` Team manages the following components:
@@ -119,37 +122,60 @@ import:
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
 
-# Global overrides
-# Override the variables, env, command and settings ONLY in the components that the `testing` team manages
+# Global overrides.
+# Override the variables, env, command and settings ONLY in the components managed by the `testing` Team.
 overrides:
   env:
-    # This variable will be added or overridden in all the components that the `testing` Team manages
+    # This ENV variable will be added or overridden in all the components managed by the `testing` Team
     TEST_ENV_VAR1: "test-env-var1-overridden"
   settings: { }
   vars: { }
 
-# Terraform overrides
-# Override the variables, env, command and settings ONLY in the Terraform components that the `testing` team manages
+# Terraform overrides.
+# Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
 # The Terraform `overrides` are deep-merged with the global overrides
+# and takes higher priority (it will override the same keys from the global `overrides`).
 terraform:
   overrides:
     settings:
       spacelift:
-        # All the components that the `testing` Team manages will have the Spacelift stacks auto-applied
+        # All the components managed by the `testing` Team will have the Spacelift stacks auto-applied
         # if the planning phase was successful and there are no plan policy warnings
         # https://docs.spacelift.io/concepts/stack/stack-settings#autodeploy
         autodeploy: true
     vars:
-      # This variable will be added or overridden in all the Terraform components that the `testing` Team manages
+      # This variable will be added or overridden in all the Terraform components managed by the `testing` Team
       test_1: 1
     # The `testing` Team uses `tofu` instead of `terraform`
     # https://opentofu.org
     # The commands `atmos terraform ...` will execute the `tofu` binary
     command: tofu
 
-# Helmfile overrides
-# Override the variables, env, command and settings ONLY in the Helmfile components that the `testing` team manages
+# Helmfile overrides.
+# Override the variables, env, command and settings ONLY in the Helmfile components managed by the `testing` Team.
 # The Helmfile `overrides` are deep-merged with the global overrides
+# and takes higher priority (it will override the same keys from the global `overrides`).
 helmfile:
-  overrides: { }
+  overrides:
+    env:
+      # This ENV variable will be added or overridden in all the Helmfile components managed by the `testing` Team
+      TEST_ENV_VAR2: "test-env-var2-overridden"
 ```
+
+In the manifest above, we configure the following:
+
+- The global `overrides` section to override the `TEST_ENV_VAR1` ENV variable in the `env` section. All the Terraform and Helmfile components
+  managed by the `testing` Team will get the ENV vars updated to `test-env-var1-overridden`
+
+- The Terraform-level `terraform.overrides` section to override some Spacelift configuration in the `settings` section, a variable in the `vars`
+  section, and the `tofu` command to execute instead of `terraform` in the `command` section. All the Terraform components managed by the `testing`
+  Team will be affected by the new values (but not the Helmfile components)
+
+- The Helmfile-level `helmfile.overrides` section to override an ENV variable in the `env` section. All the Helmfile components managed by 
+  the `testing` Team will get the new ENV variable value (but not the Terraform components)
+
+<br/>
+
+:::tip
+Refer to [`atmos describe component`](/cli/commands/describe/component) CLI command for more details
+:::
