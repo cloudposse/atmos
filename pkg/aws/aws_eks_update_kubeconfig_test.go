@@ -21,7 +21,7 @@ func TestClusterNamePattern(t *testing.T) {
 		"tenant":      "plat",
 		"environment": "ue2",
 		"stage":       "dev",
-		"attributes":  []string{"blue"},
+		"attributes":  []any{"blue"},
 	}
 
 	// Build `Context` from the variables

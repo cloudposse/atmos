@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -54,7 +55,7 @@ func SliceOfInterfacesToSliceOdStrings(input []any) []string {
 	res := make([]string, len(input))
 
 	for i, v := range input {
-		res[i] = v.(string)
+		res[i] = fmt.Sprintf("%v", v)
 	}
 
 	return res

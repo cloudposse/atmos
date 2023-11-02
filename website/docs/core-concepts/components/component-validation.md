@@ -10,7 +10,7 @@ Validation is critical to maintaining hygienic configurations in distributed tea
 
 Atmos component validation allows:
 
-* Validate component config (`vars`, `settings`, `backend`, `env`, and other sections) using JSON Schema
+* Validate component config (`vars`, `settings`, `backend`, `env`, `overrides` and other sections) using JSON Schema
 
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   OPA/Rego policies

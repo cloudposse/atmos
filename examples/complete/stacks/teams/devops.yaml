@@ -1,0 +1,3 @@
+import:
+  # The `devops` Team manages all the components defined in the following stack manifests:
+  - catalog/terraform/top-level-component1

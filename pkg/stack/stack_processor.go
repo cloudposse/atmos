@@ -75,6 +75,8 @@ func ProcessYAMLConfigFiles(
 				ignoreMissingFiles,
 				false,
 				false,
+				map[any]any{},
+				map[any]any{},
 			)
 
 			if err != nil {
@@ -149,6 +151,8 @@ func ProcessYAMLConfigFile(
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
+	parentTerraformOverrides map[any]any,
+	parentHelmfileOverrides map[any]any,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -158,6 +162,16 @@ func ProcessYAMLConfigFile(
 
 	var stackConfigs []map[any]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
+
+	globalTerraformSection := map[any]any{}
+	globalHelmfileSection := map[any]any{}
+	globalOverrides := map[any]any{}
+	terraformOverrides := map[any]any{}
+	helmfileOverrides := map[any]any{}
+	globalAndTerraformOverrides := map[any]any{}
+	globalAndHelmfileOverrides := map[any]any{}
+	finalTerraformOverrides := map[any]any{}
+	finalHelmfileOverrides := map[any]any{}
 
 	stackYamlConfig, err := getFileContent(filePath)
 
@@ -170,7 +184,7 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Process `Go` templates in the stack manifest using the provided context
-	if !skipTemplatesProcessingInImports && len(context) > 0 {
+	if !skipTemplatesProcessingInImports {
 		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			return nil, nil, nil, err
@@ -181,6 +195,89 @@ func ProcessYAMLConfigFile(
 	if err != nil {
 		e := fmt.Errorf("invalid stack manifest '%s'\n%v", relativeFilePath, err)
 		return nil, nil, nil, e
+	}
+
+	// Check if the `overrides` sections exist and if we need to process overrides for the components in this stack manifest and its imports
+	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
+		if globalOverrides, ok = i.(map[any]any); !ok {
+			return nil, nil, nil, fmt.Errorf("invalid 'overrides' section in the stack manifest '%s'", relativeFilePath)
+		}
+
+		// Terraform overrides
+		if o, ok := stackConfigMap["terraform"]; ok {
+			if globalTerraformSection, ok = o.(map[any]any); !ok {
+				return nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
+			}
+
+			if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
+				if terraformOverrides, ok = i.(map[any]any); !ok {
+					return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+				}
+			}
+
+			globalAndTerraformOverrides, err = m.Merge([]map[any]any{globalOverrides, terraformOverrides})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+		}
+
+		finalTerraformOverrides, err = m.Merge([]map[any]any{globalAndTerraformOverrides, parentTerraformOverrides})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		// Helmfile overrides
+		if o, ok := stackConfigMap["helmfile"]; ok {
+			if globalHelmfileSection, ok = o.(map[any]any); !ok {
+				return nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
+			}
+
+			if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
+				if helmfileOverrides, ok = i.(map[any]any); !ok {
+					return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+				}
+			}
+
+			globalAndHelmfileOverrides, err = m.Merge([]map[any]any{globalOverrides, helmfileOverrides})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+		}
+
+		finalHelmfileOverrides, err = m.Merge([]map[any]any{globalAndHelmfileOverrides, parentHelmfileOverrides})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	} else {
+		finalTerraformOverrides = parentTerraformOverrides
+		finalHelmfileOverrides = parentHelmfileOverrides
+	}
+
+	// Add the `overrides` section for all components in this manifest
+	if len(finalTerraformOverrides) > 0 || len(finalHelmfileOverrides) > 0 {
+		if componentsSection, ok := stackConfigMap["components"].(map[any]any); ok {
+			// Terraform
+			if len(finalTerraformOverrides) > 0 {
+				if terraformSection, ok := componentsSection["terraform"].(map[any]any); ok {
+					for _, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[any]any); ok {
+							componentSection["overrides"] = finalTerraformOverrides
+						}
+					}
+				}
+			}
+
+			// Helmfile
+			if len(finalHelmfileOverrides) > 0 {
+				if helmfileSection, ok := componentsSection["helmfile"].(map[any]any); ok {
+					for _, compSection := range helmfileSection {
+						if componentSection, ok := compSection.(map[any]any); ok {
+							componentSection["overrides"] = finalHelmfileOverrides
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Find and process all imports
@@ -276,6 +373,8 @@ func ProcessYAMLConfigFile(
 				ignoreMissingFiles,
 				importStruct.SkipTemplatesProcessing,
 				importStruct.IgnoreMissingTemplateValues,
+				finalTerraformOverrides,
+				finalHelmfileOverrides,
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -618,6 +717,43 @@ func ProcessStackConfig(
 					}
 				}
 
+				// Process overrides
+				componentOverrides := map[any]any{}
+				componentOverridesVars := map[any]any{}
+				componentOverridesSettings := map[any]any{}
+				componentOverridesEnv := map[any]any{}
+				componentOverridesTerraformCommand := ""
+
+				if i, ok := componentMap["overrides"]; ok {
+					if componentOverrides, ok = i.(map[any]any); !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides' in the manifest '%s'", component, stackName)
+					}
+
+					if i, ok = componentOverrides["vars"]; ok {
+						if componentOverridesVars, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.vars' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["settings"]; ok {
+						if componentOverridesSettings, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.settings' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["env"]; ok {
+						if componentOverridesEnv, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.env' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["command"]; ok {
+						if componentOverridesTerraformCommand, ok = i.(string); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.command' in the manifest '%s'", component, stackName)
+						}
+					}
+				}
+
 				// Process base component(s)
 				baseComponentName := ""
 				baseComponentVars := map[any]any{}
@@ -735,17 +871,33 @@ func ProcessStackConfig(
 				baseComponents = u.UniqueStrings(baseComponents)
 				sort.Strings(baseComponents)
 
-				finalComponentVars, err := m.Merge([]map[any]any{globalAndTerraformVars, baseComponentVars, componentVars})
+				// Final configs
+				finalComponentVars, err := m.Merge([]map[any]any{
+					globalAndTerraformVars,
+					baseComponentVars,
+					componentVars,
+					componentOverridesVars,
+				})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := m.Merge([]map[any]any{globalAndTerraformSettings, baseComponentSettings, componentSettings})
+				finalComponentSettings, err := m.Merge([]map[any]any{
+					globalAndTerraformSettings,
+					baseComponentSettings,
+					componentSettings,
+					componentOverridesSettings,
+				})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := m.Merge([]map[any]any{globalAndTerraformEnv, baseComponentEnv, componentEnv})
+				finalComponentEnv, err := m.Merge([]map[any]any{
+					globalAndTerraformEnv,
+					baseComponentEnv,
+					componentEnv,
+					componentOverridesEnv,
+				})
 				if err != nil {
 					return nil, err
 				}
@@ -759,9 +911,11 @@ func ProcessStackConfig(
 					finalComponentBackendType = componentBackendType
 				}
 
-				finalComponentBackendSection, err := m.Merge([]map[any]any{globalBackendSection,
+				finalComponentBackendSection, err := m.Merge([]map[any]any{
+					globalBackendSection,
 					baseComponentBackendSection,
-					componentBackendSection})
+					componentBackendSection,
+				})
 				if err != nil {
 					return nil, err
 				}
@@ -820,9 +974,11 @@ func ProcessStackConfig(
 					finalComponentRemoteStateBackendType = componentRemoteStateBackendType
 				}
 
-				finalComponentRemoteStateBackendSection, err := m.Merge([]map[any]any{globalRemoteStateBackendSection,
+				finalComponentRemoteStateBackendSection, err := m.Merge([]map[any]any{
+					globalRemoteStateBackendSection,
 					baseComponentRemoteStateBackendSection,
-					componentRemoteStateBackendSection})
+					componentRemoteStateBackendSection,
+				})
 				if err != nil {
 					return nil, err
 				}
@@ -855,6 +1011,9 @@ func ProcessStackConfig(
 				}
 				if len(componentTerraformCommand) > 0 {
 					finalComponentTerraformCommand = componentTerraformCommand
+				}
+				if len(componentOverridesTerraformCommand) > 0 {
+					finalComponentTerraformCommand = componentOverridesTerraformCommand
 				}
 
 				// If the component is not deployable (`metadata.type: abstract`), remove `settings.spacelift.workspace_enabled` from the map).
@@ -890,6 +1049,7 @@ func ProcessStackConfig(
 				comp["command"] = finalComponentTerraformCommand
 				comp["inheritance"] = componentInheritanceChain
 				comp["metadata"] = componentMetadata
+				comp["overrides"] = componentOverrides
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
@@ -956,6 +1116,43 @@ func ProcessStackConfig(
 					componentHelmfileCommand, ok = i.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.command' attribute in the file '%s'", component, stackName)
+					}
+				}
+
+				// Process overrides
+				componentOverrides := map[any]any{}
+				componentOverridesVars := map[any]any{}
+				componentOverridesSettings := map[any]any{}
+				componentOverridesEnv := map[any]any{}
+				componentOverridesHelmfileCommand := ""
+
+				if i, ok := componentMap["overrides"]; ok {
+					if componentOverrides, ok = i.(map[any]any); !ok {
+						return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides' in the manifest '%s'", component, stackName)
+					}
+
+					if i, ok = componentOverrides["vars"]; ok {
+						if componentOverridesVars, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.vars' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["settings"]; ok {
+						if componentOverridesSettings, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.settings' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["env"]; ok {
+						if componentOverridesEnv, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.env' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides["command"]; ok {
+						if componentOverridesHelmfileCommand, ok = i.(string); !ok {
+							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.command' in the manifest '%s'", component, stackName)
+						}
 					}
 				}
 
@@ -1062,17 +1259,36 @@ func ProcessStackConfig(
 					}
 				}
 
-				finalComponentVars, err := m.Merge([]map[any]any{globalAndHelmfileVars, baseComponentVars, componentVars})
+				baseComponents = u.UniqueStrings(baseComponents)
+				sort.Strings(baseComponents)
+
+				// Final configs
+				finalComponentVars, err := m.Merge([]map[any]any{
+					globalAndHelmfileVars,
+					baseComponentVars,
+					componentVars,
+					componentOverridesVars,
+				})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentSettings, err := m.Merge([]map[any]any{globalAndHelmfileSettings, baseComponentSettings, componentSettings})
+				finalComponentSettings, err := m.Merge([]map[any]any{
+					globalAndHelmfileSettings,
+					baseComponentSettings,
+					componentSettings,
+					componentOverridesSettings,
+				})
 				if err != nil {
 					return nil, err
 				}
 
-				finalComponentEnv, err := m.Merge([]map[any]any{globalAndHelmfileEnv, baseComponentEnv, componentEnv})
+				finalComponentEnv, err := m.Merge([]map[any]any{
+					globalAndHelmfileEnv,
+					baseComponentEnv,
+					componentEnv,
+					componentOverridesEnv,
+				})
 				if err != nil {
 					return nil, err
 				}
@@ -1088,6 +1304,9 @@ func ProcessStackConfig(
 				if len(componentHelmfileCommand) > 0 {
 					finalComponentHelmfileCommand = componentHelmfileCommand
 				}
+				if len(componentOverridesHelmfileCommand) > 0 {
+					finalComponentHelmfileCommand = componentOverridesHelmfileCommand
+				}
 
 				comp := map[string]any{}
 				comp["vars"] = finalComponentVars
@@ -1096,6 +1315,7 @@ func ProcessStackConfig(
 				comp["command"] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
 				comp["metadata"] = componentMetadata
+				comp["overrides"] = componentOverrides
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName

@@ -6,7 +6,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// MergeWithOptions takes a list of maps of interface and options as input and returns a single map with the merged contents
+// MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
+// and returns a single map with the merged contents
 func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (map[any]any, error) {
 	merged := map[any]any{}
 
@@ -59,7 +60,7 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 	return merged, nil
 }
 
-// Merge takes a list of maps of interface as input and returns a single map with the merged contents
+// Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
 func Merge(inputs []map[any]any) (map[any]any, error) {
 	return MergeWithOptions(inputs, false, false)
 }

@@ -1,0 +1,7 @@
+import:
+  - mixins/region/us-west-2
+  - orgs/cp/tenant1/dev/_defaults
+  # Import all components that the `devops` Team manages
+  - teams/devops
+  # Import all components that the `testing` Team manages
+  - teams/testing

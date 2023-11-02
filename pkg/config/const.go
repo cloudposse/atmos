@@ -38,5 +38,6 @@ const (
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor.yaml"
 
-	ImportSectionName = "import"
+	ImportSectionName    = "import"
+	OverridesSectionName = "overrides"
 )
