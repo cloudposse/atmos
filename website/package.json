@@ -24,7 +24,7 @@
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
     "react-image-gallery": "^1.2.11",
-    "react-player": "^2.11.0",
+    "react-player": "^2.13.0",
     "react-table": "^7.8.0",
     "remark-html": "^15.0.1",
     "remark-parse": "^10.0.1",
