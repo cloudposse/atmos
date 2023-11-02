@@ -21,6 +21,10 @@ updates:
     - dependencies
     - github-actions
     - no-release
+  groups:
+    cicd:
+      patterns:
+        - "*"
   schedule:
     interval: weekly
     day: sunday
@@ -32,6 +36,10 @@ updates:
     - dependencies
     - javascript
     - no-release
+  groups:
+    website:
+      patterns:
+        - "*"
   schedule:
     interval: weekly
     day: sunday
