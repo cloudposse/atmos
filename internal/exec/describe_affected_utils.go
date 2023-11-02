@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -12,9 +13,12 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -23,16 +27,17 @@ var (
 	remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 )
 
-// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, processes stack configs
+// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, and processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoClone(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	ref string,
 	sha string,
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,
-) ([]cfg.Affected, error) {
+	includeSpaceliftAdminStacks bool,
+) ([]schema.Affected, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
 		DetectDotGit:          true,
@@ -47,6 +52,13 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	if err != nil {
 		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
+
+	localRepoWorktree, err := localRepo.Worktree()
+	if err != nil {
+		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+	}
+
+	localRepoPath := localRepoWorktree.Filesystem.Root()
 
 	// Get the remotes of the local repo
 	keys := []string{}
@@ -84,9 +96,9 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 		return nil, err
 	}
 
-	defer removeTempDir(tempDir)
+	defer removeTempDir(cliConfig, tempDir)
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", repoUrl, tempDir))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", repoUrl, tempDir))
 
 	cloneOptions := git.CloneOptions{
 		URL:          repoUrl,
@@ -97,9 +109,9 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	// If `ref` flag is not provided, it will clone the HEAD of the default branch
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out Git ref '%s' ...\n", ref))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...\n", ref))
 	} else {
-		u.PrintInfoVerbose(verbose, "\nChecking out the HEAD of the default branch ...\n")
+		u.LogTrace(cliConfig, "\nChecking out the HEAD of the default branch ...\n")
 	}
 
 	if verbose {
@@ -139,14 +151,14 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	}
 
 	if ref != "" {
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out Git ref '%s'\n", ref))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out Git ref '%s'\n", ref))
 	} else {
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out Git ref '%s'\n", remoteRepoHead.Name()))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out Git ref '%s'\n", remoteRepoHead.Name()))
 	}
 
 	// Check if a commit SHA was provided and checkout the repo at that commit SHA
 	if sha != "" {
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -165,10 +177,10 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 			return nil, err
 		}
 
-		u.PrintInfoVerbose(verbose, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, tempDir, localRepo, remoteRepo, verbose)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -176,13 +188,14 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	return affected, nil
 }
 
-// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, processes stack configs
+// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoPath(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	repoPath string,
 	verbose bool,
-) ([]cfg.Affected, error) {
+	includeSpaceliftAdminStacks bool,
+) ([]schema.Affected, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
 		DetectDotGit:          true,
@@ -198,6 +211,13 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
 
+	localRepoWorktree, err := localRepo.Worktree()
+	if err != nil {
+		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+	}
+
+	localRepoPath := localRepoWorktree.Filesystem.Root()
+
 	remoteRepo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{
 		DetectDotGit:          false,
 		EnableDotGitCommonDir: false,
@@ -212,7 +232,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, repoPath, localRepo, remoteRepo, verbose)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, repoPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -221,12 +241,18 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 }
 
 func executeDescribeAffected(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
+	localRepoFileSystemPath string,
 	remoteRepoFileSystemPath string,
 	localRepo *git.Repository,
 	remoteRepo *git.Repository,
 	verbose bool,
-) ([]cfg.Affected, error) {
+	includeSpaceliftAdminStacks bool,
+) ([]schema.Affected, error) {
+
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
 
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -238,23 +264,39 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	if verbose {
-		u.PrintInfo(fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
-		u.PrintInfo(fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
-	}
+	u.LogTrace(cliConfig, fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
+	u.LogTrace(cliConfig, fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
 
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update paths to point to the temp dir
-	cliConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Stacks.BasePath)
-	cliConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Components.Terraform.BasePath)
-	cliConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath)
+	localRepoFileSystemPathAbs, err := filepath.Abs(localRepoFileSystemPath)
+	if err != nil {
+		return nil, err
+	}
+
+	basePath := cliConfig.BasePath
+
+	// Handle `atmos` absolute base path.
+	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
+	// If the `atmos` base path is absolute, find the relative path between the local repo path and the `atmos` base path.
+	// This relative path (the difference) is then used below to join with the remote (cloned) repo path.
+	if path.IsAbs(basePath) {
+		basePath, err = filepath.Rel(localRepoFileSystemPathAbs, basePath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Update paths to point to the cloned remote repo dir
+	cliConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath)
+	cliConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Terraform.BasePath)
+	cliConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Helmfile.BasePath)
 
 	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
-		path.Join(remoteRepoFileSystemPath, cliConfig.BasePath, cliConfig.Stacks.BasePath),
+		path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath),
 		cliConfig.StackConfigFilesRelativePaths,
 	)
 	if err != nil {
@@ -266,39 +308,39 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("\nGetting current working repo commit object..."))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nGetting current working repo commit object..."))
 
 	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
 	if err != nil {
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got current working repo commit object"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting current working repo commit tree..."))
+	u.LogTrace(cliConfig, fmt.Sprintf("Got current working repo commit object"))
+	u.LogTrace(cliConfig, fmt.Sprintf("Getting current working repo commit tree..."))
 
 	localTree, err := localCommit.Tree()
 	if err != nil {
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got current working repo commit tree"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit object..."))
+	u.LogTrace(cliConfig, fmt.Sprintf("Got current working repo commit tree"))
+	u.LogTrace(cliConfig, fmt.Sprintf("Getting remote repo commit object..."))
 
 	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
 	if err != nil {
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit object"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Getting remote repo commit tree..."))
+	u.LogTrace(cliConfig, fmt.Sprintf("Got remote repo commit object"))
+	u.LogTrace(cliConfig, fmt.Sprintf("Getting remote repo commit tree..."))
 
 	remoteTree, err := remoteCommit.Tree()
 	if err != nil {
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Got remote repo commit tree"))
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Finding diff between the current working branch and remote target branch ..."))
+	u.LogTrace(cliConfig, fmt.Sprintf("Got remote repo commit tree"))
+	u.LogTrace(cliConfig, fmt.Sprintf("Finding diff between the current working branch and remote target branch ..."))
 
 	// Find a slice of Patch objects with all the changes between the current working and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -306,18 +348,18 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	u.PrintInfoVerbose(verbose, fmt.Sprintf("Found diff between the current working branch and remote target branch"))
-	u.PrintInfoVerbose(verbose, "\nChanged files:")
+	u.LogTrace(cliConfig, fmt.Sprintf("Found diff between the current working branch and remote target branch"))
+	u.LogTrace(cliConfig, "\nChanged files:\n")
 
 	var changedFiles []string
 	for _, fileStat := range patch.Stats() {
-		u.PrintMessageVerbose(verbose && fileStat.Name != "", fileStat.Name)
+		u.LogTrace(cliConfig, fileStat.Name)
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
-	u.PrintMessageVerbose(verbose, "")
+	u.LogTrace(cliConfig, "")
 
-	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles)
+	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -329,16 +371,19 @@ func executeDescribeAffected(
 func findAffected(
 	currentStacks map[string]any,
 	remoteStacks map[string]any,
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	changedFiles []string,
-) ([]cfg.Affected, error) {
+	includeSpaceliftAdminStacks bool,
+) ([]schema.Affected, error) {
 
-	res := []cfg.Affected{}
+	res := []schema.Affected{}
 	var err error
 
 	for stackName, stackSection := range currentStacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
+
+				// Terraform
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
@@ -351,29 +396,83 @@ func findAffected(
 								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, metadataSection, "metadata") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
 									continue
 								}
 							}
-							// Check if any files in the component's folder have changed
+
+							// Check the Terraform configuration of the component
 							if component, ok := componentSection["component"].(string); ok && component != "" {
-								if isComponentFolderChanged(component, "terraform", cliConfig, changedFiles) {
-									affected := cfg.Affected{
+								// Check if the component uses some external modules (on the local filesystem) that have changed
+								changed, err := areTerraformComponentModulesChanged(component, cliConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
+									affected := schema.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "component.module",
+									}
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
+									if err != nil {
+										return nil, err
+									}
+									continue
+								}
+
+								// Check if any files in the component's folder have changed
+								changed, err = isComponentFolderChanged(component, "terraform", cliConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "component",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -383,13 +482,22 @@ func findAffected(
 							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -399,13 +507,22 @@ func findAffected(
 							// Check `env` section
 							if envSection, ok := componentSection["env"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, envSection, "env") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -415,13 +532,80 @@ func findAffected(
 							// Check `settings` section
 							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, "settings") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
+									if err != nil {
+										return nil, err
+									}
+									continue
+								}
+
+								// Check `settings.depends_on.file` and `settings.depends_on.folder`
+								// Convert the `settings` section to the `Settings` structure
+								var stackComponentSettings schema.Settings
+								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
+								if err != nil {
+									return nil, err
+								}
+
+								// Skip if the stack component has an empty `settings.depends_on` section
+								if reflect.ValueOf(stackComponentSettings).IsZero() ||
+									reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+									continue
+								}
+
+								isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChanged(
+									changedFiles,
+									stackComponentSettings.DependsOn,
+								)
+
+								if err != nil {
+									return nil, err
+								}
+
+								if isFolderOrFileChanged {
+									changedFile := ""
+									if changedType == "file" {
+										changedFile = changedFileOrFolder
+									}
+
+									changedFolder := ""
+									if changedType == "folder" {
+										changedFolder = changedFileOrFolder
+									}
+
+									affected := schema.Affected{
+										ComponentType: "terraform",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      changedType,
+										File:          changedFile,
+										Folder:        changedFolder,
+									}
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -432,6 +616,7 @@ func findAffected(
 					}
 				}
 
+				// Helmfile
 				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
@@ -444,29 +629,54 @@ func findAffected(
 								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, metadataSection, "metadata") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
 									continue
 								}
 							}
-							// Check if any files in the component's folder have changed
+
+							// Check the Helmfile configuration of the component
 							if component, ok := componentSection["component"].(string); ok && component != "" {
-								if isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles) {
-									affected := cfg.Affected{
+								// Check if any files in the component's folder have changed
+								changed, err := isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "component",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -476,13 +686,22 @@ func findAffected(
 							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -492,13 +711,22 @@ func findAffected(
 							// Check `env` section
 							if envSection, ok := componentSection["env"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, envSection, "env") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -508,13 +736,80 @@ func findAffected(
 							// Check `settings` section
 							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, "settings") {
-									affected := cfg.Affected{
+									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
-									res, err = appendToAffected(cliConfig, componentName, stackName, componentSection, res, affected)
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										false,
+										nil,
+									)
+									if err != nil {
+										return nil, err
+									}
+									continue
+								}
+
+								// Check `settings.depends_on.file` and `settings.depends_on.folder`
+								// Convert the `settings` section to the `Settings` structure
+								var stackComponentSettings schema.Settings
+								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
+								if err != nil {
+									return nil, err
+								}
+
+								// Skip if the stack component has an empty `settings.depends_on` section
+								if reflect.ValueOf(stackComponentSettings).IsZero() ||
+									reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+									continue
+								}
+
+								isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChanged(
+									changedFiles,
+									stackComponentSettings.DependsOn,
+								)
+
+								if err != nil {
+									return nil, err
+								}
+
+								if isFolderOrFileChanged {
+									changedFile := ""
+									if changedType == "file" {
+										changedFile = changedFileOrFolder
+									}
+
+									changedFolder := ""
+									if changedType == "folder" {
+										changedFolder = changedFileOrFolder
+									}
+
+									affected := schema.Affected{
+										ComponentType: "helmfile",
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      changedType,
+										File:          changedFile,
+										Folder:        changedFolder,
+									}
+									res, err = appendToAffected(
+										cliConfig,
+										componentName,
+										stackName,
+										componentSection,
+										res,
+										affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+									)
 									if err != nil {
 										return nil, err
 									}
@@ -533,13 +828,22 @@ func findAffected(
 
 // appendToAffected adds an item to the affected list, and adds the Spacelift stack and Atlantis project (if configured)
 func appendToAffected(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	componentName string,
 	stackName string,
 	componentSection map[string]any,
-	affectedList []cfg.Affected,
-	affected cfg.Affected,
-) ([]cfg.Affected, error) {
+	affectedList []schema.Affected,
+	affected schema.Affected,
+	includeSpaceliftAdminStacks bool,
+	stacks map[string]any,
+) ([]schema.Affected, error) {
+
+	// If the affected component in the stack was already added to the result, don't add it again
+	for _, v := range affectedList {
+		if v.Component == affected.Component && v.Stack == affected.Stack && v.ComponentType == affected.ComponentType {
+			return affectedList, nil
+		}
+	}
 
 	if affected.ComponentType == "terraform" {
 		varSection := map[any]any{}
@@ -581,6 +885,13 @@ func appendToAffected(
 		}
 
 		affected.AtlantisProject = atlantisProjectName
+
+		if includeSpaceliftAdminStacks {
+			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks, stackName, componentName)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Check `component` section and add `ComponentPath` to the output
@@ -616,25 +927,283 @@ func isEqual(
 	return false
 }
 
-// isComponentFolderChanged checks if a component folder changed (has changed files in it)
+// isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed
+func isComponentDependentFolderOrFileChanged(
+	changedFiles []string,
+	deps schema.DependsOn,
+) (bool, string, string, error) {
+
+	hasDependencies := false
+	isChanged := false
+	changedType := ""
+	changedFileOrFolder := ""
+	pathPatternSuffix := ""
+
+	for _, dep := range deps {
+		if isChanged {
+			break
+		}
+
+		if dep.File != "" {
+			changedType = "file"
+			changedFileOrFolder = dep.File
+			pathPatternSuffix = ""
+			hasDependencies = true
+		} else if dep.Folder != "" {
+			changedType = "folder"
+			changedFileOrFolder = dep.Folder
+			pathPatternSuffix = "/**"
+			hasDependencies = true
+		}
+
+		if hasDependencies {
+			changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+			if err != nil {
+				return false, "", "", err
+			}
+
+			pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+
+			for _, changedFile := range changedFiles {
+				changedFileAbs, err := filepath.Abs(changedFile)
+				if err != nil {
+					return false, "", "", err
+				}
+
+				match, err := u.PathMatch(pathPattern, changedFileAbs)
+				if err != nil {
+					return false, "", "", err
+				}
+
+				if match {
+					isChanged = true
+					break
+				}
+			}
+		}
+	}
+
+	return isChanged, changedType, changedFileOrFolder, nil
+}
+
+// isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders)
 func isComponentFolderChanged(
 	component string,
 	componentType string,
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	changedFiles []string,
-) bool {
+) (bool, error) {
 
-	var pathPrefix string
+	var componentPath string
 
 	switch componentType {
 	case "terraform":
-		pathPrefix = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
 	case "helmfile":
-		pathPrefix = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
+		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
 	}
 
-	if u.SliceOfPathsContainsPath(changedFiles, pathPrefix) {
-		return true
+	componentPathAbs, err := filepath.Abs(componentPath)
+	if err != nil {
+		return false, err
 	}
-	return false
+
+	componentPathPattern := componentPathAbs + "/**"
+
+	for _, changedFile := range changedFiles {
+		changedFileAbs, err := filepath.Abs(changedFile)
+		if err != nil {
+			return false, err
+		}
+
+		match, err := u.PathMatch(componentPathPattern, changedFileAbs)
+		if err != nil {
+			return false, err
+		}
+
+		if match {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// areTerraformComponentModulesChanged checks if any of the external Terraform modules (but on the local filesystem) that the component uses have changed
+func areTerraformComponentModulesChanged(
+	component string,
+	cliConfig schema.CliConfiguration,
+	changedFiles []string,
+) (bool, error) {
+
+	componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+
+	componentPathAbs, err := filepath.Abs(componentPath)
+	if err != nil {
+		return false, err
+	}
+
+	terraformConfiguration, _ := tfconfig.LoadModule(componentPathAbs)
+
+	for _, changedFile := range changedFiles {
+		changedFileAbs, err := filepath.Abs(changedFile)
+		if err != nil {
+			return false, err
+		}
+
+		for _, moduleConfig := range terraformConfiguration.ModuleCalls {
+			// We are processing the local modules only (not from terraform registry), they will have `Version` as an empty string
+			if moduleConfig.Version != "" {
+				continue
+			}
+
+			modulePath := path.Join(path.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
+
+			modulePathAbs, err := filepath.Abs(modulePath)
+			if err != nil {
+				return false, err
+			}
+
+			modulePathPattern := modulePathAbs + "/**"
+
+			match, err := u.PathMatch(modulePathPattern, changedFileAbs)
+			if err != nil {
+				return false, err
+			}
+
+			if match {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
+}
+
+// addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack
+func addAffectedSpaceliftAdminStack(
+	cliConfig schema.CliConfiguration,
+	affectedList []schema.Affected,
+	settingsSection map[any]any,
+	stacks map[string]any,
+	currentStackName string,
+	currentComponentName string,
+) ([]schema.Affected, error) {
+
+	// Convert the `settings` section to the `Settings` structure
+	var componentSettings schema.Settings
+	err := mapstructure.Decode(settingsSection, &componentSettings)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip if the component has an empty `settings.spacelift` section
+	if reflect.ValueOf(componentSettings).IsZero() ||
+		reflect.ValueOf(componentSettings.Spacelift).IsZero() {
+		return affectedList, nil
+	}
+
+	// Find and process `settings.spacelift.admin_stack_config` section
+	var adminStackContextSection any
+	var adminStackContext schema.Context
+	var ok bool
+
+	if adminStackContextSection, ok = componentSettings.Spacelift["admin_stack_selector"]; !ok {
+		return affectedList, nil
+	}
+
+	err = mapstructure.Decode(adminStackContextSection, &adminStackContext)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip if the component has an empty `settings.spacelift.admin_stack_selector` section
+	if reflect.ValueOf(adminStackContext).IsZero() {
+		return affectedList, nil
+	}
+
+	adminStackContextPrefix, err := cfg.GetContextPrefix(currentStackName, adminStackContext, cliConfig.Stacks.NamePattern, currentStackName)
+	if err != nil {
+		return nil, err
+	}
+
+	var componentVarsSection map[any]any
+	var componentSettingsSection map[any]any
+	var componentSettingsSpaceliftSection map[any]any
+
+	// Find the Spacelift adin stack that manages the current stack
+	for stackName, stackSection := range stacks {
+		if stackSectionMap, ok := stackSection.(map[string]any); ok {
+			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
+				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+					for componentName, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+
+							if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
+								return affectedList, nil
+							}
+
+							var context schema.Context
+							err = mapstructure.Decode(componentVarsSection, &context)
+							if err != nil {
+								return nil, err
+							}
+
+							contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+							if err != nil {
+								return nil, err
+							}
+
+							if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {
+								if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+									return affectedList, nil
+								}
+
+								if componentSettingsSpaceliftSection, ok = componentSettingsSection["spacelift"].(map[any]any); !ok {
+									return affectedList, nil
+								}
+
+								if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
+									return nil, errors.New(fmt.Sprintf(
+										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
+											"to point to the Spacelift admin component '%s' in the stack '%s', "+
+											"but that component has Spacelift workspace disabled "+
+											"in the 'settings.spacelift.workspace_enabled' section "+
+											"and can't be added to the affected stacks",
+										currentComponentName,
+										currentStackName,
+										componentName,
+										stackName,
+									))
+								}
+
+								affectedSpaceliftAdminStack := schema.Affected{
+									ComponentType: "terraform",
+									Component:     componentName,
+									Stack:         stackName,
+									Affected:      "stack.settings.spacelift.admin_stack_selector",
+								}
+
+								affectedList, err = appendToAffected(
+									cliConfig,
+									componentName,
+									stackName,
+									componentSection,
+									affectedList,
+									affectedSpaceliftAdminStack,
+									false,
+									nil,
+								)
+								if err != nil {
+									return nil, err
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return affectedList, nil
 }

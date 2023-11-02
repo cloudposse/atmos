@@ -1,8 +1,8 @@
 ---
-title: atmos describe dependants
-sidebar_label: dependants
+title: atmos describe dependents
+sidebar_label: dependents
 sidebar_class_name: command
-id: dependants
+id: dependents
 description: This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 ---
 
@@ -52,16 +52,16 @@ components:
       settings:
         depends_on:
           1:
-            # If the `context` (namespace, tenant, environment, stage) is not provided, 
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
             # the `component` is from the same Atmos stack as this component
             component: "test/test-component-override"
           2:
-            # This component (in any stage) depends on `test/test-component` 
+            # This component (in any stage) depends on `test/test-component`
             # from the `dev` stage (in any `environment` and any `tenant`)
             component: "test/test-component"
             stage: "dev"
           3:
-            # This component depends on `my-component` 
+            # This component depends on `my-component`
             # from the `tenant1-ue2-staging` Atmos stack
             component: "my-component"
             tenant: "tenant1"
@@ -86,11 +86,11 @@ components:
       settings:
         depends_on:
           1:
-            # If the `context` (namespace, tenant, environment, stage) is not provided, 
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
             # the `component` is from the same Atmos stack as this component
             component: "test/test-component"
           2:
-            # If the `context` (namespace, tenant, environment, stage) is not provided, 
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
             # the `component` is from the same Atmos stack as this component
             component: "test/test2/test-component-2"
       vars:
@@ -103,7 +103,7 @@ Having the `top-level-component` and `top-level-component2` components configure
 to show all the components that depend on the `test/test-component` component in the `tenant1-ue2-dev` stack:
 
 ```shell
-atmos describe dependants test/test-component -s tenant1-ue2-dev
+atmos describe dependents test/test-component -s tenant1-ue2-dev
 ```
 
 ```json
@@ -128,7 +128,7 @@ Similarly, the following Atmos command shows all the components that depend on t
 the `tenant1-ue2-test-1` stack:
 
 ```shell
-atmos describe dependants test/test-component -s tenant1-ue2-test-1
+atmos describe dependents test/test-component -s tenant1-ue2-test-1
 ```
 
 ```json
@@ -178,35 +178,35 @@ After the `test/test-component` has been provisioned, you can use the outputs to
 ## Usage
 
 ```shell
-atmos describe dependants [options]
+atmos describe dependents [options]
 ```
 
 <br/>
 
 :::tip
-Run `atmos describe dependants --help` to see all the available options
+Run `atmos describe dependents --help` to see all the available options
 :::
 
 ## Examples
 
 ```shell
-atmos describe dependants test/test-component -s tenant1-ue2-test-1
-atmos describe dependants test/test-component -s tenant1-ue2-dev --format yaml
-atmos describe dependants test/test-component -s tenant1-ue2-test-1 -f yaml
-atmos describe dependants test/test-component -s tenant1-ue2-test-1 --file dependants.json
-atmos describe dependants test/test-component -s tenant1-ue2-test-1 --format yaml --file dependants.yaml
+atmos describe dependents test/test-component -s tenant1-ue2-test-1
+atmos describe dependents test/test-component -s tenant1-ue2-dev --format yaml
+atmos describe dependents test/test-component -s tenant1-ue2-test-1 -f yaml
+atmos describe dependents test/test-component -s tenant1-ue2-test-1 --file dependents.json
+atmos describe dependents test/test-component -s tenant1-ue2-test-1 --format yaml --file dependents.yaml
 ```
 
 ## Arguments
 
 | Argument    | Description     | Required |
-|:------------|:----------------|:---------|
+| :---------- | :-------------- | :------- |
 | `component` | Atmos component | yes      |
 
 ## Flags
 
 | Flag       | Description                                         | Alias | Required |
-|:-----------|:----------------------------------------------------|:------|:---------|
+| :--------- | :-------------------------------------------------- | :---- | :------- |
 | `--stack`  | Atmos stack                                         | `-s`  | yes      |
 | `--format` | Output format: `json` or `yaml` (`json` is default) | `-f`  | no       |
 | `--file`   | If specified, write the result to the file          |       | no       |
@@ -235,30 +235,30 @@ Each object has the following schema:
 
 where:
 
-- `component` - the dependant Atmos component
+- `component` - the dependent Atmos component
 
-- `component_type` - the type of the dependant component (`terraform` or `helmfile`)
+- `component_type` - the type of the dependent component (`terraform` or `helmfile`)
 
 - `component_path` - the filesystem path to the `terraform` or `helmfile` component
 
-- `namespace` - the `namespace` where the dependant Atmos component is provisioned
+- `namespace` - the `namespace` where the dependent Atmos component is provisioned
 
-- `tenant` - the `tenant` where the dependant Atmos component is provisioned
+- `tenant` - the `tenant` where the dependent Atmos component is provisioned
 
-- `environment` - the `environment` where the dependant Atmos component is provisioned
+- `environment` - the `environment` where the dependent Atmos component is provisioned
 
-- `stage` - the `stage` where the dependant Atmos component is provisioned
+- `stage` - the `stage` where the dependent Atmos component is provisioned
 
-- `stack` - the Atmos stack where the dependant Atmos component is provisioned
+- `stack` - the Atmos stack where the dependent Atmos component is provisioned
 
 - `stack_slug` - the Atmos stack slug (concatenation of the Atmos stack and Atmos component)
 
-- `spacelift_stack` - the dependant Spacelift stack. It will be included only if the Spacelift workspace is enabled for the dependant Atmos component
+- `spacelift_stack` - the dependent Spacelift stack. It will be included only if the Spacelift workspace is enabled for the dependent Atmos component
   in the Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled`
   section or via inheritance)
 
-- `atlantis_project` - the dependant Atlantis project name. It will be included only if the Atlantis integration is configured in
-  the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
+- `atlantis_project` - the dependent Atlantis project name. It will be included only if the Atlantis integration is configured in
+  the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
 
 <br/>
 
@@ -272,7 +272,7 @@ Atmos components and are not meant to be provisioned.
 ## Output Example
 
 ```shell
-atmos describe dependants test/test-component -s tenant1-ue2-test-1
+atmos describe dependents test/test-component -s tenant1-ue2-test-1
 ```
 
 ```json

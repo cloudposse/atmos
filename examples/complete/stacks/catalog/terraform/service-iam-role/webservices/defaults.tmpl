@@ -1,0 +1,57 @@
+import:
+  - path: catalog/terraform/service-iam-role/defaults.tmpl
+    context:
+      enabled: true
+      app_name: webservices
+      iam_managed_policy_arns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+      iam_source_policy_documents:
+        - '{
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "kafka-cluster:Connect",
+                  "kafka-cluster:AlterCluster",
+                  "kafka-cluster:DescribeCluster"
+                ],
+                "Resource": [
+                  "arn:aws:kafka:us-east-2:xxxxxxxxxx:cluster/MSK-00/xxxxxxxxxx-14/*"
+                ]
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "kafka-cluster:*Topic*",
+                  "kafka-cluster:WriteData",
+                  "kafka-cluster:ReadData"
+                ],
+                "Resource": [
+                  "arn:aws:kafka:region:xxxxxxxxxx:topic/MSK-00/*"
+                ]
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "kafka-cluster:AlterGroup",
+                  "kafka-cluster:DescribeGroup"
+                ],
+                "Resource": [
+                  "arn:aws:kafka:region:xxxxxxxxxx:group/MSK-00/*"
+                ]
+              }
+            ]
+          }'
+        - '{
+              "Version": "2012-10-17",
+              "Statement": [
+                  {
+                      "Sid": "",
+                      "Effect": "Allow",
+                      "Action": "execute-api:Invoke",
+                      "Resource": "arn:aws:execute-api:us-east-2:xxxxxxxxxx:xxxxxxxxxx/v1/*/scheduledtask/*"
+                  }
+              ]
+          }' 

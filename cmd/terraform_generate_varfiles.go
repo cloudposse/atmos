@@ -15,7 +15,7 @@ var terraformGenerateVarfilesCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -36,7 +36,7 @@ func init() {
 	terraformGenerateVarfilesCmd.PersistentFlags().String("stacks", "",
 		"Only process the specified stacks (comma-separated values).\n"+
 			"atmos terraform generate varfiles --file-template <file_template> --stacks <stack1>,<stack2>\n"+
-			"The filter can contain names of the top-level stack config files (including subfolder paths), and 'atmos' stack names (derived from the context vars)\n"+
+			"The filter can contain names of the top-level stack manifests (including subfolder paths), and 'atmos' stack names (derived from the context vars)\n"+
 			"atmos terraform generate varfiles --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
 			"atmos terraform generate varfiles --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
 			"atmos terraform generate varfiles --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
@@ -53,7 +53,7 @@ func init() {
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
+		u.LogErrorAndExit(err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateVarfilesCmd)

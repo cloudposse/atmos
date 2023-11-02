@@ -91,25 +91,38 @@ const config = {
                         label: 'CLI'
                     },
                     {
-                        to: 'https://github.com/cloudposse/community/discussions',
-                        label: 'GitHub Discussions',
-                        position: 'right'
-                    },
-                    {
-                        to: 'https://slack.cloudposse.com/',
-                        label: 'Slack Community',
-                        position: 'right'
+                        type: 'dropdown',
+                        label: 'Community',
+                        position: 'right',
+                        items: [
+                            {
+                                label: 'GitHub Discussions',
+                                href: 'https://ask.sweetops.com/',
+                            },
+                            {
+                                label: 'Community',
+                                href: 'https://sweetops.com/',
+                            },
+                            {
+                                label: 'Slack',
+                                href: 'https://slack.sweetops.com/',
+                            },
+                            {
+                                label: 'Slack Archives',
+                                href: 'https://archive.sweetops.com/atmos/',
+                            },
+                            {
+                                label: 'Office Hours',
+                                href: 'https://cloudposse.com/office-hours/',
+                            },
+                        ],
                     },
                     {
                         to: 'https://cloudposse.com/services/',
                         label: 'Get Help',
-                        position: 'right'
+                        position: 'right',
+                        className: 'button button--primary navbar-cta-button'
                     },
-                    // {
-                    //     to: '/blog',
-                    //     label: 'Blog',
-                    //     position: 'left'
-                    // },
                     {
                         href: 'https://github.com/cloudposse/atmos',
                         position: 'right',

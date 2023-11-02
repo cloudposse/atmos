@@ -9,6 +9,7 @@
 **/*.terraform.tfvars.json
 **/*.helmfile.vars.yaml
 **/.terraform.lock.hcl
+.vscode/
 
 # Module directory
 .terraform
@@ -25,3 +26,10 @@
 *.tar
 *.gz
 /bin
+
+# Nix
+.envrc
+.direnv/
+
+# Compiled Binary
+atmos

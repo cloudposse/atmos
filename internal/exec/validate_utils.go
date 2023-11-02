@@ -5,14 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"strings"
 	"time"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/open-policy-agent/opa/loader"
+	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/sdk"
 	opaTestServer "github.com/open-policy-agent/opa/sdk/test"
+	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ValidateWithJsonSchema validates the data structure using the provided JSON Schema document
@@ -60,8 +63,95 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 }
 
 // ValidateWithOpa validates the data structure using the provided OPA document
+// https://github.com/open-policy-agent/opa/blob/main/rego/example_test.go
+// https://github.com/open-policy-agent/opa/blob/main/rego/rego_test.go
 // https://www.openpolicyagent.org/docs/latest/integration/#sdk
-func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, error) {
+func ValidateWithOpa(
+	data any,
+	schemaPath string,
+	modulePaths []string,
+	timeoutSeconds int,
+) (bool, error) {
+
+	// Set timeout for schema validation
+	if timeoutSeconds == 0 {
+		timeoutSeconds = 20
+	}
+
+	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
+		"1. Rego syntax\n" +
+		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
+
+	invalidRegoPolicyErrorMessage := fmt.Sprintf("invalid Rego policy in the file '%s'", schemaPath)
+
+	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
+	defer cancelFunc()
+
+	// Load the input document
+	j, err := u.ConvertToJSON(data)
+	if err != nil {
+		return false, err
+	}
+
+	var input any
+	dec := json.NewDecoder(bytes.NewBufferString(j))
+	dec.UseNumber()
+	if err = dec.Decode(&input); err != nil {
+		return false, err
+	}
+
+	// Construct a Rego object that can be prepared or evaluated.
+	r := rego.New(
+		rego.Query("data.atmos.errors"),
+		rego.Load(append([]string{schemaPath}, modulePaths...),
+			loader.GlobExcludeName("*_test.rego", 0),
+		),
+	)
+
+	// Create a prepared query that can be evaluated
+	query, err := r.PrepareForEval(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	// Execute the prepared query
+	rs, err := query.Eval(ctx, rego.EvalInput(input))
+	if err != nil {
+		if err.Error() == "context deadline exceeded" {
+			err = errors.New(timeoutErrorMessage)
+		}
+		return false, err
+	}
+
+	if len(rs) < 1 {
+		return false, errors.New(invalidRegoPolicyErrorMessage)
+	}
+
+	if len(rs[0].Expressions) < 1 {
+		return false, errors.New(invalidRegoPolicyErrorMessage)
+	}
+
+	// Check the query evaluation result (if the `errors` output array has any items)
+	ers, ok := rs[0].Expressions[0].Value.([]any)
+	if !ok {
+		return false, errors.New(invalidRegoPolicyErrorMessage)
+	}
+	if len(ers) > 0 {
+		return false, errors.New(strings.Join(u.SliceOfInterfacesToSliceOdStrings(ers), "\n"))
+	}
+
+	return true, nil
+}
+
+// ValidateWithOpaLegacy validates the data structure using the provided OPA document
+// https://www.openpolicyagent.org/docs/latest/integration/#sdk
+func ValidateWithOpaLegacy(
+	data any,
+	schemaName string,
+	schemaText string,
+	timeoutSeconds int,
+) (bool, error) {
 	// The OPA SDK does not support map[any]any data types (which can be part of 'data' input)
 	// ast: interface conversion: json: unsupported type: map[interface {}]interface {}
 	// To fix the issue, convert the data to JSON and back to Go map
@@ -76,7 +166,12 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 	}
 
 	// Set timeout for schema validation
-	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*7)
+	if timeoutSeconds == 0 {
+		timeoutSeconds = 20
+	}
+
+	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 	defer cancelFunc()
 
 	// '/bundles/' prefix is required by the OPA SDK
@@ -132,7 +227,7 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 		return false, err
 	}
 
-	ers, ok := result.Result.([]interface{})
+	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
 		return false, errors.New(strings.Join(u.SliceOfInterfacesToSliceOdStrings(ers), "\n"))
 	}
@@ -143,5 +238,5 @@ func ValidateWithOpa(data any, schemaName string, schemaText string) (bool, erro
 // ValidateWithCue validates the data structure using the provided CUE document
 // https://cuelang.org/docs/integrations/go/#processing-cue-in-go
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
-	return false, errors.New("validation using CUE is not implemented yet")
+	return false, errors.New("validation using CUE is not supported yet")
 }

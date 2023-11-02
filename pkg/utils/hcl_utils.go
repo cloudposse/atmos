@@ -1,15 +1,17 @@
 package utils
 
 import (
-	"github.com/cloudposse/atmos/pkg/convert"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"os"
+	"strings"
+
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
-	"os"
-	"strings"
+	"github.com/cloudposse/atmos/pkg/convert"
 )
 
 // PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console
@@ -28,7 +30,12 @@ func PrintAsHcl(data any) error {
 }
 
 // WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file
-func WriteToFileAsHcl(filePath string, data any, fileMode os.FileMode) error {
+func WriteToFileAsHcl(
+	cliConfig schema.CliConfiguration,
+	filePath string,
+	data any,
+	fileMode os.FileMode,
+) error {
 	astree, err := ConvertToHclAst(data)
 	if err != nil {
 		return err
@@ -42,7 +49,7 @@ func WriteToFileAsHcl(filePath string, data any, fileMode os.FileMode) error {
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			PrintError(err)
+			LogWarning(cliConfig, err.Error())
 		}
 	}(f)
 
@@ -82,7 +89,12 @@ func ConvertToHclAst(data any) (ast.Node, error) {
 // WriteTerraformBackendConfigToFileAsHcl writes the provided Terraform backend config to the specified file
 // https://dev.to/pdcommunity/write-terraform-files-in-go-with-hclwrite-2e1j
 // https://pkg.go.dev/github.com/hashicorp/hcl/v2/hclwrite
-func WriteTerraformBackendConfigToFileAsHcl(filePath string, backendType string, backendConfig map[any]any) error {
+func WriteTerraformBackendConfigToFileAsHcl(
+	cliConfig schema.CliConfiguration,
+	filePath string,
+	backendType string,
+	backendConfig map[any]any,
+) error {
 	hclFile := hclwrite.NewEmptyFile()
 	rootBody := hclFile.Body()
 	tfBlock := rootBody.AppendNewBlock("terraform", nil)
@@ -118,7 +130,7 @@ func WriteTerraformBackendConfigToFileAsHcl(filePath string, backendType string,
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			PrintError(err)
+			LogWarning(cliConfig, err.Error())
 		}
 	}(f)
 

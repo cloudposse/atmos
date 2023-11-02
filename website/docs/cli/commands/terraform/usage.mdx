@@ -4,7 +4,7 @@ sidebar_label: terraform
 sidebar_class_name: command
 ---
 
-import DocCardList from '@theme/DocCardList';
+import DocCardList from "@theme/DocCardList";
 
 :::note Purpose
 Use these subcommands to interact with `terraform`.
@@ -19,7 +19,7 @@ atmos terraform <command> <component> -s <stack> [options]
 atmos terraform <command> <component> --stack <stack> [options]
 ```
 
-<br/>
+<br />
 
 :::info
 Atmos supports all `terraform` commands and options described in [Terraform CLI reference](https://www.terraform.io/cli/commands).
@@ -27,7 +27,7 @@ Atmos supports all `terraform` commands and options described in [Terraform CLI 
 In addition, the `component` argument and `stack` flag are required to generate variables and backend config for the component in the stack.
 :::
 
-<br/>
+<br />
 
 **Additions and differences from native `terraform`:**
 
@@ -53,7 +53,7 @@ In addition, the `component` argument and `stack` flag are required to generate 
   planfile
 
 - `atmos terraform clean` command deletes the `.terraform` folder, `.terraform.lock.hcl` lock file, and the previously generated `planfile`
-  and `varfile` for the specified component and stack
+  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file.
 
 - `atmos terraform workspace` command first runs `terraform init -reconfigure`, then `terraform workspace select`, and if the workspace was not
   created before, it then runs `terraform workspace new`
@@ -72,7 +72,7 @@ In addition, the `component` argument and `stack` flag are required to generate 
 - `atmos terraform shell` command configures an environment for an Atmos component in a stack and starts a new shell allowing executing all native
   terraform commands inside the shell
 
-<br/>
+<br />
 
 :::tip
 Run `atmos terraform --help` to see all the available options
@@ -82,6 +82,7 @@ Run `atmos terraform --help` to see all the available options
 
 ```shell
 atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev
+atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev --skip-lock-file
 atmos terraform plan test/test-component-override-2 -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 atmos terraform plan test/test-component-override -s tenant1-ue2-dev --redirect-stderr ./errors.txt
 
@@ -106,18 +107,18 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --re
 ## Arguments
 
 | Argument    | Description               | Required |
-|:------------|:--------------------------|:---------|
+| :---------- | :------------------------ | :------- |
 | `component` | Atmos terraform component | yes      |
 
 ## Flags
 
 | Flag                | Description                                                                                                                                   | Alias | Required |
-|:--------------------|:----------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
+| :------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------- | :---- | :------- |
 | `--stack`           | Atmos stack                                                                                                                                   | `-s`  | yes      |
 | `--dry-run`         | Dry run                                                                                                                                       |       | no       |
 | `--redirect-stderr` | File descriptor to redirect `stderr` to.<br/>Errors can be redirected to any file or any standard file descriptor<br/>(including `/dev/null`) |       | no       |
 
-<br/>
+<br />
 
 :::note
 
@@ -127,4 +128,4 @@ All native `terraform` flags are supported
 
 ## Subcommands
 
-<DocCardList/>
+<DocCardList />

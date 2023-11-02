@@ -15,7 +15,7 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteAtlantisGenerateRepoConfigCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -30,7 +30,7 @@ func init() {
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("stacks", "",
 		"Generate Atlantis projects for the specified stacks only (comma-separated values).\n"+
 			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks <stack1>,<stack2>\n"+
-			"The filter can contain the names of the top-level stack config files and the logical stack names (derived from the context vars)\n"+
+			"The filter can contain the names of the top-level stack manifests and the logical stack names (derived from the context vars)\n"+
 			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
 			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
 			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",

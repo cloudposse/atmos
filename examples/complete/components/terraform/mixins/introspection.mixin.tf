@@ -8,8 +8,7 @@
 locals {
   # Throw an error if lookup fails
   check_required_tags = module.this.enabled ? [
-    for k in var.required_tags :
-    lookup(module.this.tags, k)
+    for k in var.required_tags : lookup(module.this.tags, k)
   ] : []
 }
 
@@ -24,9 +23,12 @@ module "introspection" {
   source  = "cloudposse/label/null"
   version = "0.25.0"
 
-  tags = merge(var.tags, {
-    "Component" = basename(abspath(path.module))
-  })
+  tags = merge(
+    var.tags,
+    {
+      "Component" = basename(abspath(path.module))
+    }
+  )
 
   context = module.this.context
 }

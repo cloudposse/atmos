@@ -10,10 +10,11 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ExecuteDescribeDependantsCmd executes `describe dependants` command
-func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
+// ExecuteDescribeDependentsCmd executes `describe dependents` command
+func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("", cmd, args)
 	if err != nil {
 		return err
@@ -47,12 +48,12 @@ func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	dependants, err := ExecuteDescribeDependants(cliConfig, component, stack)
+	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack)
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, dependants)
+	err = printOrWriteToFile(format, file, dependents)
 	if err != nil {
 		return err
 	}
@@ -60,14 +61,14 @@ func ExecuteDescribeDependantsCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeDependants produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
-func ExecuteDescribeDependants(
-	cliConfig cfg.CliConfiguration,
+// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
+func ExecuteDescribeDependents(
+	cliConfig schema.CliConfiguration,
 	component string,
 	stack string,
-) ([]cfg.Dependant, error) {
+) ([]schema.Dependent, error) {
 
-	dependants := []cfg.Dependant{}
+	dependents := []schema.Dependent{}
 	var ok bool
 
 	// Get all stacks with all components
@@ -84,11 +85,11 @@ func ExecuteDescribeDependants(
 	// Get the current component `vars`
 	var currentComponentVarsSection map[any]any
 	if currentComponentVarsSection, ok = currentComponentSection["vars"].(map[any]any); !ok {
-		return dependants, nil
+		return dependents, nil
 	}
 
 	// Convert the current component `vars` section to the `Context` structure
-	var currentComponentVars cfg.Context
+	var currentComponentVars schema.Context
 	err = mapstructure.Decode(currentComponentVarsSection, &currentComponentVars)
 	if err != nil {
 		return nil, err
@@ -136,11 +137,11 @@ func ExecuteDescribeDependants(
 				// Get the stack component `vars`
 				var stackComponentVarsSection map[any]any
 				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[any]any); !ok {
-					return dependants, nil
+					return dependents, nil
 				}
 
 				// Convert the stack component `vars` section to the `Context` structure
-				var stackComponentVars cfg.Context
+				var stackComponentVars schema.Context
 				err = mapstructure.Decode(stackComponentVarsSection, &stackComponentVars)
 				if err != nil {
 					return nil, err
@@ -153,19 +154,19 @@ func ExecuteDescribeDependants(
 				}
 
 				// Convert the `settings` section to the `Settings` structure
-				var stackComponentSettings cfg.Settings
+				var stackComponentSettings schema.Settings
 				err = mapstructure.Decode(stackComponentSettingsSection, &stackComponentSettings)
 				if err != nil {
 					return nil, err
 				}
 
-				// Skip if the stack component has an empty `settings.dependencies.depends_on` section
+				// Skip if the stack component has an empty `settings.depends_on` section
 				if reflect.ValueOf(stackComponentSettings).IsZero() ||
 					reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
 					continue
 				}
 
-				// Check if the stack component is a dependant of the current component
+				// Check if the stack component is a dependent of the current component
 				for _, stackComponentSettingsContext := range stackComponentSettings.DependsOn {
 					if stackComponentSettingsContext.Component != component {
 						continue
@@ -203,7 +204,7 @@ func ExecuteDescribeDependants(
 						continue
 					}
 
-					dependant := cfg.Dependant{
+					dependent := schema.Dependent{
 						Component:     stackComponentName,
 						ComponentPath: BuildComponentPath(cliConfig, stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
@@ -215,7 +216,7 @@ func ExecuteDescribeDependants(
 						Stage:         stackComponentVars.Stage,
 					}
 
-					// Add Spacelift stack and Atlantis project if they are configured for the dependant stack component
+					// Add Spacelift stack and Atlantis project if they are configured for the dependent stack component
 					if stackComponentType == "terraform" {
 
 						// Spacelift stack
@@ -231,7 +232,7 @@ func ExecuteDescribeDependants(
 							return nil, err
 						}
 
-						dependant.SpaceliftStack = spaceliftStackName
+						dependent.SpaceliftStack = spaceliftStackName
 
 						// Atlantis project
 						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
@@ -245,14 +246,14 @@ func ExecuteDescribeDependants(
 							return nil, err
 						}
 
-						dependant.AtlantisProject = atlantisProjectName
+						dependent.AtlantisProject = atlantisProjectName
 					}
 
-					dependants = append(dependants, dependant)
+					dependents = append(dependents, dependent)
 				}
 			}
 		}
 	}
 
-	return dependants, nil
+	return dependents, nil
 }

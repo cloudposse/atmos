@@ -3,7 +3,6 @@ package stack
 import (
 	"errors"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"os"
 	"path"
 	"path/filepath"
@@ -12,9 +11,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mitchellh/mapstructure"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -22,7 +24,7 @@ var (
 	getFileContentSyncMap = sync.Map{}
 )
 
-// FindComponentStacks finds all infrastructure stack config files where the component or the base component is defined
+// FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined
 func FindComponentStacks(
 	componentType string,
 	component string,
@@ -48,7 +50,7 @@ func FindComponentStacks(
 	return unique, nil
 }
 
-// FindComponentDependencies finds all imports where the component or the base component(s) are defined
+// FindComponentDependenciesLegacy finds all imports where the component or the base component(s) are defined
 // Component depends on the imported config file if any of the following conditions is true:
 //  1. The imported config file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
 //     `settings` or `vars` sections which are not empty.
@@ -57,7 +59,7 @@ func FindComponentStacks(
 //  3. The imported config file has the "components" section, which has the component type section, which has the component section.
 //  4. The imported config file has the "components" section, which has the component type section, which has the base component(s) section,
 //     and the base component section is defined inline (not imported).
-func FindComponentDependencies(
+func FindComponentDependenciesLegacy(
 	stack string,
 	componentType string,
 	component string,
@@ -165,34 +167,53 @@ func FindComponentDependencies(
 	return unique, nil
 }
 
-// processImportSection processes the `import` section in stack config files
-// The `import` section` can be of two different type:
+// processImportSection processes the `import` section in stack manifests
+// The `import` section` can be of the following types:
 // 1. list of `StackImport` structs
 // 2. list of strings
-func processImportSection(stackMap map[any]any, filePath string) ([]cfg.StackImport, error) {
-	if imports, ok := stackMap[cfg.ImportSectionName]; ok && imports != nil {
-		var res1 []cfg.StackImport
-		err := mapstructure.Decode(imports, &res1)
-		if err == nil && len(res1) > 0 {
-			return res1, nil
-		}
+// 3. List of strings and `StackImport` structs in the same file
+func processImportSection(stackMap map[any]any, filePath string) ([]schema.StackImport, error) {
+	stackImports, ok := stackMap[cfg.ImportSectionName]
 
-		if stringImports, ok := imports.([]any); ok && len(stringImports) > 0 {
-			var res2 []cfg.StackImport
-			for _, i := range stringImports {
-				if s, ok := i.(string); ok {
-					res2 = append(res2, cfg.StackImport{Path: s})
-				} else if i == nil {
-					return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
-				} else {
-					return nil, fmt.Errorf("invalid import '%v' in the file '%s'", i, filePath)
-				}
-			}
-			return res2, nil
-		}
+	// If the stack file does not have the `import` section, return
+	if !ok || stackImports == nil {
+		return nil, nil
 	}
 
-	return nil, nil
+	// Check if the `import` section is a list of objects
+	importsList, ok := stackImports.([]any)
+	if !ok || len(importsList) == 0 {
+		return nil, fmt.Errorf("invalid 'import' section in the file '%s'", filePath)
+	}
+
+	var result []schema.StackImport
+
+	for _, imp := range importsList {
+		if imp == nil {
+			return nil, fmt.Errorf("invalid import in the file '%s'", filePath)
+		}
+
+		// 1. Try to decode the import as the `StackImport` struct
+		var importObj schema.StackImport
+		err := mapstructure.Decode(imp, &importObj)
+		if err == nil {
+			result = append(result, importObj)
+			continue
+		}
+
+		// 2. Try to cast the import to a string
+		s, ok := imp.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid import '%v' in the file '%s'", imp, filePath)
+		}
+		if s == "" {
+			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
+		}
+
+		result = append(result, schema.StackImport{Path: s})
+	}
+
+	return result, nil
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
@@ -244,7 +265,15 @@ func CreateComponentStackMap(
 			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, _, err := ProcessYAMLConfigFile(stacksBasePath, p, map[string]map[any]any{}, nil, false)
+				config, _, _, err := ProcessYAMLConfigFile(
+					stacksBasePath,
+					p,
+					map[string]map[any]any{},
+					nil,
+					false,
+					false,
+					false,
+				)
 				if err != nil {
 					return err
 				}
@@ -328,13 +357,15 @@ func getFileContent(filePath string) (string, error) {
 
 // ProcessBaseComponentConfig processes base component(s) config
 func ProcessBaseComponentConfig(
-	baseComponentConfig *cfg.BaseComponentConfig,
+	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[any]any,
 	component string,
 	stack string,
 	baseComponent string,
 	componentBasePath string,
-	checkBaseComponentExists bool) error {
+	checkBaseComponentExists bool,
+	baseComponents *[]string,
+) error {
 
 	if component == baseComponent {
 		return nil
@@ -351,6 +382,8 @@ func ProcessBaseComponentConfig(
 	var baseComponentMap map[any]any
 	var ok bool
 
+	*baseComponents = append(*baseComponents, baseComponent)
+
 	if baseComponentSection, baseComponentSectionExist := allComponentsMap[baseComponent]; baseComponentSectionExist {
 		baseComponentMap, ok = baseComponentSection.(map[any]any)
 		if !ok {
@@ -364,7 +397,7 @@ func ProcessBaseComponentConfig(
 			baseComponentMap = c.MapsOfStringsToMapsOfInterfaces(baseComponentMapOfStrings)
 		}
 
-		// First, process the base component of this base component
+		// First, process the base component(s) of this base component
 		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
 			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
 			if !ok {
@@ -380,10 +413,57 @@ func ProcessBaseComponentConfig(
 				baseComponentOfBaseComponentString,
 				componentBasePath,
 				checkBaseComponentExists,
+				baseComponents,
 			)
 
 			if err != nil {
 				return err
+			}
+		}
+
+		// Base component metadata.
+		// This is per component, not deep-merged and not inherited from base components and globals.
+		componentMetadata := map[any]any{}
+		if i, ok := baseComponentMap["metadata"]; ok {
+			componentMetadata, ok = i.(map[any]any)
+			if !ok {
+				return fmt.Errorf("invalid '%s.metadata' section in the stack '%s'", component, stack)
+			}
+
+			if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
+				for _, v := range inheritList {
+					baseComponentFromInheritList, ok := v.(string)
+					if !ok {
+						return fmt.Errorf("invalid '%s.metadata.inherits' section in the stack '%s'", component, stack)
+					}
+
+					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
+						if checkBaseComponentExists {
+							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
+								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
+								component,
+								stack,
+								baseComponentFromInheritList,
+							)
+							return errors.New(errorMessage)
+						}
+					}
+
+					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
+					err := ProcessBaseComponentConfig(
+						baseComponentConfig,
+						allComponentsMap,
+						component,
+						stack,
+						baseComponentFromInheritList,
+						componentBasePath,
+						checkBaseComponentExists,
+						baseComponents,
+					)
+					if err != nil {
+						return err
+					}
+				}
 			}
 		}
 

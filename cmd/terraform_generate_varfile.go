@@ -15,7 +15,7 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -27,7 +27,7 @@ func init() {
 
 	err := terraformGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.PrintErrorToStdErrorAndExit(err)
+		u.LogErrorAndExit(err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateVarfileCmd)

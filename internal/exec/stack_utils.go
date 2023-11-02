@@ -2,11 +2,12 @@ package exec
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"path"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildTerraformWorkspace builds Terraform workspace
@@ -14,7 +15,7 @@ func BuildTerraformWorkspace(
 	stack string,
 	stackNamePattern string,
 	componentMetadata map[any]any,
-	context cfg.Context,
+	context schema.Context,
 ) (string, error) {
 
 	var contextPrefix string
@@ -82,20 +83,22 @@ func ProcessComponentMetadata(
 	return componentMetadata, baseComponentName, componentIsAbstract
 }
 
-// BuildDependantStackNameFromDependsOn builds the dependant stack name from "depends_on" attribute
-func BuildDependantStackNameFromDependsOn(
+// BuildDependentStackNameFromDependsOn builds the dependent stack name from "depends_on" attribute
+func BuildDependentStackNameFromDependsOn(
 	dependsOn string,
 	allStackNames []string,
 	currentStackName string,
 	componentNamesInCurrentStack []string,
 	currentComponentName string,
 ) (string, error) {
-	var dependantStackName string
+	var dependentStackName string
 
-	if u.SliceContainsString(allStackNames, dependsOn) {
-		dependantStackName = dependsOn
-	} else if u.SliceContainsString(componentNamesInCurrentStack, dependsOn) {
-		dependantStackName = fmt.Sprintf("%s-%s", currentStackName, dependsOn)
+	dep := strings.Replace(dependsOn, "/", "-", -1)
+
+	if u.SliceContainsString(allStackNames, dep) {
+		dependentStackName = dep
+	} else if u.SliceContainsString(componentNamesInCurrentStack, dep) {
+		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dep)
 	} else {
 		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
 			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
@@ -106,12 +109,12 @@ func BuildDependantStackNameFromDependsOn(
 		return "", errorMessage
 	}
 
-	return dependantStackName, nil
+	return dependentStackName, nil
 }
 
 // BuildComponentPath builds component path (path to the component's physical location on disk)
 func BuildComponentPath(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	componentSectionMap map[string]any,
 	componentType string,
 ) string {

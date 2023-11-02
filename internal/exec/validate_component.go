@@ -9,6 +9,7 @@ import (
 	"path"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -47,7 +48,17 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, err = ExecuteValidateComponent(cliConfig, info, componentName, stack, schemaPath, schemaType)
+	modulePaths, err := flags.GetStringSlice("module-paths")
+	if err != nil {
+		return err
+	}
+
+	timeout, err := flags.GetInt("timeout")
+	if err != nil {
+		return err
+	}
+
+	_, err = ExecuteValidateComponent(cliConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
 		return err
 	}
@@ -56,14 +67,22 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
-func ExecuteValidateComponent(cliConfig cfg.CliConfiguration, configAndStacksInfo cfg.ConfigAndStacksInfo, componentName string, stack string, schemaPath string, schemaType string) (bool, error) {
+func ExecuteValidateComponent(
+	cliConfig schema.CliConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
+	componentName string,
+	stack string,
+	schemaPath string,
+	schemaType string,
+	modulePaths []string,
+	timeoutSeconds int,
+) (bool, error) {
 	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
 	configAndStacksInfo, err := ProcessStacks(cliConfig, configAndStacksInfo, true)
 	if err != nil {
-		u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
@@ -73,19 +92,26 @@ func ExecuteValidateComponent(cliConfig cfg.CliConfiguration, configAndStacksInf
 
 	componentSection := configAndStacksInfo.ComponentSection
 
-	return ValidateComponent(cliConfig, componentName, componentSection, schemaPath, schemaType)
+	return ValidateComponent(cliConfig, componentName, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 }
 
 // ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
-func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, componentSection any, schemaPath string, schemaType string) (bool, error) {
+func ValidateComponent(
+	cliConfig schema.CliConfiguration,
+	componentName string,
+	componentSection any,
+	schemaPath string,
+	schemaType string,
+	modulePaths []string,
+	timeoutSeconds int,
+) (bool, error) {
 	ok := true
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
-		fmt.Println()
-		u.PrintInfo(fmt.Sprintf("Validating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+		u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
-		ok, err = validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)
+		ok, err = validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 		if err != nil {
 			return false, err
 		}
@@ -100,16 +126,43 @@ func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, com
 				continue
 			}
 
-			schemaPath = v.SchemaPath
-			schemaType = v.SchemaType
+			// Command line parameters override the validation config in YAML
+			var finalSchemaPath string
+			var finalSchemaType string
+			var finalModulePaths []string
+			var finalTimeoutSeconds int
 
-			fmt.Println()
-			u.PrintInfo(fmt.Sprintf("Validating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
-			if v.Description != "" {
-				u.PrintMessage(v.Description)
+			if schemaPath != "" {
+				finalSchemaPath = schemaPath
+			} else {
+				finalSchemaPath = v.SchemaPath
 			}
 
-			ok2, err := validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType)
+			if schemaType != "" {
+				finalSchemaType = schemaType
+			} else {
+				finalSchemaType = v.SchemaType
+			}
+
+			if len(modulePaths) > 0 {
+				finalModulePaths = modulePaths
+			} else {
+				finalModulePaths = v.ModulePaths
+			}
+
+			if timeoutSeconds > 0 {
+				finalTimeoutSeconds = timeoutSeconds
+			} else {
+				finalTimeoutSeconds = v.Timeout
+			}
+
+			u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
+
+			if v.Description != "" {
+				u.LogDebug(cliConfig, v.Description)
+			}
+
+			ok2, err := validateComponentInternal(cliConfig, componentSection, finalSchemaPath, finalSchemaType, finalModulePaths, finalTimeoutSeconds)
 			if err != nil {
 				return false, err
 			}
@@ -119,12 +172,17 @@ func ValidateComponent(cliConfig cfg.CliConfiguration, componentName string, com
 		}
 	}
 
-	fmt.Println()
-
 	return ok, nil
 }
 
-func validateComponentInternal(cliConfig cfg.CliConfiguration, componentSection any, schemaPath string, schemaType string) (bool, error) {
+func validateComponentInternal(
+	cliConfig schema.CliConfiguration,
+	componentSection any,
+	schemaPath string,
+	schemaType string,
+	modulePaths []string,
+	timeoutSeconds int,
+) (bool, error) {
 	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
 		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
 	}
@@ -173,7 +231,19 @@ func validateComponentInternal(cliConfig cfg.CliConfiguration, componentSection 
 		}
 	case "opa":
 		{
-			ok, err = ValidateWithOpa(componentSection, filePath, schemaText)
+			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(path.Join(cliConfig.BasePath, cliConfig.Schemas.Opa.BasePath), modulePaths)
+			if err != nil {
+				return false, err
+			}
+
+			ok, err = ValidateWithOpa(componentSection, filePath, modulePathsAbsolute, timeoutSeconds)
+			if err != nil {
+				return false, err
+			}
+		}
+	case "opa_legacy":
+		{
+			ok, err = ValidateWithOpaLegacy(componentSection, filePath, schemaText, timeoutSeconds)
 			if err != nil {
 				return false, err
 			}
@@ -191,7 +261,7 @@ func validateComponentInternal(cliConfig cfg.CliConfiguration, componentSection 
 }
 
 // FindValidationSection finds 'validation' section in the component config
-func FindValidationSection(componentSection map[string]any) (cfg.Validation, error) {
+func FindValidationSection(componentSection map[string]any) (schema.Validation, error) {
 	validationSection := map[any]any{}
 
 	if i, ok := componentSection["settings"].(map[any]any); ok {
@@ -200,7 +270,7 @@ func FindValidationSection(componentSection map[string]any) (cfg.Validation, err
 		}
 	}
 
-	var result cfg.Validation
+	var result schema.Validation
 
 	err := mapstructure.Decode(validationSection, &result)
 	if err != nil {

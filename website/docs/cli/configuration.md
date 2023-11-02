@@ -1,6 +1,7 @@
 ---
 title: CLI Configuration
 sidebar_position: 1
+id: configuration
 description: Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI.
 ---
 
@@ -120,11 +121,6 @@ workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
   # Supports both absolute and relative paths
   base_path: "stacks/workflows"
-
-logs:
-  verbose: false
-  colors: true
-
 ```
 
 ## Custom CLI Sub-commands
@@ -270,6 +266,79 @@ commands:
           - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
           - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
           - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
+
+  - name: list
+    description: Execute 'atmos list' commands
+    # subcommands
+    commands:
+      - name: stacks
+        description: |
+          List all Atmos stacks.
+        steps:
+          - >
+            atmos describe stacks --sections none | grep -e "^\S" | sed s/://g
+      - name: components
+        description: |
+          List all Atmos components in all stacks or in a single stack.
+
+          Example usage:
+            atmos list components
+            atmos list components -s tenant1-ue1-dev
+            atmos list components --stack tenant2-uw2-prod
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: false
+        steps:
+          - >
+            {{ if .Flags.stack }}
+            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+            {{ else }}
+            atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+            {{ end }}
+
+  - name: set-eks-cluster
+    description: |
+      Download 'kubeconfig' and set EKS cluster.
+
+      Example usage:
+        atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
+        atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
+    verbose: false  # Set to `true` to see verbose outputs
+    arguments:
+      - name: component
+        description: Name of the component
+    flags:
+      - name: stack
+        shorthand: s
+        description: Name of the stack
+        required: true
+      - name: role
+        shorthand: r
+        description: IAM role to use
+        required: true
+    # If a custom command defines 'component_config' section with 'component' and 'stack',
+    # Atmos generates the config for the component in the stack
+    # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
+    # exposing all the component sections (which are also shown by 'atmos describe component' command)
+    component_config:
+      component: "{{ .Arguments.component }}"
+      stack: "{{ .Flags.stack }}"
+    env:
+      - key: KUBECONFIG
+        value: /dev/shm/kubecfg.{{ .Flags.stack }}-{{ .Flags.role }}
+    steps:
+      - >
+        aws
+        --profile {{ .ComponentConfig.vars.namespace }}-{{ .ComponentConfig.vars.tenant }}-gbl-{{ .ComponentConfig.vars.stage }}-{{ .Flags.role }}
+        --region {{ .ComponentConfig.vars.region }}
+        eks update-kubeconfig
+        --name={{ .ComponentConfig.vars.namespace }}-{{ .Flags.stack }}-eks-cluster
+        --kubeconfig="${KUBECONFIG}"
+        > /dev/null
+      - chmod 600 ${KUBECONFIG}
+      - echo ${KUBECONFIG}
 ```
 
 ## Integrations
@@ -366,30 +435,56 @@ schemas:
     base_path: "stacks/schemas/cue"
 ```
 
+## Logs
+
+Atmos logs are configured in the `logs` section:
+
+```yaml
+logs:
+  file: "/dev/stdout"
+  # Supported log levels: Trace, Debug, Info, Warning, Off
+  level: Info
+```
+
+- `logs.file` - the file to write Atmos logs to. Logs can be written to any file or any standard file descriptor,
+  including `/dev/stdout`, `/dev/stderr` and `/dev/null`). If omitted, `/dev/stdout` will be used. The ENV variable `ATMOS_LOGS_FILE` can also be used
+  to specify the log file
+
+- `logs.level` - Log level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log
+  any messages (note that this does not prevent other tools like Terraform from logging). The ENV variable `ATMOS_LOGS_LEVEL` can also be used
+  to specify the log level
+
+To prevent Atmos from logging any messages, you can do one of the following:
+
+- Set `logs.file` or the ENV variable `ATMOS_LOGS_FILE` to `/dev/null`
+
+- Set `logs.level` or the ENV variable `ATMOS_LOGS_LEVEL` to `Off`
+
 ## Environment Variables
 
 Most YAML settings can also be defined by environment variables. This is helpful while doing local development. For example,
 setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local development folder, will enable you to rapidly iterate.
 
-| Variable                                              | YAML Path                                       | Description                                                                                                                                |
-|:------------------------------------------------------|:------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------|
-| ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                |
-| ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                             |
-| ATMOS_LOGS_VERBOSE                                    | logs.verbose                                    | Set to `true` to increase log verbosity                                                                                                    |
-| ATMOS_COMPONENTS_TERRAFORM_BASE_PATH                  | components.terraform.base_path                  | Base path to Terraform components                                                                                                          |
-| ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE         | components.terraform.apply_auto_approve         | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                   |
-| ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT            | components.terraform.deploy_run_init            | Run `terraform init` when executing `atmos terraform deploy` command                                                                       |
-| ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE       | components.terraform.init_run_reconfigure       | Run `terraform init -reconfigure` when executing `atmos terraform` commands                                                                |
-| ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE | components.terraform.auto_generate_backend_file | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                   |
-| ATMOS_COMPONENTS_HELMFILE_BASE_PATH                   | components.helmfile.base_path                   | Path to helmfile components                                                                                                                |
-| ATMOS_COMPONENTS_HELMFILE_USE_EKS                     | components.helmfile.use_eks                     | If set to `true`, download `kubeconfig` from EKS by running `aws eks update-kubeconfig` command before executing `atmos helmfile` commands |
-| ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH             | components.helmfile.kubeconfig_path             | Path to write the `kubeconfig` file when executing `aws eks update-kubeconfig` command                                                     |
-| ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN    | components.helmfile.helm_aws_profile_pattern    | Pattern for AWS profile to use when executing `atmos helmfile` commands                                                                    |
-| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_pattern        | Pattern for EKS cluster name to use when executing `atmos helmfile` commands                                                               |
-| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to Atmos stack configs                                                                                                           |
-| ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack configs                                                                                            |
-| ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           | List of paths to not consider as top-level stacks                                                                                          |
-| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as Atmos stack names                                                                                             |
-| ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                               |
-| ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                         |
-| ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           | Base path to OPA policies for component validation                                                                                         |
+| Variable                                              | YAML Path                                       | Description                                                                                                                                                                                                                 |
+|:------------------------------------------------------|:------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                                                                                                 |
+| ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                                                                                                              |
+| ATMOS_COMPONENTS_TERRAFORM_BASE_PATH                  | components.terraform.base_path                  | Base path to Terraform components                                                                                                                                                                                           |
+| ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE         | components.terraform.apply_auto_approve         | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                    |
+| ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT            | components.terraform.deploy_run_init            | Run `terraform init` when executing `atmos terraform deploy` command                                                                                                                                                        |
+| ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE       | components.terraform.init_run_reconfigure       | Run `terraform init -reconfigure` when executing `atmos terraform` commands                                                                                                                                                 |
+| ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE | components.terraform.auto_generate_backend_file | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                    |
+| ATMOS_COMPONENTS_HELMFILE_BASE_PATH                   | components.helmfile.base_path                   | Path to helmfile components                                                                                                                                                                                                 |
+| ATMOS_COMPONENTS_HELMFILE_USE_EKS                     | components.helmfile.use_eks                     | If set to `true`, download `kubeconfig` from EKS by running `aws eks update-kubeconfig` command before executing `atmos helmfile` commands                                                                                  |
+| ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH             | components.helmfile.kubeconfig_path             | Path to write the `kubeconfig` file when executing `aws eks update-kubeconfig` command                                                                                                                                      |
+| ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN    | components.helmfile.helm_aws_profile_pattern    | Pattern for AWS profile to use when executing `atmos helmfile` commands                                                                                                                                                     |
+| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_pattern        | Pattern for EKS cluster name to use when executing `atmos helmfile` commands                                                                                                                                                |
+| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to Atmos stack manifests                                                                                                                                                                                          |
+| ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack manifests                                                                                                                                                                           |
+| ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           | List of paths to not consider as top-level stacks                                                                                                                                                                           |
+| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as Atmos stack names                                                                                                                                                                              |
+| ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                                                                                                                |
+| ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                                                                                                          |
+| ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           | Base path to OPA policies for component validation                                                                                                                                                                          |
+| ATMOS_LOGS_FILE                                       | logs.file                                       | The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`). If omitted, `/dev/stdout` will be used                           |
+| ATMOS_LOGS_LEVEL                                      | logs.level                                      | Log level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging) |

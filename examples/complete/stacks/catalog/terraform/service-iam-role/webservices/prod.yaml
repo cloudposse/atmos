@@ -1,0 +1,5 @@
+import:
+  - path: catalog/terraform/service-iam-role/webservices/prod.defaults.tmpl
+    context:
+      service_account_namespace: prod
+      service_environment: prod

@@ -1,4 +1,4 @@
-package config
+package schema
 
 // CliConfiguration structure represents schema for `atmos.yaml` CLI config
 type CliConfiguration struct {
@@ -54,8 +54,8 @@ type Workflows struct {
 }
 
 type Logs struct {
-	Verbose bool `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
-	Colors  bool `yaml:"colors" json:"colors" mapstructure:"colors"`
+	File  string `yaml:"file" json:"file" mapstructure:"file"`
+	Level string `yaml:"level" json:"level" mapstructure:"level"`
 }
 
 type Context struct {
@@ -69,6 +69,8 @@ type Context struct {
 	ComponentPath string   `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
 	Workspace     string   `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
 	Attributes    []string `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
+	File          string   `yaml:"file" json:"file" mapstructure:"file"`
+	Folder        string   `yaml:"folder" json:"folder" mapstructure:"folder"`
 }
 
 type ArgsAndFlagsInfo struct {
@@ -114,6 +116,7 @@ type ConfigAndStacksInfo struct {
 	SubCommand2                   string
 	ComponentSection              map[string]any
 	ComponentVarsSection          map[any]any
+	ComponentSettingsSection      map[any]any
 	ComponentEnvSection           map[any]any
 	ComponentEnvList              []string
 	ComponentBackendSection       map[any]any
@@ -136,6 +139,7 @@ type ConfigAndStacksInfo struct {
 	DryRun                        bool
 	SkipInit                      bool
 	ComponentInheritanceChain     []string
+	ComponentImportsSection       []string
 	NeedHelp                      bool
 	ComponentIsAbstract           bool
 	ComponentMetadataSection      map[any]any
@@ -331,10 +335,12 @@ type Schemas struct {
 }
 
 type ValidationItem struct {
-	SchemaType  string `yaml:"schema_type" json:"schema_type" mapstructure:"schema_type"`
-	SchemaPath  string `yaml:"schema_path" json:"schema_path" mapstructure:"schema_path"`
-	Description string `yaml:"description" json:"description" mapstructure:"description"`
-	Disabled    bool   `yaml:"disabled" json:"disabled" mapstructure:"disabled"`
+	SchemaType  string   `yaml:"schema_type" json:"schema_type" mapstructure:"schema_type"`
+	SchemaPath  string   `yaml:"schema_path" json:"schema_path" mapstructure:"schema_path"`
+	ModulePaths []string `yaml:"module_paths" json:"module_paths" mapstructure:"module_paths"`
+	Description string   `yaml:"description" json:"description" mapstructure:"description"`
+	Disabled    bool     `yaml:"disabled" json:"disabled" mapstructure:"disabled"`
+	Timeout     int      `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
 }
 
 type Validation map[string]ValidationItem
@@ -354,6 +360,8 @@ type Affected struct {
 	SpaceliftStack  string `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject string `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
 	Affected        string `yaml:"affected" json:"affected" mapstructure:"affected"`
+	File            string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	Folder          string `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
 }
 
 type BaseComponentConfig struct {
@@ -372,15 +380,17 @@ type BaseComponentConfig struct {
 // Stack imports (`import` section)
 
 type StackImport struct {
-	Path    string         `yaml:"path" json:"path" mapstructure:"path"`
-	Context map[string]any `yaml:"context" json:"context" mapstructure:"context"`
+	Path                        string         `yaml:"path" json:"path" mapstructure:"path"`
+	Context                     map[string]any `yaml:"context" json:"context" mapstructure:"context"`
+	SkipTemplatesProcessing     bool           `yaml:"skip_templates_processing" json:"skip_templates_processing" mapstructure:"skip_templates_processing"`
+	IgnoreMissingTemplateValues bool           `yaml:"ignore_missing_template_values" json:"ignore_missing_template_values" mapstructure:"ignore_missing_template_values"`
 }
 
 // Dependencies
 
 type DependsOn map[any]Context
 
-type Dependant struct {
+type Dependent struct {
 	Component       string `yaml:"component" json:"component" mapstructure:"component"`
 	ComponentType   string `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
 	ComponentPath   string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
@@ -396,6 +406,56 @@ type Dependant struct {
 
 // Settings
 
+type SettingsSpacelift map[any]any
+
 type Settings struct {
-	DependsOn DependsOn `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
+	DependsOn DependsOn         `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
+	Spacelift SettingsSpacelift `yaml:"spacelift" json:"spacelift" mapstructure:"spacelift"`
+}
+
+// ConfigSourcesStackDependency defines schema for sources of config sections
+type ConfigSourcesStackDependency struct {
+	StackFile        string `yaml:"stack_file" json:"stack_file" mapstructure:"stack_file"`
+	StackFileSection string `yaml:"stack_file_section" json:"stack_file_section" mapstructure:"stack_file_section"`
+	DependencyType   string `yaml:"dependency_type" json:"dependency_type" mapstructure:"dependency_type"`
+	VariableValue    any    `yaml:"variable_value" json:"variable_value" mapstructure:"variable_value"`
+}
+
+type ConfigSourcesStackDependencies []ConfigSourcesStackDependency
+
+type ConfigSourcesItem struct {
+	FinalValue        any                            `yaml:"final_value" json:"final_value" mapstructure:"final_value"`
+	Name              string                         `yaml:"name" json:"name" mapstructure:"name"`
+	StackDependencies ConfigSourcesStackDependencies `yaml:"stack_dependencies" json:"stack_dependencies" mapstructure:"stack_dependencies"`
+}
+
+type ConfigSources map[string]map[string]ConfigSourcesItem
+
+// Atmos vendoring (`vendor.yaml` file)
+
+type AtmosVendorSource struct {
+	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
+	File          string   `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+}
+
+type AtmosVendorSpec struct {
+	Imports []string            `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
+	Sources []AtmosVendorSource `yaml:"sources" json:"sources" mapstructure:"sources"`
+}
+
+type AtmosVendorMetadata struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type AtmosVendorConfig struct {
+	ApiVersion string `yaml:"apiVersion" json:"apiVersion" mapstructure:"apiVersion"`
+	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Metadata   AtmosVendorMetadata
+	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
 }

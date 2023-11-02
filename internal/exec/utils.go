@@ -3,14 +3,16 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"os"
-	"reflect"
+	"sort"
 	"strings"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+	"github.com/spf13/cobra"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -45,28 +47,20 @@ var (
 
 // FindComponentConfig finds component config sections
 func FindComponentConfig(
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
 	componentType string,
 	component string,
-) (map[string]any,
-	map[any]any,
-	map[any]any,
-	map[any]any,
-	string,
-	string,
-	string,
-	[]string,
-	bool,
-	map[any]any,
-	error,
-) {
+) error {
 
 	var stackSection map[any]any
 	var componentsSection map[string]any
 	var componentTypeSection map[string]any
 	var componentSection map[string]any
 	var componentVarsSection map[any]any
+	var componentSettingsSection map[any]any
+	var componentImportsSection []string
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
 	var componentBackendType string
@@ -75,28 +69,28 @@ func FindComponentConfig(
 	var ok bool
 
 	if len(stack) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("stack must be provided and must not be empty")
+		return errors.New("stack must be provided and must not be empty")
 	}
 	if len(component) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component must be provided and must not be empty")
+		return errors.New("component must be provided and must not be empty")
 	}
 	if len(componentType) == 0 {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, errors.New("component type must be provided and must not be empty")
+		return errors.New("component type must be provided and must not be empty")
 	}
 	if stackSection, ok = stacksMap[stack].(map[any]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("could not find the stack '%s'", stack)
+		return fmt.Errorf("could not find the stack '%s'", stack)
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components' section is missing in the stack file '%s'", stack)
+		return fmt.Errorf("'components' section is missing in the stack file '%s'", stack)
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("'components/%s' section is missing in the stack file '%s'", componentType, stack)
+		return fmt.Errorf("'components/%s' section is missing in the stack file '%s'", componentType, stack)
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("no config found for the component '%s' in the stack file '%s'", component, stack)
+		return fmt.Errorf("no config found for the component '%s' in the stack file '%s'", component, stack)
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
-		return nil, nil, nil, nil, "", "", "", nil, false, nil, fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
+		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[any]any); !ok {
 		componentBackendSection = nil
@@ -104,11 +98,17 @@ func FindComponentConfig(
 	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
 		componentBackendType = ""
 	}
+	if componentImportsSection, ok = stackSection["imports"].([]string); !ok {
+		componentImportsSection = nil
+	}
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
 	}
 	if componentEnvSection, ok = componentSection["env"].(map[any]any); !ok {
 		componentEnvSection = map[any]any{}
+	}
+	if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+		componentSettingsSection = map[any]any{}
 	}
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
@@ -117,22 +117,36 @@ func FindComponentConfig(
 	// Process component metadata and find a base component (if any) and whether the component is real or abstract
 	componentMetadata, baseComponentName, componentIsAbstract := ProcessComponentMetadata(component, componentSection)
 
-	return componentSection,
-		componentVarsSection,
-		componentEnvSection,
-		componentBackendSection,
-		componentBackendType,
-		baseComponentName,
-		command,
-		componentInheritanceChain,
-		componentIsAbstract,
-		componentMetadata,
-		nil
+	// Remove the ENV vars that are set to `null` in the `env` section.
+	// Setting an ENV var to `null` in stack config has the effect of unsetting it
+	// because the exec.Command, which sets these ENV vars, is itself executed in a separate process started by the os.StartProcess function.
+	componentEnvSectionFiltered := map[any]any{}
+
+	for k, v := range componentEnvSection {
+		if v != nil {
+			componentEnvSectionFiltered[k] = v
+		}
+	}
+
+	configAndStacksInfo.ComponentSection = componentSection
+	configAndStacksInfo.ComponentVarsSection = componentVarsSection
+	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
+	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
+	configAndStacksInfo.ComponentBackendSection = componentBackendSection
+	configAndStacksInfo.ComponentBackendType = componentBackendType
+	configAndStacksInfo.BaseComponentPath = baseComponentName
+	configAndStacksInfo.Command = command
+	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
+	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
+	configAndStacksInfo.ComponentMetadataSection = componentMetadata
+	configAndStacksInfo.ComponentImportsSection = componentImportsSection
+
+	return nil
 }
 
 // processCommandLineArgs processes command-line args
-func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (cfg.ConfigAndStacksInfo, error) {
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
+func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
+	var configAndStacksInfo schema.ConfigAndStacksInfo
 
 	cmd.DisableFlagParsing = false
 
@@ -191,7 +205,7 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(cliConfig cfg.CliConfiguration, ignoreMissingFiles bool) (
+func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
 	error,
@@ -216,13 +230,10 @@ func FindStacksMap(cliConfig cfg.CliConfiguration, ignoreMissingFiles bool) (
 
 // ProcessStacks processes stack config
 func ProcessStacks(
-	cliConfig cfg.CliConfiguration,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
+	cliConfig schema.CliConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
-) (
-	cfg.ConfigAndStacksInfo,
-	error,
-) {
+) (schema.ConfigAndStacksInfo, error) {
 
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
@@ -244,15 +255,14 @@ func ProcessStacks(
 	}
 
 	// Print the stack config files
-	if cliConfig.Logs.Verbose {
-		fmt.Println()
+	if cliConfig.Logs.Level == u.LogLevelTrace {
 		var msg string
 		if cliConfig.StackType == "Directory" {
-			msg = "Found the config file for the provided stack:"
+			msg = "\nFound the config file for the provided stack:"
 		} else {
-			msg = "Found stack config files:"
+			msg = "\nFound stack config files:"
 		}
-		u.PrintInfo(msg)
+		u.LogTrace(cliConfig, msg)
 		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -261,17 +271,13 @@ func ProcessStacks(
 
 	// Check and process stacks
 	if cliConfig.StackType == "Directory" {
-		configAndStacksInfo.ComponentSection,
-			configAndStacksInfo.ComponentVarsSection,
-			configAndStacksInfo.ComponentEnvSection,
-			configAndStacksInfo.ComponentBackendSection,
-			configAndStacksInfo.ComponentBackendType,
-			configAndStacksInfo.BaseComponentPath,
-			configAndStacksInfo.Command,
-			configAndStacksInfo.ComponentInheritanceChain,
-			configAndStacksInfo.ComponentIsAbstract,
-			configAndStacksInfo.ComponentMetadataSection,
-			err = FindComponentConfig(configAndStacksInfo.Stack, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
+		err = FindComponentConfig(
+			&configAndStacksInfo,
+			configAndStacksInfo.Stack,
+			stacksMap,
+			configAndStacksInfo.ComponentType,
+			configAndStacksInfo.ComponentFromArg,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -283,6 +289,7 @@ func ProcessStacks(
 		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
 		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
 			cliConfig.Stacks.NamePattern,
@@ -292,26 +299,20 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		u.PrintInfoVerbose(cliConfig.Logs.Verbose, fmt.Sprintf("Searching for stack config where the component '%s' is defined", configAndStacksInfo.ComponentFromArg))
 		foundStackCount := 0
 		var foundStacks []string
-		var foundConfigAndStacksInfo cfg.ConfigAndStacksInfo
+		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
 			// Check if we've found the component config
-			configAndStacksInfo.ComponentSection,
-				configAndStacksInfo.ComponentVarsSection,
-				configAndStacksInfo.ComponentEnvSection,
-				configAndStacksInfo.ComponentBackendSection,
-				configAndStacksInfo.ComponentBackendType,
-				configAndStacksInfo.BaseComponentPath,
-				configAndStacksInfo.Command,
-				configAndStacksInfo.ComponentInheritanceChain,
-				configAndStacksInfo.ComponentIsAbstract,
-				configAndStacksInfo.ComponentMetadataSection,
-				err = FindComponentConfig(stackName, stacksMap, configAndStacksInfo.ComponentType, configAndStacksInfo.ComponentFromArg)
+			err = FindComponentConfig(
+				&configAndStacksInfo,
+				stackName,
+				stacksMap,
+				configAndStacksInfo.ComponentType,
+				configAndStacksInfo.ComponentFromArg,
+			)
 			if err != nil {
-				u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
 				continue
 			}
 
@@ -321,15 +322,13 @@ func ProcessStacks(
 			configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
 			configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 				configAndStacksInfo.Context,
 				cliConfig.Stacks.NamePattern,
 				stackName,
 			)
 			if err != nil {
-				// If any of the stack config files throws error (which also means that we can't find the component in that stack),
-				// print the error to the console and continue searching for the component in the other stack config files.
-				u.PrintErrorVerbose(cliConfig.Logs.Verbose, err)
 				continue
 			}
 
@@ -340,9 +339,9 @@ func ProcessStacks(
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
 
-				u.PrintInfoVerbose(
-					cliConfig.Logs.Verbose,
-					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack file '%s'",
+				u.LogDebug(
+					cliConfig,
+					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack config file '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
 						stackName,
@@ -351,16 +350,21 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
-			y, _ := u.ConvertToYAML(cliConfig)
+			cliConfigYaml := ""
+
+			if cliConfig.Logs.Level == u.LogLevelTrace {
+				y, _ := u.ConvertToYAML(cliConfig)
+				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
+			}
 
 			return configAndStacksInfo,
 				fmt.Errorf("\nSearched all stack YAML files, but could not find config for the component '%s' in the stack '%s'.\n"+
 					"Check that all variables in the stack name pattern '%s' are correctly defined in the stack config files.\n"+
-					"Are the component and stack names correct? Did you forget an import?\n\n\nCLI config:\n\n%v",
+					"Are the component and stack names correct? Did you forget an import?%v\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					cliConfig.Stacks.NamePattern,
-					y)
+					cliConfigYaml)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
 				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
@@ -369,7 +373,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 				cliConfig.Stacks.NamePattern)
-			u.PrintErrorToStdErrorAndExit(err)
+			u.LogErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -428,569 +432,97 @@ func ProcessStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
-	// sources (stack config files where the variables and other settings are defined)
-	sources, err := processConfigSources(configAndStacksInfo, rawStackConfigs)
+	// Add imports
+	configAndStacksInfo.ComponentSection["imports"] = configAndStacksInfo.ComponentImportsSection
+
+	// Add Atmos component and stack
+	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
+
+	// Add Atmos CLI config
+	atmosCliConfig := map[string]any{}
+	atmosCliConfig["base_path"] = cliConfig.BasePath
+	atmosCliConfig["components"] = cliConfig.Components
+	atmosCliConfig["stacks"] = cliConfig.Stacks
+	atmosCliConfig["workflows"] = cliConfig.Workflows
+	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
+
+	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
+	if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
+		configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
+	}
+
+	// Spacelift stack
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
+		cliConfig,
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.Stack,
+		configAndStacksInfo.ComponentSettingsSection,
+		configAndStacksInfo.ComponentVarsSection,
+	)
+
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	// Atlantis project
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
+		cliConfig,
+		configAndStacksInfo.ComponentFromArg,
+		configAndStacksInfo.ComponentSettingsSection,
+		configAndStacksInfo.ComponentVarsSection,
+	)
+
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
+	// Add component info, including Terraform config
+	componentInfo := map[string]any{}
+	componentInfo["component_type"] = configAndStacksInfo.ComponentType
+
+	if configAndStacksInfo.ComponentType == "terraform" {
+		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
+		componentInfo["component_path"] = componentPath
+		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+		componentInfo["terraform_config"] = terraformConfiguration
+	} else if configAndStacksInfo.ComponentType == "helmfile" {
+		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
+	}
+
+	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
+
+	// `sources` (stack config files where the variables and other settings are defined)
+	sources, err := ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
 	configAndStacksInfo.ComponentSection["sources"] = sources
 
+	// Component dependencies
+	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.ComponentSection["deps"] = componentDeps
+	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
+
 	return configAndStacksInfo, nil
 }
 
-// processConfigSources processes the sources (files) for all variables for a component in a stack
-func processConfigSources(
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
-	rawStackConfigs map[string]map[string]any,
-) (
-	map[string]map[string]any,
-	error,
-) {
-	result := map[string]map[string]any{}
-	vars := map[string]any{}
-	result["vars"] = vars
-
-	for varKey, varVal := range configAndStacksInfo.ComponentVarsSection {
-		variable := varKey.(string)
-		varObj := map[string]any{}
-		varObj["name"] = variable
-		varObj["final_value"] = varVal
-		varObj["stack_dependencies"] = processVariableInStacks(configAndStacksInfo, rawStackConfigs, variable)
-		vars[variable] = varObj
-	}
-
-	return result, nil
-}
-
-func processVariableInStacks(
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
-	rawStackConfigs map[string]map[string]any,
-	variable string,
-) []map[string]any {
-
-	result := []map[string]any{}
-
-	// Process the variable for the component in the stack
-	// Because we want to show the variable dependencies from higher to lower priority,
-	// the order of processing is the reverse order from what Atmos follows when calculating the final variables in the `vars` section
-	processComponentVariableInStack(
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.StackFile,
-		&result,
-		configAndStacksInfo,
-		rawStackConfigs,
-		variable,
-	)
-
-	processComponentVariableInStackImports(
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.StackFile,
-		&result,
-		configAndStacksInfo,
-		rawStackConfigs,
-		variable,
-	)
-
-	// Process the variable for all the base components in the stack from the inheritance chain
-	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processComponentVariableInStack(
-			baseComponent,
-			configAndStacksInfo.StackFile,
-			&result,
-			configAndStacksInfo,
-			rawStackConfigs,
-			variable,
-		)
-
-		processComponentVariableInStackImports(
-			baseComponent,
-			configAndStacksInfo.StackFile,
-			&result,
-			configAndStacksInfo,
-			rawStackConfigs,
-			variable,
-		)
-	}
-
-	processComponentTypeVariableInStack(
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.StackFile,
-		&result,
-		configAndStacksInfo,
-		rawStackConfigs,
-		variable,
-	)
-
-	processGlobalVariableInStack(
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.StackFile,
-		&result,
-		rawStackConfigs,
-		variable,
-	)
-
-	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processComponentTypeVariableInStack(
-			baseComponent,
-			configAndStacksInfo.StackFile,
-			&result,
-			configAndStacksInfo,
-			rawStackConfigs,
-			variable,
-		)
-
-		processGlobalVariableInStack(
-			baseComponent,
-			configAndStacksInfo.StackFile,
-			&result,
-			rawStackConfigs,
-			variable,
-		)
-	}
-
-	processComponentTypeVariableInStackImports(
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.StackFile,
-		&result,
-		configAndStacksInfo,
-		rawStackConfigs,
-		variable,
-	)
-
-	processGlobalVariableInStackImports(
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.StackFile,
-		&result,
-		rawStackConfigs,
-		variable,
-	)
-
-	for _, baseComponent := range configAndStacksInfo.ComponentInheritanceChain {
-		processComponentTypeVariableInStackImports(
-			baseComponent,
-			configAndStacksInfo.StackFile,
-			&result,
-			configAndStacksInfo,
-			rawStackConfigs,
-			variable,
-		)
-
-		processGlobalVariableInStackImports(
-			baseComponent,
-			configAndStacksInfo.StackFile,
-			&result,
-			rawStackConfigs,
-			variable,
-		)
-	}
-
-	return result
-}
-
-// https://medium.com/swlh/golang-tips-why-pointers-to-slices-are-useful-and-how-ignoring-them-can-lead-to-tricky-bugs-cac90f72e77b
-func processComponentVariableInStack(
-	component string,
-	stackFile string,
-	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
-	rawStackConfigs map[string]map[string]any,
-	variable string,
-) *[]map[string]any {
-
-	rawStackConfig, ok := rawStackConfigs[stackFile]
-	if !ok {
-		return result
-	}
-
-	rawStack, ok := rawStackConfig["stack"]
-	if !ok {
-		return result
-	}
-
-	rawStackMap, ok := rawStack.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackComponentsSection, ok := rawStackMap["components"]
-	if !ok {
-		return result
-	}
-
-	rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackComponentTypeSection, ok := rawStackComponentsSectionMap[configAndStacksInfo.ComponentType]
-	if !ok {
-		return result
-	}
-
-	rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackComponentSection, ok := rawStackComponentTypeSectionMap[component]
-	if !ok {
-		return result
-	}
-
-	rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackVars, ok := rawStackComponentSectionMap["vars"]
-	if !ok {
-		return result
-	}
-
-	rawStackVarsMap, ok := rawStackVars.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackVarVal, ok := rawStackVarsMap[variable]
-	if !ok {
-		return result
-	}
-
-	val := map[string]any{
-		"stack_file":         stackFile,
-		"stack_file_section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
-		"variable_value":     rawStackVarVal,
-		"dependency_type":    "inline",
-	}
-
-	appendVariableDescriptor(result, val)
-
-	return result
-}
-
-func processComponentTypeVariableInStack(
-	component string,
-	stackFile string,
-	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
-	rawStackConfigs map[string]map[string]any,
-	variable string,
-) *[]map[string]any {
-
-	rawStackConfig, ok := rawStackConfigs[stackFile]
-	if !ok {
-		return result
-	}
-
-	rawStack, ok := rawStackConfig["stack"]
-	if !ok {
-		return result
-	}
-
-	rawStackMap, ok := rawStack.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackComponentTypeSection, ok := rawStackMap[configAndStacksInfo.ComponentType]
-	if !ok {
-		return result
-	}
-
-	rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]
-	if !ok {
-		return result
-	}
-
-	rawStackVarsMap, ok := rawStackVars.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackVarVal, ok := rawStackVarsMap[variable]
-	if !ok {
-		return result
-	}
-
-	val := map[string]any{
-		"stack_file":         stackFile,
-		"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
-		"variable_value":     rawStackVarVal,
-		"dependency_type":    "inline",
-	}
-
-	appendVariableDescriptor(result, val)
-
-	return result
-}
-
-func processGlobalVariableInStack(
-	component string,
-	stackFile string,
-	result *[]map[string]any,
-	rawStackConfigs map[string]map[string]any,
-	variable string,
-) *[]map[string]any {
-
-	rawStackConfig, ok := rawStackConfigs[stackFile]
-	if !ok {
-		return result
-	}
-
-	rawStack, ok := rawStackConfig["stack"]
-	if !ok {
-		return result
-	}
-
-	rawStackMap, ok := rawStack.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackVars, ok := rawStackMap["vars"]
-	if !ok {
-		return result
-	}
-
-	rawStackVarsMap, ok := rawStackVars.(map[any]any)
-	if !ok {
-		return result
-	}
-
-	rawStackVarVal, ok := rawStackVarsMap[variable]
-	if !ok {
-		return result
-	}
-
-	val := map[string]any{
-		"stack_file":         stackFile,
-		"stack_file_section": "vars",
-		"variable_value":     rawStackVarVal,
-		"dependency_type":    "inline",
-	}
-
-	appendVariableDescriptor(result, val)
-
-	return result
-}
-
-func processComponentVariableInStackImports(
-	component string,
-	stackFile string,
-	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
-	rawStackConfigs map[string]map[string]any,
-	variable string,
-) *[]map[string]any {
-
-	rawStackConfig, ok := rawStackConfigs[stackFile]
-	if !ok {
-		return result
-	}
-
-	rawStackImports, ok := rawStackConfig["imports"]
-	if !ok {
-		return result
-	}
-
-	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
-	if !ok {
-		return result
-	}
-
-	for impKey, impVal := range rawStackImportsMap {
-		rawStackComponentsSection, ok := impVal["components"]
-		if !ok {
-			continue
-		}
-
-		rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any)
-		if !ok {
-			continue
-		}
-
-		rawStackComponentTypeSection, ok := rawStackComponentsSectionMap[configAndStacksInfo.ComponentType]
-		if !ok {
-			continue
-		}
-
-		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
-		if !ok {
-			continue
-		}
-
-		rawStackComponentSection, ok := rawStackComponentTypeSectionMap[component]
-		if !ok {
-			continue
-		}
-
-		rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any)
-		if !ok {
-			continue
-		}
-
-		rawStackVars, ok := rawStackComponentSectionMap["vars"]
-		if !ok {
-			continue
-		}
-
-		rawStackVarsMap, ok := rawStackVars.(map[any]any)
-		if !ok {
-			continue
-		}
-
-		rawStackVarVal, ok := rawStackVarsMap[variable]
-		if !ok {
-			continue
-		}
-
-		val := map[string]any{
-			"stack_file":         impKey,
-			"stack_file_section": fmt.Sprintf("components.%s.vars", configAndStacksInfo.ComponentType),
-			"variable_value":     rawStackVarVal,
-			"dependency_type":    "import",
-		}
-
-		appendVariableDescriptor(result, val)
-	}
-
-	return result
-}
-
-func processComponentTypeVariableInStackImports(
-	component string,
-	stackFile string,
-	result *[]map[string]any,
-	configAndStacksInfo cfg.ConfigAndStacksInfo,
-	rawStackConfigs map[string]map[string]any,
-	variable string,
-) *[]map[string]any {
-
-	rawStackConfig, ok := rawStackConfigs[stackFile]
-	if !ok {
-		return result
-	}
-
-	rawStackImports, ok := rawStackConfig["imports"]
-	if !ok {
-		return result
-	}
-
-	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
-	if !ok {
-		return result
-	}
-
-	for impKey, impVal := range rawStackImportsMap {
-		rawStackComponentTypeSection, ok := impVal[configAndStacksInfo.ComponentType]
-		if !ok {
-			continue
-		}
-
-		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
-		if !ok {
-			continue
-		}
-
-		rawStackVars, ok := rawStackComponentTypeSectionMap["vars"]
-		if !ok {
-			continue
-		}
-
-		rawStackVarsMap, ok := rawStackVars.(map[any]any)
-		if !ok {
-			continue
-		}
-
-		rawStackVarVal, ok := rawStackVarsMap[variable]
-		if !ok {
-			continue
-		}
-
-		val := map[string]any{
-			"stack_file":         impKey,
-			"stack_file_section": fmt.Sprintf("%s.vars", configAndStacksInfo.ComponentType),
-			"variable_value":     rawStackVarVal,
-			"dependency_type":    "import",
-		}
-
-		appendVariableDescriptor(result, val)
-	}
-
-	return result
-}
-
-func processGlobalVariableInStackImports(
-	component string,
-	stackFile string,
-	result *[]map[string]any,
-	rawStackConfigs map[string]map[string]any,
-	variable string,
-) *[]map[string]any {
-
-	rawStackConfig, ok := rawStackConfigs[stackFile]
-	if !ok {
-		return result
-	}
-
-	rawStackImports, ok := rawStackConfig["imports"]
-	if !ok {
-		return result
-	}
-
-	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
-	if !ok {
-		return result
-	}
-
-	for impKey, impVal := range rawStackImportsMap {
-		rawStackVars, ok := impVal["vars"]
-		if !ok {
-			continue
-		}
-
-		rawStackVarsMap, ok := rawStackVars.(map[any]any)
-		if !ok {
-			continue
-		}
-
-		rawStackVarVal, ok := rawStackVarsMap[variable]
-		if !ok {
-			continue
-		}
-
-		val := map[string]any{
-			"stack_file":         impKey,
-			"stack_file_section": "vars",
-			"variable_value":     rawStackVarVal,
-			"dependency_type":    "import",
-		}
-
-		appendVariableDescriptor(result, val)
-	}
-
-	return result
-}
-
-func appendVariableDescriptor(result *[]map[string]any, descriptor map[string]any) {
-	for _, item := range *result {
-		if reflect.DeepEqual(item, descriptor) {
-			return
-		}
-	}
-	*result = append(*result, descriptor)
-}
-
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
-func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.ArgsAndFlagsInfo, error) {
-	var info cfg.ArgsAndFlagsInfo
+func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (schema.ArgsAndFlagsInfo, error) {
+	var info schema.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 
@@ -1273,12 +805,20 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (cfg.
 		}
 
 		if twoWordsCommand {
-			info.ComponentFromArg = additionalArgsAndFlags[2]
-			info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
+			if len(additionalArgsAndFlags) > 2 {
+				info.ComponentFromArg = additionalArgsAndFlags[2]
+			} else {
+				return info, fmt.Errorf("command \"%s\" requires an argument", info.SubCommand)
+			}
+			if len(additionalArgsAndFlags) > 3 {
+				info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
+			}
 		} else {
 			info.SubCommand = additionalArgsAndFlags[0]
 			info.ComponentFromArg = additionalArgsAndFlags[1]
-			info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+			if len(additionalArgsAndFlags) > 2 {
+				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
+			}
 		}
 	}
 
@@ -1296,46 +836,28 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 	}
 }
 
-// printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
-// and prints the data to the console or to a file (if file is specified)
-func printOrWriteToFile(format string, file string, data any) error {
-	switch format {
-	case "yaml":
-		if file == "" {
-			err := u.PrintAsYAML(data)
-			if err != nil {
-				return err
-			}
-		} else {
-			err := u.WriteToFileAsYAML(file, data, 0644)
-			if err != nil {
-				return err
-			}
-		}
+// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defind in
+func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
+	var deps []string
+	var depsAll []string
 
-	case "json":
-		if file == "" {
-			err := u.PrintAsJSON(data)
-			if err != nil {
-				return err
-			}
-		} else {
-			err := u.WriteToFileAsJSON(file, data, 0644)
-			if err != nil {
-				return err
+	for _, source := range sources {
+		for _, v := range source {
+			for i, dep := range v.StackDependencies {
+				if dep.StackFile != "" {
+					depsAll = append(depsAll, dep.StackFile)
+					if i == 0 {
+						deps = append(deps, dep.StackFile)
+					}
+				}
 			}
 		}
-
-	default:
-		return fmt.Errorf("invalid 'format': %s", format)
 	}
 
-	return nil
-}
-
-func removeTempDir(path string) {
-	err := os.RemoveAll(path)
-	if err != nil {
-		u.PrintError(err)
-	}
+	depsAll = append(depsAll, currentStack)
+	unique := u.UniqueStrings(deps)
+	uniqueAll := u.UniqueStrings(depsAll)
+	sort.Strings(unique)
+	sort.Strings(uniqueAll)
+	return unique, uniqueAll, nil
 }

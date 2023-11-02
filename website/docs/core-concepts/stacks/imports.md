@@ -51,8 +51,7 @@ Use [mixins](/core-concepts/stacks/mixins) for reusable snippets of configuratio
 
 ## Imports Schema
 
-The `import` section supports the following two formats (note that only one format is supported in a stack config file, but different stack
-configs can use one format or the other):
+The `import` section supports the following two formats:
 
 - a list of paths to the imported files, for example:
 
@@ -72,27 +71,42 @@ configs can use one format or the other):
   import:
     - path: "<path_to_imported_file>"
       context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: false
     - path: "<path_to_imported_file>"
       context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: true
   ```
 
 where:
 
-- `path` - the path to the imported file
-- `context` - an optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
+- `path` - (string) The path to the imported file
+
+- `context` - (map) An optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
   a [Go template](https://pkg.go.dev/text/template))
+
+- `skip_templates_processing` - (boolean) Skip template processing for the imported file. Can be used if the imported file uses `Go` templates 
+  to configure external systems, e.g. Datadog
+
+- `ignore_missing_template_values` - (boolean) Ignore the missing template values in the imported file. Can be used if the imported file uses `Go` 
+  templates to configure external systems, e.g. Datadog. In this case, Atmos will process all template values that are provided in the `context`, 
+  and will skip the missing values in the templates for the external systems without throwing an error. The `ignore_missing_template_values` setting 
+  is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file,
+  while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values
 
 ## `Go` Templates in Imports
 
-Atmos supports all the functionality of the [Go templates](https://pkg.go.dev/text/template) in imported stack configurations (including
-[functions](https://pkg.go.dev/text/template#hdr-Functions)). Stack configurations can be templatized and then reused with different
-settings provided via the import `context` section.
+Atmos supports all the functionality of [Go templates](https://pkg.go.dev/text/template) in imported stack configurations, including
+[functions](https://pkg.go.dev/text/template#hdr-Functions) and [Sprig functions](http://masterminds.github.io/sprig/).
+
+Stack configurations can be templatized and then reused with different settings provided via the import `context` section.
 
 For example, we can define the following configuration for EKS Atmos components in the `catalog/terraform/eks_cluster_tmpl.yaml` template file:
 
 ```yaml title=stacks/catalog/terraform/eks_cluster_tmpl.yaml
 # Imports can also be parameterized using `Go` templates
-import: []
+import: [ ]
 
 components:
   terraform:
@@ -292,7 +306,7 @@ atmos terraform apply eks-blue/cluster -s tenant1-uw1-test-1
 atmos terraform apply eks-green/cluster -s tenant1-uw1-test-1
 ```
 
-All the parameterized variables get their values from the all the hierarchical `context` settings:
+All the parameterized variables get their values from the hierarchical `context` settings:
 
 ```yaml title="atmos describe component eks-blue/cluster -s tenant1-uw1-test-1"
 vars:
@@ -308,6 +322,58 @@ vars:
     flavor: blue
   tenant: tenant1
 ```
+
+<br/>
+
+:::warning Handle with Care
+
+Leveraging Go templating for Atmos stack generation grants significant power but demands equal responsibility. It can easily defy the principle of creating stack configurations that are straightforward and intuitive to read.
+
+While templating fosters DRYer code, it comes at the expense of searchable components and introduces elements like conditionals, loops, and dynamic variables that impede understandability. It's a tool not for regular use, but for instances where code duplication becomes excessively cumbersome.
+
+Before resorting to advanced Go templates in Atmos, rigorously evaluate the trade-off between the value added and the complexity introduced.
+
+:::
+
+## Advanced Examples of Templates in Atmos Configurations
+
+Atmos supports all the functionality of [Go templates](https://pkg.go.dev/text/template), including [functions](https://pkg.go.dev/text/template#hdr-Functions) and [Sprig functions](http://masterminds.github.io/sprig/).
+The Sprig library provides over 70 template functions for `Go's` template language.
+
+The following example shows how to dynamically include a variable in the Atmos component configuration by using the `hasKey` Sprig function.
+The hasKey function returns `true` if the given dictionary contains the given key.
+
+```yaml
+components:
+  terraform:
+    eks/iam-role/{{ .app_name }}/{{ .service_environment }}:
+      metadata:
+        component: eks/iam-role
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        enabled: {{ .enabled }}
+        tags:
+          Service: {{ .app_name }}
+        service_account_name: {{ .app_name }}
+        service_account_namespace: {{ .service_account_namespace }}
+        {{ if hasKey . "iam_managed_policy_arns" }}
+        iam_managed_policy_arns:
+          {{ range $i, $iam_managed_policy_arn := .iam_managed_policy_arns }}
+          - '{{ $iam_managed_policy_arn }}'
+          {{ end }}
+        {{- end }}
+        {{ if hasKey . "iam_source_policy_documents" }}
+        iam_source_policy_documents:
+          {{ range $i, $iam_source_policy_document := .iam_source_policy_documents }}
+          - '{{ $iam_source_policy_document }}'
+          {{ end }}
+        {{- end }}
+```
+
+The `iam_managed_policy_arns` and `iam_source_policy_documents` variables will be included in the component configuration only if the 
+provided `context` object has the `iam_managed_policy_arns` and `iam_source_policy_documents` fields. 
 
 ## Summary
 

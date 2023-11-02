@@ -5,6 +5,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -16,7 +17,7 @@ func ProcessComponentInStack(
 	atmosBasePath string,
 ) (map[string]any, error) {
 
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
+	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
@@ -24,7 +25,7 @@ func ProcessComponentInStack(
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.PrintErrorToStdError(err)
+		u.LogError(err)
 		return nil, err
 	}
 
@@ -34,7 +35,7 @@ func ProcessComponentInStack(
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true)
 		if err != nil {
-			u.PrintErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 	}
@@ -53,26 +54,26 @@ func ProcessComponentFromContext(
 	atmosBasePath string,
 ) (map[string]any, error) {
 
-	var configAndStacksInfo cfg.ConfigAndStacksInfo
+	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.PrintErrorToStdError(err)
+		u.LogError(err)
 		return nil, err
 	}
 
 	if len(cliConfig.Stacks.NamePattern) < 1 {
 		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-		u.PrintErrorToStdError(er)
+		u.LogError(er)
 		return nil, er
 	}
 
 	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, cliConfig.Stacks.NamePattern)
 	if err != nil {
-		u.PrintErrorToStdError(err)
+		u.LogError(err)
 		return nil, err
 	}
 

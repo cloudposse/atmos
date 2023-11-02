@@ -2,19 +2,21 @@ package exec
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"path"
 	"strings"
 
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
-	info := cfg.ConfigAndStacksInfo{}
+	info := schema.ConfigAndStacksInfo{}
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -35,13 +37,21 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	u.PrintInfo(fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders\n",
+	u.LogDebug(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders\n",
 		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 
 	var errorMessages []string
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, _, err := s.ProcessYAMLConfigFile(cliConfig.StacksBaseAbsolutePath, filePath, map[string]map[any]any{}, nil, false)
+		stackConfig, importsConfig, _, err := s.ProcessYAMLConfigFile(
+			cliConfig.StacksBaseAbsolutePath,
+			filePath,
+			map[string]map[any]any{},
+			nil,
+			false,
+			false,
+			false,
+		)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}

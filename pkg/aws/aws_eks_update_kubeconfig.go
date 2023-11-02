@@ -2,17 +2,17 @@ package aws
 
 import (
 	e "github.com/cloudposse/atmos/internal/exec"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig'
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
-func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext cfg.AwsEksUpdateKubeconfigContext) error {
+func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconfigContext) error {
 	err := e.ExecuteAwsEksUpdateKubeconfig(kubeconfigContext)
 
 	if err != nil {
-		u.PrintErrorToStdError(err)
+		u.LogError(err)
 		return err
 	}
 

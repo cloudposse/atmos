@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -89,9 +90,9 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeStacks processes stack configs and returns the final map of stacks and components
+// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
 func ExecuteDescribeStacks(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	filterByStack string,
 	components []string,
 	componentTypes []string,
@@ -106,7 +107,9 @@ func ExecuteDescribeStacks(
 
 	finalStacksMap := make(map[string]any)
 	var varsSection map[any]any
+	var metadataSection map[any]any
 	var stackName string
+	context := schema.Context{}
 
 	for stackFileName, stackSection := range stacksMap {
 		// Delete the stack-wide imports
@@ -134,11 +137,16 @@ func ExecuteDescribeStacks(
 
 						// Component vars
 						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
-							context := cfg.GetContextFromVars(varsSection)
+							context = cfg.GetContextFromVars(varsSection)
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
 							if err != nil {
 								return nil, err
 							}
+						}
+
+						// Component metadata
+						if metadataSection, ok = componentSection["metadata"].(map[any]any); !ok {
+							metadataSection = map[any]any{}
 						}
 
 						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
@@ -167,6 +175,21 @@ func ExecuteDescribeStacks(
 							for sectionName, section := range componentSection {
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
+								}
+
+								// Terraform workspace
+								if len(sections) == 0 || u.SliceContainsString(sections, "workspace") {
+									workspace, err := BuildTerraformWorkspace(
+										stackName,
+										cliConfig.Stacks.NamePattern,
+										metadataSection,
+										context,
+									)
+									if err != nil {
+										return nil, err
+									}
+
+									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["workspace"] = workspace
 								}
 							}
 						}

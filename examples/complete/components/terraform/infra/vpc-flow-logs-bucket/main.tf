@@ -1,6 +1,6 @@
 module "flow_logs_s3_bucket" {
   source  = "cloudposse/vpc-flow-logs-s3-bucket/aws"
-  version = "0.12.0"
+  version = "1.0.1"
 
   lifecycle_prefix                   = var.lifecycle_prefix
   lifecycle_tags                     = var.lifecycle_tags
@@ -12,7 +12,6 @@ module "flow_logs_s3_bucket" {
   expiration_days                    = var.expiration_days
   traffic_type                       = var.traffic_type
   force_destroy                      = var.force_destroy
-  arn_format                         = var.arn_format
   flow_log_enabled                   = false
 
   context = module.this.context

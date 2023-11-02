@@ -2,14 +2,14 @@ package exec
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
-func BuildSpaceliftStackName(spaceliftSettings map[any]any, context cfg.Context, contextPrefix string) (string, string) {
+func BuildSpaceliftStackName(spaceliftSettings map[any]any, context schema.Context, contextPrefix string) (string, string) {
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
 		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
@@ -59,7 +59,6 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 					if stackNamePattern != "" {
 						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
-							u.PrintErrorToStdError(err)
 							return nil, err
 						}
 					} else {
@@ -79,7 +78,7 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 
 // BuildSpaceliftStackNameFromComponentConfig builds Spacelift stack name from the component config
 func BuildSpaceliftStackNameFromComponentConfig(
-	cliConfig cfg.CliConfiguration,
+	cliConfig schema.CliConfiguration,
 	componentName string,
 	stackName string,
 	componentSettingsSection map[any]any,

@@ -24,18 +24,23 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		// so `mergo` does not have access to the original pointers
 		yamlCurrent, err := yaml.Marshal(current)
 		if err != nil {
-			u.PrintErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
 		var dataCurrent map[any]any
 		if err = yaml.Unmarshal(yamlCurrent, &dataCurrent); err != nil {
-			u.PrintErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 
 		var opts []func(*mergo.Config)
-		opts = append(opts, mergo.WithOverride, mergo.WithOverwriteWithEmptyValue, mergo.WithTypeCheck)
+		opts = append(opts, mergo.WithOverride, mergo.WithTypeCheck)
+
+		// This was fixed/broken in https://github.com/imdario/mergo/pull/231/files
+		// It was released in https://github.com/imdario/mergo/releases/tag/v0.3.14
+		// It was not working before in `github.com/imdario/mergo` so we need to disable it in our code
+		// opts = append(opts, mergo.WithOverwriteWithEmptyValue)
 
 		if appendSlice {
 			opts = append(opts, mergo.WithAppendSlice)
@@ -46,7 +51,7 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			u.PrintErrorToStdError(err)
+			u.LogError(err)
 			return nil, err
 		}
 	}

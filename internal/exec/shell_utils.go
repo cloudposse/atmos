@@ -4,25 +4,28 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"io"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteShellCommand prints and executes the provided command with args and flags
 func ExecuteShellCommand(
+	cliConfig schema.CliConfiguration,
 	command string,
 	args []string,
 	dir string,
 	env []string,
 	dryRun bool,
-	verbose bool,
 	redirectStdError string,
 ) error {
 	cmd := exec.Command(command, args...)
@@ -42,17 +45,15 @@ func ExecuteShellCommand(
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.PrintError(err)
+				u.LogWarning(cliConfig, err.Error())
 			}
 		}(f)
 
 		cmd.Stderr = f
 	}
 
-	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		fmt.Println(cmd.String())
-	}
+	u.LogDebug(cliConfig, "\nExecuting command:")
+	u.LogDebug(cliConfig, cmd.String())
 
 	if dryRun {
 		return nil
@@ -62,11 +63,16 @@ func ExecuteShellCommand(
 }
 
 // ExecuteShell runs a shell script
-func ExecuteShell(command string, name string, dir string, env []string, dryRun bool, verbose bool) error {
-	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		fmt.Println(command)
-	}
+func ExecuteShell(
+	cliConfig schema.CliConfiguration,
+	command string,
+	name string,
+	dir string,
+	env []string,
+	dryRun bool,
+) error {
+	u.LogDebug(cliConfig, "\nExecuting command:")
+	u.LogDebug(cliConfig, command)
 
 	if dryRun {
 		return nil
@@ -76,13 +82,18 @@ func ExecuteShell(command string, name string, dir string, env []string, dryRun 
 }
 
 // ExecuteShellAndReturnOutput runs a shell script and capture its standard output
-func ExecuteShellAndReturnOutput(command string, name string, dir string, env []string, dryRun bool, verbose bool) (string, error) {
+func ExecuteShellAndReturnOutput(
+	cliConfig schema.CliConfiguration,
+	command string,
+	name string,
+	dir string,
+	env []string,
+	dryRun bool,
+) (string, error) {
 	var b bytes.Buffer
 
-	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		fmt.Println(command)
-	}
+	u.LogDebug(cliConfig, "\nExecuting command:")
+	u.LogDebug(cliConfig, command)
 
 	if dryRun {
 		return "", nil
@@ -117,78 +128,9 @@ func shellRunner(command string, name string, dir string, env []string, out io.W
 	return runner.Run(context.TODO(), parser)
 }
 
-// ExecuteShellCommandAndReturnOutput prints and executes the provided command with args and flags and returns the command output
-func ExecuteShellCommandAndReturnOutput(
-	command string,
-	args []string,
-	dir string,
-	env []string,
-	dryRun bool,
-	verbose bool,
-	redirectStdError string,
-) (string, error) {
-	cmd := exec.Command(command, args...)
-	cmd.Env = append(os.Environ(), env...)
-	cmd.Dir = dir
-	cmd.Stdin = os.Stdin
-
-	if redirectStdError == "" {
-		cmd.Stderr = os.Stderr
-	} else {
-		f, err := os.OpenFile(redirectStdError, os.O_RDWR|os.O_CREATE, 0644)
-		if err != nil {
-			return "", err
-		}
-
-		defer func(f *os.File) {
-			err = f.Close()
-			if err != nil {
-				u.PrintError(err)
-			}
-		}(f)
-
-		cmd.Stderr = f
-	}
-
-	if verbose {
-		u.PrintInfo("\nExecuting command:")
-		fmt.Println(cmd.String())
-	}
-
-	if dryRun {
-		return "", nil
-	}
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	return string(output), nil
-}
-
-// ExecuteShellCommands sequentially executes the provided list of commands
-func ExecuteShellCommands(
-	commands []string,
-	dir string,
-	env []string,
-	dryRun bool,
-	verbose bool,
-	redirectStdError string,
-) error {
-	for _, command := range commands {
-		args := strings.Fields(command)
-		if len(args) > 0 {
-			if err := ExecuteShellCommand(args[0], args[1:], dir, env, dryRun, verbose, redirectStdError); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
 func execTerraformShellCommand(
+	cliConfig schema.CliConfiguration,
 	component string,
 	stack string,
 	componentEnvList []string,
@@ -204,18 +146,15 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
 
-	fmt.Println()
-	u.PrintInfo("Starting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
-	fmt.Printf("Component: %s\n", component)
-	fmt.Printf("Stack: %s\n", stack)
-	fmt.Printf("Working directory: %s\n", workingDir)
-	fmt.Printf("Terraform workspace: %s\n", workspaceName)
-	fmt.Println()
-	u.PrintInfo("Setting the ENV vars in the shell:\n")
+	u.LogDebug(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
+	u.LogDebug(cliConfig, fmt.Sprintf("Component: %s\n", component))
+	u.LogDebug(cliConfig, fmt.Sprintf("Stack: %s\n", stack))
+	u.LogDebug(cliConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
+	u.LogDebug(cliConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
+	u.LogDebug(cliConfig, "\nSetting the ENV vars in the shell:\n")
 	for _, v := range componentEnvList {
-		fmt.Println(v)
+		u.LogDebug(cliConfig, v)
 	}
-	fmt.Println()
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
 	pa := os.ProcAttr{
@@ -242,8 +181,7 @@ func execTerraformShellCommand(
 		shellCommand = shellCommand + " -l"
 	}
 
-	u.PrintInfo(fmt.Sprintf("Starting process: %s", shellCommand))
-	fmt.Println()
+	u.LogDebug(cliConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
 
 	args := strings.Fields(shellCommand)
 
@@ -258,6 +196,6 @@ func execTerraformShellCommand(
 		return err
 	}
 
-	fmt.Printf("Exited shell: %s\n", state.String())
+	u.LogDebug(cliConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
 	return nil
 }
