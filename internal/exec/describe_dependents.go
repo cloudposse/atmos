@@ -77,20 +77,20 @@ func ExecuteDescribeDependents(
 		return nil, err
 	}
 
-	currentComponentSection, err := ExecuteDescribeComponent(component, stack)
+	providedComponentSection, err := ExecuteDescribeComponent(component, stack)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the current component `vars`
-	var currentComponentVarsSection map[any]any
-	if currentComponentVarsSection, ok = currentComponentSection["vars"].(map[any]any); !ok {
+	// Get the provided component `vars`
+	var providedComponentVarsSection map[any]any
+	if providedComponentVarsSection, ok = providedComponentSection["vars"].(map[any]any); !ok {
 		return dependents, nil
 	}
 
-	// Convert the current component `vars` section to the `Context` structure
-	var currentComponentVars schema.Context
-	err = mapstructure.Decode(currentComponentVarsSection, &currentComponentVars)
+	// Convert the provided component `vars` section to the `Context` structure
+	var providedComponentVars schema.Context
+	err = mapstructure.Decode(providedComponentVarsSection, &providedComponentVars)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func ExecuteDescribeDependents(
 					continue
 				}
 
-				// Skip the stack component if it's the same as the current component
+				// Skip the stack component if it's the same as the provided component
 				if stackComponentName == component {
 					continue
 				}
@@ -166,41 +166,53 @@ func ExecuteDescribeDependents(
 					continue
 				}
 
-				// Check if the stack component is a dependent of the current component
-				for _, stackComponentSettingsContext := range stackComponentSettings.DependsOn {
-					if stackComponentSettingsContext.Component != component {
+				// Check if the stack component is a dependent of the provided component
+				for _, dependsOn := range stackComponentSettings.DependsOn {
+					if dependsOn.Component != component {
 						continue
 					}
 
-					if stackComponentSettingsContext.Namespace != "" {
-						if stackComponentSettingsContext.Namespace != stackComponentVars.Namespace {
+					// Include the component from the stack if any of the following is true:
+					// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`
+					// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`
+					if dependsOn.Namespace != "" {
+						if providedComponentVars.Namespace != dependsOn.Namespace {
 							continue
 						}
-					} else if currentComponentVars.Namespace != stackComponentVars.Namespace {
+					} else if providedComponentVars.Namespace != stackComponentVars.Namespace {
 						continue
 					}
 
-					if stackComponentSettingsContext.Tenant != "" {
-						if stackComponentSettingsContext.Tenant != stackComponentVars.Tenant {
+					// Include the component from the stack if any of the following is true:
+					// - `tenant` is specified in `depends_on` and the provided component's tenant is equal to the tenant in `depends_on`
+					// - `tenant` is not specified in `depends_on` and the provided component is from the same tenant as the component in `depends_on`
+					if dependsOn.Tenant != "" {
+						if providedComponentVars.Tenant != dependsOn.Tenant {
 							continue
 						}
-					} else if currentComponentVars.Tenant != stackComponentVars.Tenant {
+					} else if providedComponentVars.Tenant != stackComponentVars.Tenant {
 						continue
 					}
 
-					if stackComponentSettingsContext.Environment != "" {
-						if stackComponentSettingsContext.Environment != stackComponentVars.Environment {
+					// Include the component from the stack if any of the following is true:
+					// - `environment` is specified in `depends_on` and the component's environment is equal to the environment in `depends_on`
+					// - `environment` is not specified in `depends_on` and the provided component is from the same environment as the component in `depends_on`
+					if dependsOn.Environment != "" {
+						if providedComponentVars.Environment != dependsOn.Environment {
 							continue
 						}
-					} else if currentComponentVars.Environment != stackComponentVars.Environment {
+					} else if providedComponentVars.Environment != stackComponentVars.Environment {
 						continue
 					}
 
-					if stackComponentSettingsContext.Stage != "" {
-						if stackComponentSettingsContext.Stage != stackComponentVars.Stage {
+					// Include the component from the stack if any of the following is true:
+					// - `stage` is specified in `depends_on` and the provided component's stage is equal to the stage in `depends_on`
+					// - `stage` is not specified in `depends_on` and the provided component is from the same stage as the component in `depends_on`
+					if dependsOn.Stage != "" {
+						if providedComponentVars.Stage != dependsOn.Stage {
 							continue
 						}
-					} else if currentComponentVars.Stage != stackComponentVars.Stage {
+					} else if providedComponentVars.Stage != stackComponentVars.Stage {
 						continue
 					}
 
