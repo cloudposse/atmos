@@ -184,7 +184,7 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Process `Go` templates in the stack manifest using the provided context
-	if !skipTemplatesProcessingInImports {
+	if !skipTemplatesProcessingInImports && len(context) > 0 {
 		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			return nil, nil, nil, err
