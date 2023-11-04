@@ -72,6 +72,11 @@ In addition, the `component` argument and `stack` flag are required to generate 
 - `atmos terraform shell` command configures an environment for an Atmos component in a stack and starts a new shell allowing executing all native
   terraform commands inside the shell
 
+- double-dash `--` can be used to signify the end of the options for Atmos and the start of the additional native arguments and flags for
+  the `terraform` commands. For example:
+    - `atmos terraform plan <component> -s <stack> -- -refresh=false`
+    - `atmos terraform apply <component> -s <stack> -- -lock=false`
+
 <br />
 
 :::tip
@@ -102,6 +107,8 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr /dev/null
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr ./errors.txt
+
+atmos terraform plan test/test-component -s tenant1-ue2-dev -- -refresh=false -lock=false
 ```
 
 ## Arguments
