@@ -22,8 +22,8 @@ const (
 )
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
-func ExecuteTerraformCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args)
+func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
+	info, err := processCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}

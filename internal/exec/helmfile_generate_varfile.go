@@ -24,7 +24,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 
 	component := args[0]
 
-	info, err := processCommandLineArgs("helmfile", cmd, args)
+	info, err := processCommandLineArgs("helmfile", cmd, args, nil)
 	if err != nil {
 		return err
 	}

@@ -150,7 +150,12 @@ func FindComponentConfig(
 }
 
 // processCommandLineArgs processes command-line args
-func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
+func processCommandLineArgs(
+	componentType string,
+	cmd *cobra.Command,
+	args []string,
+	additionalArgsAndFlags []string,
+) (schema.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
 	cmd.DisableFlagParsing = false
@@ -165,7 +170,12 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo, err
 	}
 
-	configAndStacksInfo.AdditionalArgsAndFlags = argsAndFlagsInfo.AdditionalArgsAndFlags
+	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
+	if len(additionalArgsAndFlags) > 0 {
+		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
+	}
+
+	configAndStacksInfo.AdditionalArgsAndFlags = finalAdditionalArgsAndFlags
 	configAndStacksInfo.SubCommand = argsAndFlagsInfo.SubCommand
 	configAndStacksInfo.SubCommand2 = argsAndFlagsInfo.SubCommand2
 	configAndStacksInfo.ComponentType = componentType
