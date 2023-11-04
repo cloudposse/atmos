@@ -281,7 +281,8 @@ func TransformStackConfigToSpaceliftStacks(
 							allStackNames,
 							contextPrefix,
 							terraformComponentNamesInCurrentStack,
-							component)
+							component,
+						)
 						if err != nil {
 							u.LogError(err)
 							return nil, err
@@ -336,11 +337,12 @@ func TransformStackConfigToSpaceliftStacks(
 						}
 
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
+							component,
+							contextPrefix,
 							stackComponentSettingsDependsOnContext.Component,
-							allStackNames,
 							contextPrefixDependsOn,
-							terraformComponentNamesInCurrentStack,
-							component)
+							allStackNames,
+						)
 						if err != nil {
 							u.LogError(err)
 							return nil, err

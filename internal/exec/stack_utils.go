@@ -115,32 +115,28 @@ func BuildDependentStackNameFromDependsOnLegacy(
 
 // BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config
 func BuildDependentStackNameFromDependsOn(
-	dependsOn string,
-	allStackNames []string,
-	currentStackName string,
-	componentNamesInCurrentStack []string,
 	currentComponentName string,
+	currentStackName string,
+	dependsOnComponentName string,
+	dependsOnStackName string,
+	allStackNames []string,
 ) (string, error) {
-	var dependentStackName string
 
-	dep := strings.Replace(dependsOn, "/", "-", -1)
+	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
 
 	if u.SliceContainsString(allStackNames, dep) {
-		dependentStackName = dep
-	} else if u.SliceContainsString(componentNamesInCurrentStack, dep) {
-		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dep)
-	} else {
-		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
-			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
-			currentComponentName,
-			currentStackName,
-			dependsOn,
-		)
-
-		return "", errorMessage
+		return dep, nil
 	}
 
-	return dependentStackName, nil
+	errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'settings.depends_on' dependency "+
+		"on the component '%[3]s' in the stack '%[4]s', but '%[3]s' is not defined in the '%[4]s' stack, or the component and stack names are not correct",
+		currentComponentName,
+		currentStackName,
+		dependsOnComponentName,
+		dependsOnStackName,
+	)
+
+	return "", errorMessage
 }
 
 // BuildComponentPath builds component path (path to the component's physical location on disk)
