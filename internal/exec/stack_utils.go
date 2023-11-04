@@ -83,7 +83,37 @@ func ProcessComponentMetadata(
 	return componentMetadata, baseComponentName, componentIsAbstract
 }
 
-// BuildDependentStackNameFromDependsOn builds the dependent stack name from "depends_on" attribute
+// BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config
+func BuildDependentStackNameFromDependsOnLegacy(
+	dependsOn string,
+	allStackNames []string,
+	currentStackName string,
+	componentNamesInCurrentStack []string,
+	currentComponentName string,
+) (string, error) {
+	var dependentStackName string
+
+	dep := strings.Replace(dependsOn, "/", "-", -1)
+
+	if u.SliceContainsString(allStackNames, dep) {
+		dependentStackName = dep
+	} else if u.SliceContainsString(componentNamesInCurrentStack, dep) {
+		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dep)
+	} else {
+		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
+			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
+			currentComponentName,
+			currentStackName,
+			dependsOn,
+		)
+
+		return "", errorMessage
+	}
+
+	return dependentStackName, nil
+}
+
+// BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config
 func BuildDependentStackNameFromDependsOn(
 	dependsOn string,
 	allStackNames []string,
@@ -104,7 +134,8 @@ func BuildDependentStackNameFromDependsOn(
 			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
 			currentComponentName,
 			currentStackName,
-			dependsOn)
+			dependsOn,
+		)
 
 		return "", errorMessage
 	}

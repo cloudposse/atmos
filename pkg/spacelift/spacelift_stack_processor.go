@@ -263,8 +263,8 @@ func TransformStackConfigToSpaceliftStacks(
 
 					var terraformComponentNamesInCurrentStack []string
 
-					for v := range terraformComponentsMap {
-						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.Replace(v, "/", "-", -1))
+					for v2 := range terraformComponentsMap {
+						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.Replace(v2, "/", "-", -1))
 					}
 
 					// Legacy/deprecated `settings.spacelift.depends_on`
@@ -276,7 +276,7 @@ func TransformStackConfigToSpaceliftStacks(
 					var spaceliftStackNameDependsOnLabels1 []string
 
 					for _, dep := range spaceliftDependsOn {
-						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
+						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOnLegacy(
 							dep.(string),
 							allStackNames,
 							contextPrefix,
