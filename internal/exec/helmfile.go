@@ -15,8 +15,8 @@ import (
 )
 
 // ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands
-func ExecuteHelmfileCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("helmfile", cmd, args)
+func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
+	info, err := processCommandLineArgs("helmfile", cmd, args, additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}

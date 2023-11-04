@@ -42,6 +42,9 @@ func processHelp(componentType string, command string) error {
 			u.PrintMessage(" - 'atmos terraform generate varfiles' command generates varfiles for all 'atmos' components in all stacks")
 			u.PrintMessage(" - 'atmos terraform shell' command configures an environment for an 'atmos' component in a stack and starts a new shell " +
 				"allowing executing all native terraform commands inside the shell without using atmos-specific arguments and flags")
+			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
+				"native arguments and flags for the 'terraform' commands. " +
+				"For example: atmos terraform plan <component> -s <stack> -- -refresh=false -lock=false")
 		}
 
 		if componentType == "helmfile" {
@@ -52,6 +55,8 @@ func processHelp(componentType string, command string) error {
 			u.PrintMessage(" - before executing the 'helmfile' commands, 'atmos' runs 'aws eks update-kubeconfig' to read kubeconfig from " +
 				"the EKS cluster and use it to authenticate with the cluster. This can be disabled in 'atmos.yaml' CLI config " +
 				"by setting 'components.helmfile.use_eks' to 'false'")
+			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
+				"native arguments and flags for the 'helmfile' commands")
 		}
 
 		err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, "")

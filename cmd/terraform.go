@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"github.com/samber/lo"
+	"github.com/spf13/cobra"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -13,7 +15,16 @@ var terraformCmd = &cobra.Command{
 	Long:               `This command runs terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteTerraformCmd(cmd, args)
+		var argsAfterDoubleDash []string
+		var finalArgs = args
+
+		doubleDashIndex := lo.IndexOf(args, "--")
+		if doubleDashIndex > 0 {
+			finalArgs = lo.Slice(args, 0, doubleDashIndex)
+			argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
+		}
+
+		err := e.ExecuteTerraformCmd(cmd, finalArgs, argsAfterDoubleDash)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
