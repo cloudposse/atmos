@@ -11,15 +11,15 @@ import (
 )
 
 func TestStackProcessor(t *testing.T) {
-	stacksBasePath := "../../tests/stacks"
-	terraformComponentsBasePath := "../../tests/components/terraform"
-	helmfileComponentsBasePath := "../../tests/components/helmfile"
+	stacksBasePath := "../../examples/tests/stacks"
+	terraformComponentsBasePath := "../../examples/tests/components/terraform"
+	helmfileComponentsBasePath := "../../examples/tests/components/helmfile"
 
 	filePaths := []string{
-		"../../tests/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
-		"../../tests/stacks/orgs/cp/tenant1/prod/us-east-2.yaml",
-		"../../tests/stacks/orgs/cp/tenant1/staging/us-east-2.yaml",
-		"../../tests/stacks/orgs/cp/tenant1/test1/us-east-2.yaml",
+		"../../examples/tests/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
+		"../../examples/tests/stacks/orgs/cp/tenant1/prod/us-east-2.yaml",
+		"../../examples/tests/stacks/orgs/cp/tenant1/staging/us-east-2.yaml",
+		"../../examples/tests/stacks/orgs/cp/tenant1/test1/us-east-2.yaml",
 	}
 
 	processStackDeps := true

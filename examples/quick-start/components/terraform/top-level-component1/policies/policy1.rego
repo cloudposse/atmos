@@ -1,5 +1,0 @@
-package atmos
-
-allow {
-  true
-}
