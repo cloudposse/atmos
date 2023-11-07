@@ -1,0 +1,14 @@
+import:
+  a: globals/tenant1-globals
+
+vars:
+  stage: invalid
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform: {}

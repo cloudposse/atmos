@@ -1,0 +1,15 @@
+import:
+  # Test invalid import when the file imports itself
+  - catalog/invalid-yaml-and-schema/invalid-import-2
+
+vars:
+  stage: invalid
+
+terraform:
+  vars: {}
+
+helmfile:
+  vars: {}
+
+components:
+  terraform: {}

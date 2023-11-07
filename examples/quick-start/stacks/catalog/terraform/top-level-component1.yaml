@@ -1,0 +1,26 @@
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+# https://en.wikipedia.org/wiki/Glob_(programming)
+# https://pkg.go.dev/gopkg.in/godo.v2/glob
+# https://github.com/bmatcuk/doublestar
+# File extensions are optional (if not specified, `.yaml` is used by default)
+import:
+  - catalog/terraform/services/top-level-service-?.*
+
+components:
+  terraform:
+    top-level-component1:
+      settings:
+        spacelift:
+          workspace_enabled: true
+        depends_on:
+          1:
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test-component-override"
+          2:
+            # This component (in any stage) depends on `test/test-component`
+            # from the `dev` stage (in any `environment` and any `tenant`)
+            component: "test/test-component"
+            stage: "dev"
+      vars:
+        enabled: true

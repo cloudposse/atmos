@@ -1,0 +1,13 @@
+import:
+  - catalog/terraform/base-component-4
+
+components:
+  terraform:
+    derived-component-3:
+      metadata:
+        component: "test/test-component"
+        inherits:
+          - base-component-4
+      vars:
+        enabled: true
+        service_1_name: "bad-name"

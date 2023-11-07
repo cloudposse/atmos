@@ -1,0 +1,28 @@
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+# https://en.wikipedia.org/wiki/Glob_(programming)
+# https://pkg.go.dev/gopkg.in/godo.v2/glob
+# https://github.com/bmatcuk/doublestar
+# File extensions are optional (if not specified, `.yaml` is used by default)
+import:
+  - catalog/terraform/services/service-?.*
+
+components:
+  terraform:
+    "test/test-component":
+      settings:
+        spacelift:
+          workspace_enabled: true
+      # Setting `metadata.type: abstract` makes the component `abstract` (similar to OOP abstract classes, which can't be instantiated),
+      # explicitly prohibiting the component from being deployed,
+      # and a Spacelift stack from being created for the component (even if `settings.spacelift.workspace_enabled: true`).
+      # `terraform apply` and `terraform deploy` will fail with an error that the component cannot be provisioned.
+      # All other terraform commands on this component will succeed.
+      # If `metadata.type` attribute is not specified, it defaults to `real` (which means the component can be provisioned).
+      metadata:
+        type: real # `real` is implicit, you don't need to specify it; `abstract` makes the component protected from being deployed
+      vars:
+        enabled: true
+      env:
+        TEST_ENV_VAR1: "val1"
+        TEST_ENV_VAR2: "val2"
+        TEST_ENV_VAR3: "val3"

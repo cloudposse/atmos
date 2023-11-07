@@ -1,0 +1,11 @@
+components:
+  terraform:
+    derived-component-1:
+      metadata:
+        component: "test/test-component"
+        inherits:
+          - base-component-1
+      vars:
+        enabled: true
+        service_1_name: "derived-component-1-service-1"
+        service_2_name: "derived-component-1-service-2"

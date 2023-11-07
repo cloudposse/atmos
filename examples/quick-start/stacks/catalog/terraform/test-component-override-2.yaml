@@ -1,0 +1,46 @@
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+# https://en.wikipedia.org/wiki/Glob_(programming)
+# https://pkg.go.dev/gopkg.in/godo.v2/glob
+# https://github.com/bmatcuk/doublestar
+# File extensions are optional (if not specified, `.yaml` is used by default)
+import:
+  - catalog/terraform/services/service-?-override-2.*
+
+components:
+  terraform:
+    "test/test-component-override-2":
+      settings:
+        spacelift:
+          workspace_enabled: true
+          # `stack_name_pattern` overrides Spacelift stack names
+          # By specifying the following `stack_name_pattern`, the final Spacelift stack name will be
+          # `tenant1-ue2-dev-new-component` instead of `tenant1-ue2-dev-test-test-component-override-2`
+          # By default (if `stack_name_pattern` is not specified), the stack name is generated using the pattern {tenant}-{environment}-{stage}-{component}
+          # Supported tokens: {namespace}, {tenant}, {environment}, {stage}, {component}
+          stack_name_pattern: "{tenant}-{environment}-{stage}-new-component"
+      # Specify terraform binary to run
+      command: "/usr/local/bin/terraform"
+      # The `component` attribute specifies that `test-component-override-2` inherits from the `test-component-override` base component,
+      # which in turn inherits from `test-component` (inheritance chain).
+      # `test-component-override-2` can override all the variables and other settings of all its base components (except the `metadata` section).
+      # In this example, variables for each service are overridden in `catalog/services/service-?-override-2.*`
+      component: "test/test-component-override"
+      # Other variables can be overridden here
+      vars: {}
+      # Other ENV vars can be overridden here
+      env:
+        TEST_ENV_VAR1: "val1-override-2"
+        TEST_ENV_VAR2: "val2-override-2"
+        TEST_ENV_VAR4: "val4-override-2"
+      # Override remote state backend for this component
+      remote_state_backend_type: static # s3, remote, vault, static, etc.
+      remote_state_backend:
+        static:
+          val1: true
+          val2: "5"
+          val3: 7
+          val4: null
+      metadata:
+        # Override Terraform workspace
+        # Note that by default, Terraform workspace is generated from the context, e.g. `<environment>-<stage>`
+        terraform_workspace_pattern: "{tenant}-{environment}-{stage}-{component}"

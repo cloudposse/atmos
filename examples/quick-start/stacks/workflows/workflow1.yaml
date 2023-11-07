@@ -1,0 +1,78 @@
+workflows:
+
+  terraform-plan-all-test-components:
+    description: |
+      Run 'terraform plan' on 'test/test-component' and all its derived components.
+      The stack must be provided on the command line: atmos workflow terraform-plan-all-test-components -f workflow1 -s <stack>
+    steps:
+      - command: terraform plan test/test-component
+      - command: terraform plan test/test-component-override
+      - command: terraform plan test/test-component-override-2
+      - command: terraform plan test/test-component-override-3
+
+  terraform-plan-test-component-override-2-all-stacks:
+    description: Run 'terraform plan' on 'test/test-component-override-2' component in all stacks
+    steps:
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-dev
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-staging
+      - command: terraform plan test/test-component-override-2 -s tenant1-ue2-prod
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-dev
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-staging
+      - command: terraform plan test/test-component-override-2 -s tenant2-ue2-prod
+
+  terraform-plan-test-component-override-3-all-stacks:
+    description: Run 'terraform plan' on 'test/test-component-override-3' component in all stacks
+    steps:
+      - command: terraform plan test/test-component-override-3
+        stack: tenant1-ue2-dev
+      - command: terraform plan test/test-component-override-3
+        stack: tenant1-ue2-staging
+      - command: terraform plan test/test-component-override-3
+        stack: tenant1-ue2-prod
+      - command: terraform plan test/test-component-override-3
+        stack: tenant2-ue2-dev
+      - command: terraform plan test/test-component-override-3
+        stack: tenant2-ue2-staging
+      - command: terraform plan test/test-component-override-3
+        stack: tenant2-ue2-prod
+
+  terraform-plan-all-tenant1-ue2-dev:
+    description: Run 'terraform plan' on all components in the 'tenant1-ue2-dev' stack
+    # The step-level `stack` attribute can override the workflow-level `stack` attribute
+    stack: tenant1-ue2-dev
+    steps:
+      - command: echo Running terraform plan on the component 'test/test-component' in the stack 'tenant1-ue2-dev'
+        type: shell
+      - command: terraform plan test/test-component
+        # Type `atmos` is implicit, you don't have to specify it
+        # Other supported types: 'shell'
+        type: atmos
+      - command: echo Running terraform plan on the component 'test/test-component-override' in the stack 'tenant1-ue2-dev'
+        type: shell
+      - command: terraform plan test/test-component-override
+        type: atmos
+      - command: echo Running terraform plan on the component 'test/test-component-override-2' in the stack 'tenant1-ue2-dev'
+        type: shell
+      - command: terraform plan test/test-component-override-2
+        type: atmos
+      - command: echo Running terraform plan on the component 'test/test-component-override-3' in the stack 'tenant1-ue2-dev'
+        type: shell
+      - command: terraform plan test/test-component-override-3
+        type: atmos
+
+  test-1:
+    description: Test workflow
+    steps:
+      - command: echo Command 1
+        name: step1
+        type: shell
+      - command: echo Command 2
+        name: step2
+        type: shell
+      - command: echo Command 3
+        name: step3
+        type: shell
+      - command: echo Command 4
+        type: shell
+      - command: echo Command 5
+        type: shell

@@ -18,10 +18,10 @@ func TestDescribeAffectedWithTargetRepoClone(t *testing.T) {
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../examples/complete",
+	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../tests",
 	// which will be wrong for the remote repo which is cloned into a temp dir.
 	// Set the correct base path for the cloned remote repo
-	cliConfig.BasePath = "./examples/complete"
+	cliConfig.BasePath = "./tests"
 
 	// Git reference and commit SHA
 	// Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details
@@ -43,10 +43,10 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../examples/complete",
+	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../tests",
 	// which will be wrong for the remote repo which is cloned into a temp dir.
 	// Set the correct base path for the cloned remote repo
-	cliConfig.BasePath = "./examples/complete"
+	cliConfig.BasePath = "./tests"
 
 	// Point to the same local repository
 	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list

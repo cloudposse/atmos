@@ -1,0 +1,5 @@
+components:
+  terraform:
+    "test/test-component-override":
+      vars:
+        service_1_name: "service-1-override-2"

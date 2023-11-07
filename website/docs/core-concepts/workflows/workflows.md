@@ -352,9 +352,9 @@ Atmos stack for the workflow commands of type `atmos` can be specified in four d
   ```yaml
   workflows:
     my-workflow:
-    stack: tenant1-ue2-dev
-    steps:
-      - command: terraform plan test/test-component
+      stack: tenant1-ue2-dev
+      steps:
+        - command: terraform plan test/test-component
   ```
 
 - In the step-level `stack` attribute

@@ -1,0 +1,37 @@
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+# https://en.wikipedia.org/wiki/Glob_(programming)
+# https://pkg.go.dev/gopkg.in/godo.v2/glob
+# https://github.com/bmatcuk/doublestar
+# File extensions are optional (if not specified, `.yaml` is used by default)
+import:
+  - catalog/terraform/services/service-?-override.*
+
+components:
+  terraform:
+    "test/test-component-override":
+      # Specify terraform binary to run
+      command: "/usr/local/bin/terraform"
+      # The `component` attribute specifies that `test/test-component-override` inherits from the `test/test-component` base component,
+      # and points to the `test/test-component` Terraform component in the `components/terraform` folder
+      # `test/test-component-override` can override all the variables and other settings of the base component (except the `metadata` section).
+      # In this example, variables for each service are overridden in `catalog/services/service-?-override.*`
+      component: "test/test-component"
+      # Other variables can be overridden here
+      vars: {}
+      # Other ENV vars can be overridden here
+      env:
+        TEST_ENV_VAR1: "val1-override"
+        TEST_ENV_VAR3: "val3-override"
+        TEST_ENV_VAR4: "val4"
+      # Override remote state backend for this component
+      remote_state_backend_type: static # s3, remote, vault, static, etc.
+      remote_state_backend:
+        static:
+          val1: true
+          val2: "2"
+          val3: 3
+          val4: null
+      metadata:
+        # Override Terraform workspace
+        # Note that by default, Terraform workspace is generated from the context, e.g. `<environment>-<stage>`
+        terraform_workspace: test-component-override-workspace-override
