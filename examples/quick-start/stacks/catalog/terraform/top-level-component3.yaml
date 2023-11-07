@@ -13,6 +13,6 @@ components:
           1:
             file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
           2:
-            folder: "examples/complete/components/helmfile/infra/infra-server"
+            folder: "examples/complete/components/helmfile/infra-server"
       vars:
         enabled: true

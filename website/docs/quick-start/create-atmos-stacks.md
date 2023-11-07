@@ -73,7 +73,7 @@ When executing the [CLI commands](/cli/cheatsheet), Atmos does not use the stack
 where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The
 stack config file names can be anything, and they can be in any folder in any sub-folder in the `stacks` directory.
 
-For example, when executing the `atmos terraform apply infra/vpc -s tenant1-ue2-dev`
+For example, when executing the `atmos terraform apply vpc -s tenant1-ue2-dev`
 command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"`
 (see [Configure CLI](/quick-start/configure-cli)) and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second
 part is `environment`, and the third part is `stage`. Then Atmos searches for the parent stack configuration file (in the `stacks` directory)
@@ -196,7 +196,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: infra/vpc
+        component: vpc
       vars:
         availability_zones:
           - us-east-2a
@@ -215,7 +215,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: infra/vpc
+        component: vpc
       vars:
         availability_zones:
           - us-west-2a
@@ -329,7 +329,7 @@ components:
     vpc-flow-logs-bucket-1:
       metadata:
         # Point to the Terraform component in `components/terraform` folder
-        component: infra/vpc-flow-logs-bucket
+        component: vpc-flow-logs-bucket
         inherits:
           # Inherit all settings and variables from the 
           # `vpc-flow-logs-bucket/defaults` base Atmos component
@@ -344,7 +344,7 @@ components:
     vpc-1:
       metadata:
         # Point to the Terraform component in `components/terraform` folder
-        component: infra/vpc
+        component: vpc
         inherits:
           # Inherit all settings and variables from the `vpc/defaults` base Atmos component
           - vpc/defaults
@@ -358,7 +358,7 @@ components:
         vpc_flow_logs_traffic_type: "REJECT"
 
         # Specify the name of the Atmos component that provides configuration
-        # for the `infra/vpc-flow-logs-bucket` Terraform component
+        # for the `vpc-flow-logs-bucket` Terraform component
         vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket-1
 
         # Override the context variables to point to a different Atmos stack if the 
@@ -395,7 +395,7 @@ components:
 
     vpc-flow-logs-bucket-1:
       metadata:
-        component: infra/vpc-flow-logs-bucket
+        component: vpc-flow-logs-bucket
         inherits:
           - vpc-flow-logs-bucket/defaults
       vars:
@@ -403,7 +403,7 @@ components:
 
     vpc-1:
       metadata:
-        component: infra/vpc
+        component: vpc
         inherits:
           - vpc/defaults
       vars:

@@ -1,8 +1,8 @@
 {
   "$id": "infra-vpc-component",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "infra/vpc component validation",
-  "description": "JSON Schema for infra/vpc atmos component.",
+  "title": "vpc component validation",
+  "description": "JSON Schema for the 'vpc' Atmos component.",
   "type": "object",
   "properties": {
     "vars": {

@@ -130,7 +130,7 @@ to [CLI Configuration](/cli/configuration).
 - `stacks.name_pattern` - Atmos stack name pattern. When executing `atmos` commands, Atmos does not use the configuration file names and their
   filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context
   variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names can be anything, and they can be in
-  any folder in any sub-folder in the `stacks` directory. For example, when executing the `atmos terraform apply infra/vpc -s tenant1-ue2-dev`
+  any folder in any sub-folder in the `stacks` directory. For example, when executing the `atmos terraform apply vpc -s tenant1-ue2-dev`
   command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"` and processing
   the tokens, Atmos knows that the first part of the stack name is `tenant`, the second part is `environment`, and the third part is `stage`. Then
   Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are

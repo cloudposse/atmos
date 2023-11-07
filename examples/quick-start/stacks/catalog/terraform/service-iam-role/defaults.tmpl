@@ -2,7 +2,7 @@ components:
   terraform:
     service-iam-role/{{ .app_name }}/{{ .service_environment }}:
       metadata:
-        component: infra/service-iam-role
+        component: service-iam-role
       settings:
         spacelift:
           workspace_enabled: false

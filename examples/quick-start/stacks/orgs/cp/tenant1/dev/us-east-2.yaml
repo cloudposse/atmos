@@ -21,7 +21,7 @@ terraform:
 
 components:
   terraform:
-    "infra/vpc":
+    "vpc":
       vars:
         name: "co!!,mmon"
         ipv4_primary_cidr_block: 10.10.0.0/18

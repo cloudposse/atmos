@@ -1,5 +1,0 @@
-components:
-  helmfile:
-    echo-server:
-      vars:
-        installed: true

@@ -1,7 +1,7 @@
 # 'vpc' component vendoring config
 
 # 'component.yaml' in the component folder is processed by the 'atmos' commands
-# 'atmos vendor pull -c infra/vpc' or 'atmos vendor pull --component infra/vpc'
+# 'atmos vendor pull -c vpc' or 'atmos vendor pull --component vpc'
 
 apiVersion: atmos/v1
 kind: ComponentVendorConfig

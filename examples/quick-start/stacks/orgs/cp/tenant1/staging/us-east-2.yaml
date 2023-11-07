@@ -13,6 +13,6 @@ import:
 
 components:
   terraform:
-    "infra/vpc":
+    "vpc":
       vars:
         ipv4_primary_cidr_block: 10.9.0.0/180

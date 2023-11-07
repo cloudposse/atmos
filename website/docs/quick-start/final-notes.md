@@ -14,11 +14,11 @@ Atmos provides unlimited flexibility in defining and configuring Atmos stacks an
   to find the stack and the component in the stack by using the context variables `namespace`, `tenant`, `environment` and `stage`
 
 - An Atmos component can have any name different from the Terraform component name. For example, two different Atmos components `vpc-1` and `vpc-2`
-  can provide configuration for the same Terraform component `infra/vpc`
+  can provide configuration for the same Terraform component `vpc`
 
 - We can provision more than one instance of the same Terraform component (with the same or different settings) into the same environment by defining
   many Atmos components that provide configuration for the Terraform component. For example, the following config shows how to define two Atmos
-  components, `vpc-1` and `vpc-2`, which both point to the same Terraform component `infra/vpc`:
+  components, `vpc-1` and `vpc-2`, which both point to the same Terraform component `vpc`:
 
   ```yaml
   import:
@@ -31,7 +31,7 @@ Atmos provides unlimited flexibility in defining and configuring Atmos stacks an
   
       vpc-1:
         metadata:
-          component: infra/vpc
+          component: vpc
           inherits:
             - vpc/defaults
         vars:
@@ -40,7 +40,7 @@ Atmos provides unlimited flexibility in defining and configuring Atmos stacks an
   
       vpc-2:
         metadata:
-          component: infra/vpc
+          component: vpc
           inherits:
             - vpc/defaults
         vars:

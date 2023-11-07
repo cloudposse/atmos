@@ -6,7 +6,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: infra/vpc
+        component: vpc
       vars:
         availability_zones:
           - us-east-1a

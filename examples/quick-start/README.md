@@ -10,8 +10,8 @@ Noticeable `atmos` commands:
 atmos version
 atmos validate stacks
 atmos describe stacks
-atmos describe component infra/vpc -s tenant1-ue2-dev
-atmos terraform plan infra/vpc -s tenant1-ue2-dev
+atmos describe component vpc -s tenant1-ue2-dev
+atmos terraform plan vpc -s tenant1-ue2-dev
 atmos terraform plan test/test-component-override -s tenant1-ue2-dev
 atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev
 atmos terraform validate test/test-component-override -s tenant1-ue2-dev

@@ -21,6 +21,6 @@ import:
 
 components:
   terraform:
-    "infra/vpc":
+    "vpc":
       vars:
         ipv4_primary_cidr_block: 10.11.0.0/18
