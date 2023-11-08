@@ -38,3 +38,7 @@ components:
         max_subnet_count: 3
         map_public_ip_on_launch: true
         dns_hostnames_enabled: true
+        vpc_flow_logs_enabled: true
+        vpc_flow_logs_traffic_type: "ALL"
+        vpc_flow_logs_log_destination_type: "s3"
+        vpc_flow_logs_bucket_component_name: "vpc-flow-logs-bucket"

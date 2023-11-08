@@ -1,5 +1,5 @@
 import:
-  - mixins/region/us-east-2
-  - orgs/acme/plat/prod/_defaults
+  - mixins/region/us-west-2
+  - orgs/acme/plat/staging/_defaults
   - catalog/terraform/vpc/defaults
   - catalog/terraform/vpc-flow-logs-bucket/defaults
