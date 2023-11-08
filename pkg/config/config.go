@@ -16,7 +16,7 @@ import (
 
 var NotFound = errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
 	"\nYou can download a sample config and adapt it to your requirements from " +
-	"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/complete/atmos.yaml")
+	"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
 
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
