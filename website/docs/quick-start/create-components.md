@@ -51,25 +51,24 @@ The filesystem layout should look like this:
    │   # Centralized components configuration. Components are broken down by tool
    ├── components
    │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── infra
-   │       │   ├── vpc
-   │       │   │   ├── component.yaml
-   │       │   │   ├── context.tf
-   │       │   │   ├── main.tf
-   │       │   │   ├── outputs.tf
-   │       │   │   ├── providers.tf
-   │       │   │   ├── remote-state.tf
-   │       │   │   ├── variables.tf
-   │       │   │   ├── versions.tf
-   │       │   │   ├── vpc-flow-logs.tf
-   │       │   ├── vpc-flow-logs-bucket
-   │       │   │   ├── component.yaml
-   │       │   │   ├── context.tf
-   │       │   │   ├── main.tf
-   │       │   │   ├── outputs.tf
-   │       │   │   ├── providers.tf
-   │       │   │   ├── variables.tf
-   │       │   │   ├── versions.tf
+   │       ├── vpc
+   │       │   ├── component.yaml
+   │       │   ├── context.tf
+   │       │   ├── main.tf
+   │       │   ├── outputs.tf
+   │       │   ├── providers.tf
+   │       │   ├── remote-state.tf
+   │       │   ├── variables.tf
+   │       │   ├── versions.tf
+   │       │   ├── vpc-flow-logs.tf
+   │       ├── vpc-flow-logs-bucket
+   │       │   ├── component.yaml
+   │       │   ├── context.tf
+   │       │   ├── main.tf
+   │       │   ├── outputs.tf
+   │       │   ├── providers.tf
+   │       │   ├── variables.tf
+   │       │   ├── versions.tf
 ```
 
 <br/>

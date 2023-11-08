@@ -148,9 +148,8 @@ layout:
    │   # Centralized components configuration. Components are broken down by tool
    ├── components
    │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── infra
-   │       │   ├── vpc
-   │       │   ├── vpc-flow-logs-bucket
+   │       ├── vpc
+   │       ├── vpc-flow-logs-bucket
 ```
 
 <br/>

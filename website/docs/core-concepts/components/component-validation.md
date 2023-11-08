@@ -243,13 +243,13 @@ Validate 'infra/vpc' component variables using JSON Schema
   "errors": [
     {
       "keywordLocation": "",
-      "absoluteKeywordLocation": "file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#",
+      "absoluteKeywordLocation": "file:///examples/tests/stacks/schemas/jsonschema/infra-vpc-component#",
       "instanceLocation": "",
-      "error": "doesn't validate with file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#"
+      "error": "doesn't validate with file:///examples/tests/stacks/schemas/jsonschema/infra-vpc-component#"
     },
     {
       "keywordLocation": "/properties/vars/properties/cidr_block/pattern",
-      "absoluteKeywordLocation": "file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#/properties/vars/properties/cidr_block/pattern",
+      "absoluteKeywordLocation": "file:///examples/tests/stacks/schemas/jsonschema/infra-vpc-component#/properties/vars/properties/cidr_block/pattern",
       "instanceLocation": "/vars/cidr_block",
       "error": "does not match pattern '^([0-9]{1,3}\\\\.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))?$'"
     }

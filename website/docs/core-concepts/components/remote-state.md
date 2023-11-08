@@ -34,7 +34,7 @@ state for the component in the stack.
 
 - **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) and stored typically in `components/terraform/$name`
   that consists of the resources defined in the `.tf` files in a working directory
-  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc))
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/tests/components/terraform/infra/vpc))
 
 - **Atmos Component** provides configuration (variables and other settings) for a component and is defined in one or more YAML stack config
   files (which are called [Atmos stacks](/core-concepts/stacks))
@@ -47,8 +47,8 @@ Here is an example.
 
 Suppose that we need to provision two Terraform components:
 
-- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
-- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
+- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc-flow-logs-bucket)
+- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc)
 
 The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
 configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket.
@@ -307,10 +307,10 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
   set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
 
 - When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
-  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/rootfs/usr/local/etc/atmos/atmos.yaml)
-  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/complete/Dockerfile)
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/Dockerfile)
   by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
-  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/complete)
+  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
   var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
 

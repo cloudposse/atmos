@@ -72,7 +72,7 @@ description: "Learn how to migrate an Atmos component to a new name or to use th
 1. Pull down the latest `vpc` component and repeat the previous step (optional)
 
     ```sh
-    ⨠ wget https://raw.githubusercontent.com/cloudposse/atmos/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket/component.yaml -O components/terraform/vpc/component.yaml
+    ⨠ wget https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/components/terraform/vpc/component.yaml -O components/terraform/vpc/component.yaml
     ⨠ sed -i 's,infra/vpc-flow-logs-bucket,vpc,g' components/terraform/vpc/component.yaml
     ⨠ atmos vendor pull -c vpc
     ```

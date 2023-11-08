@@ -115,9 +115,8 @@ would look like this:
    │   # Centralized components configuration. Components are broken down by tool
    ├── components
    │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── infra
-   │       │   ├── vpc
-   │       │   └── vpc-flow-logs-bucket
+   │       ├── vpc
+   │       └── vpc-flow-logs-bucket
 ```
 
 <br/>
@@ -174,9 +173,8 @@ Create the following filesystem layout (which will be the final layout for this 
    │   # Centralized components configuration. Components are broken down by tool
    ├── components
    │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── infra
-   │       │   ├── vpc
-   │       │   └── vpc-flow-logs-bucket
+   │       ├── vpc
+   │       └── vpc-flow-logs-bucket
 ```
 
 ### Configure Region and Stage Mixins
