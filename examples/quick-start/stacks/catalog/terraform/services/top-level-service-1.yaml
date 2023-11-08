@@ -1,5 +1,0 @@
-components:
-  terraform:
-    top-level-component1:
-      vars:
-        service_1_name: "top-level-service-1"

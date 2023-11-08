@@ -1,6 +1,2 @@
 vars:
   stage: staging
-
-settings:
-  config:
-    is_prod: false

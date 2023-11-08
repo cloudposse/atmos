@@ -1,0 +1,8 @@
+components:
+  terraform:
+    vpc-flow-logs-bucket:
+      metadata:
+        component: vpc-flow-logs-bucket
+      vars:
+        enabled: true
+        name: "vpc-flow-logs"

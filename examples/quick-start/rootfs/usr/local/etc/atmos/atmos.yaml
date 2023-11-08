@@ -15,7 +15,7 @@
 # are independent settings (supporting both absolute and relative paths).
 # If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
 # are considered paths relative to 'base_path'.
-base_path: "."
+base_path: ""
 
 components:
   terraform:
@@ -185,7 +185,6 @@ commands:
           - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
           - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
           - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
-
   - name: list
     description: Execute 'atmos list' commands
     # subcommands
@@ -217,68 +216,6 @@ commands:
             atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
             {{ end }}
 
-
-# Integrations
-integrations:
-
-  # Atlantis integration
-  # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
-  atlantis:
-    # Path and name of the Atlantis config file 'atlantis.yaml'
-    # Supports absolute and relative paths
-    # All the intermediate folders will be created automatically (e.g. 'path: /config/atlantis/atlantis.yaml')
-    # Can be overridden on the command line by using '--output-path' command-line argument in 'atmos atlantis generate repo-config' command
-    # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to 'stdout'
-    # On Linux/macOS, you can also use '--output-path=/dev/stdout' to dump the content to 'stdout' without setting it to an empty string in 'atlantis.path'
-    path: "atlantis.yaml"
-
-    # Config templates
-    # Select a template by using the '--config-template <config_template>' command-line argument in 'atmos atlantis generate repo-config' command
-    config_templates:
-      config-1:
-        version: 3
-        automerge: true
-        delete_source_branch_on_merge: true
-        parallel_plan: true
-        parallel_apply: true
-        allowed_regexp_prefixes:
-          - dev/
-          - staging/
-          - prod/
-
-    # Project templates
-    # Select a template by using the '--project-template <project_template>' command-line argument in 'atmos atlantis generate repo-config' command
-    project_templates:
-      project-1:
-        # generate a project entry for each component in every stack
-        name: "{tenant}-{environment}-{stage}-{component}"
-        workspace: "{workspace}"
-        dir: "{component-path}"
-        terraform_version: v1.2
-        delete_source_branch_on_merge: true
-        autoplan:
-          enabled: true
-          when_modified:
-            - "**/*.tf"
-            - "varfiles/$PROJECT_NAME.tfvars.json"
-        apply_requirements:
-          - "approved"
-
-    # Workflow templates
-    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
-    # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
-    workflow_templates:
-      workflow-1:
-        plan:
-          steps:
-            - run: terraform init -input=false
-            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
-            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
-            # You must output the plan using '-out $PLANFILE' because Atlantis expects plans to be in a specific location
-            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
-        apply:
-          steps:
-            - run: terraform apply $PLANFILE
 
 # Validation schemas (for validating atmos stacks and components)
 schemas:

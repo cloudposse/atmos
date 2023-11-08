@@ -1,3 +1,0 @@
-import:
-  - mixins/region/global-region
-  - orgs/cp/tenant2/prod/_defaults

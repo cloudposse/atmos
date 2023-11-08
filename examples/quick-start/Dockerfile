@@ -25,7 +25,7 @@ ENV AWS_VAULT_ENABLED=false
 ENV AWS_VAULT_SERVER_ENABLED=false
 ENV GEODESIC_TF_PROMPT_ACTIVE=false
 ENV DIRENV_ENABLED=false
-ENV NAMESPACE="cp"
+ENV NAMESPACE="acme"
 
 # Enable advanced AWS assume role chaining for tools using AWS SDK
 # https://docs.aws.amazon.com/sdk-for-go/api/aws/session/

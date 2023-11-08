@@ -1,0 +1,5 @@
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: plat

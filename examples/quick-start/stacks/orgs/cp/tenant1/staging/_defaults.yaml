@@ -1,3 +1,0 @@
-import:
-  - mixins/stage/staging
-  - orgs/cp/tenant1/_defaults

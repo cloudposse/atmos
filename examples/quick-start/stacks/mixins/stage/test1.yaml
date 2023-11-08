@@ -1,6 +1,0 @@
-vars:
-  stage: test-1
-
-settings:
-  config:
-    is_prod: false

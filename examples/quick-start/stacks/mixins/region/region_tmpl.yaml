@@ -1,3 +1,0 @@
-vars:
-  region: "{{ .region }}"
-  environment: "{{ .environment }}"
