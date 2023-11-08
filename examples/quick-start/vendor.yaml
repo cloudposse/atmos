@@ -26,11 +26,12 @@ spec:
         - "**/*.tf"
         - "**/*.tfvars"
         - "**/*.md"
+      excluded_paths:
+        - "providers.tf"
     - component: "vpc-flow-logs-bucket"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
       version: "1.323.0"
       targets:
         - "components/terraform/vpc-flow-logs-bucket/{{.Version}}"
       excluded_paths:
-        - "**/*.yaml"
-        - "**/*.yml"
+        - "providers.tf"
