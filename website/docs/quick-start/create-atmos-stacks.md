@@ -132,7 +132,7 @@ Although in this Quick Start guide we use just a few Terraform components which 
 (which could be considered basic), we will use the Hierarchical Layout to show how the Atmos stacks can be configured for very complex organizations
 and infrastructures.
 
-We will assume we are using just one Organization `acme` and just one AWS Organizational Unit (OU) `core`. But as you will notice, the layout
+We will assume we are using just one Organization `acme` and just one AWS Organizational Unit (OU) `plat`. But as you will notice, the layout
 can be easily extended to support many AWS Organizations and Organizational Units.
 
 Create the following filesystem layout (which will be the final layout for this Quick Start guide):
@@ -155,7 +155,7 @@ Create the following filesystem layout (which will be the final layout for this 
    │   ├── orgs
    │   │    ├── acme
    │   │    │   ├── _defaults.yaml
-   │   │    │   ├── core
+   │   │    │   ├── plat
    │   │    │   │    ├── _defaults.yaml
    │   │    │   │    ├── dev
    │   │    │   │    │   ├── _defaults.yaml
@@ -261,45 +261,45 @@ vars:
 
 The file defines the context variable `namespace` for the entire `acme` Organization.
 
-In `stacks/orgs/acme/core/_defaults.yaml`, add the following config for the `core` OU (tenant):
+In `stacks/orgs/acme/plat/_defaults.yaml`, add the following config for the `plat` OU (tenant):
 
-```yaml title="stacks/orgs/acme/core/_defaults.yaml"
+```yaml title="stacks/orgs/acme/plat/_defaults.yaml"
 import:
   - orgs/acme/_defaults
 
 vars:
-  tenant: core
+  tenant: plat
 ```
 
-In the `stacks/orgs/acme/core/_defaults.yaml` file, we import the defaults for the Organization and define the context variable `tenant` (which
-corresponds to the `core` Organizational Unit). When Atmos processes this stack config, it will import and deep-merge all the variables defined in the
+In the `stacks/orgs/acme/plat/_defaults.yaml` file, we import the defaults for the Organization and define the context variable `tenant` (which
+corresponds to the `plat` Organizational Unit). When Atmos processes this stack config, it will import and deep-merge all the variables defined in the
 imported files and inline.
 
-In `stacks/orgs/acme/core/dev/_defaults.yaml`, add the following config for the `dev` account:
+In `stacks/orgs/acme/plat/dev/_defaults.yaml`, add the following config for the `dev` account:
 
-```yaml title="stacks/orgs/acme/core/dev/_defaults.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/_defaults.yaml"
 import:
   - mixins/stage/dev
-  - orgs/acme/core/_defaults
+  - orgs/acme/plat/_defaults
 ```
 
-In the file, we import the mixing for the `dev` account (which defines `stage: dev` variable) and then the defaults for the `core` tenant (which,
+In the file, we import the mixing for the `dev` account (which defines `stage: dev` variable) and then the defaults for the `plat` tenant (which,
 as was described above, imports the defaults for the Organization). After processing all these imports, Atmos determines the values for the three
 context variables `namespace`, `tenant` and `stage`, which it then sends to the Terraform components as Terraform variables. We are using hierarchical
 imports here.
 
 Similar to the `dev` account, add the following configs for the `staging` and `prod` accounts:
 
-```yaml title="stacks/orgs/acme/core/staging/_defaults.yaml"
+```yaml title="stacks/orgs/acme/plat/staging/_defaults.yaml"
 import:
   - mixins/stage/staging
-  - orgs/acme/core/_defaults
+  - orgs/acme/plat/_defaults
 ```
 
-```yaml title="stacks/orgs/acme/core/prod/_defaults.yaml"
+```yaml title="stacks/orgs/acme/plat/prod/_defaults.yaml"
 import:
   - mixins/stage/prod
-  - orgs/acme/core/_defaults
+  - orgs/acme/plat/_defaults
 ```
 
 <br/>
@@ -309,22 +309,22 @@ import:
 After we've configured the catalog for the components, the mixins for the regions and stages, and the defaults for the Organization, OU and accounts,
 the final step is to configure the Atmos parent (top-level) stacks and the Atmos components in the stacks.
 
-In `stacks/orgs/acme/core/dev/us-east-2.yaml`, add the following config:
+In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, add the following config:
 
-```yaml title="stacks/orgs/acme/core/dev/us-east-2.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2.yaml"
 # Import the region mixin, the defaults, and the base component configurations from the `catalog`.
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 # File extensions are optional (if not specified, `.yaml` is used by default).
 import:
   - mixins/region/us-east-2
-  - orgs/acme/core/dev/_defaults
+  - orgs/acme/plat/dev/_defaults
   - catalog/vpc
   - catalog/vpc-flow-logs-bucket
 
 components:
   terraform:
 
-    vpc-flow-logs-bucket-1:
+    vpc-flow-logs-bucket:
       metadata:
         # Point to the Terraform component in `components/terraform` folder
         component: vpc-flow-logs-bucket
@@ -335,11 +335,11 @@ components:
       vars:
         # Define variables that are specific for this component
         # and are not set in the base component
-        name: vpc-flow-logs-bucket-1
+        name: vpc-flow-logs-bucket
         # Override the default variables from the base component
         traffic_type: "REJECT"
 
-    vpc-1:
+    vpc:
       metadata:
         # Point to the Terraform component in `components/terraform` folder
         component: vpc
@@ -349,7 +349,7 @@ components:
       vars:
         # Define variables that are specific for this component
         # and are not set in the base component
-        name: vpc-1
+        name: vpc
         ipv4_primary_cidr_block: 10.8.0.0/18
         # Override the default variables from the base component
         vpc_flow_logs_enabled: true
@@ -357,10 +357,10 @@ components:
 
         # Specify the name of the Atmos component that provides configuration
         # for the `vpc-flow-logs-bucket` Terraform component
-        vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket-1
+        vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket
 
         # Override the context variables to point to a different Atmos stack if the 
-        # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region.
+        # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region.
 
         # If the bucket is provisioned in a different AWS account, 
         # set `vpc_flow_logs_bucket_stage_name`
@@ -368,7 +368,7 @@ components:
 
         # If the bucket is provisioned in a different AWS OU, 
         # set `vpc_flow_logs_bucket_tenant_name`
-        # vpc_flow_logs_bucket_tenant_name: core
+        # vpc_flow_logs_bucket_tenant_name: plat
 
         # If the bucket is provisioned in a different AWS region, 
         # set `vpc_flow_logs_bucket_environment_name`
@@ -376,44 +376,44 @@ components:
 ```
 
 In the file, we first import the region mixin, the defaults for the Organization, OU and account (using hierarchical imports), and then the base
-component configurations from the catalog. Then we define two Atmos components `vpc-flow-logs-bucket-1` and `vpc-1`, which inherit the base config
+component configurations from the catalog. Then we define two Atmos components `vpc-flow-logs-bucket` and `vpc`, which inherit the base config
 from the default Atmos components in the catalog and define and override some variables specific to the components in the stacks.
 
 Similarly, create the parent Atmos stack for the `dev` account in `us-west-2` region:
 
-```yaml title="stacks/orgs/acme/core/dev/us-west-2.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
 import:
   - mixins/region/us-west-2
-  - orgs/acme/core/dev/_defaults
+  - orgs/acme/plat/dev/_defaults
   - catalog/vpc
   - catalog/vpc-flow-logs-bucket
 
 components:
   terraform:
 
-    vpc-flow-logs-bucket-1:
+    vpc-flow-logs-bucket:
       metadata:
         component: vpc-flow-logs-bucket
         inherits:
           - vpc-flow-logs-bucket/defaults
       vars:
-        name: vpc-flow-logs-bucket-1
+        name: vpc-flow-logs-bucket
 
-    vpc-1:
+    vpc:
       metadata:
         component: vpc
         inherits:
           - vpc/defaults
       vars:
-        name: vpc-1
+        name: vpc
         ipv4_primary_cidr_block: 10.9.0.0/18
 ```
 
 <br/>
 
 Similar to the `dev` account, create the parent stacks for the `staging` and `prod` accounts for both `us-east-2` and `us-west-2` regions in the files
-`stacks/orgs/acme/core/staging/us-east-2.yaml`, `stacks/orgs/acme/core/staging/us-west-2.yaml` , `stacks/orgs/acme/core/prod/us-east-2.yaml` and
-`stacks/orgs/acme/core/prod/us-west-2.yaml`.
+`stacks/orgs/acme/plat/staging/us-east-2.yaml`, `stacks/orgs/acme/plat/staging/us-west-2.yaml` , `stacks/orgs/acme/plat/prod/us-east-2.yaml` and
+`stacks/orgs/acme/plat/prod/us-west-2.yaml`.
 
 For clarity, we skip these configurations here since they are similar to what we showed for the `dev`
 account except for importing different region mixins and the defaults, and providing different values for components' variables in different stacks.

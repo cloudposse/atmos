@@ -1,7 +1,7 @@
 ---
-title: Create Components
+title: Vendor Components
 sidebar_position: 5
-sidebar_label: Create Components
+sidebar_label: Vendor Components
 ---
 
 In the previous steps, we've configured the repository, and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
@@ -98,7 +98,7 @@ module "vpc_flow_logs_bucket" {
   component = var.vpc_flow_logs_bucket_component_name
 
   # Override the context variables to point to a different Atmos stack if the 
-  # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region
+  # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region
   stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
   environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
