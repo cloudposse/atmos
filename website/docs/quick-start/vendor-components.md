@@ -52,7 +52,6 @@ The filesystem layout should look like this:
    ├── components
    │   └── terraform   # Terraform components (Terraform root modules)
    │       ├── vpc
-   │       │   ├── component.yaml
    │       │   ├── context.tf
    │       │   ├── main.tf
    │       │   ├── outputs.tf
@@ -62,7 +61,6 @@ The filesystem layout should look like this:
    │       │   ├── versions.tf
    │       │   ├── vpc-flow-logs.tf
    │       ├── vpc-flow-logs-bucket
-   │       │   ├── component.yaml
    │       │   ├── context.tf
    │       │   ├── main.tf
    │       │   ├── outputs.tf
@@ -95,13 +93,13 @@ module "vpc_flow_logs_bucket" {
 
   # Specify the Atmos component name (defined in YAML stack config files) 
   # for which to get the remote state outputs
-  component = var.vpc_flow_logs_bucket_component_name
+  component = "vpc-flow-logs-bucket"
 
   # Override the context variables to point to a different Atmos stack if the 
   # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region
-  stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
+  environment = var.vpc_flow_logs_bucket_environment_name
+  stage       = var.vpc_flow_logs_bucket_stage_name
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
-  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
 
   # `context` input is a way to provide the information about the stack (using the context
   # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
