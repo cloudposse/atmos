@@ -50,7 +50,8 @@ locals {
   } }
 
   # If we use a separate security group for each endpoint interface,
-  # we will use the interface service name as the key: security_group_ids  = [module.endpoint_security_groups[v].id]
+  # we will use the interface service name as the key:
+  #       security_group_ids  = [module.endpoint_security_groups[v].id]
   # If we use a single security group for all endpoint interfaces,
   # we will use local.interface_endpoint_security_group_key as the key.
   interface_endpoint_security_group_key = "VPC Endpoint interfaces"
@@ -66,7 +67,7 @@ locals {
 
 module "utils" {
   source  = "cloudposse/utils/aws"
-  version = "1.1.0"
+  version = "1.3.0"
 }
 
 module "vpc" {
@@ -76,6 +77,10 @@ module "vpc" {
   ipv4_primary_cidr_block          = var.ipv4_primary_cidr_block
   internet_gateway_enabled         = var.public_subnets_enabled
   assign_generated_ipv6_cidr_block = var.assign_generated_ipv6_cidr_block
+
+  ipv4_primary_cidr_block_association     = var.ipv4_primary_cidr_block_association
+  ipv4_additional_cidr_block_associations = var.ipv4_additional_cidr_block_associations
+  ipv4_cidr_block_association_timeouts    = var.ipv4_cidr_block_association_timeouts
 
   # Required for DNS resolution of VPC Endpoint interfaces, and generally harmless
   # See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-support
@@ -123,7 +128,7 @@ module "vpc_endpoints" {
   source  = "cloudposse/vpc/aws//modules/vpc-endpoints"
   version = "2.1.0"
 
-  enabled = (length(var.interface_vpc_endpoints) + length(var.gateway_vpc_endpoints)) > 0
+  enabled = local.enabled && (length(var.interface_vpc_endpoints) + length(var.gateway_vpc_endpoints)) > 0
 
   vpc_id                  = module.vpc.vpc_id
   gateway_vpc_endpoints   = local.gateway_endpoint_map
@@ -134,7 +139,7 @@ module "vpc_endpoints" {
 
 module "subnets" {
   source  = "cloudposse/dynamic-subnets/aws"
-  version = "2.4.1"
+  version = "2.3.0"
 
   availability_zones              = local.availability_zones
   availability_zone_ids           = local.availability_zone_ids
@@ -147,6 +152,7 @@ module "subnets" {
   nat_gateway_enabled             = var.nat_gateway_enabled
   nat_instance_enabled            = var.nat_instance_enabled
   nat_instance_type               = var.nat_instance_type
+  nat_instance_ami_id             = var.nat_instance_ami_id
   public_subnets_enabled          = var.public_subnets_enabled
   public_subnets_additional_tags  = local.public_subnets_additional_tags
   private_subnets_additional_tags = local.private_subnets_additional_tags

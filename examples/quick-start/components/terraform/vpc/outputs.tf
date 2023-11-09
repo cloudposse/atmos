@@ -57,6 +57,7 @@ output "vpc" {
     id : module.vpc.vpc_id
     cidr : module.vpc.vpc_cidr_block
     subnet_type_tag_key : var.subnet_type_tag_key
+    # subnet_type_tag_value_format : var.subnet_type_tag_value_format
   }
   description = "VPC info map"
 }
@@ -103,7 +104,27 @@ output "max_subnet_count" {
   description = "Maximum allowed number of subnets before all subnet CIDRs need to be recomputed"
 }
 
+output "nat_eip_protections" {
+  description = "List of AWS Shield Advanced Protections for NAT Elastic IPs."
+  value       = aws_shield_protection.nat_eip_shield_protection
+}
+
+output "interface_vpc_endpoints" {
+  description = "List of Interface VPC Endpoints in this VPC."
+  value       = try(module.vpc_endpoints[0].interface_vpc_endpoints, [])
+}
+
 output "availability_zones" {
   description = "List of Availability Zones where subnets were created"
-  value       = local.availability_zones
+  value       = module.subnets.availability_zones
+}
+
+output "az_private_subnets_map" {
+  description = "Map of AZ names to list of private subnet IDs in the AZs"
+  value       = module.subnets.az_private_subnets_map
+}
+
+output "az_public_subnets_map" {
+  description = "Map of AZ names to list of public subnet IDs in the AZs"
+  value       = module.subnets.az_public_subnets_map
 }

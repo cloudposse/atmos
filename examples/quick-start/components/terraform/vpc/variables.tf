@@ -7,6 +7,7 @@ variable "availability_zones" {
   type        = list(string)
   description = <<-EOT
     List of Availability Zones (AZs) where subnets will be created. Ignored when `availability_zone_ids` is set.
+    Can be the full name, e.g. `us-east-1a`, or just the part after the region, e.g. `a` to allow reusable values across regions.
     The order of zones in the list ***must be stable*** or else Terraform will continually make changes.
     If no AZs are specified, then `max_subnet_count` AZs will be selected in alphabetical order.
     If `max_subnet_count > 0` and `length(var.availability_zones) > max_subnet_count`, the list
@@ -20,6 +21,8 @@ variable "availability_zone_ids" {
   type        = list(string)
   description = <<-EOT
     List of Availability Zones IDs where subnets will be created. Overrides `availability_zones`.
+    Can be the full name, e.g. `use1-az1`, or just the part after the AZ ID region code, e.g. `-az1`,
+    to allow reusable values across regions. Consider contention for resources and spot pricing in each AZ when selecting.
     Useful in some regions when using only some AZs and you want to use the same ones across multiple accounts.
     EOT
   default     = []
@@ -31,6 +34,42 @@ variable "ipv4_primary_cidr_block" {
     The primary IPv4 CIDR block for the VPC.
     Either `ipv4_primary_cidr_block` or `ipv4_primary_cidr_block_association` must be set, but not both.
     EOT
+  default     = null
+}
+
+variable "ipv4_primary_cidr_block_association" {
+  type = object({
+    ipv4_ipam_pool_id   = string
+    ipv4_netmask_length = number
+  })
+  description = <<-EOT
+    Configuration of the VPC's primary IPv4 CIDR block via IPAM. Conflicts with `ipv4_primary_cidr_block`.
+    One of `ipv4_primary_cidr_block` or `ipv4_primary_cidr_block_association` must be set.
+    Additional CIDR blocks can be set via `ipv4_additional_cidr_block_associations`.
+    EOT
+  default     = null
+}
+
+variable "ipv4_additional_cidr_block_associations" {
+  type = map(object({
+    ipv4_cidr_block     = string
+    ipv4_ipam_pool_id   = string
+    ipv4_netmask_length = number
+  }))
+  description = <<-EOT
+    IPv4 CIDR blocks to assign to the VPC.
+    `ipv4_cidr_block` can be set explicitly, or set to `null` with the CIDR block derived from `ipv4_ipam_pool_id` using `ipv4_netmask_length`.
+    Map keys must be known at `plan` time, and are only used to track changes.
+    EOT
+  default     = {}
+}
+
+variable "ipv4_cidr_block_association_timeouts" {
+  type = object({
+    create = string
+    delete = string
+  })
+  description = "Timeouts (in `go` duration format) for creating and destroying IPv4 CIDR block associations"
   default     = null
 }
 
@@ -83,6 +122,17 @@ variable "nat_instance_type" {
   default     = "t3.micro"
 }
 
+variable "nat_instance_ami_id" {
+  type        = list(string)
+  description = <<-EOT
+    A list optionally containing the ID of the AMI to use for the NAT instance.
+    If the list is empty (the default), the latest official AWS NAT instance AMI
+    will be used. NOTE: The Official NAT instance AMI is being phased out and
+    does not support NAT64. Use of a NAT gateway is recommended instead.
+    EOT
+  default     = []
+}
+
 variable "map_public_ip_on_launch" {
   type        = bool
   default     = true
@@ -116,12 +166,6 @@ variable "vpc_flow_logs_log_destination_type" {
   type        = string
   description = "The type of the logging destination. Valid values: `cloud-watch-logs`, `s3`"
   default     = "s3"
-}
-
-variable "vpc_flow_logs_bucket_component_name" {
-  type        = string
-  description = "The name of the VPC Flow Logs bucket component"
-  default     = "vpc-flow-logs-bucket"
 }
 
 variable "vpc_flow_logs_bucket_environment_name" {
