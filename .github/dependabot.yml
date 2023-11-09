@@ -13,14 +13,43 @@ updates:
   schedule:
     interval: weekly
     day: sunday
-      
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+
 - package-ecosystem: github-actions
   open-pull-requests-limit: 3
   directory: /
   labels:
     - dependencies
     - github-actions
-    - patch
+    - no-release
+  groups:
+    cicd:
+      patterns:
+        - "*"
   schedule:
     interval: weekly
     day: sunday
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+
+- package-ecosystem: npm
+  open-pull-requests-limit: 3
+  directory: /website
+  labels:
+    - dependencies
+    - javascript
+    - no-release
+  groups:
+    website:
+      patterns:
+        - "*"
+  schedule:
+    interval: weekly
+    day: sunday
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+

@@ -59,18 +59,18 @@ type Logs struct {
 }
 
 type Context struct {
-	Namespace     string   `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
-	Tenant        string   `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
-	Environment   string   `yaml:"environment" json:"environment" mapstructure:"environment"`
-	Stage         string   `yaml:"stage" json:"stage" mapstructure:"stage"`
-	Region        string   `yaml:"region" json:"region" mapstructure:"region"`
-	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
-	BaseComponent string   `yaml:"base_component" json:"base_component" mapstructure:"base_component"`
-	ComponentPath string   `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
-	Workspace     string   `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
-	Attributes    []string `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
-	File          string   `yaml:"file" json:"file" mapstructure:"file"`
-	Folder        string   `yaml:"folder" json:"folder" mapstructure:"folder"`
+	Namespace     string `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
+	Tenant        string `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
+	Environment   string `yaml:"environment" json:"environment" mapstructure:"environment"`
+	Stage         string `yaml:"stage" json:"stage" mapstructure:"stage"`
+	Region        string `yaml:"region" json:"region" mapstructure:"region"`
+	Component     string `yaml:"component" json:"component" mapstructure:"component"`
+	BaseComponent string `yaml:"base_component" json:"base_component" mapstructure:"base_component"`
+	ComponentPath string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Workspace     string `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
+	Attributes    []any  `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
+	File          string `yaml:"file" json:"file" mapstructure:"file"`
+	Folder        string `yaml:"folder" json:"folder" mapstructure:"folder"`
 }
 
 type ArgsAndFlagsInfo struct {
@@ -117,6 +117,7 @@ type ConfigAndStacksInfo struct {
 	ComponentSection              map[string]any
 	ComponentVarsSection          map[any]any
 	ComponentSettingsSection      map[any]any
+	ComponentOverridesSection     map[any]any
 	ComponentEnvSection           map[any]any
 	ComponentEnvList              []string
 	ComponentBackendSection       map[any]any
@@ -430,3 +431,32 @@ type ConfigSourcesItem struct {
 }
 
 type ConfigSources map[string]map[string]ConfigSourcesItem
+
+// Atmos vendoring (`vendor.yaml` file)
+
+type AtmosVendorSource struct {
+	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
+	File          string   `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+}
+
+type AtmosVendorSpec struct {
+	Imports []string            `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
+	Sources []AtmosVendorSource `yaml:"sources" json:"sources" mapstructure:"sources"`
+}
+
+type AtmosVendorMetadata struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type AtmosVendorConfig struct {
+	ApiVersion string `yaml:"apiVersion" json:"apiVersion" mapstructure:"apiVersion"`
+	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Metadata   AtmosVendorMetadata
+	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
+}

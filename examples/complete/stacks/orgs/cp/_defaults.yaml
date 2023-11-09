@@ -35,6 +35,9 @@ components:
   helmfile: {}
 
 settings:
+  spacelift:
+    workspace_enabled: false
+    autodeploy: false
   atlantis:
     # Select a config template defined in `atmos.yaml` in the `integrations.atlantis.config_templates` section
     config_template_name: "config-1"

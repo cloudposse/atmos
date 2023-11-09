@@ -25,7 +25,7 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	)
 
 	assert.Nil(t, err)
-	assert.Equal(t, 44, len(spaceliftStacks))
+	assert.Equal(t, 47, len(spaceliftStacks))
 
 	tenant1Ue2DevInfraVpcStack := spaceliftStacks["tenant1-ue2-dev-infra-vpc"].(map[string]any)
 	tenant1Ue2DevInfraVpcStackInfrastructureStackName := tenant1Ue2DevInfraVpcStack["stack"].(string)

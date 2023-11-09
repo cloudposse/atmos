@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -61,6 +60,7 @@ func FindComponentConfig(
 	var componentSection map[string]any
 	var componentVarsSection map[any]any
 	var componentSettingsSection map[any]any
+	var componentOverridesSection map[any]any
 	var componentImportsSection []string
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
@@ -111,6 +111,9 @@ func FindComponentConfig(
 	if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
 		componentSettingsSection = map[any]any{}
 	}
+	if componentOverridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
+		componentOverridesSection = map[any]any{}
+	}
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
@@ -132,6 +135,7 @@ func FindComponentConfig(
 	configAndStacksInfo.ComponentSection = componentSection
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
+	configAndStacksInfo.ComponentOverridesSection = componentOverridesSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -146,7 +150,12 @@ func FindComponentConfig(
 }
 
 // processCommandLineArgs processes command-line args
-func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
+func processCommandLineArgs(
+	componentType string,
+	cmd *cobra.Command,
+	args []string,
+	additionalArgsAndFlags []string,
+) (schema.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
 	cmd.DisableFlagParsing = false
@@ -161,7 +170,12 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo, err
 	}
 
-	configAndStacksInfo.AdditionalArgsAndFlags = argsAndFlagsInfo.AdditionalArgsAndFlags
+	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
+	if len(additionalArgsAndFlags) > 0 {
+		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
+	}
+
+	configAndStacksInfo.AdditionalArgsAndFlags = finalAdditionalArgsAndFlags
 	configAndStacksInfo.SubCommand = argsAndFlagsInfo.SubCommand
 	configAndStacksInfo.SubCommand2 = argsAndFlagsInfo.SubCommand2
 	configAndStacksInfo.ComponentType = componentType
@@ -351,16 +365,21 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
-			y, _ := u.ConvertToYAML(cliConfig)
+			cliConfigYaml := ""
+
+			if cliConfig.Logs.Level == u.LogLevelTrace {
+				y, _ := u.ConvertToYAML(cliConfig)
+				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
+			}
 
 			return configAndStacksInfo,
 				fmt.Errorf("\nSearched all stack YAML files, but could not find config for the component '%s' in the stack '%s'.\n"+
 					"Check that all variables in the stack name pattern '%s' are correctly defined in the stack config files.\n"+
-					"Are the component and stack names correct? Did you forget an import?\n\n\nCLI config:\n\n%v",
+					"Are the component and stack names correct? Did you forget an import?%v\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					cliConfig.Stacks.NamePattern,
-					y)
+					cliConfigYaml)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
 				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
@@ -829,54 +848,6 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 				backendType: backendConfig,
 			},
 		},
-	}
-}
-
-// printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
-// and prints the data to the console or to a file (if file is specified)
-func printOrWriteToFile(
-	format string,
-	file string,
-	data any,
-) error {
-	switch format {
-	case "yaml":
-		if file == "" {
-			err := u.PrintAsYAML(data)
-			if err != nil {
-				return err
-			}
-		} else {
-			err := u.WriteToFileAsYAML(file, data, 0644)
-			if err != nil {
-				return err
-			}
-		}
-
-	case "json":
-		if file == "" {
-			err := u.PrintAsJSON(data)
-			if err != nil {
-				return err
-			}
-		} else {
-			err := u.WriteToFileAsJSON(file, data, 0644)
-			if err != nil {
-				return err
-			}
-		}
-
-	default:
-		return fmt.Errorf("invalid 'format': %s", format)
-	}
-
-	return nil
-}
-
-func removeTempDir(cliConfig schema.CliConfiguration, path string) {
-	err := os.RemoveAll(path)
-	if err != nil {
-		u.LogWarning(cliConfig, err.Error())
 	}
 }
 

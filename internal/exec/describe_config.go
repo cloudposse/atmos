@@ -15,7 +15,7 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	info, err := processCommandLineArgs("", cmd, args)
+	info, err := processCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}

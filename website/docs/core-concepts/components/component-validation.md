@@ -10,7 +10,7 @@ Validation is critical to maintaining hygienic configurations in distributed tea
 
 Atmos component validation allows:
 
-* Validate component config (`vars`, `settings`, `backend`, `env`, and other sections) using JSON Schema
+* Validate component config (`vars`, `settings`, `backend`, `env`, `overrides` and other sections) using JSON Schema
 
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   OPA/Rego policies
@@ -357,17 +357,17 @@ errors[message] {
     message = "'notes2.message' should not be empty"
 }
 
-# Check that the `app_config.hostname` variable is defined only once for the stack accross all stack config files
+# Check that the `app_config.hostname` variable is defined only once for the stack accross all stack manifests
 # Refer to https://atmos.tools/cli/commands/describe/component#sources-of-component-variables for details on how 
 # 'atmos' detects sources for all variables
 # https://www.openpolicyagent.org/docs/latest/policy-language/#universal-quantification-for-all
 errors[message] {
     hostnames := {app_config | some app_config in input.sources.vars.app_config; app_config.hostname}
     count(hostnames) > 0
-    message = "'app_config.hostname' variable must be defined only once for the stack accross all stack config files"
+    message = "'app_config.hostname' variable must be defined only once for the stack accross all stack manifests"
 }
 
-# This policy checks that the 'bar' variable is not defined in any of the '_defaults.yaml' Atmos stack config files
+# This policy checks that the 'bar' variable is not defined in any of the '_defaults.yaml' Atmos stack manifests
 # Refer to https://atmos.tools/cli/commands/describe/component#sources-of-component-variables for details on how 
 # 'atmos' detects sources for all variables
 # https://www.openpolicyagent.org/docs/latest/policy-language/#universal-quantification-for-all
@@ -379,17 +379,17 @@ errors[message] {
     # Check the count of the stack dependencies of the 'bar' variable where 'stack_file' ends with '_defaults'
     count(defaults_stack_dependencies) > 0
     # Generate the error message
-    message = "The 'bar' variable must not be defined in any of '_defaults.yaml' stack config files"
+    message = "The 'bar' variable must not be defined in any of '_defaults.yaml' stack manifests"
 }
 
-# This policy checks that if the 'foo' variable is defined in the 'stack1.yaml' stack config file, it cannot be overriden in 'stack2.yaml'
+# This policy checks that if the 'foo' variable is defined in the 'stack1.yaml' stack manifest, it cannot be overriden in 'stack2.yaml'
 # Refer to https://atmos.tools/cli/commands/describe/component#sources-of-component-variables for details 
 # on how 'atmos' detects sources for all variables
 # https://www.openpolicyagent.org/docs/latest/policy-language/#universal-quantification-for-all
 errors[message] {
     # Get all 'stack_dependencies' of the 'foo' variable
     stack_dependencies := input.sources.vars.foo.stack_dependencies
-    # Check if the 'foo' variable is defined in the 'stack1.yaml' stack config file
+    # Check if the 'foo' variable is defined in the 'stack1.yaml' stack manifest
     stack1_dependency := endswith(stack_dependencies[0].stack_file, "stack1")
     stack1_dependency == true
     # Get all stack dependencies of the 'foo' variable where 'stack_file' ends with 'stack2' (this means that the variable 

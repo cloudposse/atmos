@@ -21,7 +21,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("invalid arguments. The command requires one argument `workflow name`")
 	}
 
-	info, err := processCommandLineArgs("terraform", cmd, args)
+	info, err := processCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}

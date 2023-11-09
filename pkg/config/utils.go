@@ -12,7 +12,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// FindAllStackConfigsInPathsForStack finds all stack config files in the paths specified by globs for the provided stack
+// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack
 func FindAllStackConfigsInPathsForStack(
 	cliConfig schema.CliConfiguration,
 	stack string,
@@ -92,7 +92,7 @@ func FindAllStackConfigsInPathsForStack(
 	return absolutePaths, relativePaths, false, nil
 }
 
-// FindAllStackConfigsInPaths finds all stack config files in the paths specified by globs
+// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs
 func FindAllStackConfigsInPaths(
 	cliConfig schema.CliConfiguration,
 	includeStackPaths []string,
@@ -400,7 +400,7 @@ func GetContextFromVars(vars map[any]any) schema.Context {
 		context.Region = region
 	}
 
-	if attributes, ok := vars["attributes"].([]string); ok {
+	if attributes, ok := vars["attributes"].([]any); ok {
 		context.Attributes = attributes
 	}
 
@@ -492,7 +492,7 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 		"{tenant}", context.Tenant,
 		"{stage}", context.Stage,
 		"{workspace}", context.Workspace,
-		"{attributes}", strings.Join(context.Attributes, "-"),
+		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOdStrings(context.Attributes), "-"),
 	)
 	return r.Replace(pattern)
 }

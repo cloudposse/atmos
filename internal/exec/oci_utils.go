@@ -27,12 +27,7 @@ func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDi
 		return err
 	}
 
-	defer func(tempDir string) {
-		err := os.RemoveAll(tempDir)
-		if err != nil {
-			u.LogError(err)
-		}
-	}(tempDir)
+	defer removeTempDir(cliConfig, tempDir)
 
 	// Temp tarball file name
 	tempTarFileName := path.Join(tempDir, uuid.New().String()) + ".tar"

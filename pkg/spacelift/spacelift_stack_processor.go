@@ -75,7 +75,7 @@ func CreateSpaceliftStacks(
 	}
 }
 
-// TransformStackConfigToSpaceliftStacks takes a map of stack configs and transforms it to a map of Spacelift stacks
+// TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
 	stacks map[string]any,
 	stackConfigPathTemplate string,
@@ -263,8 +263,8 @@ func TransformStackConfigToSpaceliftStacks(
 
 					var terraformComponentNamesInCurrentStack []string
 
-					for v := range terraformComponentsMap {
-						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.Replace(v, "/", "-", -1))
+					for v2 := range terraformComponentsMap {
+						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.Replace(v2, "/", "-", -1))
 					}
 
 					// Legacy/deprecated `settings.spacelift.depends_on`
@@ -276,12 +276,13 @@ func TransformStackConfigToSpaceliftStacks(
 					var spaceliftStackNameDependsOnLabels1 []string
 
 					for _, dep := range spaceliftDependsOn {
-						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
+						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOnLegacy(
 							dep.(string),
 							allStackNames,
 							contextPrefix,
 							terraformComponentNamesInCurrentStack,
-							component)
+							component,
+						)
 						if err != nil {
 							u.LogError(err)
 							return nil, err
@@ -336,11 +337,12 @@ func TransformStackConfigToSpaceliftStacks(
 						}
 
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
+							component,
+							contextPrefix,
 							stackComponentSettingsDependsOnContext.Component,
-							allStackNames,
 							contextPrefixDependsOn,
-							terraformComponentNamesInCurrentStack,
-							component)
+							allStackNames,
+						)
 						if err != nil {
 							u.LogError(err)
 							return nil, err

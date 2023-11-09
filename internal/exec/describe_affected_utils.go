@@ -27,7 +27,7 @@ var (
 	remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 )
 
-// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, processes stack configs
+// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, and processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoClone(
 	cliConfig schema.CliConfiguration,
@@ -188,7 +188,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	return affected, nil
 }
 
-// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, processes stack configs
+// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoPath(
 	cliConfig schema.CliConfiguration,

@@ -69,7 +69,7 @@ The output contains the following sections:
 
 - `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
 
-- `atmos_stack_file` - the stack config file name where the Atmos stack is defined
+- `atmos_stack_file` - the stack manifest where the Atmos stack is defined
 
 - `backend` - Terraform backend configuration
 
@@ -114,10 +114,12 @@ The output contains the following sections:
 
 - `imports` - a list of all imports in the Atmos stack (this shows all imports in the stack, related to the component and not)
 
-- `deps_all` - a list of all component stack dependencies (stack config files where the component settings are defined, either inline or via imports)
+- `deps_all` - a list of all component stack dependencies (stack manifests where the component settings are defined, either inline or via imports)
 
 - `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
   (after the deep-merging and processing all the inheritance chains and all the base components)
+
+- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/components/overrides) for more details
 
 ## Difference between `imports`, `deps_all` and `deps` outputs
 
@@ -471,16 +473,16 @@ The `sources.vars` section of the output shows the final deep-merged component's
 
 Each variable descriptor has the following schema:
 
-- `final_value` - the final value of the variable after Atmos processes and deep-merges all values from all stack config files
+- `final_value` - the final value of the variable after Atmos processes and deep-merges all values from all stack manifests
 - `name` - the variable name
-- `stack_dependencies` - the variable's inheritance chain (stack config files where the values for the variable were provided). It has the following
+- `stack_dependencies` - the variable's inheritance chain (stack manifests where the values for the variable were provided). It has the following
   schema:
 
-  - `stack_file` - the stack config file where the value for the variable was provided
-  - `stack_file_section` - the section of the stack config file where the value for the variable was provided
+  - `stack_file` - the stack manifest where the value for the variable was provided
+  - `stack_file_section` - the section of the stack manifest where the value for the variable was provided
   - `variable_value` - the variable's value
   - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
-    in the stack config file. `import` means the stack config file where the variable is defined was imported into the parent Atmos stack
+    in the stack manifest. `import` means the stack manifest where the variable is defined was imported into the parent Atmos stack
 
 <br/>
 
@@ -631,13 +633,13 @@ sources:
 
 Which we can interpret as follows (reading from the last to the first item in the `stack_dependencies` list):
 
-- In the `orgs/cp/tenant1/dev/us-east-2` stack config file (the last item in the list), the value for `enabled` was set to `true` in the global `vars`
+- In the `orgs/cp/tenant1/dev/us-east-2` stack manifest (the last item in the list), the value for `enabled` was set to `true` in the global `vars`
   section (inline)
 
-- Then in the same `orgs/cp/tenant1/dev/us-east-2` stack config file, the value for `enabled` was set to `false` in the `terraform.vars`
+- Then in the same `orgs/cp/tenant1/dev/us-east-2` stack manifest, the value for `enabled` was set to `false` in the `terraform.vars`
   section (inline). This value overrode the value set in the global `vars` section
 
-- Finally, in the `catalog/terraform/test-component` stack config file (which was imported into the parent Atmos stack
+- Finally, in the `catalog/terraform/test-component` stack manifest (which was imported into the parent Atmos stack
   via [`import`](/core-concepts/stacks/imports)), the value for `enabled` was set to `true` in the `components.terraform.vars` section of
   the `test/test-component-override-3` Atmos component. This value overrode all the previous values arriving at the `final_value: true` for the
   variable. This final value is then set for the `enabled` variable of the Terraform component `test/test-component` when Atmos
@@ -649,16 +651,16 @@ The `sources.env` section of the output shows the final deep-merged component's 
 
 Each variable descriptor has the following schema:
 
-- `final_value` - the final value of the variable after Atmos processes and deep-merges all values from all stack config files
+- `final_value` - the final value of the variable after Atmos processes and deep-merges all values from all stack manifests
 - `name` - the variable name
-- `stack_dependencies` - the variable's inheritance chain (stack config files where the values for the variable were provided). It has the following
+- `stack_dependencies` - the variable's inheritance chain (stack manifests where the values for the variable were provided). It has the following
   schema:
 
-  - `stack_file` - the stack config file where the value for the variable was provided
-  - `stack_file_section` - the section of the stack config file where the value for the variable was provided
+  - `stack_file` - the stack manifest where the value for the variable was provided
+  - `stack_file_section` - the section of the stack manifest where the value for the variable was provided
   - `variable_value` - the variable's value
   - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
-    in the stack config file. `import` means the stack config file where the variable is defined was imported into the parent Atmos stack
+    in the stack manifest. `import` means the stack manifest where the variable is defined was imported into the parent Atmos stack
 
 <br/>
 
@@ -767,16 +769,16 @@ sources:
 
 Which we can interpret as follows (reading from the last to the first item in the `stack_dependencies` list):
 
-- In the `catalog/terraform/test-component` stack config file (the last item in the list), the value for the `TEST_ENV_VAR1` ENV variable was set
+- In the `catalog/terraform/test-component` stack manifest (the last item in the list), the value for the `TEST_ENV_VAR1` ENV variable was set
   to `val1` in the `components.terraform.env` section
 
-- Then the value was set to `val1-override` in the `catalog/terraform/test-component-override` stack config file. This value overrides the value set
-  in the `catalog/terraform/test-component` stack config file
+- Then the value was set to `val1-override` in the `catalog/terraform/test-component-override` stack manifest. This value overrides the value set
+  in the `catalog/terraform/test-component` stack manifest
 
-- Then the value was set to `val1-override-2` in the `catalog/terraform/test-component-override-2` stack config file. This value overrides the values
-  set in the `catalog/terraform/test-component` and `catalog/terraform/test-component-override` stack config files
+- Then the value was set to `val1-override-2` in the `catalog/terraform/test-component-override-2` stack manifest. This value overrides the values
+  set in the `catalog/terraform/test-component` and `catalog/terraform/test-component-override` stack manifests
 
-- Finally, in the `catalog/terraform/test-component-override-3` stack config file (which was imported into the parent Atmos stack
+- Finally, in the `catalog/terraform/test-component-override-3` stack manifest (which was imported into the parent Atmos stack
   via [`import`](/core-concepts/stacks/imports)), the value was set to `val1-override-3` in the `components.terraform.env` section of
   the `test/test-component-override-3` Atmos component. This value overrode all the previous values arriving at the `final_value: val1-override-3` for
   the ENV variable
@@ -787,16 +789,16 @@ The `sources.settings` section of the output shows the final deep-merged compone
 
 Each setting descriptor has the following schema:
 
-- `final_value` - the final value of the setting after Atmos processes and deep-merges all values from all stack config files
+- `final_value` - the final value of the setting after Atmos processes and deep-merges all values from all stack manifests
 - `name` - the setting name
-- `stack_dependencies` - the setting's inheritance chain (stack config files where the values for the variable were provided). It has the following
+- `stack_dependencies` - the setting's inheritance chain (stack manifests where the values for the variable were provided). It has the following
   schema:
 
-  - `stack_file` - the stack config file where the value for the setting was provided
-  - `stack_file_section` - the section of the stack config file where the value for the setting was provided
+  - `stack_file` - the stack manifest where the value for the setting was provided
+  - `stack_file_section` - the section of the stack manifest where the value for the setting was provided
   - `variable_value` - the setting's value
   - `dependency_type` - how the setting was defined (`inline` or `import`). `inline` means the setting was defined in one of the sections
-    in the stack config file. `import` means the stack config file where the setting is defined was imported into the parent Atmos stack
+    in the stack manifest. `import` means the stack config file where the setting is defined was imported into the parent Atmos stack
 
 <br/>
 
