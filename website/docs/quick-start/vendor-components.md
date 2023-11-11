@@ -6,10 +6,7 @@ sidebar_label: Vendor Components
 
 In the previous steps, we've configured the repository, and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
 components into three AWS accounts (`dev`, `staging`, `prod`) in two AWS regions (`us-east-2` and `us-west-2`). We've also configured the Atmos CLI to
-search for the components in the `components/terraform` directory.
-
-We'll also put the Terraform components into the `infra` folder under `components/terraform` (note that a component can be in
-the `components/terraform` directory itself, or in any subfolder at any level in the directory).
+search for the Terraform components in the `components/terraform` directory.
 
 Next step is to create the Terraform components `vpc-flow-logs-bucket` and `vpc`.
 
