@@ -5,8 +5,9 @@ sidebar_label: Vendor Components
 ---
 
 In the previous steps, we've configured the repository, and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
-components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`). 
-We've also configured the Atmos CLI to search for the Terraform components in the `components/terraform` directory.
+components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
+We've also configured the Atmos CLI in the `atmos.yaml` CLI config file to search for the Terraform components in
+the `components/terraform` directory.
 
 Next step is to create the Terraform components `vpc-flow-logs-bucket` and `vpc`.
 
@@ -20,7 +21,7 @@ One way to create the Terraform components is to copy them into the correspondin
   [vpc](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/vpc)
   into the `components/terraform/vpc` folder
 
-The recommended way is to vendor the components is using Atmos Vendoring and the `atmos vendor pull` CLI command.
+__NOTE:__ The recommended way is to vendor the components using Atmos Vendoring and the `atmos vendor pull` CLI command.
 
 <br/>
 
@@ -38,20 +39,51 @@ For more information about Atmos Vendoring and the `atmos vendor pull` CLI comma
 To vendor the components from the open-source component repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components),
 perform the following steps:
 
-- Copy the `component.yaml` component vendoring config file from the Atmos
-  example [components/terraform/vpc-flow-logs-bucket/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/components/terraform/vpc-flow-logs-bucket/component.yaml)
-  into `components/terraform/vpc-flow-logs-bucket/component.yaml` and then run the Atmos
-  command `atmos vendor pull --component vpc-flow-logs-bucket` from
-  the root of the repo. The command will copy all the component's files from the open-source component
-  repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/vpc-flow-logs-bucket)
+- Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
 
-- Copy the `component.yaml` component vendoring config file from the Atmos
-  example [components/terraform/vpc/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/components/terraform/vpc/component.yaml)
-  into `components/terraform/vpc/component.yaml` and then run the Atmos command `atmos vendor pull --component vpc` from
-  the root of the repo. The command will copy all the component's files from the open-source component
-  repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/vpc)
+```yaml title="vendor.yaml"
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config
+  description: Atmos vendoring manifest
+spec:
+  # `imports` or `sources` (or both) must be defined in a vendoring manifest
+  imports: []
 
-The filesystem layout should look like this:
+  sources:
+    # `source` supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
+    # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
+    # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
+    - component: "vpc"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
+      version: "1.343.1"
+      targets:
+        - "components/terraform/vpc"
+      # Only include the files that match the 'included_paths' patterns.
+      # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
+      # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
+      # https://en.wikipedia.org/wiki/Glob_(programming)
+      # https://github.com/bmatcuk/doublestar#patterns
+      included_paths:
+        - "**/*.tf"
+      excluded_paths:
+        - "**/providers.tf"
+    - component: "vpc-flow-logs-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      version: "1.343.1"
+      targets:
+        - "components/terraform/vpc-flow-logs-bucket"
+      included_paths:
+        - "**/*.tf"
+      excluded_paths:
+        - "**/providers.tf"
+```
+
+- Execute the command `atmos vendor pull` from the root of the repo
+
+After the command is executed, the filesystem layout should look like this:
 
 <br/>
 
