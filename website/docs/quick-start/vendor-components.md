@@ -5,20 +5,38 @@ sidebar_label: Vendor Components
 ---
 
 In the previous steps, we've configured the repository, and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
-components into three AWS accounts (`dev`, `staging`, `prod`) in two AWS regions (`us-east-2` and `us-west-2`). We've also configured the Atmos CLI to
-search for the Terraform components in the `components/terraform` directory.
+components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`). 
+We've also configured the Atmos CLI to search for the Terraform components in the `components/terraform` directory.
 
 Next step is to create the Terraform components `vpc-flow-logs-bucket` and `vpc`.
 
-There are a few ways to create the Terraform components:
+One way to create the Terraform components is to copy them into the corresponding folders in your repo:
 
-- Copy the `vpc-flow-logs-bucket` component from the Atmos
-  example [components/terraform/vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc-flow-logs-bucket)
+- Copy the `vpc-flow-logs-bucket` component from the open-source component repository
+  [vpc-flow-logs-bucket](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/vpc-flow-logs-bucket)
+  into the `components/terraform/vpc-flow-logs-bucket` folder
 
-- Copy the `vpc` component from the Atmos
-  example [components/terraform/vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc)
+- Copy the `vpc` component from the open-source component repository
+  [vpc](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/vpc)
+  into the `components/terraform/vpc` folder
 
-or
+The recommended way is to vendor the components is using Atmos Vendoring and the `atmos vendor pull` CLI command.
+
+<br/>
+
+:::tip
+
+For more information about Atmos Vendoring and the `atmos vendor pull` CLI command, refer to:
+
+- [`Atmos Vendoring`](/core-concepts/vendoring)
+- [`atmos vendor pull`](/cli/commands/vendor/pull)
+
+:::
+
+<br/>
+
+To vendor the components from the open-source component repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components),
+perform the following steps:
 
 - Copy the `component.yaml` component vendoring config file from the Atmos
   example [components/terraform/vpc-flow-logs-bucket/component.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/components/terraform/vpc-flow-logs-bucket/component.yaml)
@@ -41,9 +59,6 @@ The filesystem layout should look like this:
    │  
    │   # Centralized stacks configuration
    ├── stacks
-   │   └── <stack_1>
-   │   └── <stack_2>
-   │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
    ├── components
