@@ -116,24 +116,6 @@ commands:
         steps:
           - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
           - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
-  - name: play
-    description: This command plays games
-    steps:
-      - echo Playing...
-    # subcommands
-    commands:
-      - name: hello
-        description: This command says Hello world
-        steps:
-          - echo Hello world
-      - name: ping
-        description: This command plays ping-pong
-        # If 'verbose' is set to 'true', atmos will output some info messages to the console before executing the command's steps
-        # If 'verbose' is not defined, it implicitly defaults to 'false'
-        verbose: true
-        steps:
-          - echo Playing ping-pong...
-          - echo pong
   - name: show
     description: Execute 'show' commands
     # subcommands
@@ -202,83 +184,43 @@ commands:
 
           Example usage:
             atmos list components
-            atmos list components -s tenant1-ue1-dev
-            atmos list components --stack tenant2-uw2-prod
+            atmos list components -s plat-ue2-dev
+            atmos list components --stack plat-uw2-prod
+            atmos list components -s plat-ue2-dev --type abstract
+            atmos list components -s plat-ue2-dev -t enabled
+            atmos list components -s plat-ue2-dev -t disabled
         flags:
           - name: stack
             shorthand: s
             description: Name of the stack
             required: false
+          - name: type
+            shorthand: t
+            description: Component types - abstract, enabled, or disabled
+            required: false
         steps:
           - >
             {{ if .Flags.stack }}
-            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ if eq .Flags.type "enabled" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r .key
+              {{ else if eq .Flags.type "disabled" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r .key
+              {{ else if eq .Flags.type "abstract" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r .key
+              {{ else }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ end }}
             {{ else }}
-            atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ if eq .Flags.type "enabled" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else if eq .Flags.type "disabled" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else if eq .Flags.type "abstract" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else }}
+                atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ end }}
             {{ end }}
-
-
-# Integrations
-integrations:
-
-  # Atlantis integration
-  # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
-  atlantis:
-    # Path and name of the Atlantis config file 'atlantis.yaml'
-    # Supports absolute and relative paths
-    # All the intermediate folders will be created automatically (e.g. 'path: /config/atlantis/atlantis.yaml')
-    # Can be overridden on the command line by using '--output-path' command-line argument in 'atmos atlantis generate repo-config' command
-    # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to 'stdout'
-    # On Linux/macOS, you can also use '--output-path=/dev/stdout' to dump the content to 'stdout' without setting it to an empty string in 'atlantis.path'
-    path: "atlantis.yaml"
-
-    # Config templates
-    # Select a template by using the '--config-template <config_template>' command-line argument in 'atmos atlantis generate repo-config' command
-    config_templates:
-      config-1:
-        version: 3
-        automerge: true
-        delete_source_branch_on_merge: true
-        parallel_plan: true
-        parallel_apply: true
-        allowed_regexp_prefixes:
-          - dev/
-          - staging/
-          - prod/
-
-    # Project templates
-    # Select a template by using the '--project-template <project_template>' command-line argument in 'atmos atlantis generate repo-config' command
-    project_templates:
-      project-1:
-        # generate a project entry for each component in every stack
-        name: "{tenant}-{environment}-{stage}-{component}"
-        workspace: "{workspace}"
-        dir: "{component-path}"
-        terraform_version: v1.2
-        delete_source_branch_on_merge: true
-        autoplan:
-          enabled: true
-          when_modified:
-            - "**/*.tf"
-            - "varfiles/$PROJECT_NAME.tfvars.json"
-        apply_requirements:
-          - "approved"
-
-    # Workflow templates
-    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
-    # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
-    workflow_templates:
-      workflow-1:
-        plan:
-          steps:
-            - run: terraform init -input=false
-            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
-            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
-            # You must output the plan using '-out $PLANFILE' because Atlantis expects plans to be in a specific location
-            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
-        apply:
-          steps:
-            - run: terraform apply $PLANFILE
 
 # Validation schemas (for validating atmos stacks and components)
 schemas:

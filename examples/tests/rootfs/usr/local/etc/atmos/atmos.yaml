@@ -300,6 +300,7 @@ commands:
               # https://stackoverflow.com/questions/39139107/how-to-format-a-json-string-as-a-table-using-jq
               # https://stackoverflow.com/questions/57298373/print-colored-raw-output-with-jq-on-terminal
               # https://stackoverflow.com/questions/23118341/how-to-get-key-names-from-json-using-jq
+              # https://stackoverflow.com/questions/42011086/merge-arrays-of-json
               # https://www.baeldung.com/linux/jq-passing-bash-variables
               # https://learnk8s.io/blog/kubectl-productivity
               # https://stackoverflow.com/questions/65421774/kubernetes-list-all-containers-that-are-not-running
