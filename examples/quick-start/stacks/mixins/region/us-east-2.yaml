@@ -1,5 +1,5 @@
 import:
-  - catalog/vpc/us-east-2
+  - catalog/vpc/ue2
 
 vars:
   region: us-east-2

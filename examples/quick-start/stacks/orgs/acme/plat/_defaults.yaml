@@ -1,5 +1,6 @@
 import:
   - orgs/acme/_defaults
+  - catalog/terraform/vpc-flow-logs-bucket/defaults
 
 vars:
   tenant: plat

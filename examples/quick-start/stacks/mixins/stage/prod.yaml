@@ -1,2 +1,5 @@
+import:
+  - catalog/vpc/prod
+
 vars:
   stage: prod

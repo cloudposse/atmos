@@ -83,6 +83,18 @@ spec:
 
 - Execute the command `atmos vendor pull` from the root of the repo
 
+```text
+Processing vendor config file 'vendor.yaml'
+
+Pulling sources for the component 'vpc' 
+from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.343.1' 
+into 'components/terraform/vpc'
+
+Pulling sources for the component 'vpc-flow-logs-bucket' 
+from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.343.1' 
+into 'components/terraform/vpc-flow-logs-bucket/1.343.1'
+```
+
 After the command is executed, the filesystem layout should look like this:
 
 <br/>
