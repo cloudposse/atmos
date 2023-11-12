@@ -17,8 +17,7 @@ This makes the stack configurations DRY by reusing the component's config that i
 
 Refer to [Stack Imports](/core-concepts/stacks/imports) for more details on Atmos imports.
 
-In the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket` Atmos
-component:
+In the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` file, add the following manifest for the `vpc-flow-logs-bucket` Atmos component:
 
 ```yaml title="tacks/catalog/vpc-flow-logs-bucket/defaults.yaml"
 components:
@@ -35,7 +34,7 @@ components:
         lifecycle_rule_enabled: false
 ```
 
-In the `stacks/catalog/vpc/defaults.yaml` file, add the following default config for the `vpc` Atmos component:
+In the `stacks/catalog/vpc/defaults.yaml` file, add the following manifest for the `vpc` Atmos component:
 
 ```yaml title="stacks/catalog/vpc.yaml"
 components:
@@ -80,6 +79,49 @@ components:
         vpc_flow_logs_enabled: true
         vpc_flow_logs_traffic_type: "ALL"
         vpc_flow_logs_log_destination_type: "s3"
+```
+
+In the `stacks/catalog/vpc/ue2.yaml` file, add the following manifest for the `vpc` Atmos component:
+
+```yaml title="tacks/catalog/vpc/ue2.yaml"
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones:
+          - us-east-2a
+          - us-east-2b
+          - us-east-2c
+```
+
+In the `stacks/catalog/vpc/uw2.yaml` file, add the following manifest for the `vpc` Atmos component:
+
+```yaml title="tacks/catalog/vpc/uw2.yaml"
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones:
+          - us-west-2a
+          - us-west-2b
+          - us-west-2c
+```
+
+In the `stacks/catalog/vpc/prod.yaml` file, add the following manifest for the `vpc` Atmos component:
+
+```yaml title="tacks/catalog/vpc/prod.yaml"
+components:
+  terraform:
+    vpc:
+      vars:
+        # In `prod`, don't map public IPs on launch
+        map_public_ip_on_launch: false
 ```
 
 <br/>
@@ -162,8 +204,15 @@ Create the following filesystem layout (which will be the final layout for this 
    │   # Centralized stacks configuration
    ├── stacks
    │   ├── catalog
-   │   │    ├── vpc.yaml
-   │   │    └── vpc-flow-logs-bucket.yaml
+   │   │    ├── vpc
+   │   │    │   ├── defaults.yaml
+   │   │    │   └── disabled.yaml
+   │   │    │   └── prod.yaml
+   │   │    │   └── ue2.yaml
+   │   │    │   └── uw2.yaml
+   │   │    ├── vpc-flow-logs-bucket
+   │   │    │   ├── defaults.yaml
+   │   │    │   └── disabled.yaml
    │   ├── mixins
    │   │    ├── region
    │   │    │   ├── us-east-2.yaml
@@ -180,6 +229,7 @@ Create the following filesystem layout (which will be the final layout for this 
    │   │    │   │    ├── dev
    │   │    │   │    │   ├── _defaults.yaml
    │   │    │   │    │   ├── us-east-2.yaml
+   │   │    │   │    │   ├── us-east-2-extras.yaml
    │   │    │   │    │   └── us-west-2.yaml
    │   │    │   │    ├── prod
    │   │    │   │    │   ├── _defaults.yaml
@@ -206,14 +256,34 @@ Mixins are not handled in any special way. They are technically identical to all
 In `stacks/mixins/region/us-east-2.yaml`, add the following config:
 
 ```yaml title="stacks/mixins/region/us-east-2.yaml"
+import:
+  - catalog/vpc/ue2
+
 vars:
   region: us-east-2
   environment: ue2
 ```
 
+In `stacks/mixins/region/us-east-2.yaml`, add the following config:
+
+```yaml title="stacks/mixins/region/us-east-2-extras.yaml"
+import:
+  - mixins/region/us-east-2
+  - orgs/acme/plat/dev/_defaults
+  # In this `orgs/acme/plat/dev/us-east-2-extras.yaml` manifest,
+  # you can import or define other components that are not defined in the `orgs/acme/plat/dev/us-east-2.yaml` manifest
+  # This pattern is called `Atmos Partial Stack Configuration`
+
+components:
+  terraform: {}
+```
+
 In `stacks/mixins/region/us-west-2.yaml`, add the following config:
 
 ```yaml title="stacks/mixins/region/us-west-2.yaml"
+import:
+  - catalog/vpc/uw2
+
 vars:
   region: us-west-2
   environment: uw2
@@ -229,6 +299,10 @@ vars:
 In `stacks/mixins/stage/prod.yaml`, add the following config:
 
 ```yaml title="stacks/mixins/stage/prod.yaml"
+import:
+  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
+  - catalog/vpc/prod
+
 vars:
   stage: prod
 ```
@@ -264,6 +338,8 @@ In `stacks/orgs/acme/plat/_defaults.yaml`, add the following config for the `pla
 ```yaml title="stacks/orgs/acme/plat/_defaults.yaml"
 import:
   - orgs/acme/_defaults
+  # All accounts (stages) and all regions (environments) in the `plat` OU (tenant) will have the `vpc-flow-logs-bucket` component
+  - catalog/terraform/vpc-flow-logs-bucket/defaults
 
 vars:
   tenant: plat

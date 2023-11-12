@@ -1,4 +1,5 @@
 import:
+  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
   - catalog/vpc/prod
 
 vars:
