@@ -180,7 +180,6 @@ commands:
           - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
           - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
           - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
-          - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
   - name: list
     description: Execute 'atmos list' commands
     # subcommands
@@ -197,19 +196,42 @@ commands:
 
           Example usage:
             atmos list components
-            atmos list components -s tenant1-ue1-dev
-            atmos list components --stack tenant2-uw2-prod
+            atmos list components -s plat-ue2-dev
+            atmos list components --stack plat-uw2-prod
+            atmos list components -s plat-ue2-dev --type abstract
+            atmos list components -s plat-ue2-dev -t enabled
+            atmos list components -s plat-ue2-dev -t disabled
         flags:
           - name: stack
             shorthand: s
             description: Name of the stack
             required: false
+          - name: type
+            shorthand: t
+            description: Component types - abstract, enabled, or disabled
+            required: false
         steps:
           - >
             {{ if .Flags.stack }}
-            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ if eq .Flags.type "enabled" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r .key
+              {{ else if eq .Flags.type "disabled" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r .key
+              {{ else if eq .Flags.type "abstract" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r .key
+              {{ else }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ end }}
             {{ else }}
-            atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ if eq .Flags.type "enabled" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else if eq .Flags.type "disabled" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else if eq .Flags.type "abstract" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else }}
+                atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ end }}
             {{ end }}
 
 

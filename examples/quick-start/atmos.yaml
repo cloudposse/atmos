@@ -162,8 +162,6 @@ commands:
           - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
           - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
           - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
-          - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
-
   - name: list
     description: Execute 'atmos list' commands
     # subcommands
