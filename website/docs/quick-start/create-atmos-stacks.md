@@ -4,7 +4,7 @@ sidebar_position: 6
 sidebar_label: Create Stacks
 ---
 
-In the previous step, we've configured the Terraform components and described how they can be copied into the repository.
+In the previous step, we've configured the Terraform components and described how they can be vendored into the repository.
 
 Next step is to create and configure [Atmos stacks](/core-concepts/stacks).
 
@@ -29,7 +29,7 @@ components:
         # explicitly prohibiting the component from being deployed.
         # `atmos terraform apply` will fail with an error.
         # If `metadata.type` attribute is not specified, it defaults to `real`.
-        # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis.
+        # `real` components can be provisioned by Atmos.
         type: abstract
       # Default variables, which will be inherited and can be overridden in the derived components
       vars:
@@ -49,7 +49,7 @@ components:
         # explicitly prohibiting the component from being deployed.
         # `atmos terraform apply` will fail with an error.
         # If `metadata.type` attribute is not specified, it defaults to `real`.
-        # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis.
+        # `real` components can be provisioned by Atmos.
         type: abstract
       # Default variables, which will be inherited and can be overridden in the derived components
       vars:

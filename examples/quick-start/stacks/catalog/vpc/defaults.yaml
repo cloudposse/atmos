@@ -4,8 +4,6 @@ components:
       metadata:
         component: vpc
       settings:
-        spacelift:
-          workspace_enabled: true
         # Validation
         # Supports JSON Schema and OPA policies
         # All validation steps must succeed to allow the component to be provisioned
@@ -41,4 +39,3 @@ components:
         vpc_flow_logs_enabled: true
         vpc_flow_logs_traffic_type: "ALL"
         vpc_flow_logs_log_destination_type: "s3"
-        vpc_flow_logs_bucket_component_name: "vpc-flow-logs-bucket"

@@ -160,8 +160,6 @@ commands:
             value: "{{ .ComponentConfig.vars.stage }}"
           - key: ATMOS_ENVIRONMENT
             value: "{{ .ComponentConfig.vars.environment }}"
-          - key: ATMOS_IS_PROD
-            value: "{{ .ComponentConfig.settings.config.is_prod }}"
         # If a custom command defines 'component_config' section with 'component' and 'stack', 'atmos' generates the config for the component in the stack
         # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
         # exposing all the component sections (which are also shown by 'atmos describe component' command)
@@ -181,10 +179,8 @@ commands:
           - 'echo Tenant: "{{ .ComponentConfig.vars.tenant }}"'
           - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
           - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
-          - 'echo settings.spacelift.workspace_enabled: "{{ .ComponentConfig.settings.spacelift.workspace_enabled }}"'
           - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
           - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
-          - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
   - name: list
     description: Execute 'atmos list' commands
     # subcommands
