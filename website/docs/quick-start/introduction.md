@@ -22,6 +22,6 @@ The steps to configure and provision the infrastructure are as follows:
 - [Install Atmos](/quick-start/install-atmos)
 - [Configure Repository](/quick-start/configure-repository)
 - [Configure CLI](/quick-start/configure-cli)
-- [Create Components](/quick-start/create-components)
+- [Vendor Components](/quick-start/vendor-components)
 - [Create Atmos Stacks](/quick-start/create-atmos-stacks)
 - [Provision](/quick-start/provision)

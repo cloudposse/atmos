@@ -123,14 +123,14 @@ workflows:
   base_path: "stacks/workflows"
 ```
 
-## Custom CLI Sub-commands
+## Custom CLI Commands
 
-You can extend the Atmos CLI and add as many subcommands as you want. This is a great way to increase DX by exposing a consistent CLI interface to
+You can extend the Atmos CLI and add as many custom commands as you want. This is a great way to increase DX by exposing a consistent CLI interface to
 developers.
 
-For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly,
-inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and
-discover all available commands.
+For example, one great way to use custom commands is to tie all the miscellaneous scripts into one consistent CLI interface. 
+Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. 
+Then developers can just run `atmos help` and discover all available commands.
 
 Here are some examples to play around with to get started.
 

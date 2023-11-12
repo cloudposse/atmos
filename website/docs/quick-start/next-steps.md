@@ -16,6 +16,6 @@ Here are some of the major differentiators of Atmos:
 * [Component Vendoring](/core-concepts/components/vendoring)
 * [Imports](/core-concepts/stacks/imports) (mixins, catalogs)
 * [Workflow automation](/core-concepts/workflows)
-* [Custom commands](/core-concepts/subcommands)
+* [Custom commands](/core-concepts/custom-commands)
 * [Component Inheritance & Multiple Inheritance](/core-concepts/components/inheritance)
 * [JSON Schema & OPA Policy Enforcement](/core-concepts/components/validation)

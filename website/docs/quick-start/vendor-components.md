@@ -4,7 +4,7 @@ sidebar_position: 5
 sidebar_label: Vendor Components
 ---
 
-In the previous steps, we've configured the repository, and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
+In the previous steps, we've configured the repository and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
 components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
 We've also configured the Atmos CLI in the `atmos.yaml` CLI config file to search for the Terraform components in
 the `components/terraform` directory.
@@ -21,7 +21,7 @@ One way to create the Terraform components is to copy them into the correspondin
   [vpc](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/vpc)
   into the `components/terraform/vpc` folder
 
-__NOTE:__ The recommended way is to vendor the components using Atmos Vendoring and the `atmos vendor pull` CLI command.
+__NOTE:__ The recommended way is to vendor the components using [`Atmos Vendoring`](/core-concepts/vendoring) and the `atmos vendor pull` CLI command.
 
 <br/>
 

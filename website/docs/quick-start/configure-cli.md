@@ -54,7 +54,7 @@ components:
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
     init_run_reconfigure: true
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
-    auto_generate_backend_file: false
+    auto_generate_backend_file: true
 
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
@@ -86,7 +86,17 @@ commands: []
 integrations: {}
 
 # Validation schemas (for validating atmos stacks and components)
-schemas: {}
+schemas:
+  # https://json-schema.org
+  jsonschema:
+    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/jsonschema"
+  # https://www.openpolicyagent.org
+  opa:
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/opa"
 ```
 
 <br/>
@@ -136,7 +146,11 @@ to [CLI Configuration](/cli/configuration).
   Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are
   defined (inline or via imports)
 
-- `workflows.base_path` - the base path to Atmos [workflow](/core-concepts/workflows) files
+- `workflows.base_path` - the base path to Atmos [Workflows](/core-concepts/workflows) files
 
 - `logs.verbose` - set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and
   process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack
+
+- `commands` - configuration for [Atmos Custom Commands](/core-concepts/custom-commands)
+
+- `schemas` - configuration for [Atmos Component Validation](/core-concepts/components/validation)

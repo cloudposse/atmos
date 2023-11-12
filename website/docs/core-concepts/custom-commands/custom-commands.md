@@ -1,15 +1,17 @@
 ---
-title: Atmos Subcommands
-sidebar_label: Subcommands
+title: Atmos Custom Commands
+sidebar_label: Custom Commands
+id: custom-commands
 ---
 
-Atmos can be easily extended to support any number of custom commands, what we call "subcommands".
+Atmos can be easily extended to support any number of custom commands.
 
-Subcommands are exposed through the `atmos` CLI when you run `atmos help`. It's a great way to centralize
+Custom commands are exposed through the `atmos` CLI when you run `atmos help`. It's a great way to centralize
 the way operational tools are run in order to improve DX. 
 
-For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and discover all available commands.
-
+For example, one great way to use custom commands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly, 
+inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` 
+and discover all available commands.
 
 
 ## Simple Example

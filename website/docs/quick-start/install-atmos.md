@@ -18,7 +18,8 @@ always be available for download here.
 - Go to [Releases Page](https://github.com/cloudposse/atmos/releases)
 - Download the binary for your operating system and architecture. Replace `${version}` with the desired version
 
-  - e.g. If you’re on a Mac (M1), download the `atmos_${version}_darwin_arm64` binary
+  - e.g. If you’re on a Mac (M1/M2/M3), download the `atmos_${version}_darwin_arm64` binary
+  - e.g. If you’re on an Intel Mac, download the `atmos_${version}_darwin_amd64` binary
   - e.g. If you’re on Windows, download `atmos_${version}_windows_amd64.exe`, etc.
 
 - Rename the downloaded file to `atmos` (optional)
@@ -82,7 +83,7 @@ go install github.com/cloudposse/atmos
 Get a specific version
 
 ```shell
-go install github.com/cloudposse/atmos@v1.46.0
+go install github.com/cloudposse/atmos@v1.51.0
 ```
 
 <br/>
