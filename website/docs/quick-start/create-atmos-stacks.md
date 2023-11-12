@@ -17,69 +17,89 @@ This makes the stack configurations DRY by reusing the component's config that i
 
 Refer to [Stack Imports](/core-concepts/stacks/imports) for more details on Atmos imports.
 
-In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
+In the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket` Atmos
 component:
 
-```yaml title="stacks/catalog/vpc-flow-logs-bucket.yaml"
+```yaml title="tacks/catalog/vpc-flow-logs-bucket/defaults.yaml"
 components:
   terraform:
-    vpc-flow-logs-bucket/defaults:
+    vpc-flow-logs-bucket:
       metadata:
-        # `metadata.type: abstract` makes the component `abstract`,
-        # explicitly prohibiting the component from being deployed.
-        # `atmos terraform apply` will fail with an error.
-        # If `metadata.type` attribute is not specified, it defaults to `real`.
-        # `real` components can be provisioned by Atmos.
-        type: abstract
-      # Default variables, which will be inherited and can be overridden in the derived components
+        # Point to the Terraform component
+        component: vpc-flow-logs-bucket
       vars:
-        force_destroy: false
-        lifecycle_rule_enabled: false
+        enabled: true
+        name: "vpc-flow-logs"
         traffic_type: "ALL"
+        force_destroy: true
+        lifecycle_rule_enabled: false
 ```
 
-In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc/defaults` Atmos component:
+In the `stacks/catalog/vpc/defaults.yaml` file, add the following default config for the `vpc` Atmos component:
 
 ```yaml title="stacks/catalog/vpc.yaml"
 components:
   terraform:
-    vpc/defaults:
+    vpc:
       metadata:
-        # `metadata.type: abstract` makes the component `abstract`,
-        # explicitly prohibiting the component from being deployed.
-        # `atmos terraform apply` will fail with an error.
-        # If `metadata.type` attribute is not specified, it defaults to `real`.
-        # `real` components can be provisioned by Atmos.
-        type: abstract
-      # Default variables, which will be inherited and can be overridden in the derived components
+        # Point to the Terraform component
+        component: vpc
+      settings:
+        # Validation
+        # Supports JSON Schema and OPA policies
+        # All validation steps must succeed to allow the component to be provisioned
+        validation:
+          validate-vpc-component-with-jsonschema:
+            schema_type: jsonschema
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.jsonschema.base_path' defined in `atmos.yaml`
+            schema_path: "vpc/validate-vpc-component.json"
+            description: Validate 'vpc' component variables using JSON Schema
+          check-vpc-component-config-with-opa-policy:
+            schema_type: opa
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
+            schema_path: "vpc/validate-vpc-component.rego"
+            # An array of filesystem paths (folders or individual files) to the additional modules for schema validation
+            # Each path can be an absolute path or a path relative to `schemas.opa.base_path` defined in `atmos.yaml`
+            # In this example, we have the additional Rego modules in `stacks/schemas/opa/catalog/constants`
+            module_paths:
+              - "catalog/constants"
+            description: Check 'vpc' component configuration using OPA policy
+            # Set `disabled` to `true` to skip the validation step
+            # `disabled` is set to `false` by default, the step is allowed if `disabled` is not declared
+            disabled: false
+            # Validation timeout in seconds
+            timeout: 10
       vars:
-        public_subnets_enabled: false
-        nat_gateway_enabled: false
+        enabled: true
+        name: "common"
+        nat_gateway_enabled: true
         nat_instance_enabled: false
         max_subnet_count: 3
-        vpc_flow_logs_enabled: false
-        vpc_flow_logs_log_destination_type: s3
+        map_public_ip_on_launch: true
+        dns_hostnames_enabled: true
+        vpc_flow_logs_enabled: true
         vpc_flow_logs_traffic_type: "ALL"
+        vpc_flow_logs_log_destination_type: "s3"
 ```
 
 <br/>
 
-These default Atmos components will be imported into the parent Atmos stacks. The default variables (in the `vars` sections) will be reused, and can
-also be overridden in the derived Atmos components by using [Atmos Component Inheritance](/core-concepts/components/inheritance).
+These Atmos component manifests will be imported into the top-level Atmos stacks. The default variables (in the `vars` sections)
+can be overridden in the derived Atmos components by using [Atmos Component Inheritance](/core-concepts/components/inheritance).
 
-## Atmos Parent Stacks
+## Atmos Top-level Stacks
 
 When executing the [CLI commands](/cli/cheatsheet), Atmos does not use the stack file names and their filesystem locations to search for the stack
 where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The
-stack config file names can be anything, and they can be in any folder in any sub-folder in the `stacks` directory.
+stack config file names (stack manifest names) can be anything, and they can be in any folder in any sub-folder in the `stacks` directory.
 
-For example, when executing the `atmos terraform apply vpc -s tenant1-ue2-dev`
-command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"`
+For example, when executing the `atmos terraform apply vpc -s plat-ue2-dev`
+command, the Atmos stack `plat-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"`
 (see [Configure CLI](/quick-start/configure-cli)) and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second
-part is `environment`, and the third part is `stage`. Then Atmos searches for the parent stack configuration file (in the `stacks` directory)
-where `tenant: tenant1`, `environment: ue2` and `stage: dev` are defined (inline or via imports).
+part is `environment`, and the third part is `stage`. Then Atmos searches for the top-level stack manifest (in the `stacks` directory)
+where `tenant: plat`, `environment: ue2` and `stage: dev` are defined (inline or via imports).
 
-Atmos parent stacks can be configured using a Basic Layout or a Hierarchical Layout.
+Atmos top-level stacks can be configured using a Basic Layout or a Hierarchical Layout.
 
 The Basic Layout can be used when you have a very simple configuration using just a few accounts and regions.
 The Hierarchical Layout should be used when you have a very complex organization, for example, with many AWS Organizational Units (which Atmos
@@ -126,7 +146,7 @@ would look like this:
 We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens or
 hundreds of accounts and regions that you operate in.
 
-## Create Parent Stacks
+## Create Top-level Stacks
 
 Although in this Quick Start guide we use just a few Terraform components which we want to provision into three AWS accounts in just two AWS regions
 (which could be considered basic), we will use the Hierarchical Layout to show how the Atmos stacks can be configured for very complex organizations
@@ -189,17 +209,6 @@ In `stacks/mixins/region/us-east-2.yaml`, add the following config:
 vars:
   region: us-east-2
   environment: ue2
-
-components:
-  terraform:
-    vpc:
-      metadata:
-        component: vpc
-      vars:
-        availability_zones:
-          - us-east-2a
-          - us-east-2b
-          - us-east-2c
 ```
 
 In `stacks/mixins/region/us-west-2.yaml`, add the following config:
@@ -208,17 +217,6 @@ In `stacks/mixins/region/us-west-2.yaml`, add the following config:
 vars:
   region: us-west-2
   environment: uw2
-
-components:
-  terraform:
-    vpc:
-      metadata:
-        component: vpc
-      vars:
-        availability_zones:
-          - us-west-2a
-          - us-west-2b
-          - us-west-2c
 ```
 
 In `stacks/mixins/stage/dev.yaml`, add the following config:
@@ -246,7 +244,7 @@ vars:
 
 As we can see, in the region and stage mixins, besides some other common variables, we are defining the global context variables `environment`
 and `stage`, which Atmos uses when searching for a component in a stack. These mixins then get imported into the parent Atmos stacks without defining
-the context variables in each parent stack, making the configuration DRY.
+the context variables in each top-level stack, making the configuration DRY.
 
 ### Configure Defaults for Organization, OU and accounts
 
@@ -304,7 +302,7 @@ import:
 
 <br/>
 
-### Configure Parent Stacks
+### Configure Top-level Stacks
 
 After we've configured the catalog for the components, the mixins for the regions and stages, and the defaults for the Organization, OU and accounts,
 the final step is to configure the Atmos parent (top-level) stacks and the Atmos components in the stacks.
@@ -318,95 +316,16 @@ In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, add the following config:
 import:
   - mixins/region/us-east-2
   - orgs/acme/plat/dev/_defaults
-  - catalog/vpc
-  - catalog/vpc-flow-logs-bucket
-
-components:
-  terraform:
-
-    vpc-flow-logs-bucket:
-      metadata:
-        # Point to the Terraform component in `components/terraform` folder
-        component: vpc-flow-logs-bucket
-        inherits:
-          # Inherit all settings and variables from the 
-          # `vpc-flow-logs-bucket/defaults` base Atmos component
-          - vpc-flow-logs-bucket/defaults
-      vars:
-        # Define variables that are specific for this component
-        # and are not set in the base component
-        name: vpc-flow-logs-bucket
-        # Override the default variables from the base component
-        traffic_type: "REJECT"
-
-    vpc:
-      metadata:
-        # Point to the Terraform component in `components/terraform` folder
-        component: vpc
-        inherits:
-          # Inherit all settings and variables from the `vpc/defaults` base Atmos component
-          - vpc/defaults
-      vars:
-        # Define variables that are specific for this component
-        # and are not set in the base component
-        name: vpc
-        ipv4_primary_cidr_block: 10.8.0.0/18
-        # Override the default variables from the base component
-        vpc_flow_logs_enabled: true
-        vpc_flow_logs_traffic_type: "REJECT"
-
-        # Specify the name of the Atmos component that provides configuration
-        # for the `vpc-flow-logs-bucket` Terraform component
-        vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket
-
-        # Override the context variables to point to a different Atmos stack if the 
-        # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region.
-
-        # If the bucket is provisioned in a different AWS account, 
-        # set `vpc_flow_logs_bucket_stage_name`
-        # vpc_flow_logs_bucket_stage_name: prod
-
-        # If the bucket is provisioned in a different AWS OU, 
-        # set `vpc_flow_logs_bucket_tenant_name`
-        # vpc_flow_logs_bucket_tenant_name: plat
-
-        # If the bucket is provisioned in a different AWS region, 
-        # set `vpc_flow_logs_bucket_environment_name`
-        # vpc_flow_logs_bucket_environment_name: uw2
 ```
 
-In the file, we first import the region mixin, the defaults for the Organization, OU and account (using hierarchical imports), and then the base
-component configurations from the catalog. Then we define two Atmos components `vpc-flow-logs-bucket` and `vpc`, which inherit the base config
-from the default Atmos components in the catalog and define and override some variables specific to the components in the stacks.
+In the file, we first import the region mixin, the defaults for the Organization, OU and account (using hierarchical imports).
 
-Similarly, create the parent Atmos stack for the `dev` account in `us-west-2` region:
+Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2` region:
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
 import:
   - mixins/region/us-west-2
   - orgs/acme/plat/dev/_defaults
-  - catalog/vpc
-  - catalog/vpc-flow-logs-bucket
-
-components:
-  terraform:
-
-    vpc-flow-logs-bucket:
-      metadata:
-        component: vpc-flow-logs-bucket
-        inherits:
-          - vpc-flow-logs-bucket/defaults
-      vars:
-        name: vpc-flow-logs-bucket
-
-    vpc:
-      metadata:
-        component: vpc
-        inherits:
-          - vpc/defaults
-      vars:
-        name: vpc
-        ipv4_primary_cidr_block: 10.9.0.0/18
 ```
 
 <br/>
@@ -416,4 +335,4 @@ Similar to the `dev` account, create the parent stacks for the `staging` and `pr
 `stacks/orgs/acme/plat/prod/us-west-2.yaml`.
 
 For clarity, we skip these configurations here since they are similar to what we showed for the `dev`
-account except for importing different region mixins and the defaults, and providing different values for components' variables in different stacks.
+account except for importing different region mixins and the defaults.

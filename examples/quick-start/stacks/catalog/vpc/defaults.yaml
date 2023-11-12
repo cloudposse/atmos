@@ -2,6 +2,7 @@ components:
   terraform:
     vpc:
       metadata:
+        # Point to the Terraform component
         component: vpc
       settings:
         # Validation
