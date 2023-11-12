@@ -1,12 +1,6 @@
+import:
+  - catalog/vpc/us-west-2
+
 vars:
   region: us-west-2
   environment: uw2
-
-components:
-  terraform:
-    vpc:
-      vars:
-        availability_zones:
-          - us-west-2a
-          - us-west-2b
-          - us-west-2c
