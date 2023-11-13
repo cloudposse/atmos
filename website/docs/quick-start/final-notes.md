@@ -1,6 +1,6 @@
 ---
 title: Final Notes
-sidebar_position: 8
+sidebar_position: 10
 sidebar_label: Final Notes
 ---
 
@@ -11,13 +11,13 @@ Atmos provides unlimited flexibility in defining and configuring Atmos stacks an
 
 - Atmos stacks can have arbitrary names and can be located in any sub-folder in the `stacks` directory. Atmos stack filesystem layout is for people to
   better organize the stacks and make the configurations DRY. Atmos (the CLI) does not care about the filesystem layout, all it cares about is how
-  to find the stack and the component in the stack by using the context variables `namespace`, `tenant`, `environment` and `stage`
+  to find the stacks and the components in the stacks by using the context variables `namespace`, `tenant`, `environment` and `stage`
 
 - An Atmos component can have any name different from the Terraform component name. For example, two different Atmos components `vpc` and `vpc-2`
   can provide configuration for the same Terraform component `vpc`
 
 - We can provision more than one instance of the same Terraform component (with the same or different settings) into the same environment by defining
-  many Atmos components that provide configuration for the Terraform component. For example, the following config shows how to define two Atmos
+  many Atmos components that define configuration for the Terraform component. For example, the following config shows how to define two Atmos
   components, `vpc` and `vpc-2`, which both point to the same Terraform component `vpc`:
 
   ```yaml
@@ -31,6 +31,7 @@ Atmos provides unlimited flexibility in defining and configuring Atmos stacks an
   
       vpc:
         metadata:
+          # Point to the Terraform component
           component: vpc
           inherits:
             - vpc/defaults
@@ -40,6 +41,7 @@ Atmos provides unlimited flexibility in defining and configuring Atmos stacks an
   
       vpc-2:
         metadata:
+          # Point to the Terraform component
           component: vpc
           inherits:
             - vpc/defaults
