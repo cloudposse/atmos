@@ -1,7 +1,7 @@
 import:
   - orgs/acme/_defaults
   # All accounts (stages) and all regions (environments) in the `plat` OU (tenant) will have the `vpc-flow-logs-bucket` component
-  - catalog/terraform/vpc-flow-logs-bucket/defaults
+  - catalog/vpc-flow-logs-bucket/defaults
 
 vars:
   tenant: plat

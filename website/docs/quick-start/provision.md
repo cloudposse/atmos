@@ -4,7 +4,7 @@ sidebar_position: 9
 sidebar_label: Provision
 ---
 
-Having configured the Terraform components, the Atmos components catalog, all the mixins and defaults, and the Atmos parent stacks, we can now
+Having configured the Terraform components, the Atmos components catalog, all the mixins and defaults, and the Atmos top-level stacks, we can now
 provision the components into the stacks.
 
 The `vpc` Atmos components use the remote state from the `vpc-flow-logs-bucket` components, therefore the `vpc-flow-logs-bucket` components must
@@ -44,6 +44,15 @@ atmos terraform apply vpc -s plat-uw2-staging
 # `plat` OU, `prod` account, `us-east-2` and `us-west-2` regions
 atmos terraform apply vpc -s plat-ue2-prod
 atmos terraform apply vpc -s plat-uw2-prod
+```
+
+<br/>
+
+Alternatively, you can execute the configured [Atmos workflow](/quick-start/create-workflows) to provision all the components in all the stacks:
+
+```shell
+# Execute the workflow `apply-all-components` from the workflow manifest `networking`
+atmos workflow apply-all-components -f networking
 ```
 
 ## Stack Search Algorithm
