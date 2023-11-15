@@ -38,7 +38,7 @@ Even though Christopher Alexander was describing the patterns in construction an
 ## What are Atmos Design Patterns?
 
 Atmos Design Patterns describe core concepts, principles, insights and best practices to structure and organize infrastructures, components and
-stacks to design for organizational complexity and provision multi-account environments for complex organizations.
+stacks to design for organizational complexity and provision multi-account enterprise-grade environments for complex organizations.
 
 Atmos Design Patterns help the infrastructure designers and architects to leverage the expertise of other skilled architects in creating reusable,
 robust, flexible, and maintainable solutions.
