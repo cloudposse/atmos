@@ -7,8 +7,6 @@ description: Inline Component Configuration Atmos Design Pattern
 
 # Inline Component Configuration
 
-## Intent
-
 ## Applicability
 
 Use the Inline Component Configuration pattern when:
@@ -19,11 +17,11 @@ Use the Inline Component Configuration pattern when:
 
 ## Benefits
 
-The Inline Component Configuration pattern has the following benefits:
+The Inline Component Configuration pattern provides the following benefits:
 
-## liabilities
+## Drawbacks
 
-The Inline Component Configuration pattern has the following liabilities:
+The Inline Component Configuration pattern has the following drawbacks:
 
 ## Related Patterns
 
