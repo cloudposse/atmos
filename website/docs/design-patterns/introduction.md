@@ -52,6 +52,8 @@ manner.
 Once you understand the Design Patterns and have experience with them, you won't ever think about infrastructure design in the same way.
 You'll have knowledge and insights that can make your own designs more flexible, modular, reusable, and understandable.
 
+<br/>
+
 :::note
 
 We view this collection of Design Patterns as neither exhaustive nor fixed. Instead, it serves as a documentation of our present ideas, insights and

@@ -13,6 +13,20 @@ Use the Inline Component Configuration pattern when:
 
 ## Structure
 
+```console
+   │   # Centralized stacks configuration (stack manifests)
+   ├── stacks
+   │   └── dev.yaml
+   │   └── staging.yaml
+   │   └── prod.yaml
+   │  
+   │   # Centralized components configuration
+   ├── components
+   │   └── terraform  # Terraform components (Terraform root modules)
+   │       ├── vpc
+   │       ├── vpc-flow-logs-bucket
+```
+
 ## Example
 
 ## Benefits
