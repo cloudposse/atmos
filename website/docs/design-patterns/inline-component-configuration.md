@@ -25,6 +25,7 @@ Use the Inline Component Configuration pattern when:
    │   └── terraform  # Terraform components (Terraform root modules)
    │       ├── vpc
    │       ├── vpc-flow-logs-bucket
+   │       ├── < other components >
 ```
 
 ## Example
@@ -40,3 +41,9 @@ The Inline Component Configuration pattern has the following drawbacks:
 ## Related Patterns
 
 The Inline Component Configuration pattern is often implemented with:
+
+- [Component Catalog Pattern](/design-patterns/component-catalog)
+- [Component Catalog with Mixins Pattern](/design-patterns/component-catalog-with-mixins)
+- [Component Catalog Template Pattern](/design-patterns/component-catalog-template)
+- [Component Inheritance Pattern](/design-patterns/component-inheritance)
+- [Partial Component Configuration Pattern](/design-patterns/partial-component-configuration)
