@@ -7,6 +7,8 @@ description: Inline Component Configuration Atmos Design Pattern
 
 # Inline Component Configuration
 
+The Inline Component Configuration pattern is used when:
+
 ## Applicability
 
 Use the Inline Component Configuration pattern when:
@@ -29,6 +31,90 @@ Use the Inline Component Configuration pattern when:
 ```
 
 ## Example
+
+Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
+
+```yaml title="atmos.yaml"
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{stage}"
+
+schemas:
+  jsonschema:
+    base_path: "stacks/schemas/jsonschema"
+  opa:
+    base_path: "stacks/schemas/opa"
+```
+
+Add the following component configurations to the `stacks/dev.yaml` stack manifest:
+
+```yaml title="stacks/dev.yaml"
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc-flow-logs-bucket:
+      metadata:
+        # Point to the Terraform component
+        component: vpc-flow-logs-bucket
+      vars:
+        enabled: true
+        name: "vpc-flow-logs"
+        traffic_type: "ALL"
+        force_destroy: true
+        lifecycle_rule_enabled: false
+
+    vpc:
+      metadata:
+        # Point to the Terraform component
+        component: vpc
+      settings:
+        # All validation steps must succeed to allow the component to be provisioned
+        validation:
+          validate-vpc-component-with-jsonschema:
+            schema_type: jsonschema
+            schema_path: "vpc/validate-vpc-component.json"
+            description: Validate 'vpc' component variables using JSON Schema
+          check-vpc-component-config-with-opa-policy:
+            schema_type: opa
+            schema_path: "vpc/validate-vpc-component.rego"
+            # An array of filesystem paths (folders or individual files) to the additional modules for schema validation
+            # Each path can be an absolute path or a path relative to `schemas.opa.base_path` defined in `atmos.yaml`
+            # In this example, we have the additional Rego modules in `stacks/schemas/opa/catalog/constants`
+            module_paths:
+              - "catalog/constants"
+            description: Check 'vpc' component configuration using OPA policy
+      vars:
+        enabled: true
+        name: "common"
+        max_subnet_count: 3
+        map_public_ip_on_launch: true
+        dns_hostnames_enabled: true
+        vpc_flow_logs_enabled: true
+        vpc_flow_logs_traffic_type: "ALL"
+        vpc_flow_logs_log_destination_type: "s3"
+```
+
+To provision the components, execute the following commands:
+
+```shell
+# `dev` stack
+atmos terraform apply vpc-flow-logs-bucket -s dev
+atmos terraform apply vpc -s dev
+
+# `staging` stack
+atmos terraform apply vpc-flow-logs-bucket -s staging
+atmos terraform apply vpc -s staging
+
+# `prod` stack
+atmos terraform apply vpc-flow-logs-bucket -s prod
+atmos terraform apply vpc -s prod
+```
 
 ## Benefits
 
