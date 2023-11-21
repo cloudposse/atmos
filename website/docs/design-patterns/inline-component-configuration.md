@@ -106,14 +106,6 @@ To provision the components, execute the following commands:
 # `dev` stack
 atmos terraform apply vpc-flow-logs-bucket -s dev
 atmos terraform apply vpc -s dev
-
-# `staging` stack
-atmos terraform apply vpc-flow-logs-bucket -s staging
-atmos terraform apply vpc -s staging
-
-# `prod` stack
-atmos terraform apply vpc-flow-logs-bucket -s prod
-atmos terraform apply vpc -s prod
 ```
 
 ## Benefits
