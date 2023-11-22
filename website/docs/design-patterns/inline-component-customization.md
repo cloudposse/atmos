@@ -1,18 +1,18 @@
 ---
-title: Inline Component Configuration Atmos Design Pattern
-sidebar_position: 2
-sidebar_label: Inline Component Configuration
-description: Inline Component Configuration Atmos Design Pattern
+title: Inline Component Customization Atmos Design Pattern
+sidebar_position: 3
+sidebar_label: Inline Component Customization
+description: Inline Component Customization Atmos Design Pattern
 ---
 
-# Inline Component Configuration
+# Inline Component Customization
 
-The Inline Component Configuration pattern is used when the [components](/core-concepts/components) in a [stack](/core-concepts/stacks) 
+The Inline Component Customization pattern is used when the [components](/core-concepts/components) in a [stack](/core-concepts/stacks) 
 are configured inline in the stack manifest without [importing](/core-concepts/stacks/imports) and reusing a default/base configuration.
 
 ## Applicability
 
-Use the Inline Component Configuration pattern when:
+Use the Inline Component Customization pattern when:
 
 - You have a very simple organizational structure, e.g. one OU, one or a few accounts, one region
 
@@ -118,33 +118,25 @@ atmos terraform apply vpc -s dev
 
 ## Benefits
 
-The Inline Component Configuration pattern provides the following benefits:
+The Inline Component Customization pattern provides the following benefits:
 
 - Very simple stack and component configuration
 
 - All components are defined in just one place (in one stack manifest) - easier to see what is provisioned and where
 
-## Limitations
+## Drawbacks
 
-The Inline Component Configuration pattern has the following limitations and drawbacks:
+The Inline Component Customization pattern has the following drawbacks:
 
 - If you have more than one stack (e.g. `dev`, `staging`, `prod`), then the component definitions would be repeated in the stack manifests,
   which makes them not reusable and the entire stack configuration not DRY
 
 - Should be used only for specific use-cases (e.g. you have just one stack, or you are designing and testing the components)
 
-:::note
-
-Use the [Inline Component Customization](/design-patterns/inline-component-customization) pattern to address the limitations of the 
-Inline Component Configuration pattern.
-
-:::
-
 ## Related Patterns
 
-The Inline Component Configuration pattern is often implemented with:
+The Inline Component Customization pattern is often implemented with:
 
-- [Inline Component Customization Pattern](/design-patterns/inline-component-customization)
 - [Component Catalog Pattern](/design-patterns/component-catalog)
 - [Component Catalog with Mixins Pattern](/design-patterns/component-catalog-with-mixins)
 - [Component Catalog Template Pattern](/design-patterns/component-catalog-template)

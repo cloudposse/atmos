@@ -1,6 +1,6 @@
 ---
 title: Partial Component Configuration Atmos Design Pattern
-sidebar_position: 9
+sidebar_position: 10
 sidebar_label: Partial Component Configuration
 description: Partial Component Configuration Atmos Design Pattern
 ---
