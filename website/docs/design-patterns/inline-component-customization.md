@@ -9,24 +9,26 @@ description: Inline Component Customization Atmos Design Pattern
 
 The Inline Component Customization pattern is used when the defaults for the [components](/core-concepts/components) in a [stack](/core-concepts/stacks)
 are configured in default/base manifests, the manifests are [imported](/core-concepts/stacks/imports) into the top-level stacks, and the components are customized/modified 
-inline in each top-level stack providing or overriding the configuration for each environment (OU, account, region).
+inline in each top-level stack overriding the configuration for each environment (OU, account, region).
 
 ## Applicability
 
 Use the Inline Component Customization pattern when:
 
-- You have a very simple organizational structure, e.g. one OU, one or a few accounts, one region
+- You have components that are provisioned in multiple stacks (e.g. `dev`, `staging`, `prod` accounts) with different configurations for each stack
 
-- You have a component that is provisioned only in one stack (e.g. only in the `dev` account). In this case, the component is configured inline in the
-  stack manifest and is not used in other stacks
+- You need to make the components' default configurations reusable across different stacks
 
-- For testing or development purposes
+- You want to keep the configurations DRY
 
 ## Structure
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
+   │   └── defaults
+   │       ├── vpc-flow-logs-bucket.yaml
+   │       ├── vpc.yaml
    │   └── dev.yaml
    │   └── staging.yaml
    │   └── prod.yaml
@@ -51,6 +53,9 @@ components:
 stacks:
   base_path: "stacks"
   name_pattern: "{stage}"
+  excluded_paths:
+    # Tell Atmos that the `defaults` folder and all sub-folders don't contain top-level stack manifests
+    - "defaults/**/*"
 
 schemas:
   jsonschema:
