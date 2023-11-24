@@ -1,6 +1,6 @@
 ---
 title: Component Catalog Template Atmos Design Pattern
-sidebar_position: 6
+sidebar_position: 7
 sidebar_label: Component Catalog Template
 description: Component Catalog Template Atmos Design Pattern
 ---
