@@ -142,9 +142,9 @@ Inline Component Configuration pattern.
 
 ## Related Patterns
 
-- [Inline Component Customization Pattern](/design-patterns/inline-component-customization)
-- [Component Catalog Pattern](/design-patterns/component-catalog)
-- [Component Catalog with Mixins Pattern](/design-patterns/component-catalog-with-mixins)
-- [Component Catalog Template Pattern](/design-patterns/component-catalog-template)
-- [Component Inheritance Pattern](/design-patterns/component-inheritance)
-- [Partial Component Configuration Pattern](/design-patterns/partial-component-configuration)
+- [Inline Component Customization](/design-patterns/inline-component-customization)
+- [Component Catalog](/design-patterns/component-catalog)
+- [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
+- [Component Catalog Template](/design-patterns/component-catalog-template)
+- [Component Inheritance](/design-patterns/component-inheritance)
+- [Partial Component Configuration](/design-patterns/partial-component-configuration)

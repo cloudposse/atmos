@@ -218,17 +218,18 @@ The Inline Component Customization pattern has the following limitations and dra
 
 To address the limitations of the Inline Component Customization pattern, use the following patterns:
 
-- [Organizational Structure Configuration Pattern](/design-patterns/organizational-structure-configuration)
-- [Component Catalog Pattern](/design-patterns/component-catalog)
-- [Component Catalog with Mixins Pattern](/design-patterns/component-catalog-with-mixins)
+- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+- [Component Catalog](/design-patterns/component-catalog)
+- [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
 
 :::
 
 ## Related Patterns
 
-- [Organizational Structure Configuration Pattern](/design-patterns/organizational-structure-configuration)
-- [Component Catalog Pattern](/design-patterns/component-catalog)
-- [Component Catalog with Mixins Pattern](/design-patterns/component-catalog-with-mixins)
-- [Component Catalog Template Pattern](/design-patterns/component-catalog-template)
-- [Component Inheritance Pattern](/design-patterns/component-inheritance)
-- [Partial Component Configuration Pattern](/design-patterns/partial-component-configuration)
+- [Inline Component Configuration](/design-patterns/inline-component-configuration)
+- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+- [Component Catalog](/design-patterns/component-catalog)
+- [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
+- [Component Catalog Template](/design-patterns/component-catalog-template)
+- [Component Inheritance](/design-patterns/component-inheritance)
+- [Partial Component Configuration](/design-patterns/partial-component-configuration)
