@@ -7,8 +7,10 @@ description: Inline Component Customization Atmos Design Pattern
 
 # Inline Component Customization
 
-The Inline Component Customization pattern is used when the defaults for the [components](/core-concepts/components) in a [stack](/core-concepts/stacks)
-are configured in default/base manifests, the manifests are [imported](/core-concepts/stacks/imports) into the top-level stacks, and the components are customized/modified 
+The Inline Component Customization pattern is used when the defaults for the [components](/core-concepts/components) in
+a [stack](/core-concepts/stacks)
+are configured in default/base manifests, the manifests are [imported](/core-concepts/stacks/imports) into the top-level stacks, and the components
+are customized
 inline in each top-level stack overriding the configuration for each environment (OU, account, region).
 
 ## Applicability
@@ -17,7 +19,7 @@ Use the Inline Component Customization pattern when:
 
 - You have components that are provisioned in multiple stacks (e.g. `dev`, `staging`, `prod` accounts) with different configurations for each stack
 
-- You need to make the components' default configurations reusable across different stacks
+- You need to make the components' default/base configurations reusable across different stacks
 
 - You want to keep the configurations DRY
 
@@ -64,12 +66,9 @@ schemas:
     base_path: "stacks/schemas/opa"
 ```
 
-Add the following component configurations to the `stacks/dev.yaml` stack manifest:
+Add the following default configuration to the `stacks/defaults/vpc-flow-logs-bucket.yaml` manifest:
 
-```yaml title="stacks/dev.yaml"
-vars:
-  stage: dev
-
+```yaml title="stacks/defaults/vpc-flow-logs-bucket.yaml"
 components:
   terraform:
     vpc-flow-logs-bucket:
@@ -82,7 +81,13 @@ components:
         traffic_type: "ALL"
         force_destroy: true
         lifecycle_rule_enabled: false
+```
 
+Add the following default configuration to the `stacks/defaults/vpc.yaml` manifest:
+
+```yaml title="stacks/defaults/vpc.yaml"
+components:
+  terraform:
     vpc:
       metadata:
         # Point to the Terraform component
@@ -114,35 +119,114 @@ components:
         vpc_flow_logs_log_destination_type: "s3"
 ```
 
+Configure the `stacks/dev.yaml` top-level stack manifest:
+
+```yaml title="stacks/dev.yaml"
+vars:
+  stage: dev
+
+# Import the component default configurations
+import:
+  - defaults/vpc
+
+components:
+  terraform:
+    # Customize the `vpc` component for the `dev` account
+    # You can define variables or override the imported defaults
+    vpc:
+      vars:
+        max_subnet_count: 2
+        vpc_flow_logs_enabled: false
+```
+
+Configure the `stacks/staging.yaml` top-level stack manifest:
+
+```yaml title="stacks/staging.yaml"
+vars:
+  stage: staging
+
+# Import the component default configurations
+import:
+  - defaults/vpc-flow-logs-bucket
+  - defaults/vpc
+
+components:
+  terraform:
+    # Customize the `vpc` component for the `staging` account
+    # You can define variables or override the imported defaults
+    vpc:
+      vars:
+        map_public_ip_on_launch: false
+        vpc_flow_logs_traffic_type: "REJECT"
+```
+
+Configure the `stacks/prod.yaml` top-level stack manifest:
+
+```yaml title="stacks/prod.yaml"
+vars:
+  stage: prod
+
+# Import the component default configurations
+import:
+  - defaults/vpc-flow-logs-bucket
+  - defaults/vpc
+
+components:
+  terraform:
+    # Customize the `vpc` component for the `prod` account
+    # You can define variables or override the imported defaults
+    vpc:
+      vars:
+        map_public_ip_on_launch: false
+```
+
 To provision the components, execute the following commands:
 
 ```shell
 # `dev` stack
-atmos terraform apply vpc-flow-logs-bucket -s dev
 atmos terraform apply vpc -s dev
+
+# `staging` stack
+atmos terraform apply vpc-flow-logs-bucket -s staging
+atmos terraform apply vpc -s staging
+
+# `prod` stack
+atmos terraform apply vpc-flow-logs-bucket -s prod
+atmos terraform apply vpc -s prod
 ```
 
 ## Benefits
 
 The Inline Component Customization pattern provides the following benefits:
 
-- Very simple stack and component configuration
+- The defaults for the components are defined in just one place making the entire configuration DRY
 
-- All components are defined in just one place (in one stack manifest) - easier to see what is provisioned and where
+- The defaults for the components are reusable across many stacks
+
+- Simple stack and component configurations
 
 ## Limitations
 
 The Inline Component Customization pattern has the following limitations and drawbacks:
 
-- If you have more than one stack (e.g. `dev`, `staging`, `prod`), then the component definitions would be repeated in the stack manifests,
-  which makes them not reusable and the entire stack configuration not DRY
+- The pattern is useful to customize components per account or region, but if you have more than one Organization, Organizational Unit (OU) or region,
+  then the inline customizations would be repeated in the stack manifests, making the entire stack configuration not DRY
 
-- Should be used only for specific use-cases (e.g. you have just one stack, or you are designing and testing the components)
+- Should be used only for specific use-cases, e.g. when you use just one region, Organization or Organizational Unit (OU)
+
+:::note
+
+To address the limitations of the Inline Component Customization pattern, use the following patterns:
+
+- [Organizational Structure Configuration Pattern](/design-patterns/organizational-structure-configuration)
+- [Component Catalog Pattern](/design-patterns/component-catalog)
+- [Component Catalog with Mixins Pattern](/design-patterns/component-catalog-with-mixins)
+
+:::
 
 ## Related Patterns
 
-The Inline Component Customization pattern is often implemented with:
-
+- [Organizational Structure Configuration Pattern](/design-patterns/organizational-structure-configuration)
 - [Component Catalog Pattern](/design-patterns/component-catalog)
 - [Component Catalog with Mixins Pattern](/design-patterns/component-catalog-with-mixins)
 - [Component Catalog Template Pattern](/design-patterns/component-catalog-template)

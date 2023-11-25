@@ -120,7 +120,7 @@ atmos terraform apply vpc -s dev
 
 The Inline Component Configuration pattern provides the following benefits:
 
-- Very simple stack and component configuration
+- Very simple stack and component configurations
 
 - All components are defined in just one place (in one stack manifest) - easier to see what is provisioned and where
 
@@ -141,8 +141,6 @@ Inline Component Configuration pattern.
 :::
 
 ## Related Patterns
-
-The Inline Component Configuration pattern is often implemented with:
 
 - [Inline Component Customization Pattern](/design-patterns/inline-component-customization)
 - [Component Catalog Pattern](/design-patterns/component-catalog)
