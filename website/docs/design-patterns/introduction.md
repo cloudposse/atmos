@@ -46,8 +46,8 @@ robust, flexible, and maintainable solutions.
 ## The Catalog of Design Patterns
 
 The catalog of Atmos Design Patterns contains simple and elegant solutions to specific problems in infrastructure design and
-configuration. These solutions have been developed and evolved over time. The Design Patterns encapsulate them in a concise and readily applicable
-manner.
+configuration. These solutions have been developed and evolved over time. The Design Patterns encapsulate them in concise and readily applicable
+forms.
 
 Once you understand the Design Patterns and have experience with them, you won't ever think about infrastructure design in the same way.
 You'll have knowledge and insights that can make your own designs more flexible, modular, reusable, and understandable.

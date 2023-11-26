@@ -7,12 +7,12 @@ description: Inline Component Configuration Atmos Design Pattern
 
 # Inline Component Configuration
 
-The Inline Component Configuration pattern is used when the [components](/core-concepts/components) in a [stack](/core-concepts/stacks) 
+The **Inline Component Configuration** pattern is used when the [components](/core-concepts/components) in a [stack](/core-concepts/stacks) 
 are configured inline in the stack manifest without [importing](/core-concepts/stacks/imports) and reusing default/base configurations.
 
 ## Applicability
 
-Use the Inline Component Configuration pattern when:
+Use the **Inline Component Configuration** pattern when:
 
 - You have a very simple organizational structure, e.g. one OU, one or a few accounts, one region
 
@@ -118,7 +118,7 @@ atmos terraform apply vpc -s dev
 
 ## Benefits
 
-The Inline Component Configuration pattern provides the following benefits:
+The **Inline Component Configuration** pattern provides the following benefits:
 
 - Very simple stack and component configurations
 
@@ -126,7 +126,7 @@ The Inline Component Configuration pattern provides the following benefits:
 
 ## Limitations
 
-The Inline Component Configuration pattern has the following limitations and drawbacks:
+The **Inline Component Configuration** pattern has the following limitations and drawbacks:
 
 - If you have more than one stack (e.g. `dev`, `staging`, `prod`), then the component definitions would be repeated in the stack manifests,
   which makes them not reusable and the entire stack configuration not DRY
@@ -135,7 +135,7 @@ The Inline Component Configuration pattern has the following limitations and dra
 
 :::note
 
-Use the [Inline Component Customization](/design-patterns/inline-component-customization) pattern to address the limitations of the 
+Use the [Inline Component Customization](/design-patterns/inline-component-customization) pattern to address the limitations of the
 Inline Component Configuration pattern.
 
 :::

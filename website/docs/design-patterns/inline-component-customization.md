@@ -7,19 +7,18 @@ description: Inline Component Customization Atmos Design Pattern
 
 # Inline Component Customization
 
-The Inline Component Customization pattern is used when the defaults for the [components](/core-concepts/components) in
+The **Inline Component Customization** pattern is used when the defaults for the [components](/core-concepts/components) in
 a [stack](/core-concepts/stacks)
 are configured in default/base manifests, the manifests are [imported](/core-concepts/stacks/imports) into the top-level stacks, and the components
-are customized
-inline in each top-level stack overriding the configuration for each environment (OU, account, region).
+are customized inline in each top-level stack overriding the configuration for each environment (OU, account, region).
 
 ## Applicability
 
-Use the Inline Component Customization pattern when:
+Use the **Inline Component Customization** pattern when:
 
 - You have components that are provisioned in multiple stacks (e.g. `dev`, `staging`, `prod` accounts) with different configurations for each stack
 
-- You need to make the components' default/base configurations reusable across different stacks
+- You need to make the components' default/baseline configurations reusable across different stacks
 
 - You want to keep the configurations DRY
 
@@ -197,7 +196,7 @@ atmos terraform apply vpc -s prod
 
 ## Benefits
 
-The Inline Component Customization pattern provides the following benefits:
+The **Inline Component Customization** pattern provides the following benefits:
 
 - The defaults for the components are defined in just one place making the entire configuration DRY
 
@@ -207,7 +206,7 @@ The Inline Component Customization pattern provides the following benefits:
 
 ## Limitations
 
-The Inline Component Customization pattern has the following limitations and drawbacks:
+The **Inline Component Customization** pattern has the following limitations and drawbacks:
 
 - The pattern is useful to customize components per account or region, but if you have more than one Organization, Organizational Unit (OU) or region,
   then the inline customizations would be repeated in the stack manifests, making the entire stack configuration not DRY
