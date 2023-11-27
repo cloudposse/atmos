@@ -1,30 +1,235 @@
 {
-  "$id": "infra-vpc-component",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "vpc component validation",
-  "description": "JSON Schema for the 'vpc' Atmos component.",
-  "type": "object",
-  "properties": {
-    "vars": {
+  "$schema": "http://json-schema.org/draft-06/schema#",
+  "$ref": "#/definitions/Welcome7",
+  "definitions": {
+    "Welcome10": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "region": {
+        "import": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "vars": {
+          "$ref": "#/definitions/Vars"
+        }
+      },
+      "required": [
+        "import",
+        "vars"
+      ],
+      "title": "Welcome10"
+    },
+    "Welcome7": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "components": {
+          "$ref": "#/definitions/Components"
+        }
+      },
+      "required": [
+        "components"
+      ],
+      "title": "Welcome7"
+    },
+    "Components": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "terraform": {
+          "$ref": "#/definitions/Terraform"
+        }
+      },
+      "required": [
+        "terraform"
+      ],
+      "title": "Components"
+    },
+    "Terraform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vpc": {
+          "$ref": "#/definitions/Vpc"
+        }
+      },
+      "required": [
+        "vpc"
+      ],
+      "title": "Terraform"
+    },
+    "Vpc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        },
+        "settings": {
+          "$ref": "#/definitions/Settings"
+        },
+        "vars": {
+          "$ref": "#/definitions/Vars"
+        }
+      },
+      "required": [
+        "metadata",
+        "settings",
+        "vars"
+      ],
+      "title": "Vpc"
+    },
+    "Metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "component"
+      ],
+      "title": "Metadata"
+    },
+    "Settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "validation": {
+          "$ref": "#/definitions/Validation"
+        }
+      },
+      "required": [
+        "validation"
+      ],
+      "title": "Settings"
+    },
+    "Validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "validate-vpc-component-with-jsonschema": {
+          "$ref": "#/definitions/ValidateVpcComponentWithJsonschema"
+        },
+        "check-vpc-component-config-with-opa-policy": {
+          "$ref": "#/definitions/CheckVpcComponentConfigWithOpaPolicy"
+        }
+      },
+      "required": [
+        "check-vpc-component-config-with-opa-policy",
+        "validate-vpc-component-with-jsonschema"
+      ],
+      "title": "Validation"
+    },
+    "CheckVpcComponentConfigWithOpaPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_type": {
           "type": "string"
         },
-        "cidr_block": {
-          "type": "string",
-          "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))?$"
+        "schema_path": {
+          "type": "string"
+        },
+        "module_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "description",
+        "disabled",
+        "module_paths",
+        "schema_path",
+        "schema_type",
+        "timeout"
+      ],
+      "title": "CheckVpcComponentConfigWithOpaPolicy"
+    },
+    "ValidateVpcComponentWithJsonschema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_type": {
+          "type": "string"
+        },
+        "schema_path": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "schema_path",
+        "schema_type"
+      ],
+      "title": "ValidateVpcComponentWithJsonschema"
+    },
+    "Vars": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nat_gateway_enabled": {
+          "type": "boolean"
+        },
+        "nat_instance_enabled": {
+          "type": "boolean"
+        },
+        "max_subnet_count": {
+          "type": "integer"
         },
         "map_public_ip_on_launch": {
           "type": "boolean"
+        },
+        "dns_hostnames_enabled": {
+          "type": "boolean"
+        },
+        "vpc_flow_logs_enabled": {
+          "type": "boolean"
+        },
+        "vpc_flow_logs_traffic_type": {
+          "type": "string"
+        },
+        "vpc_flow_logs_log_destination_type": {
+          "type": "string"
         }
       },
-      "additionalProperties": true,
       "required": [
-        "region",
-        "cidr_block",
-        "map_public_ip_on_launch"
-      ]
+        "dns_hostnames_enabled",
+        "enabled",
+        "map_public_ip_on_launch",
+        "max_subnet_count",
+        "name",
+        "nat_gateway_enabled",
+        "nat_instance_enabled",
+        "vpc_flow_logs_enabled",
+        "vpc_flow_logs_log_destination_type",
+        "vpc_flow_logs_traffic_type"
+      ],
+      "title": "Vars"
     }
   }
 }
