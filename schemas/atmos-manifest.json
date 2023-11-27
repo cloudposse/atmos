@@ -1,235 +1,132 @@
 {
-  "$schema": "http://json-schema.org/draft-06/schema#",
-  "$ref": "#/definitions/Welcome7",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "https://json.schemastore.org/atmos-manifest.json",
+  "title": "JSON Schema for Atmos stack manifest files. https://atmos.tools",
+  "type": "object",
+  "properties": {
+    "components": {
+      "$ref": "#/definitions/components"
+    },
+    "vars": {
+      "$ref": "#/definitions/vars"
+    },
+    "command": {
+      "type": "string",
+      "description": "Command to execute"
+    }
+  },
+  "additionalProperties": false,
+  "required": [],
   "definitions": {
-    "Welcome10": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "import": {
-          "type": "array",
-          "items": {
-            "type": "string"
+    "import": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "uniqueItems": true
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "skip_templates_processing": {
+                "type": "boolean"
+              },
+              "ignore_missing_template_values": {
+                "type": "boolean"
+              },
+              "context": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "required": ["path"]
           }
-        },
-        "vars": {
-          "$ref": "#/definitions/Vars"
-        }
-      },
-      "required": [
-        "import",
-        "vars"
-      ],
-      "title": "Welcome10"
+        ]
+      }
     },
-    "Welcome7": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "components": {
-          "$ref": "#/definitions/Components"
-        }
-      },
-      "required": [
-        "components"
-      ],
-      "title": "Welcome7"
-    },
-    "Components": {
+    "components": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "terraform": {
-          "$ref": "#/definitions/Terraform"
-        }
-      },
-      "required": [
-        "terraform"
-      ],
-      "title": "Components"
-    },
-    "Terraform": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "vpc": {
-          "$ref": "#/definitions/Vpc"
-        }
-      },
-      "required": [
-        "vpc"
-      ],
-      "title": "Terraform"
-    },
-    "Vpc": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "metadata": {
-          "$ref": "#/definitions/Metadata"
+          "$ref": "#/definitions/terraform"
         },
-        "settings": {
-          "$ref": "#/definitions/Settings"
-        },
-        "vars": {
-          "$ref": "#/definitions/Vars"
+        "helmfile": {
+          "$ref": "#/definitions/helmfile"
         }
       },
-      "required": [
-        "metadata",
-        "settings",
-        "vars"
-      ],
-      "title": "Vpc"
+      "required": [],
+      "title": "components"
     },
-    "Metadata": {
+    "terraform": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+      },
+      "required": [],
+      "title": "terraform"
+    },
+    "helmfile": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+      },
+      "required": [],
+      "title": "helmfile"
+    },
+    "metadata": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["abstract", "real"]
+        },
         "component": {
           "type": "string"
-        }
-      },
-      "required": [
-        "component"
-      ],
-      "title": "Metadata"
-    },
-    "Settings": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "validation": {
-          "$ref": "#/definitions/Validation"
-        }
-      },
-      "required": [
-        "validation"
-      ],
-      "title": "Settings"
-    },
-    "Validation": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "validate-vpc-component-with-jsonschema": {
-          "$ref": "#/definitions/ValidateVpcComponentWithJsonschema"
         },
-        "check-vpc-component-config-with-opa-policy": {
-          "$ref": "#/definitions/CheckVpcComponentConfigWithOpaPolicy"
-        }
-      },
-      "required": [
-        "check-vpc-component-config-with-opa-policy",
-        "validate-vpc-component-with-jsonschema"
-      ],
-      "title": "Validation"
-    },
-    "CheckVpcComponentConfigWithOpaPolicy": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "schema_type": {
-          "type": "string"
-        },
-        "schema_path": {
-          "type": "string"
-        },
-        "module_paths": {
+        "inherits": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "uniqueItems": true
           }
-        },
-        "description": {
-          "type": "string"
-        },
-        "disabled": {
-          "type": "boolean"
-        },
-        "timeout": {
-          "type": "integer"
         }
       },
-      "required": [
-        "description",
-        "disabled",
-        "module_paths",
-        "schema_path",
-        "schema_type",
-        "timeout"
-      ],
-      "title": "CheckVpcComponentConfigWithOpaPolicy"
+      "required": [],
+      "title": "metadata"
     },
-    "ValidateVpcComponentWithJsonschema": {
+    "settings": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
-        "schema_type": {
-          "type": "string"
-        },
-        "schema_path": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
+        "validation": {
+          "$ref": "#/definitions/validation"
         }
       },
-      "required": [
-        "description",
-        "schema_path",
-        "schema_type"
-      ],
-      "title": "ValidateVpcComponentWithJsonschema"
+      "required": [],
+      "title": "settings"
     },
-    "Vars": {
+    "validation": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "name": {
-          "type": "string"
-        },
-        "nat_gateway_enabled": {
-          "type": "boolean"
-        },
-        "nat_instance_enabled": {
-          "type": "boolean"
-        },
-        "max_subnet_count": {
-          "type": "integer"
-        },
-        "map_public_ip_on_launch": {
-          "type": "boolean"
-        },
-        "dns_hostnames_enabled": {
-          "type": "boolean"
-        },
-        "vpc_flow_logs_enabled": {
-          "type": "boolean"
-        },
-        "vpc_flow_logs_traffic_type": {
-          "type": "string"
-        },
-        "vpc_flow_logs_log_destination_type": {
-          "type": "string"
-        }
       },
-      "required": [
-        "dns_hostnames_enabled",
-        "enabled",
-        "map_public_ip_on_launch",
-        "max_subnet_count",
-        "name",
-        "nat_gateway_enabled",
-        "nat_instance_enabled",
-        "vpc_flow_logs_enabled",
-        "vpc_flow_logs_log_destination_type",
-        "vpc_flow_logs_traffic_type"
-      ],
-      "title": "Vars"
+      "required": [],
+      "title": "validation"
+    },
+    "vars": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+      },
+      "required": [],
+      "title": "vars"
     }
   }
 }

@@ -340,6 +340,7 @@ schemas:
     base_path: "stacks/schemas/cue"
   # JSONSchema to validate Atmos manifests
   # https://www.schemastore.org/json
+  # https://json-schema.org/draft/2020-12/release-notes
   # https://github.com/SchemaStore/schemastore
   atmos:
     # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
