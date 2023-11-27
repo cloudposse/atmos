@@ -16,23 +16,34 @@ The pattern is used to model multi-region infrastructures for organizations with
 
 Use the **Organizational Structure Configuration** pattern when:
 
-- You have components that are provisioned in multiple stacks (e.g. `dev`, `staging`, `prod` accounts) with different configurations for each stack
+- You have one or more organizations with multiple OUs/departments/tenants
 
-- You need to make the components' default/baseline configurations reusable across different stacks
+- Each OU/department/tenant has multiple accounts
 
-- You want to keep the entire configuration DRY, reusable and easy to manage
+- You want to provision the infrastructure into many regions
 
 ## Structure
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── defaults
-   │       ├── vpc-flow-logs-bucket.yaml
-   │       ├── vpc.yaml
-   │   └── dev.yaml
-   │   └── staging.yaml
-   │   └── prod.yaml
+   │   ├── mixins
+   │   │   ├── region
+   │   │   │   ├── global-region.yaml
+   │   │   │   ├── us-east-2.yaml
+   │   │   │   └── us-west-2.yaml
+   │   │   └── stage
+   │   │        ├── audit.yaml
+   │   │        ├── automation.yaml
+   │   │        ├── identity.yaml
+   │   │        ├── root.yaml
+   │   │        ├── dev.yaml
+   │   │        ├── staging.yaml
+   │   │        └── prod.yaml
+   │   └── orgs
+   │       ├── org1
+   │       │   ├── core
+   │       │   ├── plat
    │  
    │   # Centralized components configuration
    ├── components
