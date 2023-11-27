@@ -247,3 +247,7 @@ schemas:
     # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
+  atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
+    # Supports both absolute and relative paths
+    manifest: "schemas/atmos-manifest.json"

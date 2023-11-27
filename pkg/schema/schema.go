@@ -329,10 +329,15 @@ type Opa struct {
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 }
 
+type AtmosSchema struct {
+	Manifest string `yaml:"manifest" json:"manifest" mapstructure:"manifest"`
+}
+
 type Schemas struct {
-	JsonSchema JsonSchema `yaml:"jsonschema" json:"jsonschema" mapstructure:"jsonschema"`
-	Cue        Cue        `yaml:"cue" json:"cue" mapstructure:"cue"`
-	Opa        Opa        `yaml:"opa" json:"opa" mapstructure:"opa"`
+	JsonSchema JsonSchema  `yaml:"jsonschema" json:"jsonschema" mapstructure:"jsonschema"`
+	Cue        Cue         `yaml:"cue" json:"cue" mapstructure:"cue"`
+	Opa        Opa         `yaml:"opa" json:"opa" mapstructure:"opa"`
+	Atmos      AtmosSchema `yaml:"atmos" json:"atmos" mapstructure:"atmos"`
 }
 
 type ValidationItem struct {

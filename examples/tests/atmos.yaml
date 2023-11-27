@@ -338,3 +338,7 @@ schemas:
     # Can also be set using 'ATMOS_SCHEMAS_CUE_BASE_PATH' ENV var, or '--schemas-cue-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/cue"
+  atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
+    # Supports both absolute and relative paths
+    manifest: "../../schemas/atmos-manifest.json"
