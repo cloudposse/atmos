@@ -4,15 +4,29 @@
   "title": "JSON Schema for Atmos stack manifest files. https://atmos.tools",
   "type": "object",
   "properties": {
+    "import": {
+      "$ref": "#/definitions/import"
+    },
+    "terraform": {
+      "$ref": "#/definitions/terraform"
+    },
+    "helmfile": {
+      "$ref": "#/definitions/helmfile"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
     "vars": {
       "$ref": "#/definitions/vars"
     },
-    "command": {
-      "type": "string",
-      "description": "Command to execute"
+    "env": {
+      "$ref": "#/definitions/env"
+    },
+    "settings": {
+      "$ref": "#/definitions/settings"
+    },
+    "overrides": {
+      "$ref": "#/definitions/overrides"
     }
   },
   "additionalProperties": false,
@@ -44,7 +58,9 @@
                 "additionalProperties": true
               }
             },
-            "required": ["path"]
+            "required": [
+              "path"
+            ]
           }
         ]
       }
@@ -67,6 +83,9 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "command": {
+          "$ref": "#/definitions/command"
+        }
       },
       "required": [],
       "title": "terraform"
@@ -75,9 +94,20 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "command": {
+          "$ref": "#/definitions/command"
+        }
       },
       "required": [],
       "title": "helmfile"
+    },
+    "command": {
+      "type": "string",
+      "title": "command"
+    },
+    "component": {
+      "type": "string",
+      "title": "component"
     },
     "metadata": {
       "type": "object",
@@ -85,7 +115,10 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["abstract", "real"]
+          "enum": [
+            "abstract",
+            "real"
+          ]
         },
         "component": {
           "type": "string"
@@ -107,6 +140,12 @@
       "properties": {
         "validation": {
           "$ref": "#/definitions/validation"
+        },
+        "spacelift": {
+          "$ref": "#/definitions/spacelift"
+        },
+        "atlantis": {
+          "$ref": "#/definitions/atlantis"
         }
       },
       "required": [],
@@ -114,7 +153,7 @@
     },
     "validation": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
       },
       "required": [],
@@ -123,10 +162,73 @@
     "vars": {
       "type": "object",
       "additionalProperties": true,
+      "title": "vars"
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [],
+      "title": "env"
+    },
+    "backend_type": {
+      "type": "string",
+      "title": "backend_type"
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
       },
       "required": [],
-      "title": "vars"
+      "title": "backend"
+    },
+    "remote_state_backend_type": {
+      "type": "string",
+      "title": "remote_state_backend_type"
+    },
+    "remote_state_backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+      },
+      "required": [],
+      "title": "remote_state_backend"
+    },
+    "overrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "$ref": "#/definitions/command"
+        },
+        "vars": {
+          "$ref": "#/definitions/vars"
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "settings": {
+          "$ref": "#/definitions/settings"
+        }
+      },
+      "required": [],
+      "title": "overrides"
+    },
+    "spacelift": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+      },
+      "required": [],
+      "title": "spacelift"
+    },
+    "atlantis": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+      },
+      "required": [],
+      "title": "atlantis"
     }
   }
 }
