@@ -13,9 +13,6 @@
     "helmfile": {
       "$ref": "#/definitions/helmfile"
     },
-    "components": {
-      "$ref": "#/definitions/components"
-    },
     "vars": {
       "$ref": "#/definitions/vars"
     },
@@ -24,6 +21,9 @@
     },
     "settings": {
       "$ref": "#/definitions/settings"
+    },
+    "components": {
+      "$ref": "#/definitions/components"
     },
     "overrides": {
       "$ref": "#/definitions/overrides"
@@ -34,6 +34,7 @@
   "definitions": {
     "import": {
       "type": "array",
+      "description": "Import section",
       "items": {
         "oneOf": [
           {
@@ -67,13 +68,14 @@
     },
     "components": {
       "type": "object",
+      "description": "Components section",
       "additionalProperties": false,
       "properties": {
         "terraform": {
-          "$ref": "#/definitions/terraform"
+          "$ref": "#/definitions/terraform_components"
         },
         "helmfile": {
-          "$ref": "#/definitions/helmfile"
+          "$ref": "#/definitions/helmfile_components"
         }
       },
       "required": [],
@@ -81,36 +83,165 @@
     },
     "terraform": {
       "type": "object",
-      "additionalProperties": true,
+      "description": "Terraform section",
+      "additionalProperties": false,
       "properties": {
+        "vars": {
+          "$ref": "#/definitions/vars"
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "settings": {
+          "$ref": "#/definitions/settings"
+        },
         "command": {
           "$ref": "#/definitions/command"
+        },
+        "backend_type": {
+          "$ref": "#/definitions/backend_type"
+        },
+        "backend": {
+          "$ref": "#/definitions/backend"
+        },
+        "remote_state_backend_type": {
+          "$ref": "#/definitions/command"
+        },
+        "remote_state_backend": {
+          "$ref": "#/definitions/command"
+        },
+        "overrides": {
+          "$ref": "#/definitions/overrides"
         }
       },
       "required": [],
       "title": "terraform"
     },
-    "helmfile": {
+    "terraform_components": {
       "type": "object",
-      "additionalProperties": true,
+      "description": "Terraform components section",
+      "patternProperties": {
+        "^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-]+$": {
+          "$ref": "#/definitions/terraform_component_manifest"
+        }
+      },
+      "additionalProperties": false,
+      "title": "terraform_components"
+    },
+    "terraform_component_manifest": {
+      "type": "object",
+      "description": "Terraform component manifest",
+      "additionalProperties": false,
       "properties": {
+        "metadata": {
+          "$ref": "#/definitions/metadata"
+        },
+        "component": {
+          "$ref": "#/definitions/component"
+        },
+        "vars": {
+          "$ref": "#/definitions/vars"
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "settings": {
+          "$ref": "#/definitions/settings"
+        },
         "command": {
           "$ref": "#/definitions/command"
+        },
+        "backend_type": {
+          "$ref": "#/definitions/backend_type"
+        },
+        "backend": {
+          "$ref": "#/definitions/backend"
+        },
+        "remote_state_backend_type": {
+          "$ref": "#/definitions/command"
+        },
+        "remote_state_backend": {
+          "$ref": "#/definitions/command"
+        }
+      },
+      "required": [],
+      "title": "terraform_component_manifest"
+    },
+    "helmfile": {
+      "type": "object",
+      "description": "Helmfile section",
+      "additionalProperties": false,
+      "properties": {
+        "vars": {
+          "$ref": "#/definitions/vars"
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "settings": {
+          "$ref": "#/definitions/settings"
+        },
+        "command": {
+          "$ref": "#/definitions/command"
+        },
+        "overrides": {
+          "$ref": "#/definitions/overrides"
         }
       },
       "required": [],
       "title": "helmfile"
     },
+    "helmfile_components": {
+      "type": "object",
+      "description": "Helmfile components section",
+      "patternProperties": {
+        "^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-]+$": {
+          "$ref": "#/definitions/helmfile_component_manifest"
+        }
+      },
+      "additionalProperties": false,
+      "title": "helmfile_components"
+    },
+    "helmfile_component_manifest": {
+      "type": "object",
+      "description": "Helmfile component manifest",
+      "additionalProperties": false,
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/metadata"
+        },
+        "component": {
+          "$ref": "#/definitions/component"
+        },
+        "vars": {
+          "$ref": "#/definitions/vars"
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "settings": {
+          "$ref": "#/definitions/settings"
+        },
+        "command": {
+          "$ref": "#/definitions/command"
+        }
+      },
+      "required": [],
+      "title": "helmfile_component_manifest"
+    },
     "command": {
       "type": "string",
+      "description": "Command to execute",
       "title": "command"
     },
     "component": {
       "type": "string",
+      "description": "Component section",
       "title": "component"
     },
     "metadata": {
       "type": "object",
+      "description": "Metadata section",
       "additionalProperties": false,
       "properties": {
         "type": {
@@ -136,6 +267,7 @@
     },
     "settings": {
       "type": "object",
+      "description": "Settings section",
       "additionalProperties": true,
       "properties": {
         "validation": {
@@ -153,29 +285,75 @@
     },
     "validation": {
       "type": "object",
-      "additionalProperties": false,
-      "properties": {
+      "description": "Validation section",
+      "patternProperties": {
+        "^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-]+$": {
+          "$ref": "#/definitions/validation_manifest"
+        }
       },
-      "required": [],
+      "additionalProperties": false,
       "title": "validation"
+    },
+    "validation_manifest": {
+      "type": "object",
+      "description": "Validation manifest",
+      "properties": {
+        "schema_type": {
+          "type": "string",
+          "enum": [
+            "jsonschema",
+            "opa"
+          ]
+        },
+        "schema_path": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "module_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of paths to validation modules"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_type",
+        "schema_path"
+      ],
+      "title": "validation_manifest"
     },
     "vars": {
       "type": "object",
+      "description": "Vars section",
       "additionalProperties": true,
       "title": "vars"
     },
     "env": {
       "type": "object",
+      "description": "Env section",
       "additionalProperties": true,
       "required": [],
       "title": "env"
     },
     "backend_type": {
       "type": "string",
+      "description": "Backend type",
       "title": "backend_type"
     },
     "backend": {
       "type": "object",
+      "description": "Backend section",
       "additionalProperties": false,
       "properties": {
       },
@@ -184,10 +362,12 @@
     },
     "remote_state_backend_type": {
       "type": "string",
+      "description": "Remote state backend type",
       "title": "remote_state_backend_type"
     },
     "remote_state_backend": {
       "type": "object",
+      "description": "Remote state backend section",
       "additionalProperties": false,
       "properties": {
       },
@@ -196,6 +376,7 @@
     },
     "overrides": {
       "type": "object",
+      "description": "Overrides section",
       "additionalProperties": false,
       "properties": {
         "command": {
@@ -216,6 +397,7 @@
     },
     "spacelift": {
       "type": "object",
+      "description": "Spacelift section",
       "additionalProperties": true,
       "properties": {
       },
@@ -224,7 +406,8 @@
     },
     "atlantis": {
       "type": "object",
-      "additionalProperties": true,
+      "description": "Atlantis section",
+      "additionalProperties": false,
       "properties": {
       },
       "required": [],
