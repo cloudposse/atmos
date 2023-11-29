@@ -9,14 +9,16 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
-	info := schema.ConfigAndStacksInfo{}
+	info, err := processCommandLineArgs("", cmd, args, nil)
+	if err != nil {
+		return err
+	}
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -73,6 +75,11 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 			false)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
+		}
+
+		// Validate the Atmos manifest using JSON Schema if configured
+		if cliConfig.Schemas.Atmos.Manifest != "" {
+			u.PrintMessage(cliConfig.Schemas.Atmos.Manifest)
 		}
 	}
 
