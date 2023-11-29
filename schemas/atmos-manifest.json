@@ -121,7 +121,7 @@
       "type": "object",
       "description": "Terraform components section",
       "patternProperties": {
-        "^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-]+$": {
+        "^[\/a-zA-Z0-9-_{}]+$": {
           "$ref": "#/definitions/terraform_component_manifest"
         }
       },
@@ -195,7 +195,7 @@
       "type": "object",
       "description": "Helmfile components section",
       "patternProperties": {
-        "^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-]+$": {
+        "^[\/a-zA-Z0-9-_{}]+$": {
           "$ref": "#/definitions/helmfile_component_manifest"
         }
       },
@@ -260,6 +260,12 @@
             "type": "string",
             "uniqueItems": true
           }
+        },
+        "terraform_workspace": {
+          "type": "string"
+        },
+        "terraform_workspace_pattern": {
+          "type": "string"
         }
       },
       "required": [],
@@ -272,6 +278,9 @@
       "properties": {
         "validation": {
           "$ref": "#/definitions/validation"
+        },
+        "depends_on": {
+          "$ref": "#/definitions/depends_on"
         },
         "spacelift": {
           "$ref": "#/definitions/spacelift"
@@ -287,7 +296,7 @@
       "type": "object",
       "description": "Validation section",
       "patternProperties": {
-        "^(?:@[a-zA-Z0-9_-]+\/)?[a-zA-Z0-9_-]+$": {
+        "^[\/a-zA-Z0-9-_{}]+$": {
           "$ref": "#/definitions/validation_manifest"
         }
       },
@@ -359,12 +368,7 @@
       "title": "backend_type"
     },
     "backend": {
-      "type": "object",
-      "description": "Backend section",
-      "additionalProperties": false,
-      "properties": {
-      },
-      "required": [],
+      "$ref": "#/definitions/backend_manifest",
       "title": "backend"
     },
     "remote_state_backend_type": {
@@ -380,13 +384,72 @@
       "title": "remote_state_backend_type"
     },
     "remote_state_backend": {
+      "$ref": "#/definitions/backend_manifest",
+      "title": "remote_state_backend"
+    },
+    "backend_manifest": {
       "type": "object",
-      "description": "Remote state backend section",
+      "description": "Backend manifest",
       "additionalProperties": false,
       "properties": {
+        "s3": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "encrypt": {
+              "type": "boolean"
+            },
+            "bucket": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "dynamodb_table": {
+              "type": "string"
+            },
+            "acl": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
+            "role_arn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "profile": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "workspace_key_prefix": {
+              "type": "string"
+            }
+          }
+        },
+        "remote": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "vault": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "static": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "azurerm": {
+          "type": "object",
+          "additionalProperties": true
+        }
       },
       "required": [],
-      "title": "remote_state_backend"
+      "title": "backend"
     },
     "overrides": {
       "type": "object",
@@ -408,6 +471,63 @@
       },
       "required": [],
       "title": "overrides"
+    },
+    "depends_on": {
+      "type": "object",
+      "description": "Depends_on section",
+      "patternProperties": {
+        "^[\/a-zA-Z0-9-_{}]+$": {
+          "$ref": "#/definitions/depends_on_manifest"
+        }
+      },
+      "additionalProperties": false,
+      "title": "depends_on"
+    },
+    "depends_on_manifest": {
+      "type": "object",
+      "description": "Depends_on manifest",
+      "properties": {
+        "namespace": {
+          "type": "string"
+        },
+        "tenant": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "component": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "folder": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "component"
+          ]
+        },
+        {
+          "required": [
+            "file"
+          ]
+        },
+        {
+          "required": [
+            "folder"
+          ]
+        }
+      ],
+      "additionalProperties": false,
+      "title": "depends_on_manifest"
     },
     "spacelift": {
       "type": "object",
@@ -438,6 +558,24 @@
       "description": "Atlantis section",
       "additionalProperties": false,
       "properties": {
+        "config_template_name": {
+          "type": "string"
+        },
+        "config_template": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "project_template_name": {
+          "type": "string"
+        },
+        "project_template": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "workflow_templates": {
+          "type": "object",
+          "additionalProperties": true
+        }
       },
       "required": [],
       "title": "atlantis"
