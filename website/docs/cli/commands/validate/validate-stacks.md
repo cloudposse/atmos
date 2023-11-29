@@ -83,7 +83,7 @@ For this to work, configure the following:
 
 <br/>
 
-In case of any validation errors (invalid, YAML syntax, Atmos manifest JSON Schema errors, invalid imports, etc.), you'll get an output from the
+In case of any validation errors (invalid YAML syntax, Atmos manifest JSON Schema errors, invalid imports, etc.), you'll get an output from the
 command similar to the following:
 
 ```console
