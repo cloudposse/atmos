@@ -20,8 +20,8 @@ terraform:
       storage_account_name: staterraformstate
       container_name: dev-tfstate
       key: dev.atmos
-    remote:
-    vault:
+    remote: {}
+    vault: {}
 
   remote_state_backend:
     s3:

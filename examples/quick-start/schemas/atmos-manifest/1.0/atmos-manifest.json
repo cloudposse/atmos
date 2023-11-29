@@ -27,10 +27,63 @@
     },
     "overrides": {
       "$ref": "#/definitions/overrides"
+    },
+    "workflows": {
+      "$ref": "#/definitions/workflows"
     }
   },
   "additionalProperties": false,
-  "required": [],
+  "oneOf": [
+    {
+      "required": [
+        "workflows"
+      ]
+    },
+    {
+      "anyOf": [
+        {
+          "required": [
+            "import"
+          ]
+        },
+        {
+          "required": [
+            "terraform"
+          ]
+        },
+        {
+          "required": [
+            "helmfile"
+          ]
+        },
+        {
+          "required": [
+            "vars"
+          ]
+        },
+        {
+          "required": [
+            "env"
+          ]
+        },
+        {
+          "required": [
+            "settings"
+          ]
+        },
+        {
+          "required": [
+            "components"
+          ]
+        },
+        {
+          "required": [
+            "overrides"
+          ]
+        }
+      ]
+    }
+  ],
   "definitions": {
     "import": {
       "type": "array",
@@ -105,10 +158,10 @@
           "$ref": "#/definitions/backend"
         },
         "remote_state_backend_type": {
-          "$ref": "#/definitions/command"
+          "$ref": "#/definitions/remote_state_backend_type"
         },
         "remote_state_backend": {
-          "$ref": "#/definitions/command"
+          "$ref": "#/definitions/remote_state_backend"
         },
         "overrides": {
           "$ref": "#/definitions/overrides"
@@ -121,7 +174,7 @@
       "type": "object",
       "description": "Terraform components section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}]+$": {
+        "^[\/a-zA-Z0-9-_{}.]+$": {
           "$ref": "#/definitions/terraform_component_manifest"
         }
       },
@@ -158,10 +211,10 @@
           "$ref": "#/definitions/backend"
         },
         "remote_state_backend_type": {
-          "$ref": "#/definitions/command"
+          "$ref": "#/definitions/remote_state_backend_type"
         },
         "remote_state_backend": {
-          "$ref": "#/definitions/command"
+          "$ref": "#/definitions/remote_state_backend"
         }
       },
       "required": [],
@@ -195,7 +248,7 @@
       "type": "object",
       "description": "Helmfile components section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}]+$": {
+        "^[\/a-zA-Z0-9-_{}.]+$": {
           "$ref": "#/definitions/helmfile_component_manifest"
         }
       },
@@ -296,7 +349,7 @@
       "type": "object",
       "description": "Validation section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}]+$": {
+        "^[\/a-zA-Z0-9-_{}.]+$": {
           "$ref": "#/definitions/validation_manifest"
         }
       },
@@ -330,7 +383,8 @@
         "module_paths": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "uniqueItems": true
           },
           "description": "List of paths to validation modules"
         }
@@ -476,7 +530,7 @@
       "type": "object",
       "description": "Depends_on section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}]+$": {
+        "^[\/a-zA-Z0-9-_{}.]+$": {
           "$ref": "#/definitions/depends_on_manifest"
         }
       },
@@ -547,7 +601,10 @@
           "type": "boolean"
         },
         "terraform_version": {
-          "type": "string"
+          "type": [
+            "string",
+            "number"
+          ]
         }
       },
       "required": [],
@@ -579,6 +636,58 @@
       },
       "required": [],
       "title": "atlantis"
+    },
+    "workflows": {
+      "type": "object",
+      "description": "Workflows section",
+      "patternProperties": {
+        "^[\/a-zA-Z0-9-_{}.]+$": {
+          "$ref": "#/definitions/workflow_manifest"
+        }
+      },
+      "additionalProperties": false,
+      "title": "workflows"
+    },
+    "workflow_manifest": {
+      "type": "object",
+      "description": "Atmos workflow manifest",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "stack": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              },
+              "stack": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "title": "workflow_manifest"
     }
   }
 }
