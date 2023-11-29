@@ -218,20 +218,22 @@ func ProcessYAMLConfigFile(
 
 		compiler := jsonschema.NewCompiler()
 
+		atmosManifestJsonSchemaValidationErrorFormat := "Atmos manifest JSON Schema validation error:\n%v"
+
 		atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, err)
 		}
 
 		if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, err)
 		}
 
 		compiler.Draft = jsonschema.Draft2020
 
 		compiledSchema, err := compiler.Compile(atmosManifestJsonSchemaFilePath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, err)
 		}
 
 		if err = compiledSchema.Validate(dataFromJson); err != nil {
@@ -239,11 +241,11 @@ func ProcessYAMLConfigFile(
 			case *jsonschema.ValidationError:
 				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 				if err2 != nil {
-					return nil, nil, nil, err2
+					return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, err2)
 				}
-				return nil, nil, nil, errors.New(string(b))
+				return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, errors.New(string(b)))
 			default:
-				return nil, nil, nil, err
+				return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, err)
 			}
 		}
 	}
