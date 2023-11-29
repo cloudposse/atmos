@@ -1,6 +1,7 @@
 ---
 title: Atmos Alternatives
 sidebar_label: Alternatives
+sidebar_position: 3
 ---
 
 To better understand where Atmos fits in, it may be helpful to understand some of the alternative tooling it seeks to replace. There are lots of great
