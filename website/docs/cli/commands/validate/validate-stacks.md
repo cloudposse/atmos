@@ -7,7 +7,7 @@ description: Use this command to validate all Stack configurations.
 ---
 
 :::note Purpose
-Use this command to validate all Stack configurations.
+Use this command to validate Atmos stack manifest configurations.
 :::
 
 ## Usage
@@ -20,16 +20,64 @@ atmos validate stacks
 
 <br/>
 
-This command validates stacks configurations. The command checks and validates the following:
+This command validates Atmos stack manifests and checks the following:
 
-- All YAML config files for any YAML errors and inconsistencies
+- All YAML manifest files for any YAML errors and inconsistencies
 
-- All imports - if they are configured correctly, have valid data types, and point to existing files
+- All imports: if they are configured correctly, have valid data types, and point to existing files
 
-- Schema - if all sections in all YAML files are correctly configured and have valid data types
+- Schema: if all sections in all YAML manifest files are correctly configured and have valid data types
 
 <br/>
 
 :::tip
 Run `atmos validate stacks --help` to see all the available options
 :::
+
+## Examples
+
+```shell
+atmos validate stacks
+atmos validate stacks --schemas-atmos-manifest schemas/1.0/atmos-manifest.json
+```
+
+## Flags
+
+| Flag                       | Description                                                                                                                                               | Alias | Required |
+|:---------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--schemas-atmos-manifest` | Path to JSON Schema to validate Atmos stack manifests.<br/>Can be an absolute path or <br/>a path relative to the directory where the command is executed |       | no       |
+
+## Validate Atmos Manifests using JSON Schema
+
+Atmos can use the [Atmos Manifest JSON Schema](pathname://../../../schemas/1.0/atmos-manifest.json) to validate Atmos stack manifests on the command
+line
+by executing the command `atmos validate stacks`.
+
+For this to work, configure the following:
+
+- Add the [Atmos Manifest JSON Schema](pathname://../../../schemas/1.0/atmos-manifest.json) to your repository, for example
+  in  `schemas/1.0/atmos-manifest.json`
+
+- Configure the following section in the `atmos.yaml` [CLI config file](/cli/configuration)
+
+  ```yaml title="atmos.yaml"
+  # Validation schemas (for validating atmos stacks and components)
+  schemas:
+    # JSON Schema to validate Atmos manifests
+    atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
+    # Supports both absolute and relative paths
+      manifest: "schemas/1.0/atmos-manifest.json"
+  ```
+
+- Execute the command `atmos validate stacks`
+
+- Instead of configuring the `schemas.atmos.manifest` section in `atmos.yaml`, you can provide the path to
+  the [Atmos Manifest JSON Schema](pathname://../../../schemas/1.0/atmos-manifest.json) file by using the ENV variable `ATMOS_SCHEMAS_ATMOS_MANIFEST`
+  or the
+  `--schemas-atmos-manifest` command line argument:
+
+  ```shell
+  ATMOS_SCHEMAS_ATMOS_MANIFEST=schemas/1.0/atmos-manifest.json atmos validate stacks
+  atmos validate stacks --schemas-atmos-manifest schemas/1.0/atmos-manifest.json
+  ```
