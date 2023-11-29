@@ -1,7 +1,9 @@
 package stack
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/pkg/errors"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -77,6 +80,7 @@ func ProcessYAMLConfigFiles(
 				false,
 				map[any]any{},
 				map[any]any{},
+				"",
 			)
 
 			if err != nil {
@@ -153,6 +157,7 @@ func ProcessYAMLConfigFile(
 	ignoreMissingTemplateValues bool,
 	parentTerraformOverrides map[any]any,
 	parentHelmfileOverrides map[any]any,
+	atmosManifestJsonSchemaFilePath string,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -195,6 +200,52 @@ func ProcessYAMLConfigFile(
 	if err != nil {
 		e := fmt.Errorf("invalid stack manifest '%s'\n%v", relativeFilePath, err)
 		return nil, nil, nil, e
+	}
+
+	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
+	if atmosManifestJsonSchemaFilePath != "" {
+		// Convert the data to JSON and back to Go map to prevent the error:
+		// jsonschema: invalid jsonType: map[interface {}]interface {}
+		dataJson, err := u.ConvertToJSONFast(stackConfigMap)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		dataFromJson, err := u.ConvertFromJSON(dataJson)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		compiler := jsonschema.NewCompiler()
+
+		atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
+			return nil, nil, nil, err
+		}
+
+		compiler.Draft = jsonschema.Draft2020
+
+		compiledSchema, err := compiler.Compile(atmosManifestJsonSchemaFilePath)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		if err = compiledSchema.Validate(dataFromJson); err != nil {
+			switch e := err.(type) {
+			case *jsonschema.ValidationError:
+				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
+				if err2 != nil {
+					return nil, nil, nil, err2
+				}
+				return nil, nil, nil, errors.New(string(b))
+			default:
+				return nil, nil, nil, err
+			}
+		}
 	}
 
 	// Check if the `overrides` sections exist and if we need to process overrides for the components in this stack manifest and its imports
@@ -375,6 +426,7 @@ func ProcessYAMLConfigFile(
 				importStruct.IgnoreMissingTemplateValues,
 				finalTerraformOverrides,
 				finalHelmfileOverrides,
+				"",
 			)
 			if err != nil {
 				return nil, nil, nil, err

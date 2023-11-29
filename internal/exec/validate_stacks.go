@@ -27,13 +27,31 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 
 	flags := cmd.Flags()
 
-	schemasAtmosManifest, err := flags.GetString("schemas-atmos-manifest")
+	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
 		return err
 	}
 
-	if schemasAtmosManifest != "" {
-		cliConfig.Schemas.Atmos.Manifest = schemasAtmosManifest
+	if schemasAtmosManifestFlag != "" {
+		cliConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
+	}
+
+	// Check if the Atmos manifest JSON Schema is configured and the file exists
+	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
+	var atmosManifestJsonSchemaFilePath string
+
+	if cliConfig.Schemas.Atmos.Manifest != "" {
+		atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
+
+		if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
+			atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
+		} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
+			atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
+		} else {
+			return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist. "+
+				"It should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'",
+				cliConfig.Schemas.Atmos.Manifest)
+		}
 	}
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
@@ -66,11 +84,13 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 			false,
 			map[any]any{},
 			map[any]any{},
+			atmosManifestJsonSchemaFilePath,
 		)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}
 
+		// Process and validate the stack manifest
 		componentStackMap := map[string]map[string][]string{}
 		_, err = s.ProcessStackConfig(
 			cliConfig.StacksBaseAbsolutePath,
@@ -86,11 +106,6 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 			false)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
-		}
-
-		// Validate the Atmos manifest using JSON Schema if configured
-		if cliConfig.Schemas.Atmos.Manifest != "" {
-			u.PrintMessage(cliConfig.Schemas.Atmos.Manifest)
 		}
 	}
 
