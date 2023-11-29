@@ -44,8 +44,8 @@ For this to work, configure the following:
   schemas:
     # JSON Schema to validate Atmos manifests
     atmos:
-    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
-    # Supports both absolute and relative paths
+      # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
+      # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
       manifest: "schemas/1.0/atmos-manifest.json"
   ```
 

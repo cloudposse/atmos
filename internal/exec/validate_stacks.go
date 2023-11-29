@@ -25,6 +25,17 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	flags := cmd.Flags()
+
+	schemasAtmosManifest, err := flags.GetString("schemas-atmos-manifest")
+	if err != nil {
+		return err
+	}
+
+	if schemasAtmosManifest != "" {
+		cliConfig.Schemas.Atmos.Manifest = schemasAtmosManifest
+	}
+
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
 	includedPaths := []string{"**/*"}
 	// Don't exclude any YAML files for validation
