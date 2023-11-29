@@ -41,6 +41,7 @@ var (
 		cfg.JsonSchemaDirFlag,
 		cfg.OpaDirFlag,
 		cfg.CueDirFlag,
+		cfg.AtmosManifestJsonSchemaFlag,
 		cfg.RedirectStdErrFlag,
 	}
 )
@@ -196,6 +197,7 @@ func processCommandLineArgs(
 	configAndStacksInfo.SkipInit = argsAndFlagsInfo.SkipInit
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 	configAndStacksInfo.JsonSchemaDir = argsAndFlagsInfo.JsonSchemaDir
+	configAndStacksInfo.AtmosManifestJsonSchema = argsAndFlagsInfo.AtmosManifestJsonSchema
 	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
 	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
@@ -707,6 +709,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.CueDir = cueDirFlagParts[1]
+		}
+
+		if arg == cfg.AtmosManifestJsonSchemaFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.AtmosManifestJsonSchema = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.AtmosManifestJsonSchemaFlag) {
+			var atmosManifestJsonSchemaFlagParts = strings.Split(arg, "=")
+			if len(atmosManifestJsonSchemaFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.AtmosManifestJsonSchema = atmosManifestJsonSchemaFlagParts[1]
 		}
 
 		if arg == cfg.RedirectStdErrFlag {

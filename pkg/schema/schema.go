@@ -96,6 +96,7 @@ type ArgsAndFlagsInfo struct {
 	JsonSchemaDir           string
 	OpaDir                  string
 	CueDir                  string
+	AtmosManifestJsonSchema string
 	RedirectStdErr          string
 }
 
@@ -148,6 +149,7 @@ type ConfigAndStacksInfo struct {
 	JsonSchemaDir                 string
 	OpaDir                        string
 	CueDir                        string
+	AtmosManifestJsonSchema       string
 	AtmosCliConfigPath            string
 	AtmosBasePath                 string
 	RedirectStdErr                string
