@@ -174,7 +174,7 @@
       "type": "object",
       "description": "Terraform components section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}.]+$": {
+        "^[\/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/terraform_component_manifest"
         }
       },
@@ -248,7 +248,7 @@
       "type": "object",
       "description": "Helmfile components section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}.]+$": {
+        "^[\/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/helmfile_component_manifest"
         }
       },
@@ -349,7 +349,7 @@
       "type": "object",
       "description": "Validation section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}.]+$": {
+        "^[\/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/validation_manifest"
         }
       },
@@ -530,7 +530,7 @@
       "type": "object",
       "description": "Depends_on section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}.]+$": {
+        "^[\/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/depends_on_manifest"
         }
       },
@@ -641,7 +641,7 @@
       "type": "object",
       "description": "Workflows section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}.]+$": {
+        "^[\/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/workflow_manifest"
         }
       },

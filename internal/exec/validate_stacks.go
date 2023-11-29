@@ -48,8 +48,10 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
 			atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
 		} else {
-			return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist. "+
-				"It should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'",
+			return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist.\n"+
+				"It can be configured in the 'schemas.atmos.manifest' section in 'atmos.yaml', or provided using the 'ATMOS_SCHEMAS_ATMOS_MANIFEST' "+
+				"ENV variable or '--schemas-atmos-manifest' command line argument.\n"+
+				"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'.",
 				cliConfig.Schemas.Atmos.Manifest)
 		}
 	}

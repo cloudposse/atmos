@@ -80,3 +80,83 @@ For this to work, configure the following:
   ATMOS_SCHEMAS_ATMOS_MANIFEST=schemas/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
   atmos validate stacks --schemas-atmos-manifest schemas/atmos-manifest/1.0/atmos-manifest.json
   ```
+
+<br/>
+
+In case of any validation errors (invalid, YAML syntax, Atmos manifest JSON Schema errors, invalid imports, etc.), you'll get an output from the
+command similar to the following:
+
+```console
+no matches found for the import 'globals/tenant1-globals-does-not-exist' in the 
+file 'catalog/invalid-yaml-and-schema/invalid-import-1.yaml'
+
+invalid import in the file 'catalog/invalid-yaml-and-schema/invalid-import-2.yaml'
+The file imports itself in 'catalog/invalid-yaml-and-schema/invalid-import-2'
+
+invalid stack manifest 'catalog/invalid-yaml-and-schema/invalid-yaml-1.yaml'
+yaml: line 15: found unknown directive name
+
+invalid stack manifest 'catalog/invalid-yaml-and-schema/invalid-yaml-3.yaml'
+yaml: line 13: did not find expected key
+
+invalid stack manifest 'catalog/invalid-yaml-and-schema/invalid-yaml-5.yaml'
+yaml: mapping values are not allowed in this context
+
+invalid stack manifest 'catalog/invalid-yaml-and-schema/invalid-yaml-6.yaml'
+yaml: line 2: block sequence entries are not allowed in this context
+
+invalid stack manifest 'catalog/invalid-yaml-and-schema/invalid-yaml-7.yaml'
+yaml: line 4: could not find expected ':'
+
+Atmos manifest JSON Schema validation error in the 
+file 'catalog/invalid-yaml-and-schema/invalid-import-5.yaml':
+{
+  "valid": false,
+  "errors": [
+    {
+      "keywordLocation": "",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#",
+      "instanceLocation": "",
+      "error": "doesn't validate with examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#"
+    },
+    {
+      "keywordLocation": "/properties/import/$ref",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#/properties/import/$ref",
+      "instanceLocation": "/import",
+      "error": "doesn't validate with '/definitions/import'"
+    },
+    {
+      "keywordLocation": "/properties/import/$ref/type",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#/definitions/import/type",
+      "instanceLocation": "/import",
+      "error": "expected array, but got object"
+    }
+  ]
+}
+
+Atmos manifest JSON Schema validation error in the 
+file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
+{
+  "valid": false,
+  "errors": [
+    {
+      "keywordLocation": "",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#",
+      "instanceLocation": "",
+      "error": "doesn't validate with examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#"
+    },
+    {
+      "keywordLocation": "/properties/env/$ref",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#/properties/env/$ref",
+      "instanceLocation": "/env",
+      "error": "doesn't validate with '/definitions/env'"
+    },
+    {
+      "keywordLocation": "/properties/env/$ref/type",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#/definitions/env/type",
+      "instanceLocation": "/env",
+      "error": "expected object, but got array"
+    }
+  ]
+}
+```
