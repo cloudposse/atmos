@@ -129,7 +129,7 @@ The **Inline Component Configuration** pattern provides the following benefits:
 The **Inline Component Configuration** pattern has the following limitations and drawbacks:
 
 - If you have more than one stack (e.g. `dev`, `staging`, `prod`), then the component definitions would be repeated in the stack manifests,
-  which makes them not reusable and the entire stack configuration not DRY
+  which makes them not reusable and the entire stack configuration not [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 - Should be used only for specific use-cases (e.g. you have just one stack, or you are designing and testing the components)
 

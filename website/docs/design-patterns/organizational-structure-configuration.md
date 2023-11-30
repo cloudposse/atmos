@@ -212,7 +212,8 @@ atmos terraform apply vpc -s prod
 
 The Organizational Structure Configuration pattern provides the following benefits:
 
-- The defaults for the components are defined in just one place making the entire configuration DRY
+- The defaults for the components are defined in just one place making the entire
+  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 - The defaults for the components are reusable across many stacks
 
@@ -223,7 +224,8 @@ The Organizational Structure Configuration pattern provides the following benefi
 The Organizational Structure Configuration pattern has the following limitations and drawbacks:
 
 - The pattern is useful to customize components per account or region, but if you have more than one Organization, Organizational Unit (OU) or region,
-  then the inline customizations would be repeated in the stack manifests, making the entire stack configuration not DRY
+  then the inline customizations would be repeated in the stack manifests, making the entire stack configuration
+  not [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 - Should be used only for specific use-cases, e.g. when you use just one region, Organization or Organizational Unit (OU)
 
