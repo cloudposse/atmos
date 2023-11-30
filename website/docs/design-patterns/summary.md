@@ -24,7 +24,7 @@ Here are some recommendations:
 - If you are just developing or testing your infrastructure, you can use any of the Design Patterns described in this guide, and find out which ones
   are best suited to your requirements
 
-- If you are architecting the infrastructure to provision multi-account multi-region enterprise-grade environments, we recommend you start with the
+- If you are architecting the infrastructure to provision multi-account multi-region enterprise-grade environments, we suggest you start with the
   following Design Patterns:
 
   - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)

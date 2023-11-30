@@ -97,6 +97,14 @@ schemas:
     # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
+  # JSON Schema to validate Atmos manifests
+  # https://www.schemastore.org/json
+  # https://json-schema.org/draft/2020-12/release-notes
+  # https://github.com/SchemaStore/schemastore
+  atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
+    # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
+    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 <br/>
@@ -153,4 +161,6 @@ to [CLI Configuration](/cli/configuration).
 
 - `commands` - configuration for [Atmos Custom Commands](/core-concepts/custom-commands)
 
-- `schemas` - configuration for [Atmos Component Validation](/core-concepts/components/validation)
+- `schemas` - [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for:
+  - [Atmos Manifests Validation](/reference/schemas)
+  - [Atmos Components Validation](/core-concepts/components/validation)
