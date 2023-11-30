@@ -1,6 +1,6 @@
 ---
 title: Add Custom Commands
-sidebar_position: 8
+sidebar_position: 9
 sidebar_label: Add Custom Commands
 ---
 

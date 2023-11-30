@@ -1,10 +1,10 @@
 ---
 title: Final Notes
-sidebar_position: 10
+sidebar_position: 11
 sidebar_label: Final Notes
 ---
 
-Atmos provides unlimited flexibility in defining and configuring Atmos stacks and Atmos components in the stacks.
+Atmos provides unlimited flexibility in defining and configuring stacks and components in the stacks.
 
 - Terraform components can be in different sub-folders in the `components/terraform` directory. The sub-folders can be organized by type, by teams
   that are responsible for the components, by operations that are performed on the components, or by any other category
