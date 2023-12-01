@@ -77,8 +77,9 @@ Complete the following steps to configure Atmos manifest validation:
 
 - Configure the `schemas.atmos.manifest` section in the `atmos.yaml` [CLI config file](/cli/configuration) as described
   in [Atmos Manifests Validation using JSON Schema](/reference/schemas)
- 
+
   ```yaml title="atmos.yaml"
+  # Validation schemas (for validating atmos stacks and components)
   schemas:
     atmos:
       # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
@@ -118,6 +119,8 @@ Atmos component validation allows:
 
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   [OPA Policies](https://www.openpolicyagent.org/)
+
+To configure Atmos components validation, complete the steps described in [Atmos Components Validation](/core-concepts/components/validation).
 
 <br/>
 

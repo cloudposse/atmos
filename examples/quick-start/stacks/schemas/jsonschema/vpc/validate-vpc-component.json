@@ -1,5 +1,5 @@
 {
-  "$id": "infra-vpc-component",
+  "$id": "vpc-component",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "vpc component validation",
   "description": "JSON Schema for the 'vpc' Atmos component.",
