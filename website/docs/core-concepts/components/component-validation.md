@@ -75,7 +75,7 @@ schemas:
     base_path: "stacks/schemas/opa"
 ```
 
-In the component YAML config, add the `settings.validation` section:
+In the component manifest, add the `settings.validation` section:
 
 ```yaml
 components:
