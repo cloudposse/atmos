@@ -10,7 +10,7 @@ provision the components into the stacks.
 The `vpc` Atmos components use the remote state from the `vpc-flow-logs-bucket` components, therefore the `vpc-flow-logs-bucket` components must
 be provisioned first.
 
-## Provision Atmos Components into All Stacks
+## Provision Atmos Components into all Stacks
 
 Provision the `vpc-flow-logs-bucket` Atmos component into the stacks:
 
