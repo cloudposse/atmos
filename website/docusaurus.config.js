@@ -33,6 +33,12 @@ const config = {
         locales: ['en'],
     },
 
+    plugins: [
+        [
+            'docusaurus-plugin-image-zoom', {},
+        ]
+    ],
+
     presets: [
         [
             'classic',
@@ -143,6 +149,16 @@ const config = {
                 indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
                 contextualSearch: false
             },
+            zoom: {
+                selector: '.markdown :not(em) > img',
+                config: {
+                    // options you can specify via https://github.com/francoischalifour/medium-zoom#usage
+                    background: {
+                        light: 'rgb(255, 255, 255)',
+                        dark: 'rgb(50, 50, 50)'
+                    }
+                }
+            }
         }),
 
     markdown: {
