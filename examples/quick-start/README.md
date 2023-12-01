@@ -1,6 +1,6 @@
 # Atmos Quick Start
 
-The [`atmos`](https://github.com/cloudposse/atmos) CLI is a universal tool for DevOps and cloud automation. It allows
+[`Atmos`](https://github.com/cloudposse/atmos) is a universal tool for DevOps and cloud automation. It allows
 deploying and destroying Terraform and helmfile components, as well as running workflows to bootstrap or teardown all
 resources in an account.
 

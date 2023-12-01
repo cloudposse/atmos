@@ -32,4 +32,5 @@ Here are some recommendations:
   - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
   - [Inline Component Customization](/design-patterns/inline-component-customization)
   - [Component Inheritance](/design-patterns/component-inheritance)
+  - [Abstract Component](/design-patterns/abstract-component)
   - [Multiple Component Instances](/design-patterns/multiple-component-instances)

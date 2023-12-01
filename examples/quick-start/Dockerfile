@@ -6,7 +6,7 @@ ARG GEODESIC_OS=debian
 ARG ATMOS_VERSION=1.51.0
 
 # Terraform: https://github.com/hashicorp/terraform/releases
-ARG TF_VERSION=1.6.4
+ARG TF_VERSION=1.6.5
 
 FROM cloudposse/geodesic:${GEODESIC_VERSION}-${GEODESIC_OS}
 
