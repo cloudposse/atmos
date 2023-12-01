@@ -15,7 +15,7 @@ Atmos component validation allows:
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   OPA/Rego policies
 
-:::note
+:::tip
 
 Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
 
@@ -419,6 +419,8 @@ errors["'service_1_name' variable length must be greater than 10 chars"] {
     count(input.vars.service_1_name) <= 10
 }
 ```
+
+<br/>
 
 :::note
 
