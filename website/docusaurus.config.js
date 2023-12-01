@@ -3,10 +3,10 @@
 // https://ricard.dev/how-to-set-docs-as-homepage-for-docusaurus
 // https://docusaurus.io/docs/api/themes/configuration#theme
 // https://docusaurus.io/docs/markdown-features/code-blocks#line-highlighting
-// https://github.com/FormidableLabs/prism-react-renderer/tree/master/src/themes
+// https://github.com/FormidableLabs/prism-react-renderer/tree/master/packages/prism-react-renderer/src/themes
 
-const lightCodeTheme = require('prism-react-renderer/themes/vsDark');
-const darkCodeTheme = require('prism-react-renderer/themes/nightOwl');
+const lightCodeTheme = require('prism-react-renderer').themes.vsDark;
+const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 
 const BASE_URL = '';
 
