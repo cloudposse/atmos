@@ -63,6 +63,8 @@ schemas:
     base_path: "stacks/schemas/jsonschema"
   opa:
     base_path: "stacks/schemas/opa"
+  atmos:
+    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 Add the following default configuration to the `stacks/defaults/vpc-flow-logs-bucket.yaml` manifest:

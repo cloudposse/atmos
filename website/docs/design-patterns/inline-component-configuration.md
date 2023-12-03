@@ -56,6 +56,8 @@ schemas:
     base_path: "stacks/schemas/jsonschema"
   opa:
     base_path: "stacks/schemas/opa"
+  atmos:
+    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 Add the following component configurations to the `stacks/dev.yaml` stack manifest:

@@ -10,7 +10,8 @@ description: Organizational Structure Configuration Atmos Design Pattern
 The **Organizational Structure Configuration** pattern describes core concepts and best practices to structure and organize components
 and stacks to design for organizational complexity and provision multi-account enterprise-grade environments.
 
-The pattern is used to model multi-region infrastructures for organizations with multiple OUs/departments/tenants and multiple accounts.
+The pattern is used to model multi-region infrastructures for organizations with multiple organizational units/departments/tenants and multiple
+accounts.
 
 ## Applicability
 
@@ -33,24 +34,48 @@ Use the **Organizational Structure Configuration** pattern when:
    │   │   │   ├── us-east-2.yaml
    │   │   │   └── us-west-2.yaml
    │   │   └── stage
-   │   │        ├── audit.yaml
-   │   │        ├── automation.yaml
-   │   │        ├── identity.yaml
-   │   │        ├── root.yaml
-   │   │        ├── dev.yaml
-   │   │        ├── staging.yaml
-   │   │        └── prod.yaml
+   │   │       ├── audit.yaml
+   │   │       ├── automation.yaml
+   │   │       ├── identity.yaml
+   │   │       ├── root.yaml
+   │   │       ├── dev.yaml
+   │   │       ├── staging.yaml
+   │   │       └── prod.yaml
    │   └── orgs
    │       ├── org1
+   │       │   ├── _defaults.yaml
    │       │   ├── core
-   │       │   ├── plat
+   │       │   │   ├── _defaults.yaml
+   │       │   │   ├── audit
+   │       │   │   ├── automation
+   │       │   │   ├── identity
+   │       │   │   └── root
+   │       │   └── plat
+   │       │       ├── _defaults.yaml
+   │       │       ├── dev
+   │       │       ├── staging
+   │       │       └── prod
+   │       └── org2
+   │           ├── _defaults.yaml
+   │           ├── core
+   │           │   ├── _defaults.yaml
+   │           │   ├── audit
+   │           │   ├── automation
+   │           │   ├── identity
+   │           │   └── root
+   │           └── plat
+   │               ├── _defaults.yaml
+   │               ├── dev
+   │               ├── staging
+   │               └── prod
    │  
    │   # Centralized components configuration
-   ├── components
-   │   └── terraform  # Terraform components (Terraform root modules)
-   │       ├── vpc
-   │       ├── vpc-flow-logs-bucket
-   │       ├── < other components >
+   └── components
+       └── terraform  # Terraform components (Terraform root modules)
+           ├── account
+           ├── vpc
+           ├── vpc-flow-logs-bucket
+           ├── < other components >
 ```
 
 ## Example
@@ -77,6 +102,8 @@ schemas:
     base_path: "stacks/schemas/jsonschema"
   opa:
     base_path: "stacks/schemas/opa"
+  atmos:
+    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 Add the following default configuration to the `stacks/defaults/vpc-flow-logs-bucket.yaml` manifest:

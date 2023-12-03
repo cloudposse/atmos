@@ -1,6 +1,6 @@
 # Atmos Documentation
 
-This folder contains the website powering official [atmos](https://atmos.tools) documentation.
+This folder contains the website powering official [Atmos](https://atmos.tools) documentation.
 
 ## Getting Started
 
