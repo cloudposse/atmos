@@ -29,11 +29,11 @@ Use the **Organizational Structure Configuration** pattern when:
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
    │   ├── mixins
-   │   │   ├── region
+   │   │   ├── region  (region-specific defaults)
    │   │   │   ├── global-region.yaml
    │   │   │   ├── us-east-2.yaml
    │   │   │   └── us-west-2.yaml
-   │   │   └── stage
+   │   │   └── stage  (stage-specific defaults)
    │   │       ├── audit.yaml
    │   │       ├── automation.yaml
    │   │       ├── identity.yaml
@@ -41,29 +41,57 @@ Use the **Organizational Structure Configuration** pattern when:
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
-   │   └── orgs
+   │   └── orgs  (Organizations)
    │       ├── org1
    │       │   ├── _defaults.yaml
-   │       │   ├── core
+   │       │   ├── core  ('core' OU/tenant)
    │       │   │   ├── _defaults.yaml
    │       │   │   ├── audit
+   │       │   │   │   ├── _defaults.yaml
+   │       │   │   │   ├── global-region.yaml
+   │       │   │   │   ├── us-east-2.yaml
+   │       │   │   │   └── us-west-2.yaml
    │       │   │   ├── automation
+   │       │   │   │   ├── _defaults.yaml
+   │       │   │   │   ├── global-region.yaml
+   │       │   │   │   ├── us-east-2.yaml
+   │       │   │   │   └── us-west-2.yaml
    │       │   │   ├── identity
+   │       │   │   │   ├── _defaults.yaml
+   │       │   │   │   ├── global-region.yaml
+   │       │   │   │   ├── us-east-2.yaml
+   │       │   │   │   └── us-west-2.yaml
    │       │   │   └── root
-   │       │   └── plat
+   │       │   │       ├── _defaults.yaml
+   │       │   │       ├── global-region.yaml
+   │       │   │       ├── us-east-2.yaml
+   │       │   │       └── us-west-2.yaml
+   │       │   └── plat ('plat' OU/tenant)
    │       │       ├── _defaults.yaml
    │       │       ├── dev
+   │       │       │   ├── _defaults.yaml
+   │       │       │   ├── global-region.yaml
+   │       │       │   ├── us-east-2.yaml
+   │       │       │   └── us-west-2.yaml
    │       │       ├── staging
+   │       │       │   ├── _defaults.yaml
+   │       │       │   ├── global-region.yaml
+   │       │       │   ├── us-east-2.yaml
+   │       │       │   └── us-west-2.yaml
    │       │       └── prod
+   │       │           ├── _defaults.yaml
+   │       │           ├── global-region.yaml
+   │       │           ├── us-east-2.yaml
+   │       │           └── us-west-2.yaml
    │       └── org2
    │           ├── _defaults.yaml
-   │           ├── core
+   │           ├── core  ('core' OU/tenant)
    │           │   ├── _defaults.yaml
    │           │   ├── audit
    │           │   ├── automation
    │           │   ├── identity
    │           │   └── root
-   │           └── plat
+   │           └── plat  ('plat' OU/tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               ├── staging
