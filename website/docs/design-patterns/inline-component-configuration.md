@@ -26,8 +26,8 @@ Use the **Inline Component Configuration** pattern when:
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── dev.yaml
-   │   └── staging.yaml
+   │   ├── dev.yaml
+   │   ├── staging.yaml
    │   └── prod.yaml
    │  
    │   # Centralized components configuration

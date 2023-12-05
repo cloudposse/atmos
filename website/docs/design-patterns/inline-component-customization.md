@@ -27,11 +27,11 @@ Use the **Inline Component Customization** pattern when:
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── defaults
-   │       ├── vpc-flow-logs-bucket.yaml
-   │       ├── vpc.yaml
-   │   └── dev.yaml
-   │   └── staging.yaml
+   │   ├── defaults
+   │   │   ├── vpc-flow-logs-bucket.yaml
+   │   │   └── vpc.yaml
+   │   ├── dev.yaml
+   │   ├── staging.yaml
    │   └── prod.yaml
    │  
    │   # Centralized components configuration

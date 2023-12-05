@@ -28,6 +28,11 @@ Use the **Organizational Structure Configuration** pattern when:
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
+   │   ├── catalog
+   │   │   ├── vpc-flow-logs-bucket
+   │   │   │   └── defaults.yaml
+   │   │   └── vpc
+   │   │       └── defaults.yaml
    │   ├── mixins
    │   │   ├── region  (region-specific defaults)
    │   │   │   ├── global-region.yaml
@@ -123,7 +128,7 @@ stacks:
   excluded_paths:
     # Tell Atmos that all the `_defaults.yaml` files are not top-level stack manifests
     - "**/_defaults.yaml"
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_pattern: "{namespace}-{tenant}-{environment}-{stage}"
 
 schemas:
   jsonschema:
