@@ -128,7 +128,10 @@ stacks:
   excluded_paths:
     # Tell Atmos that all the `_defaults.yaml` files are not top-level stack manifests
     - "**/_defaults.yaml"
+  # If you are using multiple Organizations (namespaces), use the following `name_pattern`:
   name_pattern: "{namespace}-{tenant}-{environment}-{stage}"
+  # If you are using a single Organization (namespace), use the following `name_pattern`:
+  # name_pattern: "{tenant}-{environment}-{stage}"
 
 schemas:
   jsonschema:
