@@ -7,7 +7,7 @@ sidebar_position: 5
 
 ## Atmos Manifest JSON Schema
 
-[Atmos Manifest JSON Schema](pathname://schemas/atmos-manifest/1.0/atmos-manifest.json) can be used to validate Atmos stack manifests and provide
+[Atmos Manifest JSON Schema](pathname://../schemas/atmos-manifest/1.0/atmos-manifest.json) can be used to validate Atmos stack manifests and provide
 auto-completion.
 
 ### Validate and Auto-Complete Atmos Manifests in IDEs
@@ -30,12 +30,12 @@ found [here](https://json-schema.org/implementations#editors).
 
 ### Validate Atmos Manifests on the Command Line
 
-Atmos can use the [Atmos Manifest JSON Schema](pathname://schemas/atmos-manifest/1.0/atmos-manifest.json) to validate Atmos stack manifests on the
+Atmos can use the [Atmos Manifest JSON Schema](pathname://../schemas/atmos-manifest/1.0/atmos-manifest.json) to validate Atmos stack manifests on the
 command line by executing the command [`atmos validate stacks`](/cli/commands/validate/stacks).
 
 For this to work, configure the following:
 
-- Add the [Atmos Manifest JSON Schema](pathname://schemas/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
+- Add the [Atmos Manifest JSON Schema](pathname://../schemas/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
   in  `schemas/atmos-manifest/1.0/atmos-manifest.json`
 
 - Configure the following section in the `atmos.yaml` [CLI config file](/cli/configuration)
@@ -53,7 +53,7 @@ For this to work, configure the following:
 - Execute the command [`atmos validate stacks`](/cli/commands/validate/stacks)
 
 - Instead of configuring the `schemas.atmos.manifest` section in `atmos.yaml`, you can provide the path to
-  the [Atmos Manifest JSON Schema](pathname://schemas/atmos-manifest/1.0/atmos-manifest.json) file by using the ENV
+  the [Atmos Manifest JSON Schema](pathname://../schemas/atmos-manifest/1.0/atmos-manifest.json) file by using the ENV
   variable `ATMOS_SCHEMAS_ATMOS_MANIFEST` or the `--schemas-atmos-manifest` command line argument:
 
   ```shell
