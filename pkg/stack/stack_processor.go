@@ -173,8 +173,6 @@ func ProcessYAMLConfigFile(
 	globalOverrides := map[any]any{}
 	terraformOverrides := map[any]any{}
 	helmfileOverrides := map[any]any{}
-	globalAndTerraformOverrides := map[any]any{}
-	globalAndHelmfileOverrides := map[any]any{}
 	finalTerraformOverrides := map[any]any{}
 	finalHelmfileOverrides := map[any]any{}
 
@@ -251,59 +249,48 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Check if the `overrides` sections exist and if we need to process overrides for the components in this stack manifest and its imports
+
+	// Global overrides
 	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
 		if globalOverrides, ok = i.(map[any]any); !ok {
 			return nil, nil, nil, fmt.Errorf("invalid 'overrides' section in the stack manifest '%s'", relativeFilePath)
 		}
+	}
 
-		// Terraform overrides
-		if o, ok := stackConfigMap["terraform"]; ok {
-			if globalTerraformSection, ok = o.(map[any]any); !ok {
-				return nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
-			}
-
-			if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
-				if terraformOverrides, ok = i.(map[any]any); !ok {
-					return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
-				}
-			}
-
-			globalAndTerraformOverrides, err = m.Merge([]map[any]any{globalOverrides, terraformOverrides})
-			if err != nil {
-				return nil, nil, nil, err
-			}
+	// Terraform overrides
+	if o, ok := stackConfigMap["terraform"]; ok {
+		if globalTerraformSection, ok = o.(map[any]any); !ok {
+			return nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
 		}
 
-		finalTerraformOverrides, err = m.Merge([]map[any]any{globalAndTerraformOverrides, parentTerraformOverrides})
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		// Helmfile overrides
-		if o, ok := stackConfigMap["helmfile"]; ok {
-			if globalHelmfileSection, ok = o.(map[any]any); !ok {
-				return nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
-			}
-
-			if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
-				if helmfileOverrides, ok = i.(map[any]any); !ok {
-					return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
-				}
-			}
-
-			globalAndHelmfileOverrides, err = m.Merge([]map[any]any{globalOverrides, helmfileOverrides})
-			if err != nil {
-				return nil, nil, nil, err
+		if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
+			if terraformOverrides, ok = i.(map[any]any); !ok {
+				return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
 			}
 		}
+	}
 
-		finalHelmfileOverrides, err = m.Merge([]map[any]any{globalAndHelmfileOverrides, parentHelmfileOverrides})
-		if err != nil {
-			return nil, nil, nil, err
+	finalTerraformOverrides, err = m.Merge([]map[any]any{globalOverrides, terraformOverrides, parentTerraformOverrides})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Helmfile overrides
+	if o, ok := stackConfigMap["helmfile"]; ok {
+		if globalHelmfileSection, ok = o.(map[any]any); !ok {
+			return nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
 		}
-	} else {
-		finalTerraformOverrides = parentTerraformOverrides
-		finalHelmfileOverrides = parentHelmfileOverrides
+
+		if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
+			if helmfileOverrides, ok = i.(map[any]any); !ok {
+				return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+			}
+		}
+	}
+
+	finalHelmfileOverrides, err = m.Merge([]map[any]any{globalOverrides, helmfileOverrides, parentHelmfileOverrides})
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	// Add the `overrides` section for all components in this manifest
