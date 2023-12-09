@@ -9,7 +9,7 @@ updates:
   labels:
     - dependencies
     - go
-    - patch
+    - no-release
   schedule:
     interval: weekly
     day: sunday
