@@ -1,7 +1,9 @@
 package stack
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/pkg/errors"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -77,6 +80,7 @@ func ProcessYAMLConfigFiles(
 				false,
 				map[any]any{},
 				map[any]any{},
+				"",
 			)
 
 			if err != nil {
@@ -153,6 +157,7 @@ func ProcessYAMLConfigFile(
 	ignoreMissingTemplateValues bool,
 	parentTerraformOverrides map[any]any,
 	parentHelmfileOverrides map[any]any,
+	atmosManifestJsonSchemaFilePath string,
 ) (
 	map[any]any,
 	map[string]map[any]any,
@@ -168,8 +173,6 @@ func ProcessYAMLConfigFile(
 	globalOverrides := map[any]any{}
 	terraformOverrides := map[any]any{}
 	helmfileOverrides := map[any]any{}
-	globalAndTerraformOverrides := map[any]any{}
-	globalAndHelmfileOverrides := map[any]any{}
 	finalTerraformOverrides := map[any]any{}
 	finalHelmfileOverrides := map[any]any{}
 
@@ -197,60 +200,97 @@ func ProcessYAMLConfigFile(
 		return nil, nil, nil, e
 	}
 
+	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
+	if atmosManifestJsonSchemaFilePath != "" {
+		// Convert the data to JSON and back to Go map to prevent the error:
+		// jsonschema: invalid jsonType: map[interface {}]interface {}
+		dataJson, err := u.ConvertToJSONFast(stackConfigMap)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		dataFromJson, err := u.ConvertFromJSON(dataJson)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		compiler := jsonschema.NewCompiler()
+
+		atmosManifestJsonSchemaValidationErrorFormat := "Atmos manifest JSON Schema validation error in the file '%s':\n%v"
+
+		atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
+		if err != nil {
+			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+		}
+
+		if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
+			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+		}
+
+		compiler.Draft = jsonschema.Draft2020
+
+		compiledSchema, err := compiler.Compile(atmosManifestJsonSchemaFilePath)
+		if err != nil {
+			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+		}
+
+		if err = compiledSchema.Validate(dataFromJson); err != nil {
+			switch e := err.(type) {
+			case *jsonschema.ValidationError:
+				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
+				if err2 != nil {
+					return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+				}
+				return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
+			default:
+				return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			}
+		}
+	}
+
 	// Check if the `overrides` sections exist and if we need to process overrides for the components in this stack manifest and its imports
+
+	// Global overrides
 	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
 		if globalOverrides, ok = i.(map[any]any); !ok {
 			return nil, nil, nil, fmt.Errorf("invalid 'overrides' section in the stack manifest '%s'", relativeFilePath)
 		}
+	}
 
-		// Terraform overrides
-		if o, ok := stackConfigMap["terraform"]; ok {
-			if globalTerraformSection, ok = o.(map[any]any); !ok {
-				return nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
-			}
-
-			if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
-				if terraformOverrides, ok = i.(map[any]any); !ok {
-					return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
-				}
-			}
-
-			globalAndTerraformOverrides, err = m.Merge([]map[any]any{globalOverrides, terraformOverrides})
-			if err != nil {
-				return nil, nil, nil, err
-			}
+	// Terraform overrides
+	if o, ok := stackConfigMap["terraform"]; ok {
+		if globalTerraformSection, ok = o.(map[any]any); !ok {
+			return nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
 		}
 
-		finalTerraformOverrides, err = m.Merge([]map[any]any{globalAndTerraformOverrides, parentTerraformOverrides})
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		// Helmfile overrides
-		if o, ok := stackConfigMap["helmfile"]; ok {
-			if globalHelmfileSection, ok = o.(map[any]any); !ok {
-				return nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
-			}
-
-			if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
-				if helmfileOverrides, ok = i.(map[any]any); !ok {
-					return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
-				}
-			}
-
-			globalAndHelmfileOverrides, err = m.Merge([]map[any]any{globalOverrides, helmfileOverrides})
-			if err != nil {
-				return nil, nil, nil, err
+		if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
+			if terraformOverrides, ok = i.(map[any]any); !ok {
+				return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
 			}
 		}
+	}
 
-		finalHelmfileOverrides, err = m.Merge([]map[any]any{globalAndHelmfileOverrides, parentHelmfileOverrides})
-		if err != nil {
-			return nil, nil, nil, err
+	finalTerraformOverrides, err = m.Merge([]map[any]any{globalOverrides, terraformOverrides, parentTerraformOverrides})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Helmfile overrides
+	if o, ok := stackConfigMap["helmfile"]; ok {
+		if globalHelmfileSection, ok = o.(map[any]any); !ok {
+			return nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
 		}
-	} else {
-		finalTerraformOverrides = parentTerraformOverrides
-		finalHelmfileOverrides = parentHelmfileOverrides
+
+		if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
+			if helmfileOverrides, ok = i.(map[any]any); !ok {
+				return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+			}
+		}
+	}
+
+	finalHelmfileOverrides, err = m.Merge([]map[any]any{globalOverrides, helmfileOverrides, parentHelmfileOverrides})
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	// Add the `overrides` section for all components in this manifest
@@ -375,6 +415,7 @@ func ProcessYAMLConfigFile(
 				importStruct.IgnoreMissingTemplateValues,
 				finalTerraformOverrides,
 				finalHelmfileOverrides,
+				"",
 			)
 			if err != nil {
 				return nil, nil, nil, err

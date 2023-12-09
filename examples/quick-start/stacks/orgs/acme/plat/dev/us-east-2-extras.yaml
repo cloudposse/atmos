@@ -1,0 +1,9 @@
+import:
+  - mixins/region/us-east-2
+  - orgs/acme/plat/dev/_defaults
+  # In this `orgs/acme/plat/dev/us-east-2-extras.yaml` manifest,
+  # you can import or define other components that are not defined in the `orgs/acme/plat/dev/us-east-2.yaml` manifest
+  # This pattern is called `Atmos Partial Stack Configuration`
+
+components:
+  terraform: {}

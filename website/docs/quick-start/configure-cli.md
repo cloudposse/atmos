@@ -54,7 +54,7 @@ components:
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
     init_run_reconfigure: true
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
-    auto_generate_backend_file: false
+    auto_generate_backend_file: true
 
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
@@ -86,7 +86,25 @@ commands: []
 integrations: {}
 
 # Validation schemas (for validating atmos stacks and components)
-schemas: {}
+schemas:
+  # https://json-schema.org
+  jsonschema:
+    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/jsonschema"
+  # https://www.openpolicyagent.org
+  opa:
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/opa"
+  # JSON Schema to validate Atmos manifests
+  # https://www.schemastore.org/json
+  # https://json-schema.org/draft/2020-12/release-notes
+  # https://github.com/SchemaStore/schemastore
+  atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
+    # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
+    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 <br/>
@@ -130,13 +148,19 @@ to [CLI Configuration](/cli/configuration).
 - `stacks.name_pattern` - Atmos stack name pattern. When executing `atmos` commands, Atmos does not use the configuration file names and their
   filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context
   variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names can be anything, and they can be in
-  any folder in any sub-folder in the `stacks` directory. For example, when executing the `atmos terraform apply infra/vpc -s tenant1-ue2-dev`
+  any folder in any sub-folder in the `stacks` directory. For example, when executing the `atmos terraform apply vpc -s tenant1-ue2-dev`
   command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"` and processing
   the tokens, Atmos knows that the first part of the stack name is `tenant`, the second part is `environment`, and the third part is `stage`. Then
   Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are
   defined (inline or via imports)
 
-- `workflows.base_path` - the base path to Atmos [workflow](/core-concepts/workflows) files
+- `workflows.base_path` - the base path to Atmos [Workflows](/core-concepts/workflows) files
 
 - `logs.verbose` - set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and
   process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack
+
+- `commands` - configuration for [Atmos Custom Commands](/core-concepts/custom-commands)
+
+- `schemas` - [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for:
+  - [Atmos Manifests Validation](/reference/schemas)
+  - [Atmos Components Validation](/core-concepts/components/validation)

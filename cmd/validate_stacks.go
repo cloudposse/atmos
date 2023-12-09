@@ -1,16 +1,17 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
-// validateStacksCmd validates stacks
-var validateStacksCmd = &cobra.Command{
+// ValidateStacksCmd validates stacks
+var ValidateStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "Execute 'validate stacks' command",
-	Long:               `This command validates stack configurations: atmos validate stacks`,
+	Long:               `This command validates stack manifest configurations: atmos validate stacks`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteValidateStacksCmd(cmd, args)
@@ -21,7 +22,9 @@ var validateStacksCmd = &cobra.Command{
 }
 
 func init() {
-	validateStacksCmd.DisableFlagParsing = false
+	ValidateStacksCmd.DisableFlagParsing = false
 
-	validateCmd.AddCommand(validateStacksCmd)
+	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "atmos validate stacks --schemas-atmos-manifest <path-to-atmos-json-schema>")
+
+	validateCmd.AddCommand(ValidateStacksCmd)
 }

@@ -9,18 +9,51 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
-	info := schema.ConfigAndStacksInfo{}
+	info, err := processCommandLineArgs("", cmd, args, nil)
+	if err != nil {
+		return err
+	}
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
+	}
+
+	flags := cmd.Flags()
+
+	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
+	if err != nil {
+		return err
+	}
+
+	if schemasAtmosManifestFlag != "" {
+		cliConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
+	}
+
+	// Check if the Atmos manifest JSON Schema is configured and the file exists
+	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
+	var atmosManifestJsonSchemaFilePath string
+
+	if cliConfig.Schemas.Atmos.Manifest != "" {
+		atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
+
+		if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
+			atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
+		} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
+			atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
+		} else {
+			return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist.\n"+
+				"It can be configured in the 'schemas.atmos.manifest' section in 'atmos.yaml', or provided using the 'ATMOS_SCHEMAS_ATMOS_MANIFEST' "+
+				"ENV variable or '--schemas-atmos-manifest' command line argument.\n"+
+				"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'.",
+				cliConfig.Schemas.Atmos.Manifest)
+		}
 	}
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
@@ -53,11 +86,13 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 			false,
 			map[any]any{},
 			map[any]any{},
+			atmosManifestJsonSchemaFilePath,
 		)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}
 
+		// Process and validate the stack manifest
 		componentStackMap := map[string]map[string][]string{}
 		_, err = s.ProcessStackConfig(
 			cliConfig.StacksBaseAbsolutePath,

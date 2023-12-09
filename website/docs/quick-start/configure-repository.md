@@ -23,8 +23,8 @@ repositories can be used to manage infrastructure per account (e.g. `dev`, `stag
 In this Quick Start guide, we will be using a monorepo to provision the following resources into multiple AWS accounts (`dev`, `staging`, `prod`)
 and regions (`us-east-2` and `us-west-2`):
 
-- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc-flow-logs-bucket)
-- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/complete/components/terraform/infra/vpc)
+- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc-flow-logs-bucket)
+- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc)
 
 ## Common Directories and Files
 
@@ -33,6 +33,7 @@ Atmos requires a few common directories and files, which need to be configured i
 - `components` directory (required) - contains centralized component configurations
 - `stacks` directory (required) - contains centralized stack configurations
 - `atmos.yaml` (required) - CLI config file
+- `atmos.yaml` (optional) - Atmos vendor config file
 - `Makefile` (optional)
 - `Dockerfile` (optional)
 - `rootfs` directory (optional) - root filesystem for the Docker image (if `Dockerfile` is used)
@@ -54,11 +55,10 @@ configurable in the `atmos.yaml` CLI config file. Refer to [Configure CLI](/quic
 The following example provides the simplest filesystem layout that Atmos can work with:
 
 ```console
-   │  
    │   # Centralized stacks configuration
    ├── stacks
-   │   └── <stack_1>
-   │   └── <stack_2>
+   │   ├── <stack_1>
+   │   ├── <stack_2>
    │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
@@ -66,14 +66,16 @@ The following example provides the simplest filesystem layout that Atmos can wor
    │   ├── terraform   # Terraform components (Terraform root modules)
    │   │   ├── <terraform_component_1>
    │   │   ├── <terraform_component_2>
-   │   │   ├── <terraform_component_3>
+   │   │   └── <terraform_component_3>
    │   └── helmfile  # Helmfile components are organized by Helm chart
-   │   │   ├── <helmfile_component_1>
-   │   │   ├── <helmfile_component_2>
-   │   │   ├── <helmfile_component_3>
+   │       ├── <helmfile_component_1>
+   │       ├── <helmfile_component_2>
+   │       └── <helmfile_component_3>
    │
    │   # Atmos CLI configuration
    ├── atmos.yaml
+   │   # Atmos vendoring configuration
+   └── vendor.yaml
 ```
 
 <br/>
@@ -83,7 +85,7 @@ The following example provides the simplest filesystem layout that Atmos can wor
 While placing `atmos.yaml` at the root of the repository will work for the `atmos` CLI, it will not work
 for [Component Remote State](/core-concepts/components/remote-state) because it uses
 the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider. Terraform executes the provider from the
-component's folder (e.g. `components/terraform/infra/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
+component's folder (e.g. `components/terraform/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
 
 Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
 which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
@@ -105,7 +107,9 @@ This means that `atmos.yaml` file must be at a location in the file system where
 
 Initial Atmos configuration can be controlled by these ENV vars:
 
-- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Path to a folder where the `atmos.yaml` CLI config file is located
+- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Path to a folder where the `atmos.yaml` CLI config file is located (just the folder without 
+   the file name)
+
 - `ATMOS_BASE_PATH` - base path to `components` and `stacks` folders
 
 :::
@@ -125,38 +129,36 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
   set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
 
 - When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
-  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/complete/rootfs/usr/local/etc/atmos/atmos.yaml)
-  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/complete/Dockerfile)
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/Dockerfile)
   by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
-  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/complete)
+  root of the repo. Note that the [Atmos Quick Start example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
-  var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
+  var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on the local host
 
 ## Final Filesystem Layout
 
-Taking into account all the above, we can place `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and use the following filesystem
+Taking into account all the above, we can place `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on the local host and use the following filesystem
 layout:
 
 ```console
-   │  
    │   # Centralized stacks configuration
    ├── stacks
-   │   └── <stack_1>
-   │   └── <stack_2>
+   │   ├── <stack_1>
+   │   ├── <stack_2>
    │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   ├── components
-   │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── infra
-   │       │   ├── vpc
-   │       │   ├── vpc-flow-logs-bucket
+   └── components
+       └── terraform   # Terraform components (Terraform root modules)
+           ├── vpc
+           └── vpc-flow-logs-bucket
 ```
 
 <br/>
 
 :::tip
 
-For a complete example, refer to [Atmos example](https://github.com/cloudposse/atmos/tree/master/examples/complete)
+For a Quick Start example, refer to [Atmos Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start)
 
 :::

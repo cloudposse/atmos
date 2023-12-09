@@ -1,9 +1,10 @@
 ---
 title: Atmos Versioning
 sidebar_label: Versioning
+sidebar_position: 4
 ---
 
-`atmos` follows the <a href="https://semver.org/" target="_blank">Semantic Versioning (SemVer)</a> convention: <code>major.minor.patch.</code>
+Atmos follows the <a href="https://semver.org/" target="_blank">Semantic Versioning (SemVer)</a> convention: <code>major.minor.patch.</code>
 
 Incompatible changes increment the <code>major</code> version, adding backwards-compatible functionality increments the <code>minor</code> version,
 and backwards-compatible bug fixes increment the <code>patch</code> version.

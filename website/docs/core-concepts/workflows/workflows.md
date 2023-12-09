@@ -84,7 +84,7 @@ where:
 
 In `atmos.yaml`, we set `workflows.base_path` to `stacks/workflows`. The folder is relative to the root of the repository.
 
-Refer to [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/complete/stacks/workflows/workflow1.yaml) for an example.
+Refer to [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/stacks/workflows/workflow1.yaml) for an example.
 
 We put the workflow files into the folder. The workflow file names can be anything you want, but we recommend naming them according to the functions
 they perform, e.g. create separate workflow files per environment, account, team, or service.
@@ -220,7 +220,7 @@ For example:
 ```console
 > atmos workflow test-1 -f workflow1 --from-step step4
 
-Executing the workflow 'test-1' from 'examples/complete/stacks/workflows/workflow1.yaml'
+Executing the workflow 'test-1' from 'examples/quick-start/stacks/workflows/workflow1.yaml'
 
 description: Test workflow
 steps:
@@ -352,9 +352,9 @@ Atmos stack for the workflow commands of type `atmos` can be specified in four d
   ```yaml
   workflows:
     my-workflow:
-    stack: tenant1-ue2-dev
-    steps:
-      - command: terraform plan test/test-component
+      stack: tenant1-ue2-dev
+      steps:
+        - command: terraform plan test/test-component
   ```
 
 - In the step-level `stack` attribute

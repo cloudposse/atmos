@@ -1,0 +1,6 @@
+import:
+  - catalog/vpc/ue2
+
+vars:
+  region: us-east-2
+  environment: ue2

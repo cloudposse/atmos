@@ -1,6 +1,6 @@
 # Atmos Documentation
 
-This folder contains the website powering official [atmos](https://atmos.tools) documentation.
+This folder contains the website powering official [Atmos](https://atmos.tools) documentation.
 
 ## Getting Started
 
@@ -9,4 +9,4 @@ This folder contains the website powering official [atmos](https://atmos.tools) 
 3. Build the local search base by running `npm run build`
 4. Start the local web server by running `npm run serve`
 
-The shortcut for running all these commands is just to run `make all``
+The shortcut for running all these commands is just to run `make all`

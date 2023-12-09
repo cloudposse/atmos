@@ -1,0 +1,6 @@
+components:
+  terraform:
+    vpc:
+      vars:
+        # In `prod`, don't map public IPs on launch
+        map_public_ip_on_launch: false

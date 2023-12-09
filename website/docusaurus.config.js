@@ -3,10 +3,10 @@
 // https://ricard.dev/how-to-set-docs-as-homepage-for-docusaurus
 // https://docusaurus.io/docs/api/themes/configuration#theme
 // https://docusaurus.io/docs/markdown-features/code-blocks#line-highlighting
-// https://github.com/FormidableLabs/prism-react-renderer/tree/master/src/themes
+// https://github.com/FormidableLabs/prism-react-renderer/tree/master/packages/prism-react-renderer/src/themes
 
-const lightCodeTheme = require('prism-react-renderer/themes/vsDark');
-const darkCodeTheme = require('prism-react-renderer/themes/nightOwl');
+const lightCodeTheme = require('prism-react-renderer').themes.vsDark;
+const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 
 const BASE_URL = '';
 
@@ -32,6 +32,12 @@ const config = {
         defaultLocale: 'en',
         locales: ['en'],
     },
+
+    plugins: [
+        [
+            'docusaurus-plugin-image-zoom', {},
+        ]
+    ],
 
     presets: [
         [
@@ -143,6 +149,16 @@ const config = {
                 indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
                 contextualSearch: false
             },
+            zoom: {
+                selector: '.markdown :not(em) > img',
+                config: {
+                    // options you can specify via https://github.com/francoischalifour/medium-zoom#usage
+                    background: {
+                        light: 'rgb(255, 255, 255)',
+                        dark: 'rgb(50, 50, 50)'
+                    }
+                }
+            }
         }),
 
     markdown: {
