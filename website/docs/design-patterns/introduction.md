@@ -1,0 +1,63 @@
+---
+title: Introduction
+sidebar_position: 1
+sidebar_label: Introduction
+description: Introduction to Atmos Design Patterns
+---
+
+## Motivation
+
+The importance of patterns in architecting complex systems has been long recognized across various fields.
+
+A well-architected infrastructure is rich with patterns. Giving careful attention to these patterns during the development of a system can result in
+an architecture that is not only smaller and simpler but also more comprehensible compared to ignoring these patterns.
+
+Designing for organizational complexity is challenging, and making all the components and configurations reusable is even harder.
+It involves identifying relevant components and configurations, transforming them into reusable artifacts at the appropriate granularity,
+establishing inheritance hierarchies, and defining crucial relationships among them. The design must be specific to the current problem while also
+being sufficiently general to accommodate future challenges and requirements. Additionally, minimizing or avoiding redesign is essential. Seasoned
+architects emphasize that creating a design that is both reusable and flexible is a daunting task, if not impossible, on the first attempt.
+
+Nevertheless, experienced architects consistently produce effective designs.
+What do they know that the others don't?
+They possess insights that less-experienced architects may lack. One key aspect of their expertise is the avoidance of solving every problem from
+scratch. Instead, they leverage solutions that have proven successful in the past, applying them repeatedly. This accumulated experience is a crucial
+factor that distinguishes them as experts. Recurrent patterns are evident in well-designed systems, offering solutions to specific design challenges
+and enhancing the flexibility, elegance, and reusability of infrastructure configurations. These patterns enable architects to build upon successful
+designs by drawing on prior experience. An architect who is familiar with such patterns can immediately apply them to design problems without the need
+to rediscover them.
+
+## What is a Design Pattern?
+
+The well-known architect and design theorist Christopher Alexander said: "Each pattern describes a problem which occurs over and over again in our
+environment, and then describes the core of the solution to that problem, in such a way that you can use this solution a million times over, without
+ever doing it the same way twice".
+
+Even though Christopher Alexander was describing the patterns in construction and buildings, what he said is true about DevOps design patterns.
+
+## What are Atmos Design Patterns?
+
+Atmos Design Patterns describe core concepts, principles, insights and best practices to structure and organize infrastructures, components and
+stacks to design for organizational complexity and provision multi-account enterprise-grade environments for complex organizations.
+
+Atmos Design Patterns help the infrastructure designers and architects to leverage the expertise of other skilled architects in creating reusable,
+robust, flexible, and maintainable solutions.
+
+## The Catalog of Design Patterns
+
+The catalog of Atmos Design Patterns contains simple and elegant solutions to specific problems in infrastructure design and
+configuration. These solutions have been developed and evolved over time. The Design Patterns encapsulate them in concise and readily applicable
+forms.
+
+Once you understand the Design Patterns and have experience with them, you won't ever think about infrastructure design in the same way.
+You'll have knowledge and insights that can make your own designs more flexible, modular, reusable, and understandable.
+
+<br/>
+
+:::note
+
+We view this collection of Design Patterns as neither exhaustive nor fixed. Instead, it serves as a documentation of our present ideas, insights and
+knowledge. Your input, whether in the form of comments, critiques, references, or suggestions for Design Patterns we may have overlooked, is highly
+encouraged and appreciated.
+
+:::
