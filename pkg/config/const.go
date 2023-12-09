@@ -11,16 +11,17 @@ const (
 	// https://github.com/roboll/helmfile#cli-reference
 	GlobalOptionsFlag = "--global-options"
 
-	TerraformDirFlag     = "--terraform-dir"
-	HelmfileDirFlag      = "--helmfile-dir"
-	CliConfigDirFlag     = "--config-dir"
-	StackDirFlag         = "--stacks-dir"
-	BasePathFlag         = "--base-path"
-	WorkflowDirFlag      = "--workflows-dir"
-	KubeConfigConfigFlag = "--kubeconfig-path"
-	JsonSchemaDirFlag    = "--schemas-jsonschema-dir"
-	OpaDirFlag           = "--schemas-opa-dir"
-	CueDirFlag           = "--schemas-cue-dir"
+	TerraformDirFlag            = "--terraform-dir"
+	HelmfileDirFlag             = "--helmfile-dir"
+	CliConfigDirFlag            = "--config-dir"
+	StackDirFlag                = "--stacks-dir"
+	BasePathFlag                = "--base-path"
+	WorkflowDirFlag             = "--workflows-dir"
+	KubeConfigConfigFlag        = "--kubeconfig-path"
+	JsonSchemaDirFlag           = "--schemas-jsonschema-dir"
+	OpaDirFlag                  = "--schemas-opa-dir"
+	CueDirFlag                  = "--schemas-cue-dir"
+	AtmosManifestJsonSchemaFlag = "--schemas-atmos-manifest"
 
 	DeployRunInitFlag           = "--deploy-run-init"
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
@@ -38,5 +39,6 @@ const (
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor.yaml"
 
-	ImportSectionName = "import"
+	ImportSectionName    = "import"
+	OverridesSectionName = "overrides"
 )

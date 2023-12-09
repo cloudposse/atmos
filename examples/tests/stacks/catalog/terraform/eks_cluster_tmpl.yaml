@@ -1,0 +1,16 @@
+components:
+  terraform:
+    # Parameterize Atmos component name
+    "eks-{{ .flavor }}/cluster":
+      metadata:
+        component: "test/test-component"
+      # Parameterize variables
+      vars:
+        enabled: '{{ .enabled }}'
+        # http://masterminds.github.io/sprig/defaults.html
+        name: 'eks-{{ .flavor | default "foo" }}'
+        # http://masterminds.github.io/sprig/os.html
+        service_1_name: '{{ env "service_1_name" }}'
+        service_2_name: '{{ expandenv "Service 2 name is $service_2_name" }}'
+        tags:
+          flavor: '{{ .flavor }}'

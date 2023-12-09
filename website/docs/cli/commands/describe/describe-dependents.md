@@ -45,7 +45,7 @@ In the following example, we define that the `top-level-component1` component de
 - The `test/test-component` component in Atmos stacks identified by the `dev` stage
 - The `my-component` component from the `tenant1-ue2-staging` Atmos stack
 
-```yaml title="examples/complete/stacks/catalog/terraform/top-level-component1.yaml"
+```yaml title="examples/tests/stacks/catalog/terraform/top-level-component1.yaml"
 components:
   terraform:
     top-level-component1:
@@ -76,7 +76,7 @@ In the following example, we specify that the `top-level-component2` component d
 - The `test/test-component` component in the same Atmos stack
 - The `test/test2/test-component-2` component in the same Atmos stack
 
-```yaml title="examples/complete/stacks/catalog/terraform/top-level-component2.yaml"
+```yaml title="examples/tests/stacks/catalog/terraform/top-level-component2.yaml"
 components:
   terraform:
     top-level-component2:
@@ -111,7 +111,7 @@ atmos describe dependents test/test-component -s tenant1-ue2-dev
   {
     "component": "top-level-component1",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/top-level-component1",
+    "component_path": "examples/tests/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",
@@ -136,7 +136,7 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1
   {
     "component": "top-level-component1",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/top-level-component1",
+    "component_path": "examples/tests/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",
@@ -149,7 +149,7 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1
   {
     "component": "top-level-component2",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/top-level-component1",
+    "component_path": "examples/tests/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",
@@ -280,7 +280,7 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1
   {
     "component": "top-level-component2",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/top-level-component1",
+    "component_path": "examples/tests/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",
@@ -292,7 +292,7 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1
   {
     "component": "top-level-component1",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/top-level-component1",
+    "component_path": "examples/tests/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",

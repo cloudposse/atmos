@@ -68,7 +68,7 @@ Remote repo HEAD: 40210e8d365d3d88ac13c0778c0867b679bbba69 refs/heads/master
 
 Changed files:
 
-examples/complete/components/terraform/infra/vpc/main.tf
+examples/tests/components/terraform/infra/vpc/main.tf
 internal/exec/describe_affected.go
 website/docs/cli/commands/describe/describe-affected.md
 
@@ -113,7 +113,7 @@ Affected components and stacks:
     "stack_slug": "tenant1-ue2-test-1-top-level-component3",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
     "affected": "file",
-    "file": "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+    "file": "examples/tests/components/terraform/mixins/introspection.mixin.tf"
   },
   {
     "component": "top-level-component3",
@@ -123,7 +123,7 @@ Affected components and stacks:
     "stack_slug": "tenant1-ue2-test-1-top-level-component3",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
     "affected": "folder",
-    "folder": "examples/complete/components/helmfile/infra/infra-server"
+    "folder": "examples/tests/components/helmfile/infra/infra-server"
   }
 ]
 ```
@@ -276,7 +276,7 @@ where:
         {
           "component": "top-level-component1",
           "component_type": "terraform",
-          "component_path": "examples/complete/components/terraform/top-level-component1",
+          "component_path": "examples/tests/components/terraform/top-level-component1",
           "stack": "tenant1-ue2-staging",
           "stack_slug": "tenant1-ue2-staging-top-level-component1",
           "spacelift_stack": "tenant1-ue2-staging-top-level-component1",
@@ -286,7 +286,7 @@ where:
         {
           "component": "top-level-component1",
           "component_type": "terraform",
-          "component_path": "examples/complete/components/terraform/top-level-component1",
+          "component_path": "examples/tests/components/terraform/top-level-component1",
           "stack": "tenant2-ue2-staging",
           "stack_slug": "tenant2-ue2-staging-top-level-component1",
           "spacelift_stack": "tenant2-ue2-staging-top-level-component1",
@@ -350,11 +350,11 @@ where:
           settings:
             depends_on:
               1:
-                file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+                file: "examples/tests/components/terraform/mixins/introspection.mixin.tf"
     ```
 
     In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
-    `examples/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
+    `examples/tests/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
     the component `top-level-component3` will be included in the `atmos describe affected` command output. For example:
 
     ```json
@@ -367,7 +367,7 @@ where:
           "stack_slug": "tenant1-ue2-test-1-top-level-component3",
           "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
           "affected": "file",
-          "file": "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+          "file": "examples/tests/components/terraform/mixins/introspection.mixin.tf"
         }
       ]
     ```
@@ -386,13 +386,13 @@ where:
           settings:
             depends_on:
               1:
-                file: "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+                file: "examples/tests/components/terraform/mixins/introspection.mixin.tf"
               2:
-                folder: "examples/complete/components/helmfile/infra/infra-server"
+                folder: "examples/tests/components/helmfile/infra/infra-server"
     ```
 
     In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
-    `examples/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
+    `examples/tests/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
     the component `top-level-component3` will be included in the `atmos describe affected` command output. For example:
 
     ```json
@@ -405,7 +405,7 @@ where:
           "stack_slug": "tenant1-ue2-test-1-top-level-component3",
           "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
           "affected": "folder",
-          "folder": "examples/complete/components/helmfile/infra/infra-server"
+          "folder": "examples/tests/components/helmfile/infra/infra-server"
         }
       ]
     ```
@@ -430,7 +430,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
   {
     "component": "infrastructure-tenant1",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/spacelift",
+    "component_path": "examples/tests/components/terraform/spacelift",
     "stack": "tenant1-ue2-prod",
     "stack_slug": "tenant1-ue2-prod-infrastructure-tenant1",
     "spacelift_stack": "tenant1-ue2-prod-infrastructure-tenant1",
@@ -440,7 +440,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
   {
     "component": "infrastructure-tenant2",
     "component_type": "terraform",
-    "component_path": "examples/complete/components/terraform/spacelift",
+    "component_path": "examples/tests/components/terraform/spacelift",
     "stack": "tenant2-ue2-prod",
     "stack_slug": "tenant2-ue2-prod-infrastructure-tenant2",
     "spacelift_stack": "tenant2-ue2-prod-infrastructure-tenant2",
@@ -484,7 +484,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
     "stack_slug": "tenant1-ue2-test-1-top-level-component3",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
     "affected": "file",
-    "file": "examples/complete/components/terraform/mixins/introspection.mixin.tf"
+    "file": "examples/tests/components/terraform/mixins/introspection.mixin.tf"
   },
   {
     "component": "top-level-component3",
@@ -494,7 +494,7 @@ atmos describe affected --include-spacelift-admin-stacks=true
     "stack_slug": "tenant1-ue2-test-1-top-level-component3",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
     "affected": "folder",
-    "folder": "examples/complete/components/helmfile/infra/infra-server"
+    "folder": "examples/tests/components/helmfile/infra/infra-server"
   }
 ]
 ```

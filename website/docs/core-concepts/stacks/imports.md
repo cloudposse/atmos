@@ -69,11 +69,11 @@ The `import` section supports the following two formats:
 
   ```yaml
   import:
-    - path: "<path_to_imported_file>"
+    - path: "<path_to_imported_file1>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: false
-    - path: "<path_to_imported_file>"
+    - path: "<path_to_imported_file2>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: true
@@ -94,6 +94,19 @@ where:
   and will skip the missing values in the templates for the external systems without throwing an error. The `ignore_missing_template_values` setting 
   is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file,
   while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values
+
+A combination of the two formats is also supported:
+
+  ```yaml
+  import:
+    - mixins/region/us-east-2
+    - orgs/cp/tenant1/test1/_defaults
+    - path: "<path_to_imported_file1>"
+    - path: "<path_to_imported_file2>"
+      context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: true
+  ```
 
 ## `Go` Templates in Imports
 

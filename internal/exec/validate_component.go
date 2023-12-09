@@ -15,7 +15,7 @@ import (
 
 // ExecuteValidateComponentCmd executes `validate component` command
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args)
+	info, err := processCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}

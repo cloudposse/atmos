@@ -1,0 +1,6 @@
+import:
+  - catalog/vpc/uw2
+
+vars:
+  region: us-west-2
+  environment: uw2

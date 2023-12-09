@@ -5,12 +5,18 @@ id: configuration
 description: Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI.
 ---
 
+<br/>
+
 :::note Purpose
 Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI
 :::
 
+<br/>
+
 Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
 be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
+
+<br/>
 
 # Configuration File (`atmos.yaml`)
 
@@ -123,14 +129,14 @@ workflows:
   base_path: "stacks/workflows"
 ```
 
-## Custom CLI Sub-commands
+## Custom CLI Commands
 
-You can extend the Atmos CLI and add as many subcommands as you want. This is a great way to increase DX by exposing a consistent CLI interface to
+You can extend the Atmos CLI and add as many custom commands as you want. This is a great way to increase DX by exposing a consistent CLI interface to
 developers.
 
-For example, one great way to use subcommands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those ugly,
-inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help` and
-discover all available commands.
+For example, one great way to use custom commands is to tie all the miscellaneous scripts into one consistent CLI interface.
+Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script.
+Then developers can just run `atmos help` and discover all available commands.
 
 Here are some examples to play around with to get started.
 
@@ -409,35 +415,39 @@ integrations:
 
 ## Schemas
 
-Configure the paths where to find OPA, JSON Schema, and CUE files.
+Configure the paths where to find OPA and JSON Schema files.
 
 ```yaml
 # Validation schemas (for validating atmos stacks and components)
 schemas:
-
   # https://json-schema.org
   jsonschema:
-
     # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/jsonschema"
-
   # https://www.openpolicyagent.org
   opa:
     # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
-
   # https://cuelang.org
   cue:
     # Can also be set using 'ATMOS_SCHEMAS_CUE_BASE_PATH' ENV var, or '--schemas-cue-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/cue"
+  # JSON Schema to validate Atmos manifests
+  # https://www.schemastore.org/json
+  # https://json-schema.org/draft/2020-12/release-notes
+  # https://github.com/SchemaStore/schemastore
+  atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
+    # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
+    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 ## Logs
 
-Atmos logs are configured in the `logs` section:
+Logs are configured in the `logs` section:
 
 ```yaml
 logs:
@@ -486,5 +496,6 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                                                                                                                |
 | ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                                                                                                          |
 | ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           | Base path to OPA policies for component validation                                                                                                                                                                          |
+| ATMOS_SCHEMAS_ATMOS_MANIFEST                          | schemas.atmos.manifest                          | Path to JSON Schema to validate Atmos stack manifests. For more details, refer to [Atmos Manifest JSON Schema](/reference/schemas)                                                                                          |
 | ATMOS_LOGS_FILE                                       | logs.file                                       | The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`). If omitted, `/dev/stdout` will be used                           |
 | ATMOS_LOGS_LEVEL                                      | logs.level                                      | Log level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging) |

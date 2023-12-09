@@ -41,6 +41,7 @@ var (
 		cfg.JsonSchemaDirFlag,
 		cfg.OpaDirFlag,
 		cfg.CueDirFlag,
+		cfg.AtmosManifestJsonSchemaFlag,
 		cfg.RedirectStdErrFlag,
 	}
 )
@@ -60,6 +61,7 @@ func FindComponentConfig(
 	var componentSection map[string]any
 	var componentVarsSection map[any]any
 	var componentSettingsSection map[any]any
+	var componentOverridesSection map[any]any
 	var componentImportsSection []string
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
@@ -110,6 +112,9 @@ func FindComponentConfig(
 	if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
 		componentSettingsSection = map[any]any{}
 	}
+	if componentOverridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
+		componentOverridesSection = map[any]any{}
+	}
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
@@ -131,6 +136,7 @@ func FindComponentConfig(
 	configAndStacksInfo.ComponentSection = componentSection
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
+	configAndStacksInfo.ComponentOverridesSection = componentOverridesSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -145,7 +151,12 @@ func FindComponentConfig(
 }
 
 // processCommandLineArgs processes command-line args
-func processCommandLineArgs(componentType string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
+func processCommandLineArgs(
+	componentType string,
+	cmd *cobra.Command,
+	args []string,
+	additionalArgsAndFlags []string,
+) (schema.ConfigAndStacksInfo, error) {
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
 	cmd.DisableFlagParsing = false
@@ -160,7 +171,12 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 		return configAndStacksInfo, err
 	}
 
-	configAndStacksInfo.AdditionalArgsAndFlags = argsAndFlagsInfo.AdditionalArgsAndFlags
+	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
+	if len(additionalArgsAndFlags) > 0 {
+		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
+	}
+
+	configAndStacksInfo.AdditionalArgsAndFlags = finalAdditionalArgsAndFlags
 	configAndStacksInfo.SubCommand = argsAndFlagsInfo.SubCommand
 	configAndStacksInfo.SubCommand2 = argsAndFlagsInfo.SubCommand2
 	configAndStacksInfo.ComponentType = componentType
@@ -181,6 +197,7 @@ func processCommandLineArgs(componentType string, cmd *cobra.Command, args []str
 	configAndStacksInfo.SkipInit = argsAndFlagsInfo.SkipInit
 	configAndStacksInfo.NeedHelp = argsAndFlagsInfo.NeedHelp
 	configAndStacksInfo.JsonSchemaDir = argsAndFlagsInfo.JsonSchemaDir
+	configAndStacksInfo.AtmosManifestJsonSchema = argsAndFlagsInfo.AtmosManifestJsonSchema
 	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
 	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
@@ -692,6 +709,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.CueDir = cueDirFlagParts[1]
+		}
+
+		if arg == cfg.AtmosManifestJsonSchemaFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.AtmosManifestJsonSchema = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.AtmosManifestJsonSchemaFlag) {
+			var atmosManifestJsonSchemaFlagParts = strings.Split(arg, "=")
+			if len(atmosManifestJsonSchemaFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.AtmosManifestJsonSchema = atmosManifestJsonSchemaFlagParts[1]
 		}
 
 		if arg == cfg.RedirectStdErrFlag {

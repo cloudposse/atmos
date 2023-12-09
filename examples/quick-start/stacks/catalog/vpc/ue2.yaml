@@ -1,0 +1,11 @@
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones:
+          - us-east-2a
+          - us-east-2b
+          - us-east-2c

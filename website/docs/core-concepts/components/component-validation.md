@@ -10,12 +10,12 @@ Validation is critical to maintaining hygienic configurations in distributed tea
 
 Atmos component validation allows:
 
-* Validate component config (`vars`, `settings`, `backend`, `env`, and other sections) using JSON Schema
+* Validate component config (`vars`, `settings`, `backend`, `env`, `overrides` and other sections) using JSON Schema
 
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   OPA/Rego policies
 
-:::note
+:::tip
 
 Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
 
@@ -41,26 +41,27 @@ Atmos `validate component` command supports `--schema-path`, `--schema-type` and
 If the arguments are not provided, Atmos will try to find and use the `settings.validation` section defined in the component's YAML config.
 
 ```bash
-atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path vpc/validate-infra-vpc-component.json --schema-type jsonschema
+atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.json --schema-type jsonschema
 
-atmos validate component infra/vpc -s tenant1-ue2-prod --schema-path vpc/validate-infra-vpc-component.rego --schema-type opa
+atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.rego --schema-type opa
 
-atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path vpc/validate-infra-vpc-component.rego --schema-type opa --module-paths catalog/constants
+atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog/constants
 
-atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path vpc/validate-infra-vpc-component.rego --schema-type opa --module-paths catalog
+atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog
 
-atmos validate component infra/vpc -s tenant1-ue2-prod
+atmos validate component vpc -s plat-ue2-prod
 
-atmos validate component infra/vpc -s tenant1-ue2-dev
+atmos validate component vpc -s plat-ue2-dev
 
-atmos validate component infra/vpc -s tenant1-ue2-dev --timeout 15
+atmos validate component vpc -s plat-ue2-dev --timeout 15
 ```
 
 ### Configure Component Validation
 
-In `atmos.yaml`, add the `schemas` config:
+In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
+section:
 
-```yaml
+```yaml title="atmos.yaml"
 # Validation schemas (for validating atmos stacks and components)
 schemas:
   # https://json-schema.org
@@ -75,32 +76,36 @@ schemas:
     base_path: "stacks/schemas/opa"
 ```
 
-In the component YAML config, add the `settings.validation` section:
+In the component [manifest](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/stacks/catalog/vpc/defaults.yaml), add
+the `settings.validation` section:
 
-```yaml
+```yaml title="examples/quick-start/stacks/catalog/vpc/defaults.yaml"
 components:
   terraform:
-    infra/vpc:
+    vpc:
+      metadata:
+        # Point to the Terraform component
+        component: vpc
       settings:
         # Validation
         # Supports JSON Schema and OPA policies
         # All validation steps must succeed to allow the component to be provisioned
         validation:
-          validate-infra-vpc-component-with-jsonschema:
+          validate-vpc-component-with-jsonschema:
             schema_type: jsonschema
             # 'schema_path' can be an absolute path or a path relative to 'schemas.jsonschema.base_path' defined in `atmos.yaml`
-            schema_path: "vpc/validate-infra-vpc-component.json"
-            description: Validate 'infra/vpc' component variables using JSON Schema
-          check-infra-vpc-component-config-with-opa-policy:
+            schema_path: "vpc/validate-vpc-component.json"
+            description: Validate 'vpc' component variables using JSON Schema
+          check-vpc-component-config-with-opa-policy:
             schema_type: opa
             # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
-            schema_path: "vpc/validate-infra-vpc-component.rego"
+            schema_path: "vpc/validate-vpc-component.rego"
             # An array of filesystem paths (folders or individual files) to the additional modules for schema validation
             # Each path can be an absolute path or a path relative to `schemas.opa.base_path` defined in `atmos.yaml`
             # In this example, we have the additional Rego modules in `stacks/schemas/opa/catalog/constants`
             module_paths:
               - "catalog/constants"
-            description: Check 'infra/vpc' component configuration using OPA policy
+            description: Check 'vpc' component configuration using OPA policy
             # Set `disabled` to `true` to skip the validation step
             # `disabled` is set to `false` by default, the step is allowed if `disabled` is not declared
             disabled: false
@@ -108,14 +113,15 @@ components:
             timeout: 10
 ```
 
-Add the following JSON Schema in the file `stacks/schemas/jsonschema/vpc/validate-infra-vpc-component.json`:
+Add the following JSON Schema in the
+file [`stacks/schemas/jsonschema/vpc/validate-vpc-component.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/stacks/schemas/jsonschema/vpc/validate-vpc-component.json):
 
-```json
+```json title="examples/quick-start/stacks/schemas/jsonschema/vpc/validate-vpc-component.json"
 {
-  "$id": "infra-vpc-component",
+  "$id": "vpc-component",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "infra/vpc component validation",
-  "description": "JSON Schema for infra/vpc atmos component.",
+  "title": "vpc component validation",
+  "description": "JSON Schema for the 'vpc' Atmos component.",
   "type": "object",
   "properties": {
     "vars": {
@@ -143,9 +149,9 @@ Add the following JSON Schema in the file `stacks/schemas/jsonschema/vpc/validat
 }
 ```
 
-Add the following Rego package in the file `stacks/schemas/opa/catalog/constants/constants.rego`:
+Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/stacks/schemas/opa/catalog/constants/constants.rego):
 
-```rego
+```rego title="examples/quick-start/stacks/schemas/opa/catalog/constants/constants.rego"
 package atmos.constants
 
 vpc_dev_max_availability_zones_error_message := "In 'dev', only 2 Availability Zones are allowed"
@@ -157,13 +163,13 @@ vpc_name_regex := "^[a-zA-Z0-9]{2,20}$"
 vpc_name_regex_error_message := "VPC name must be a valid string from 2 to 20 alphanumeric chars"
 ```
 
-Add the following OPA policy in the file `stacks/schemas/opa/vpc/validate-infra-vpc-component.rego`:
+Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/stacks/schemas/opa/vpc/validate-vpc-component.rego):
 
-```rego
+```rego title="examples/quick-start/stacks/schemas/opa/vpc/validate-vpc-component.rego"
 # Atmos looks for the 'errors' (array of strings) output from all OPA policies
 # If the 'errors' output contains one or more error messages, Atmos considers the policy failed
 
-# 'package atmos' is required in all Atmos OPA policies
+# 'package atmos' is required in all `atmos` OPA policies
 package atmos
 
 import future.keywords.in
@@ -200,7 +206,7 @@ Atmos supports OPA policies for components validation in a single Rego file and 
 
 As shown in the example above, you can define some Rego constants, modules and helper functions in a separate
 file `stacks/schemas/opa/catalog/constants/constants.rego`, and then import them into the main policy
-file `stacks/schemas/opa/vpc/validate-infra-vpc-component.rego`.
+file `stacks/schemas/opa/vpc/validate-vpc-component.rego`.
 
 You also need to specify the `module_paths` attribute in the component's `settings.validation` section.
 The `module_paths` attribute is an array of filesystem paths (folders or individual files) to the additional modules for schema validation.
@@ -218,7 +224,7 @@ and to structure your OPA policies to make them DRY.
 Run the following commands to validate the component in the stacks:
 
 ```bash
-> atmos validate component infra/vpc -s tenant1-ue2-prod
+> atmos validate component vpc -s plat-ue2-prod
 
 Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'
 
@@ -226,7 +232,7 @@ exit status 1
 ```
 
 ```bash
-> atmos validate component infra/vpc -s tenant1-ue2-dev
+> atmos validate component vpc -s plat-ue2-dev
 
 In 'dev', only 2 Availability Zones are allowed
 VPC name must be a valid string from 2 to 20 alphanumeric chars
@@ -235,21 +241,21 @@ exit status 1
 ```
 
 ```bash
-> atmos validate component infra/vpc -s tenant1-ue2-staging
+> atmos validate component vpc -s plat-ue2-staging
 
-Validate 'infra/vpc' component variables using JSON Schema
+Validate 'vpc' component variables using JSON Schema
 {
   "valid": false,
   "errors": [
     {
       "keywordLocation": "",
-      "absoluteKeywordLocation": "file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#",
+      "absoluteKeywordLocation": "file:///examples/quick-start/stacks/schemas/jsonschema/vpc-component#",
       "instanceLocation": "",
-      "error": "doesn't validate with file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#"
+      "error": "doesn't validate with file:///examples/quick-start/stacks/schemas/jsonschema/vpc-component#"
     },
     {
       "keywordLocation": "/properties/vars/properties/cidr_block/pattern",
-      "absoluteKeywordLocation": "file:///examples/complete/stacks/schemas/jsonschema/infra-vpc-component#/properties/vars/properties/cidr_block/pattern",
+      "absoluteKeywordLocation": "file:///examples/quick-start/stacks/schemas/jsonschema/vpc-component#/properties/vars/properties/cidr_block/pattern",
       "instanceLocation": "/vars/cidr_block",
       "error": "does not match pattern '^([0-9]{1,3}\\\\.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))?$'"
     }
@@ -262,14 +268,14 @@ exit status 1
 Try to run the following commands to provision the component in the stacks:
 
 ```bash
-atmos terraform apply infra/vpc -s tenant1-ue2-prod
-atmos terraform apply infra/vpc -s tenant1-ue2-dev
+atmos terraform apply vpc -s plat-ue2-prod
+atmos terraform apply vpc -s plat-ue2-dev
 ```
 
 Since the OPA validation policies don't pass, Atmos does not allow provisioning the component in the stacks:
 
-![atmos-validate-infra-vpc-in-tenant1-ue2-prod](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
-![atmos-validate-infra-vpc-in-tenant1-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
+![atmos-validate-vpc-in-plat-ue2-prod](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
+![atmos-validate-vpc-in-plat-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
 
 ## OPA Policy Examples
 
@@ -419,6 +425,8 @@ errors["'service_1_name' variable length must be greater than 10 chars"] {
     count(input.vars.service_1_name) <= 10
 }
 ```
+
+<br/>
 
 :::note
 

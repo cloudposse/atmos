@@ -13,7 +13,7 @@ import (
 
 // ExecuteDescribeStacksCmd executes `describe stacks` command
 func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args)
+	info, err := processCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}

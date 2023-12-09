@@ -284,6 +284,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.Schemas.Cue.BasePath = cueBasePath
 	}
 
+	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
+	if len(atmosManifestJsonSchemaPath) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_ATMOS_MANIFEST=%s", atmosManifestJsonSchemaPath))
+		cliConfig.Schemas.Atmos.Manifest = atmosManifestJsonSchemaPath
+	}
+
 	logsFile := os.Getenv("ATMOS_LOGS_FILE")
 	if len(logsFile) > 0 {
 		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_FILE=%s", logsFile))
@@ -372,6 +378,10 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 		cliConfig.Schemas.Cue.BasePath = configAndStacksInfo.CueDir
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
 	}
+	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
+		cliConfig.Schemas.Atmos.Manifest = configAndStacksInfo.AtmosManifestJsonSchema
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
+	}
 
 	return nil
 }
@@ -400,7 +410,7 @@ func GetContextFromVars(vars map[any]any) schema.Context {
 		context.Region = region
 	}
 
-	if attributes, ok := vars["attributes"].([]string); ok {
+	if attributes, ok := vars["attributes"].([]any); ok {
 		context.Attributes = attributes
 	}
 
@@ -492,7 +502,7 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 		"{tenant}", context.Tenant,
 		"{stage}", context.Stage,
 		"{workspace}", context.Workspace,
-		"{attributes}", strings.Join(context.Attributes, "-"),
+		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOdStrings(context.Attributes), "-"),
 	)
 	return r.Replace(pattern)
 }

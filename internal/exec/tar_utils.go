@@ -41,6 +41,13 @@ func extractTarball(cliConfig schema.CliConfiguration, sourceFile, extractPath s
 			return err
 		}
 
+		if strings.Contains(header.Name, "..") {
+			u.LogTrace(cliConfig, fmt.Sprintf("the header '%s' in the tarball '%s' contains '..', "+
+				"which can lead to directory traversal attacks or overriding arbitrary files and directories.",
+				header.Name, sourceFile))
+			continue
+		}
+
 		filename := filepath.Join(extractPath, filepath.FromSlash(header.Name))
 
 		switch header.Typeflag {
