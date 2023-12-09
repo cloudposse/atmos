@@ -161,7 +161,6 @@ In our example, the filesystem layout for the stacks Basic Layout using `dev`, `
 would look like this:
 
 ```console
-   │  
    │   # Centralized stacks configuration
    ├── stacks
    │   ├── catalog
@@ -175,10 +174,10 @@ would look like this:
    │   └── uw2-prod.yaml
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   ├── components
-   │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── vpc
-   │       └── vpc-flow-logs-bucket
+   └── components
+       └── terraform   # Terraform components (Terraform root modules)
+           ├── vpc
+           └── vpc-flow-logs-bucket
 ```
 
 <br/>
@@ -200,51 +199,50 @@ can be easily extended to support many AWS Organizations and Organizational Unit
 Create the following filesystem layout (which will be the final layout for this Quick Start guide):
 
 ```console
-   │  
    │   # Centralized stacks configuration
    ├── stacks
    │   ├── catalog
    │   │    ├── vpc
    │   │    │   ├── defaults.yaml
-   │   │    │   └── disabled.yaml
-   │   │    │   └── prod.yaml
-   │   │    │   └── ue2.yaml
+   │   │    │   ├── disabled.yaml
+   │   │    │   ├── prod.yaml
+   │   │    │   ├── ue2.yaml
    │   │    │   └── uw2.yaml
-   │   │    ├── vpc-flow-logs-bucket
-   │   │    │   ├── defaults.yaml
-   │   │    │   └── disabled.yaml
+   │   │    └── vpc-flow-logs-bucket
+   │   │        ├── defaults.yaml
+   │   │        └── disabled.yaml
    │   ├── mixins
    │   │    ├── region
    │   │    │   ├── us-east-2.yaml
    │   │    │   └── us-west-2.yaml
-   │   │    ├── stage
-   │   │    │   ├── dev.yaml
-   │   │    │   ├── prod.yaml
-   │   │    │   └── staging.yaml
-   │   ├── orgs
-   │   │    ├── acme
-   │   │    │   ├── _defaults.yaml
-   │   │    │   ├── plat
-   │   │    │   │    ├── _defaults.yaml
-   │   │    │   │    ├── dev
-   │   │    │   │    │   ├── _defaults.yaml
-   │   │    │   │    │   ├── us-east-2.yaml
-   │   │    │   │    │   ├── us-east-2-extras.yaml
-   │   │    │   │    │   └── us-west-2.yaml
-   │   │    │   │    ├── prod
-   │   │    │   │    │   ├── _defaults.yaml
-   │   │    │   │    │   ├── us-east-2.yaml
-   │   │    │   │    │   └── us-west-2.yaml
-   │   │    │   │    ├── staging
-   │   │    │   │    │   ├── _defaults.yaml
-   │   │    │   │    │   ├── us-east-2.yaml
-   │   │    │   │    │   └── us-west-2.yaml
+   │   │    └── stage
+   │   │        ├── dev.yaml
+   │   │        ├── prod.yaml
+   │   │        └── staging.yaml
+   │   └── orgs
+   │        └── acme
+   │            ├── _defaults.yaml
+   │            └── plat
+   │                 ├── _defaults.yaml
+   │                 ├── dev
+   │                 │   ├── _defaults.yaml
+   │                 │   ├── us-east-2.yaml
+   │                 │   ├── us-east-2-extras.yaml
+   │                 │   └── us-west-2.yaml
+   │                 ├── prod
+   │                 │   ├── _defaults.yaml
+   │                 │   ├── us-east-2.yaml
+   │                 │   └── us-west-2.yaml
+   │                 └── staging
+   │                     ├── _defaults.yaml
+   │                     ├── us-east-2.yaml
+   │                     └── us-west-2.yaml
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   ├── components
-   │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── vpc
-   │       └── vpc-flow-logs-bucket
+   └── components
+       └── terraform   # Terraform components (Terraform root modules)
+           ├── vpc
+           └── vpc-flow-logs-bucket
 ```
 
 ### Configure Region and Stage Mixins

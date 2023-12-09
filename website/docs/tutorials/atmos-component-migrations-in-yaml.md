@@ -1,6 +1,6 @@
 ---
-title: Atmos component migrations in YAML config
-sidebar_label: migration
+title: Atmos component migration in YAML config
+sidebar_label: Component Migration
 description: "Learn how to migrate an Atmos component to a new name or to use the `metadata.inheritance`."
 ---
 

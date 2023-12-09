@@ -21,7 +21,11 @@ One way to create the Terraform components is to copy them into the correspondin
   [vpc](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/vpc)
   into the `components/terraform/vpc` folder
 
-__NOTE:__ The recommended way is to vendor the components using [`Atmos Vendoring`](/core-concepts/vendoring) and the `atmos vendor pull` CLI command.
+<br/>
+
+:::note
+The recommended way to vendor the components is to execute the `atmos vendor pull` CLI command.
+:::
 
 <br/>
 
@@ -29,8 +33,8 @@ __NOTE:__ The recommended way is to vendor the components using [`Atmos Vendorin
 
 For more information about Atmos Vendoring and the `atmos vendor pull` CLI command, refer to:
 
-- [`Atmos Vendoring`](/core-concepts/vendoring)
-- [`atmos vendor pull`](/cli/commands/vendor/pull)
+- [Atmos Vendoring](/core-concepts/vendoring)
+- [atmos vendor pull](/cli/commands/vendor/pull)
 
 :::
 
@@ -100,29 +104,28 @@ After the command is executed, the filesystem layout should look like this:
 <br/>
 
 ```console
-   │  
    │   # Centralized stacks configuration
    ├── stacks
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   ├── components
-   │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── vpc
-   │       │   ├── context.tf
-   │       │   ├── main.tf
-   │       │   ├── outputs.tf
-   │       │   ├── providers.tf
-   │       │   ├── remote-state.tf
-   │       │   ├── variables.tf
-   │       │   ├── versions.tf
-   │       │   ├── vpc-flow-logs.tf
-   │       ├── vpc-flow-logs-bucket
-   │       │   ├── context.tf
-   │       │   ├── main.tf
-   │       │   ├── outputs.tf
-   │       │   ├── providers.tf
-   │       │   ├── variables.tf
-   │       │   ├── versions.tf
+   └── components
+       └── terraform   # Terraform components (Terraform root modules)
+           ├── vpc
+           │   ├── context.tf
+           │   ├── main.tf
+           │   ├── outputs.tf
+           │   ├── providers.tf
+           │   ├── remote-state.tf
+           │   ├── variables.tf
+           │   ├── versions.tf
+           │   └── vpc-flow-logs.tf
+           └── vpc-flow-logs-bucket
+               ├── context.tf
+               ├── main.tf
+               ├── outputs.tf
+               ├── providers.tf
+               ├── variables.tf
+               └── versions.tf
 ```
 
 <br/>

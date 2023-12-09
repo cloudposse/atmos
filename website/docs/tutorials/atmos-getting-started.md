@@ -203,19 +203,19 @@ important to know how you would update this stack and utilize `atmos` to make th
 it out and update the `stacks/example.yaml` file on our local machines to the following:
 
 ```yaml
-import: [ ]
-vars: { }
+import: []
+vars: {}
 
 terraform:
-  vars: { }
+  vars: {}
 
 helmfile:
-  vars: { }
+  vars: {}
 
 components:
   terraform:
     fetch-location:
-      vars: { }
+      vars: {}
 
     fetch-weather:
       vars:
@@ -238,9 +238,11 @@ workflows:
       - command: terraform deploy output-results
 ```
 
-Above we updated a couple variables to change the behavior of our terraform code for this particular stack. Since we mounted our local `stacks/`
-folder to our `atmos` container via `--volume`, when you save the above stack file docker will update your container's `/stacks/example.yaml` file as
-well. Now to execute this again... we simply invoke our `deploy-all` workflow command:
+Above, we updated a couple of variables to change the behavior of our terraform code for this particular stack. Since we mounted our local `stacks/`
+folder to our Atmos container via `--volume` argument, when you save the above stack file, Docker will update your container's 
+`/stacks/example.yaml` file as well.
+
+Now to execute this again... we simply invoke our `deploy-all` workflow command.
 This should run through our workflow similar to the way we did it before. Still, this time we'll see our temperature return from the weather API for
 the date you specified instead of today's date. We'll skip over our terraform `local-exec`'s `echo` command for "pretty printing" our weather data.
 Instead, we'll just get our updated weather information as one of our `Outputs`.
@@ -252,10 +254,10 @@ Wrapping up, we've seen some critical aspects of SweetOps in action as part of t
 1. Another usage of Geodesic to easily provide a consistent environment where we have easy access to tools (like `atmos` and `terraform`).
 1. An example stack along with the breakdown of what goes into a stack and why it is a powerful way to describe an environment.
 1. Example components that require a specific workflow in order to execute correctly.
-1. Usage of `atmos` in executing against some terraform code and orchestrating a workflow from our stack.
+1. Usage of Atmos in executing against some terraform code and orchestrating a workflow from our stack.
 
 With these tools, you can skip documenting the various steps of building an environment (aka WikiOps) and instead focus on just describing and
-automating those steps! And there are many more `atmos` and stack files that can do beyond this brief intro, so keep looking around the docs for more
+automating those steps! And there are many more Atmos features that can do beyond this brief intro, so keep looking around the docs for more
 usage patterns!
 
 Want to keep learning but with a more real-world

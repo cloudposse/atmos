@@ -1,12 +1,15 @@
 # Atmos Quick Start
 
-[`Atmos`](https://github.com/cloudposse/atmos) is a universal tool for DevOps and cloud automation. It allows
-deploying and destroying Terraform and helmfile components, as well as running workflows to bootstrap or teardown all
-resources in an account.
+[Atmos](https://atmos.tools/) is a universal tool for DevOps and cloud automation. It allows
+deploying and destroying Terraform and helmfile components, as well as running workflows to bootstrap or teardown all resources in an account.
 
-Noticeable Atmos commands:
+Refer to the Atmos [Quick Start](https://atmos.tools/category/quick-start/) guide that describes the steps to configure and provision the 
+infrastructure from this repository.
 
-```bash
+<details>
+  <summary> Noticeable Atmos commands:</summary>
+
+```shell
 atmos version
 atmos validate stacks
 atmos describe stacks
@@ -46,3 +49,4 @@ atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-dev
 atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-staging
 atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-prod
 ```
+</details>

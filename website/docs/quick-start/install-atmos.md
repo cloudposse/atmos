@@ -6,7 +6,11 @@ sidebar_position: 2
 
 There are many ways to install Atmos.
 
-__NOTE:__ The latest version of Atmos might not be available with third party package managers.
+:::note
+The latest version of Atmos might not be available with third party package managers.
+:::
+
+<br/>
 
 To check what version of Atmos you have installed, just run `atmos version`.
 

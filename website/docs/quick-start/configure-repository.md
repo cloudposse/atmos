@@ -55,11 +55,10 @@ configurable in the `atmos.yaml` CLI config file. Refer to [Configure CLI](/quic
 The following example provides the simplest filesystem layout that Atmos can work with:
 
 ```console
-   │  
    │   # Centralized stacks configuration
    ├── stacks
-   │   └── <stack_1>
-   │   └── <stack_2>
+   │   ├── <stack_1>
+   │   ├── <stack_2>
    │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
@@ -67,16 +66,16 @@ The following example provides the simplest filesystem layout that Atmos can wor
    │   ├── terraform   # Terraform components (Terraform root modules)
    │   │   ├── <terraform_component_1>
    │   │   ├── <terraform_component_2>
-   │   │   ├── <terraform_component_3>
+   │   │   └── <terraform_component_3>
    │   └── helmfile  # Helmfile components are organized by Helm chart
-   │   │   ├── <helmfile_component_1>
-   │   │   ├── <helmfile_component_2>
-   │   │   ├── <helmfile_component_3>
+   │       ├── <helmfile_component_1>
+   │       ├── <helmfile_component_2>
+   │       └── <helmfile_component_3>
    │
    │   # Atmos CLI configuration
    ├── atmos.yaml
-   │   # Atmos vendor configuration
-   ├── vendor.yaml
+   │   # Atmos vendoring configuration
+   └── vendor.yaml
 ```
 
 <br/>
@@ -143,18 +142,17 @@ Taking into account all the above, we can place `atmos.yaml` at `/usr/local/etc/
 layout:
 
 ```console
-   │  
    │   # Centralized stacks configuration
    ├── stacks
-   │   └── <stack_1>
-   │   └── <stack_2>
+   │   ├── <stack_1>
+   │   ├── <stack_2>
    │   └── <stack_3>
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   ├── components
-   │   └── terraform   # Terraform components (Terraform root modules)
-   │       ├── vpc
-   │       ├── vpc-flow-logs-bucket
+   └── components
+       └── terraform   # Terraform components (Terraform root modules)
+           ├── vpc
+           └── vpc-flow-logs-bucket
 ```
 
 <br/>
