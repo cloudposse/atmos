@@ -42,6 +42,14 @@
     {
       "anyOf": [
         {
+          "additionalProperties": true,
+          "not": {
+            "required": [
+              "workflows"
+            ]
+          }
+        },
+        {
           "required": [
             "import"
           ]
