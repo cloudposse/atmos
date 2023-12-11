@@ -292,6 +292,8 @@ The Organizational Structure Configuration pattern has the following limitations
 
 - Should be used only for specific use-cases, e.g. when you use just one region, Organization or Organizational Unit (OU)
 
+<br/>
+
 :::note
 
 To address the limitations of the Organizational Structure Configuration pattern, use the following patterns:

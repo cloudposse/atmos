@@ -31,11 +31,11 @@ Use the **Inline Component Configuration** pattern when:
    │   └── prod.yaml
    │  
    │   # Centralized components configuration
-   ├── components
-   │   └── terraform  # Terraform components (Terraform root modules)
-   │       ├── vpc
-   │       ├── vpc-flow-logs-bucket
-   │       ├── < other components >
+   └── components
+       └── terraform  # Terraform components (Terraform root modules)
+           ├── vpc
+           ├── vpc-flow-logs-bucket
+           ├── < other components >
 ```
 
 ## Example
