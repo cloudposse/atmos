@@ -211,8 +211,8 @@ type VendorComponentMixins struct {
 }
 
 type VendorComponentSpec struct {
-	Source VendorComponentSource
-	Mixins []VendorComponentMixins
+	Source VendorComponentSource   `yaml:"source" json:"source" mapstructure:"source"`
+	Mixins []VendorComponentMixins `yaml:"mixins" json:"mixins" mapstructure:"mixins"`
 }
 
 type VendorComponentMetadata struct {
@@ -221,10 +221,10 @@ type VendorComponentMetadata struct {
 }
 
 type VendorComponentConfig struct {
-	ApiVersion string `yaml:"apiVersion" json:"apiVersion" mapstructure:"apiVersion"`
-	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
-	Metadata   VendorComponentMetadata
-	Spec       VendorComponentSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
+	ApiVersion string                  `yaml:"apiVersion" json:"apiVersion" mapstructure:"apiVersion"`
+	Kind       string                  `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Metadata   VendorComponentMetadata `yaml:"metadata" json:"metadata" mapstructure:"metadata"`
+	Spec       VendorComponentSpec     `yaml:"spec" json:"spec" mapstructure:"spec"`
 }
 
 // Custom CLI commands
@@ -442,13 +442,14 @@ type ConfigSources map[string]map[string]ConfigSourcesItem
 // Atmos vendoring (`vendor.yaml` file)
 
 type AtmosVendorSource struct {
-	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
-	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
-	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
-	File          string   `yaml:"file" json:"file" mapstructure:"file"`
-	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`
-	IncludedPaths []string `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+	Component     string                  `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string                  `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string                  `yaml:"version" json:"version" mapstructure:"version"`
+	File          string                  `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       []string                `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string                `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string                `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+	Mixins        []VendorComponentMixins `yaml:"mixins,omitempty" json:"mixins,omitempty" mapstructure:"mixins"`
 }
 
 type AtmosVendorSpec struct {

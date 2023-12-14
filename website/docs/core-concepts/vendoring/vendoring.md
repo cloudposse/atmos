@@ -80,6 +80,16 @@ spec:
       excluded_paths:
         - "**/*.yaml"
         - "**/*.yml"
+      # mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
+      # mixins are processed in the order they are declared in the list
+      mixins:
+        # https://github.com/hashicorp/go-getter/issues/98
+        # Mixins 'uri' supports the following protocols: local files (absolute and relative paths), OCI (https://opencontainers.org) Git,
+        # Mercurial, HTTP, HTTPS, Amazon S3, Google GCP.
+        # - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
+        # This mixin `uri` is relative to the current folder
+        - uri: components/terraform/mixins/context.tf
+          filename: context.tf
 ```
 
 <br/>
@@ -108,6 +118,10 @@ spec:
 - The `component` attribute in each source is optional. It's used in the `atmos vendor pull -- component <component>` command if the component is
   passed in. In this case, Atmos will vendor only the specified component instead of vendoring all the artifacts configured in the `vendor.yaml`
   manifest.
+
+- The `mixins` attribute in each component allows downloading files from different local and remote sources and to override files from `source`
+  with the same `filename`. Mixins `uri` supports the following protocols: local files (absolute and relative paths), OCI (https://opencontainers.org)
+  Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP
 
 - The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template)
   and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the artifact
@@ -269,7 +283,7 @@ spec:
         - "**/*.tf"
         - "**/*.tfvars"
         - "**/*.md"
-      excluded_paths: [ ]
+      excluded_paths: []
 ```
 
 To vendor the `vpc` component, execute the following command:
