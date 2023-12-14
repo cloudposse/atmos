@@ -37,13 +37,3 @@ spec:
       excluded_paths:
         - "**/*.yaml"
         - "**/*.yml"
-      # mixins override files from 'source' with the same 'filename' (e.g. 'context.tf' will override 'context.tf' from the 'source')
-      # mixins are processed in the order they are declared in the list
-      mixins:
-        # https://github.com/hashicorp/go-getter/issues/98
-        # Mixins 'uri' supports the following protocols: local files (absolute and relative paths), OCI (https://opencontainers.org) Git,
-        # Mercurial, HTTP, HTTPS, Amazon S3, Google GCP.
-        # - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
-        # This mixin `uri` is relative to the current folder
-        - uri: components/terraform/mixins/context.tf
-          filename: context.tf
