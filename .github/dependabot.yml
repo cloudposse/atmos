@@ -4,7 +4,6 @@
 version: 2
 updates:
 - package-ecosystem: gomod
-  open-pull-requests-limit: 3
   directory: /
   labels:
     - dependencies
