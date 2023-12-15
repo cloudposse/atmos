@@ -33,7 +33,7 @@ Atmos requires a few common directories and files, which need to be configured i
 - `components` directory (required) - contains centralized component configurations
 - `stacks` directory (required) - contains centralized stack configurations
 - `atmos.yaml` (required) - CLI config file
-- `atmos.yaml` (optional) - Atmos vendor config file
+- `vendor.yaml` (optional) - Atmos vendor config file
 - `Makefile` (optional)
 - `Dockerfile` (optional)
 - `rootfs` directory (optional) - root filesystem for the Docker image (if `Dockerfile` is used)
