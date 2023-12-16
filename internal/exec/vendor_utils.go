@@ -213,7 +213,7 @@ func ExecuteAtmosVendorInternal(
 	duplicateComponents := lo.FindDuplicates(components)
 
 	if len(duplicateComponents) > 0 {
-		return fmt.Errorf("dublicate component names %v in the vendor config file '%s' and the imports",
+		return fmt.Errorf("duplicate component names %v in the vendor config file '%s' and the imports",
 			duplicateComponents,
 			vendorConfigFileName,
 		)
@@ -236,7 +236,7 @@ func ExecuteAtmosVendorInternal(
 	//duplicateTargets := lo.FindDuplicates(targets)
 	//
 	//if len(duplicateTargets) > 0 {
-	//	return fmt.Errorf("dublicate targets %v in the vendor config file '%s' and the imports",
+	//	return fmt.Errorf("duplicate targets %v in the vendor config file '%s' and the imports",
 	//		duplicateTargets,
 	//		vendorConfigFileName,
 	//	)
@@ -244,7 +244,14 @@ func ExecuteAtmosVendorInternal(
 
 	// Process sources
 	for indexSource, s := range sources {
+		// If `--component` is specified, and it's not equal to this component, skip this component
 		if component != "" && s.Component != component {
+			continue
+		}
+
+		// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component
+		// https://github.com/samber/lo?tab=readme-ov-file#intersect
+		if len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0 {
 			continue
 		}
 
