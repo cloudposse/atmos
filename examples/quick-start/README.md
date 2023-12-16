@@ -6,6 +6,16 @@ deploying and destroying Terraform and helmfile components, as well as running w
 Refer to the Atmos [Quick Start](https://atmos.tools/category/quick-start/) guide that describes the steps to configure and provision the 
 infrastructure from this repository.
 
+## Run Atmos Docker Image
+
+To run the Atmos Docker image, execute the foloowing command:
+
+```shell
+make all
+```
+
+## Noticeable Atmos commands
+
 <details>
   <summary> Noticeable Atmos commands:</summary>
 

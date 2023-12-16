@@ -6,7 +6,7 @@ ARG GEODESIC_OS=debian
 ARG ATMOS_VERSION=1.52.0
 
 # Terraform: https://github.com/hashicorp/terraform/releases
-ARG TF_VERSION=1.6.5
+ARG TF_VERSION=1.6.6
 
 FROM cloudposse/geodesic:${GEODESIC_VERSION}-${GEODESIC_OS}
 
@@ -25,12 +25,16 @@ ENV AWS_VAULT_ENABLED=false
 ENV AWS_VAULT_SERVER_ENABLED=false
 ENV GEODESIC_TF_PROMPT_ACTIVE=false
 ENV DIRENV_ENABLED=false
-ENV NAMESPACE="acme"
 
 # Enable advanced AWS assume role chaining for tools using AWS SDK
 # https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
 ENV AWS_SDK_LOAD_CONFIG=1
 ENV AWS_DEFAULT_REGION=us-east-2
+
+# With Terraform 1.4, the default is for Terraform lock files to be required for cached providers to be used. It is a long story.
+# See https://developer.hashicorp.com/terraform/cli/v1.4.x/config/config-file#allowing-the-provider-plugin-cache-to-break-the-dependency-lock-file
+# for details. The short story is by setting this environment variable, we can continue the previous behavior.
+ENV TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true
 
 # Install specific version of Terraform
 ARG TF_VERSION
