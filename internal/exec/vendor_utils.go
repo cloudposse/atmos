@@ -52,8 +52,22 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	tagsCsv, err := flags.GetString("tags")
+	if err != nil {
+		return err
+	}
+
+	var tags []string
+	if tagsCsv != "" {
+		tags = strings.Split(tagsCsv, ",")
+	}
+
 	if component != "" && stack != "" {
-		return fmt.Errorf("either '--component' or '--stack' flag needs to be provided, but not both")
+		return fmt.Errorf("either '--component' or '--stack' flag can to be provided, but not both")
+	}
+
+	if component != "" && len(tags) > 0 {
+		return fmt.Errorf("either '--component' or '--tags' flag can to be provided, but not both")
 	}
 
 	if stack != "" {
@@ -61,14 +75,15 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return ExecuteStackVendorInternal(stack, dryRun)
 	}
 
-	// Check and process `vendor.yaml`
+	// Check `vendor.yaml`
 	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName)
 	if vendorConfigExists && err != nil {
 		return err
 	}
 
 	if vendorConfigExists {
-		return ExecuteAtmosVendorInternal(cliConfig, foundVendorConfigFile, vendorConfig.Spec, component, dryRun)
+		// Process `vendor.yaml`
+		return ExecuteAtmosVendorInternal(cliConfig, foundVendorConfigFile, vendorConfig.Spec, component, tags, dryRun)
 	} else {
 		// Check and process `component.yaml`
 		if component != "" {
@@ -157,6 +172,7 @@ func ExecuteAtmosVendorInternal(
 	vendorConfigFileName string,
 	atmosVendorSpec schema.AtmosVendorSpec,
 	component string,
+	tags []string,
 	dryRun bool,
 ) error {
 
