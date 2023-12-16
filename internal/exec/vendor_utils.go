@@ -210,18 +210,21 @@ func ExecuteAtmosVendorInternal(
 		)
 	}
 
-	targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
-		return s.Targets
-	})
-
-	duplicateTargets := lo.FindDuplicates(targets)
-
-	if len(duplicateTargets) > 0 {
-		return fmt.Errorf("dublicate targets %v in the vendor config file '%s' and the imports",
-			duplicateTargets,
-			vendorConfigFileName,
-		)
-	}
+	// Allow having duplicate targets in different sources.
+	// This can be used to vendor mixins (from local and remote sources) and write them to the same targets.
+	// TODO: consider adding a flag to `atmos vendor pull` to specify if duplicate targets are allowed or not.
+	//targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
+	//	return s.Targets
+	//})
+	//
+	//duplicateTargets := lo.FindDuplicates(targets)
+	//
+	//if len(duplicateTargets) > 0 {
+	//	return fmt.Errorf("dublicate targets %v in the vendor config file '%s' and the imports",
+	//		duplicateTargets,
+	//		vendorConfigFileName,
+	//	)
+	//}
 
 	// Process sources
 	for indexSource, s := range sources {
