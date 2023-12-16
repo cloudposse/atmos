@@ -74,6 +74,11 @@ spec:
         - "**/*.tf"
       excluded_paths:
         - "**/providers.tf"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags networking`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - networking
     - component: "vpc-flow-logs-bucket"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
       version: "1.343.1"
@@ -83,6 +88,11 @@ spec:
         - "**/*.tf"
       excluded_paths:
         - "**/providers.tf"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags networking,storage`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - storage
 ```
 
 - Execute the command `atmos vendor pull` from the root of the repo
