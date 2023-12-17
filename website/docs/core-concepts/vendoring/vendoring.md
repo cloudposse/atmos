@@ -8,6 +8,13 @@ id: vendoring
 
 Atmos natively supports the concept of "vendoring", which is making copies of the 3rd party components, stacks, and other artifacts in your own repo.
 
+With Atmos vendoring, you can copy components and other artifacts from the following sources:
+
+- Copy all files from [OCI Registry](https://opencontainers.org), Git, GitHub, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP into a local folder
+- Copy a local file into a local folder (keeping the same file name)
+- Copy a local file to a local file with a different file name
+- Copy a local folder (all files) into a local folder
+
 The vendoring configuration is defined in the `vendor.yaml` manifest (vendor config file).
 
 Atmos searches for the vendoring manifest in the following locations, and uses the first one found:
@@ -26,6 +33,12 @@ To vendor a particular component or other artifact, execute the following comman
 
 ```bash
 atmos vendor pull -c <component>
+```
+
+To vendor components and artifacts tagged with specific tags, execute the following command:
+
+```bash
+atmos vendor pull --tags <tag1>,<tag2>
 ```
 
 <br/>
