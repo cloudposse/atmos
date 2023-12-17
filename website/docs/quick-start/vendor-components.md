@@ -56,7 +56,8 @@ spec:
   imports: []
 
   sources:
-    # `source` supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
+    # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
     # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
     # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.

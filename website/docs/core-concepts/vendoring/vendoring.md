@@ -120,7 +120,7 @@ spec:
       targets:
         - "components/terraform/infra/vpc3"
       # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags networking,storage`
+      # `atmos vendor pull --tags test`
       # Refer to https://atmos.tools/cli/commands/vendor/pull
       tags:
         - test
@@ -131,7 +131,7 @@ spec:
       targets:
         - "components/terraform/infra/vpc3"
       # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags networking,storage`
+      # `atmos vendor pull --tags test`
       # Refer to https://atmos.tools/cli/commands/vendor/pull
       tags:
         - test
@@ -142,7 +142,7 @@ spec:
       targets:
         - "components/terraform/infra/vpc3"
       # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags networking,storage`
+      # `atmos vendor pull --tags test`
       # Refer to https://atmos.tools/cli/commands/vendor/pull
       tags:
         - test
@@ -153,7 +153,7 @@ spec:
       targets:
         - "components/terraform/infra/vpc3/context-copy.tf"
       # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags networking,storage`
+      # `atmos vendor pull --tags test`
       # Refer to https://atmos.tools/cli/commands/vendor/pull
       tags:
         - test

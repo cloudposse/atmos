@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
@@ -119,8 +120,11 @@ func ExecuteComponentVendorInternal(
 		uri = vendorComponentSpec.Source.Uri
 	}
 
-	// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
 	useOciScheme := false
+	useLocalFileSystem := false
+	sourceIsLocalFile := false
+
+	// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
 	if strings.HasPrefix(uri, "oci://") {
 		useOciScheme = true
 		uri = strings.TrimPrefix(uri, "oci://")
@@ -132,6 +136,11 @@ func ExecuteComponentVendorInternal(
 	if !useOciScheme {
 		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
 			uri = absPath
+			useLocalFileSystem = true
+
+			if u.FileExists(uri) {
+				sourceIsLocalFile = true
+			}
 		}
 	}
 
@@ -154,23 +163,36 @@ func ExecuteComponentVendorInternal(
 		defer removeTempDir(cliConfig, tempDir)
 
 		// Download the source into the temp directory
-		if !useOciScheme {
+		if useOciScheme {
+			// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+			err = processOciImage(cliConfig, uri, tempDir)
+			if err != nil {
+				return err
+			}
+		} else if useLocalFileSystem {
+			copyOptions := cp.Options{
+				PreserveTimes: false,
+				PreserveOwner: false,
+			}
+
+			if sourceIsLocalFile {
+				tempDir = path.Join(tempDir, filepath.Base(uri))
+			}
+
+			if err = cp.Copy(uri, tempDir, copyOptions); err != nil {
+				return err
+			}
+		} else {
 			client := &getter.Client{
 				Ctx: context.Background(),
 				// Define the destination where the files will be stored. This will create the directory if it doesn't exist
 				Dst: tempDir,
 				// Source
 				Src:  uri,
-				Mode: getter.ClientModeDir,
+				Mode: getter.ClientModeAny,
 			}
 
 			if err = client.Get(); err != nil {
-				return err
-			}
-		} else {
-			// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-			err = processOciImage(cliConfig, uri, tempDir)
-			if err != nil {
 				return err
 			}
 		}
@@ -240,6 +262,12 @@ func ExecuteComponentVendorInternal(
 
 			// Preserve the uid and the gid of all entries
 			PreserveOwner: false,
+		}
+
+		if sourceIsLocalFile {
+			if filepath.Ext(componentPath) == "" {
+				componentPath = path.Join(componentPath, filepath.Base(uri))
+			}
 		}
 
 		if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
