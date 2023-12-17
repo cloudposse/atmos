@@ -63,7 +63,7 @@ spec:
       # This `source` is relative to the current folder
       source: "components/terraform/mixins/context.tf"
       targets:
-        - "components/terraform/infra/vpc3/context23232323.tf"
+        - "components/terraform/infra/vpc3"
       # Tags can be used to vendor component that have the specific tags
       # `atmos vendor pull --tags networking,storage`
       # Refer to https://atmos.tools/cli/commands/vendor/pull
