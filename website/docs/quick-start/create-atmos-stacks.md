@@ -255,32 +255,24 @@ In `stacks/mixins/region/us-east-2.yaml`, add the following config:
 
 ```yaml title="stacks/mixins/region/us-east-2.yaml"
 import:
+  # Import the `ue2` manifest with `vpc` configuration for `us-east-2` region
   - catalog/vpc/ue2
+  # All accounts (stages) in `us-east-2` region will have the `vpc-flow-logs-bucket` component
+  - catalog/vpc-flow-logs-bucket/defaults
 
 vars:
   region: us-east-2
   environment: ue2
 ```
 
-In `stacks/mixins/region/us-east-2.yaml`, add the following config:
-
-```yaml title="stacks/mixins/region/us-east-2-extras.yaml"
-import:
-  - mixins/region/us-east-2
-  - orgs/acme/plat/dev/_defaults
-  # In this `orgs/acme/plat/dev/us-east-2-extras.yaml` manifest,
-  # you can import or define other components that are not defined in the `orgs/acme/plat/dev/us-east-2.yaml` manifest
-  # This pattern is called `Atmos Partial Stack Configuration`
-
-components:
-  terraform: {}
-```
-
 In `stacks/mixins/region/us-west-2.yaml`, add the following config:
 
 ```yaml title="stacks/mixins/region/us-west-2.yaml"
 import:
+  # Import the `uw2` manifest with `vpc` configuration for `us-west-2` region
   - catalog/vpc/uw2
+  # All accounts (stages) in `us-west-2` region will have the `vpc-flow-logs-bucket` component
+  - catalog/vpc-flow-logs-bucket/defaults
 
 vars:
   region: us-west-2
@@ -297,10 +289,6 @@ vars:
 In `stacks/mixins/stage/prod.yaml`, add the following config:
 
 ```yaml title="stacks/mixins/stage/prod.yaml"
-import:
-  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
-  - catalog/vpc/prod
-
 vars:
   stage: prod
 ```
@@ -336,8 +324,6 @@ In `stacks/orgs/acme/plat/_defaults.yaml`, add the following config for the `pla
 ```yaml title="stacks/orgs/acme/plat/_defaults.yaml"
 import:
   - orgs/acme/_defaults
-  # All accounts (stages) and all regions (environments) in the `plat` OU (tenant) will have the `vpc-flow-logs-bucket` component
-  - catalog/terraform/vpc-flow-logs-bucket/defaults
 
 vars:
   tenant: plat
@@ -394,6 +380,20 @@ import:
 
 In the file, we first import the region mixin, the defaults for the Organization, OU and account (using hierarchical imports).
 
+In `stacks/orgs/acme/plat/dev/us-east-2-extras.yaml`, add the following config:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-extras.yaml"
+import:
+  - mixins/region/us-east-2
+  - orgs/acme/plat/dev/_defaults
+  # In this `orgs/acme/plat/dev/us-east-2-extras.yaml` manifest,
+  # you can import or define other components that are not defined in the `orgs/acme/plat/dev/us-east-2.yaml` manifest
+  # This pattern is called `Atmos Partial Stack Configuration`
+
+components:
+  terraform: {}
+```
+
 Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2` region:
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
@@ -402,11 +402,45 @@ import:
   - orgs/acme/plat/dev/_defaults
 ```
 
-<br/>
+In `stacks/orgs/acme/plat/staging/us-east-2.yaml`, add the following config:
 
-Similar to the `dev` account, create the parent stacks for the `staging` and `prod` accounts for both `us-east-2` and `us-west-2` regions in the files
-`stacks/orgs/acme/plat/staging/us-east-2.yaml`, `stacks/orgs/acme/plat/staging/us-west-2.yaml` , `stacks/orgs/acme/plat/prod/us-east-2.yaml` and
-`stacks/orgs/acme/plat/prod/us-west-2.yaml`.
+```yaml title="stacks/orgs/acme/plat/staging/us-east-2.yaml"
+import:
+  - mixins/region/us-east-2
+  - orgs/acme/plat/staging/_defaults
+```
 
-For clarity, we skip these configurations here since they are similar to what we showed for the `dev`
-account except for importing different region mixins and the defaults.
+In the file, we first import the region mixin, the defaults for the Organization, OU and account (using hierarchical imports).
+
+Similarly, create the top-level Atmos stack for the `staging` account in `us-west-2` region:
+
+```yaml title="stacks/orgs/acme/plat/staging/us-west-2.yaml"
+import:
+  - mixins/region/us-west-2
+  - orgs/acme/plat/staging/_defaults
+```
+
+In `stacks/orgs/acme/plat/prod/us-east-2.yaml`, add the following config:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
+# Import the region mixin, the defaults, and the base component configurations from the `catalog`.
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+# File extensions are optional (if not specified, `.yaml` is used by default).
+import:
+  - mixins/region/us-east-2
+  - orgs/acme/plat/prod/_defaults
+  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
+  - catalog/vpc/prod
+```
+
+In the file, we first import the region mixin, the defaults for the Organization, OU and account (using hierarchical imports).
+
+Similarly, create the top-level Atmos stack for the `prod` account in `us-west-2` region:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-west-2.yaml"
+import:
+  - mixins/region/us-west-2
+  - orgs/acme/plat/prod/_defaults
+  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
+  - catalog/vpc/prod
+```
