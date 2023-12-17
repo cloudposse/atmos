@@ -354,7 +354,11 @@ func ExecuteAtmosVendorInternal(
 					PreserveOwner: false,
 				}
 
-				if err = cp.Copy(uri, tempDir, copyOptions); err != nil {
+				tempDir2 := tempDir
+				if u.FileExists(uri) {
+					tempDir2 = path.Join(tempDir, filepath.Base(uri))
+				}
+				if err = cp.Copy(uri, tempDir2, copyOptions); err != nil {
 					return err
 				}
 			} else {
