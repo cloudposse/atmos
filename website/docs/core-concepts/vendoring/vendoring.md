@@ -10,7 +10,10 @@ Atmos natively supports the concept of "vendoring", which is making copies of th
 
 With Atmos vendoring, you can copy components and other artifacts from the following sources:
 
-- Copy all files from [OCI Registry](https://opencontainers.org), Git, GitHub, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP into a local folder
+- Copy all files from an [OCI Registry](https://opencontainers.org) into a local folder
+- Copy all files from Git, Mercurial, Amazon S3, Google GCP into a local folder
+- Copy all files from an HTTP/HTTPS endpoint into a local folder
+- Copy a single file from an HTTP/HTTPS endpoint to a local file
 - Copy a local file into a local folder (keeping the same file name)
 - Copy a local file to a local file with a different file name
 - Copy a local folder (all files) into a local folder

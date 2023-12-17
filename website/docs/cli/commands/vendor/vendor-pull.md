@@ -7,9 +7,19 @@ description: Use this command to pull sources and mixins from remote repositorie
 ---
 
 :::note Purpose
-This command implements [Atmos Vendoring](/core-concepts/vendoring/). Use this command to download all sources and mixins from remote repositories for
-Terraform and Helmfile components and stacks.
+This command implements [Atmos Vendoring](/core-concepts/vendoring/). Use this command to download sources from local and remote 
+repositories for Terraform and Helmfile components and stacks.
 :::
+
+With Atmos vendoring, you can copy components and other artifacts from the following sources:
+
+- Copy all files from an [OCI Registry](https://opencontainers.org) into a local folder
+- Copy all files from Git, Mercurial, Amazon S3, Google GCP into a local folder
+- Copy all files from an HTTP/HTTPS endpoint into a local folder
+- Copy a single file from an HTTP/HTTPS endpoint to a local file
+- Copy a local file into a local folder (keeping the same file name)
+- Copy a local file to a local file with a different file name
+- Copy a local folder (all files) into a local folder
 
 ## Usage
 
@@ -53,6 +63,9 @@ configurations.
 
 - `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
   (double-star/globstar `**` is supported as well).
+
+- The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the
+  specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
 
 :::tip
 Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
@@ -103,8 +116,9 @@ Run `atmos vendor pull --help` to see all the available options
 atmos vendor pull
 atmos vendor pull --component vpc
 atmos vendor pull -c vpc-flow-logs-bucket
-atmos vendor pull -c echo-server -t helmfile
-atmos vendor pull --tags dev,test --dry-run
+atmos vendor pull -c echo-server --type helmfile
+atmos vendor pull --tags dev,test
+atmos vendor pull --tags networking --dry-run
 ```
 
 <br/>
