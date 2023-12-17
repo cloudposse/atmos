@@ -19,7 +19,7 @@ Refer to [Stack Imports](/core-concepts/stacks/imports) for more details on Atmo
 
 In the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` file, add the following manifest for the `vpc-flow-logs-bucket` Atmos component:
 
-```yaml title="tacks/catalog/vpc-flow-logs-bucket/defaults.yaml"
+```yaml title="stacks/catalog/vpc-flow-logs-bucket/defaults.yaml"
 components:
   terraform:
     vpc-flow-logs-bucket:
@@ -83,7 +83,7 @@ components:
 
 In the `stacks/catalog/vpc/ue2.yaml` file, add the following manifest for the `vpc` Atmos component:
 
-```yaml title="tacks/catalog/vpc/ue2.yaml"
+```yaml title="stacks/catalog/vpc/ue2.yaml"
 import:
   - catalog/vpc/defaults
 
@@ -99,7 +99,7 @@ components:
 
 In the `stacks/catalog/vpc/uw2.yaml` file, add the following manifest for the `vpc` Atmos component:
 
-```yaml title="tacks/catalog/vpc/uw2.yaml"
+```yaml title="stacks/catalog/vpc/uw2.yaml"
 import:
   - catalog/vpc/defaults
 
@@ -115,7 +115,7 @@ components:
 
 In the `stacks/catalog/vpc/prod.yaml` file, add the following manifest for the `vpc` Atmos component:
 
-```yaml title="tacks/catalog/vpc/prod.yaml"
+```yaml title="stacks/catalog/vpc/prod.yaml"
 components:
   terraform:
     vpc:
