@@ -282,8 +282,10 @@ func ExecuteAtmosVendorInternal(
 			uri = s.Source
 		}
 
-		// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
 		useOciScheme := false
+		useLocalFileSystem := false
+
+		// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
 		if strings.HasPrefix(uri, "oci://") {
 			useOciScheme = true
 			uri = strings.TrimPrefix(uri, "oci://")
@@ -292,6 +294,7 @@ func ExecuteAtmosVendorInternal(
 		if !useOciScheme {
 			if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, uri); err == nil {
 				uri = absPath
+				useLocalFileSystem = true
 			}
 		}
 
@@ -339,23 +342,32 @@ func ExecuteAtmosVendorInternal(
 			defer removeTempDir(cliConfig, tempDir)
 
 			// Download the source into the temp directory
-			if !useOciScheme {
+			if useOciScheme {
+				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+				err = processOciImage(cliConfig, uri, tempDir)
+				if err != nil {
+					return err
+				}
+			} else if useLocalFileSystem {
+				copyOptions := cp.Options{
+					PreserveTimes: false,
+					PreserveOwner: false,
+				}
+
+				if err = cp.Copy(uri, tempDir, copyOptions); err != nil {
+					return err
+				}
+			} else {
 				client := &getter.Client{
 					Ctx: context.Background(),
 					// Define the destination where the files will be stored. This will create the directory if it doesn't exist
 					Dst: tempDir,
 					// Source
 					Src:  uri,
-					Mode: getter.ClientModeDir,
+					Mode: getter.ClientModeAny,
 				}
 
 				if err = client.Get(); err != nil {
-					return err
-				}
-			} else {
-				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-				err = processOciImage(cliConfig, uri, tempDir)
-				if err != nil {
 					return err
 				}
 			}

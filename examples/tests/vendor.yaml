@@ -61,7 +61,7 @@ spec:
         - test
     - component: "vpc-context-mixin-2"
       # This `source` is relative to the current folder
-      source: "components/terraform/mixins/context.tf"
+      source: "components/terraform/mixins"
       targets:
         - "components/terraform/infra/vpc3"
       # Tags can be used to vendor component that have the specific tags
