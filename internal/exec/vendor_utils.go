@@ -284,8 +284,9 @@ func ExecuteAtmosVendorInternal(
 
 		useOciScheme := false
 		useLocalFileSystem := false
+		sourceIsLocalFile := false
 
-		// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
+		// Check if `uri` uses the `oci://` scheme (to download the source from an OCI-compatible registry).
 		if strings.HasPrefix(uri, "oci://") {
 			useOciScheme = true
 			uri = strings.TrimPrefix(uri, "oci://")
@@ -295,6 +296,10 @@ func ExecuteAtmosVendorInternal(
 			if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, uri); err == nil {
 				uri = absPath
 				useLocalFileSystem = true
+
+				if u.FileExists(uri) {
+					sourceIsLocalFile = true
+				}
 			}
 		}
 
@@ -354,11 +359,11 @@ func ExecuteAtmosVendorInternal(
 					PreserveOwner: false,
 				}
 
-				tempDir2 := tempDir
-				if u.FileExists(uri) {
-					tempDir2 = path.Join(tempDir, filepath.Base(uri))
+				if sourceIsLocalFile {
+					tempDir = path.Join(tempDir, filepath.Base(uri))
 				}
-				if err = cp.Copy(uri, tempDir2, copyOptions); err != nil {
+
+				if err = cp.Copy(uri, tempDir, copyOptions); err != nil {
 					return err
 				}
 			} else {
@@ -441,6 +446,12 @@ func ExecuteAtmosVendorInternal(
 
 				// Preserve the uid and the gid of all entries
 				PreserveOwner: false,
+			}
+
+			if sourceIsLocalFile {
+				if filepath.Ext(targetPath) == "" {
+					targetPath = path.Join(targetPath, filepath.Base(uri))
+				}
 			}
 
 			if err = cp.Copy(tempDir, targetPath, copyOptions); err != nil {
