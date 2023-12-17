@@ -203,6 +203,16 @@ func ExecuteAtmosVendorInternal(
 		return fmt.Errorf("'spec.sources' is empty in the vendor config file '%s' and the imports", vendorConfigFileName)
 	}
 
+	if len(tags) > 0 {
+		componentTags := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
+			return s.Tags
+		})
+
+		if len(lo.Intersect(tags, componentTags)) == 0 {
+			return fmt.Errorf("there are no components in the vendor config file '%s' tagged with the tags %v", vendorConfigFileName, tags)
+		}
+	}
+
 	components := lo.FilterMap(sources, func(s schema.AtmosVendorSource, index int) (string, bool) {
 		if s.Component != "" {
 			return s.Component, true
