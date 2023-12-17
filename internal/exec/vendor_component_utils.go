@@ -144,7 +144,7 @@ func ExecuteComponentVendorInternal(
 		}
 	}
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'\n",
+	u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'",
 		component,
 		uri,
 		componentPath,
@@ -173,13 +173,19 @@ func ExecuteComponentVendorInternal(
 			copyOptions := cp.Options{
 				PreserveTimes: false,
 				PreserveOwner: false,
+				// OnSymlink specifies what to do on symlink
+				// Override the destination file if it already exists
+				OnSymlink: func(src string) cp.SymlinkAction {
+					return cp.Deep
+				},
 			}
 
+			var tempDir2 = tempDir
 			if sourceIsLocalFile {
-				tempDir = path.Join(tempDir, filepath.Base(uri))
+				tempDir2 = path.Join(tempDir, filepath.Base(uri))
 			}
 
-			if err = cp.Copy(uri, tempDir, copyOptions); err != nil {
+			if err = cp.Copy(uri, tempDir2, copyOptions); err != nil {
 				return err
 			}
 		} else {
@@ -262,15 +268,22 @@ func ExecuteComponentVendorInternal(
 
 			// Preserve the uid and the gid of all entries
 			PreserveOwner: false,
+
+			// OnSymlink specifies what to do on symlink
+			// Override the destination file if it already exists
+			OnSymlink: func(src string) cp.SymlinkAction {
+				return cp.Deep
+			},
 		}
 
+		var componentPath2 = componentPath
 		if sourceIsLocalFile {
 			if filepath.Ext(componentPath) == "" {
-				componentPath = path.Join(componentPath, filepath.Base(uri))
+				componentPath2 = path.Join(componentPath, filepath.Base(uri))
 			}
 		}
 
-		if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
+		if err = cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
 			return err
 		}
 	}

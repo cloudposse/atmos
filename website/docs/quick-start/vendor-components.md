@@ -63,7 +63,7 @@ spec:
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
     - component: "vpc"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
-      version: "1.343.1"
+      version: "1.372.0"
       targets:
         - "components/terraform/vpc"
       # Only include the files that match the 'included_paths' patterns.
@@ -82,7 +82,7 @@ spec:
         - networking
     - component: "vpc-flow-logs-bucket"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-      version: "1.343.1"
+      version: "1.372.0"
       targets:
         - "components/terraform/vpc-flow-logs-bucket"
       included_paths:
