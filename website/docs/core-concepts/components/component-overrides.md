@@ -184,8 +184,8 @@ To confirm that the components managed by the `testing` Team get the new values 
 commands:
 
 ```shell
-atmos atmos describe component test/test-component -s tenant1-uw2-dev
-atmos atmos describe component test/test-component-override -s tenant1-uw2-dev
+atmos describe component test/test-component -s tenant1-uw2-dev
+atmos describe component test/test-component-override -s tenant1-uw2-dev
 ```
 
 You should see the following output:
@@ -233,7 +233,7 @@ To confirm that the components managed by the `devops` Team are not affected by 
 command:
 
 ```shell
-atmos atmos describe component top-level-component1 -s tenant1-uw2-dev
+atmos describe component top-level-component1 -s tenant1-uw2-dev
 ```
 
 You should see the following output:
