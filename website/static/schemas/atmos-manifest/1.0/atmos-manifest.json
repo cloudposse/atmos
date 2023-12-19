@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://json.schemastore.org/atmos-manifest.json",
-  "title": "JSON Schema v1.0 for Atmos Stack Manifest files. https://atmos.tools",
+  "title": "JSON Schema for Atmos Stack Manifest files. Version v1.0. https://atmos.tools",
   "type": "object",
   "properties": {
     "import": {
