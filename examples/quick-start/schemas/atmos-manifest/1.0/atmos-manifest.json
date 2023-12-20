@@ -326,6 +326,12 @@
         },
         "terraform_workspace_pattern": {
           "type": "string"
+        },
+        "custom": {
+          "type": "object",
+          "description": "Custom configuration per component, not inherited by derived components",
+          "additionalProperties": true,
+          "title": "custom"
         }
       },
       "required": [],
