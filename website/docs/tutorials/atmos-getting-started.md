@@ -136,7 +136,6 @@ That is where `atmos` workflows come in. Workflows enable you to describe the or
 components so that you can quickly invoke multiple components via one command. Let's look at an example in our `/stacks/example.yaml` file:
 
 ```yaml
-import: [ ]
 vars: { }
 
 terraform:
@@ -203,7 +202,6 @@ important to know how you would update this stack and utilize `atmos` to make th
 it out and update the `stacks/example.yaml` file on our local machines to the following:
 
 ```yaml
-import: []
 vars: {}
 
 terraform:
