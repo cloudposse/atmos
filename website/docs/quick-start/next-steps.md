@@ -1,7 +1,7 @@
 ---
 title: Next Steps
 sidebar_label: Next Steps
-sidebar_position: 12
+sidebar_position: 13
 ---
 
 You have just learned the **basics of Atmos**.

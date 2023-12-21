@@ -1,6 +1,6 @@
 ---
 title: Final Notes
-sidebar_position: 11
+sidebar_position: 12
 sidebar_label: Final Notes
 ---
 
@@ -25,10 +25,10 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
     - mixins/region/us-east-2
     - orgs/acme/plat/dev/_defaults
     - catalog/vpc
-  
+
   components:
     terraform:
-  
+
       vpc:
         metadata:
           # Point to the Terraform component
@@ -38,7 +38,7 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
         vars:
           name: vpc
           ipv4_primary_cidr_block: 10.9.0.0/18
-  
+
       vpc-2:
         metadata:
           # Point to the Terraform component

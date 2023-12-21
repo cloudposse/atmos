@@ -40,6 +40,7 @@ The steps to configure and provision the infrastructure are as follows:
 - [Configure Validation](/quick-start/configure-validation)
 - [Create Workflows](/quick-start/create-workflows)
 - [Add Custom Commands](/quick-start/add-custom-commands)
+- [Configure Terraform Backend](/quick-start/configure-terraform-backend)
 - [Provision](/quick-start/provision)
 - [Final Notes](/quick-start/final-notes)
 - [Next Steps](/quick-start/next-steps)
