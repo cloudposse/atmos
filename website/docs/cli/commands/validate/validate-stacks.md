@@ -55,7 +55,7 @@ on the command line by executing the command `atmos validate stacks`.
 For this to work, configure the following:
 
 - Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
-  in  `schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`
+  in  `stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`
 
 - Configure the following section in the `atmos.yaml` [CLI config file](/cli/configuration)
 
@@ -66,7 +66,7 @@ For this to work, configure the following:
     atmos:
       # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
       # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
-      manifest: "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+      manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
   ```
 
 - Execute the command `atmos validate stacks`
@@ -77,8 +77,8 @@ For this to work, configure the following:
   `--schemas-atmos-manifest` command line argument:
 
   ```shell
-  ATMOS_SCHEMAS_ATMOS_MANIFEST=schemas/atmos/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
-  atmos validate stacks --schemas-atmos-manifest schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+  ATMOS_SCHEMAS_ATMOS_MANIFEST=stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
+  atmos validate stacks --schemas-atmos-manifest stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   ```
 
 <br/>

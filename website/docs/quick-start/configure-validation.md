@@ -48,12 +48,10 @@ schemas:
   # https://atmos.tools/quick-start/configure-validation/
   # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
-  # https://www.schemastore.org/json
-  # https://github.com/SchemaStore/schemastore
   atmos:
     # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
-    manifest: "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 <br/>
@@ -77,7 +75,7 @@ auto-completion in IDEs and editors.
 Complete the following steps to configure Atmos manifest validation:
 
 - Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
-  in  [`schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
+  in  [`stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
 
 - Configure the `schemas.atmos.manifest` section in the `atmos.yaml` [CLI config file](/cli/configuration) as described
   in [Atmos Manifests Validation using JSON Schema](/reference/schemas)
@@ -88,7 +86,7 @@ Complete the following steps to configure Atmos manifest validation:
     atmos:
       # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
       # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
-      manifest: "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+      manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
   ```
 
 - Execute the command [`atmos validate stacks`](/cli/commands/validate/stacks)
@@ -98,8 +96,8 @@ Complete the following steps to configure Atmos manifest validation:
   variable `ATMOS_SCHEMAS_ATMOS_MANIFEST` or the `--schemas-atmos-manifest` command line argument:
 
   ```shell
-  ATMOS_SCHEMAS_ATMOS_MANIFEST=schemas/atmos/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
-  atmos validate stacks --schemas-atmos-manifest schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+  ATMOS_SCHEMAS_ATMOS_MANIFEST=stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
+  atmos validate stacks --schemas-atmos-manifest stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   ```
 
 <br/>
