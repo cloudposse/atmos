@@ -38,7 +38,7 @@ Run `atmos validate stacks --help` to see all the available options
 
 ```shell
 atmos validate stacks
-atmos validate stacks --schemas-atmos-manifest schemas/atmos-manifest/1.0/atmos-manifest.json
+atmos validate stacks --schemas-atmos-manifest schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 ```
 
 ## Flags
@@ -49,13 +49,13 @@ atmos validate stacks --schemas-atmos-manifest schemas/atmos-manifest/1.0/atmos-
 
 ## Validate Atmos Manifests using JSON Schema
 
-Atmos can use the [Atmos Manifest JSON Schema](pathname:///schemas/atmos-manifest/1.0/atmos-manifest.json) to validate Atmos stack manifests
+Atmos can use the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to validate Atmos stack manifests
 on the command line by executing the command `atmos validate stacks`.
 
 For this to work, configure the following:
 
-- Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
-  in  `schemas/atmos-manifest/1.0/atmos-manifest.json`
+- Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
+  in  `schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`
 
 - Configure the following section in the `atmos.yaml` [CLI config file](/cli/configuration)
 
@@ -72,13 +72,13 @@ For this to work, configure the following:
 - Execute the command `atmos validate stacks`
 
 - Instead of configuring the `schemas.atmos.manifest` section in `atmos.yaml`, you can provide the path to
-  the [Atmos Manifest JSON Schema](pathname:///schemas/atmos-manifest/1.0/atmos-manifest.json) file by using the ENV variable `ATMOS_SCHEMAS_ATMOS_MANIFEST`
+  the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) file by using the ENV variable `ATMOS_SCHEMAS_ATMOS_MANIFEST`
   or the
   `--schemas-atmos-manifest` command line argument:
 
   ```shell
-  ATMOS_SCHEMAS_ATMOS_MANIFEST=schemas/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
-  atmos validate stacks --schemas-atmos-manifest schemas/atmos-manifest/1.0/atmos-manifest.json
+  ATMOS_SCHEMAS_ATMOS_MANIFEST=schemas/atmos/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
+  atmos validate stacks --schemas-atmos-manifest schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   ```
 
 <br/>
@@ -115,19 +115,19 @@ file 'catalog/invalid-yaml-and-schema/invalid-import-5.yaml':
   "errors": [
     {
       "keywordLocation": "",
-      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#",
       "instanceLocation": "",
-      "error": "doesn't validate with examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#"
+      "error": "doesn't validate with examples/tests/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#"
     },
     {
       "keywordLocation": "/properties/import/$ref",
-      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#/properties/import/$ref",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#/properties/import/$ref",
       "instanceLocation": "/import",
       "error": "doesn't validate with '/definitions/import'"
     },
     {
       "keywordLocation": "/properties/import/$ref/type",
-      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#/definitions/import/type",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#/definitions/import/type",
       "instanceLocation": "/import",
       "error": "expected array, but got object"
     }
@@ -141,19 +141,19 @@ file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
   "errors": [
     {
       "keywordLocation": "",
-      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#",
       "instanceLocation": "",
-      "error": "doesn't validate with examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#"
+      "error": "doesn't validate with examples/tests/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#"
     },
     {
       "keywordLocation": "/properties/env/$ref",
-      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#/properties/env/$ref",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#/properties/env/$ref",
       "instanceLocation": "/env",
       "error": "doesn't validate with '/definitions/env'"
     },
     {
       "keywordLocation": "/properties/env/$ref/type",
-      "absoluteKeywordLocation": "examples/tests/schemas/atmos-manifest/1.0/atmos-manifest.json#/definitions/env/type",
+      "absoluteKeywordLocation": "examples/tests/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#/definitions/env/type",
       "instanceLocation": "/env",
       "error": "expected object, but got array"
     }

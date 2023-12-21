@@ -439,7 +439,7 @@ schemas:
   # https://atmos.tools/reference/schemas/
   # https://atmos.tools/cli/commands/validate/stacks/
   # https://atmos.tools/quick-start/configure-validation/
-  # https://atmos.tools/schemas/atmos-manifest/1.0/atmos-manifest.json
+  # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
   # https://www.schemastore.org/json
   # https://github.com/SchemaStore/schemastore

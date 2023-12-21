@@ -46,7 +46,7 @@ schemas:
   # https://atmos.tools/reference/schemas/
   # https://atmos.tools/cli/commands/validate/stacks/
   # https://atmos.tools/quick-start/configure-validation/
-  # https://atmos.tools/schemas/atmos-manifest/1.0/atmos-manifest.json
+  # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
   # https://www.schemastore.org/json
   # https://github.com/SchemaStore/schemastore
@@ -71,13 +71,13 @@ For more information, refer to:
 
 ## Configure Atmos Manifests Validation
 
-[Atmos Manifest JSON Schema](pathname:///schemas/atmos-manifest/1.0/atmos-manifest.json) can be used to validate Atmos stack manifests and provide
+[Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) can be used to validate Atmos stack manifests and provide
 auto-completion in IDEs and editors.
 
 Complete the following steps to configure Atmos manifest validation:
 
-- Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
-  in  [`schemas/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/schemas/atmos-manifest/1.0/atmos-manifest.json)
+- Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
+  in  [`schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
 
 - Configure the `schemas.atmos.manifest` section in the `atmos.yaml` [CLI config file](/cli/configuration) as described
   in [Atmos Manifests Validation using JSON Schema](/reference/schemas)
@@ -94,12 +94,12 @@ Complete the following steps to configure Atmos manifest validation:
 - Execute the command [`atmos validate stacks`](/cli/commands/validate/stacks)
 
 - Instead of configuring the `schemas.atmos.manifest` section in `atmos.yaml`, you can provide the path to
-  the [Atmos Manifest JSON Schema](pathname:///schemas/atmos-manifest/1.0/atmos-manifest.json) file by using the ENV
+  the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) file by using the ENV
   variable `ATMOS_SCHEMAS_ATMOS_MANIFEST` or the `--schemas-atmos-manifest` command line argument:
 
   ```shell
-  ATMOS_SCHEMAS_ATMOS_MANIFEST=schemas/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
-  atmos validate stacks --schemas-atmos-manifest schemas/atmos-manifest/1.0/atmos-manifest.json
+  ATMOS_SCHEMAS_ATMOS_MANIFEST=schemas/atmos/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
+  atmos validate stacks --schemas-atmos-manifest schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   ```
 
 <br/>
