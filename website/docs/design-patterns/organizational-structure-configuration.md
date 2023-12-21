@@ -126,7 +126,7 @@ stacks:
     # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
   excluded_paths:
-    # Tell Atmos that all the `_defaults.yaml` files are not top-level stack manifests
+    # Tell Atmos that all `_defaults.yaml` files are not top-level stack manifests
     - "**/_defaults.yaml"
   # If you are using multiple Organizations (namespaces), use the following `name_pattern`:
   name_pattern: "{namespace}-{tenant}-{environment}-{stage}"
@@ -139,7 +139,7 @@ schemas:
   opa:
     base_path: "stacks/schemas/opa"
   atmos:
-    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
+    manifest: "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 Add the following default configuration to the `stacks/defaults/vpc-flow-logs-bucket.yaml` manifest:
