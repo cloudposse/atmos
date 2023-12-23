@@ -209,3 +209,35 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
   automatically (which is this example is `vpc`). `/` (slash) in the Atmos component name will get replaced with `-` (dash).
 
   We usually don’t specify `workspace_key_prefix` for each component and let Atmos use the component name as `workspace_key_prefix`.
+
+<br/>
+
+Once all the above is configured, when you run the commands `atmos terraform plan vpc -s <stack>`
+or `atmos terraform apply vpc -s <stack>`, before executing the Terraform commands, Atmos will deep-merge the backend configurations from
+the `_defaults.yaml` manifest and from the component itself, and will generate a backend config JSON file `backend.tf.json` in the component's folder,
+similar to this:
+
+```json
+{
+  "terraform": {
+    "backend": {
+      "s3": {
+        "acl": "bucket-owner-full-control",
+        "bucket": "your-s3-bucket-name",
+        "dynamodb_table": "your-dynamodb-table-name",
+        "encrypt": true,
+        "key": "terraform.tfstate",
+        "region": "your-aws-region",
+        "role_arn": "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>",
+        "workspace_key_prefix": "vpc"
+      }
+    }
+  }
+}
+```
+
+<br/>
+
+You can also generate the backend configuration file for a component in a stack by executing the
+command [atmos terraform generate backend](/cli/commands/terraform/generate-backend). Or generate the backend configuration files for all components
+by executing the command [atmos terraform generate backends](/cli/commands/terraform/generate-backends).

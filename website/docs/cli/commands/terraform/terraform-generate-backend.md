@@ -15,7 +15,7 @@ Use this command to generate a Terraform backend config file for an Atmos terraf
 Execute the `terraform generate backend` command like this:
 
 ```shell
-atmos terraform generate backend <command> <component> -s <stack>
+atmos terraform generate backend <component> -s <stack>
 ```
 
 This command generates a backend config file for an Atmos terraform component in a stack.
