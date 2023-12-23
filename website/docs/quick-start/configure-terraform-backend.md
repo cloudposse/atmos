@@ -7,10 +7,9 @@ sidebar_label: Configure Terraform Backend
 In the previous steps, we've configured the `vpc-flow-logs-bucket` and `vpc` Terraform components to be provisioned into three AWS accounts
 (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
 
-If we provision the `vpc-flow-logs-bucket` and `vpc` components, by default, Terraform will use a backend
-called [local](https://developer.hashicorp.com/terraform/language/settings/backends/local), which stores Terraform state on the local filesystem,
-locks that state using system APIs, and performs operations locally. For production use, we'll provision and configure the
-Terraform [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3) backend.
+By default, Terraform will use a backend called [local](https://developer.hashicorp.com/terraform/language/settings/backends/local), which stores
+Terraform state on the local filesystem, locks that state using system APIs, and performs operations locally. For production use, we'll provision and
+configure the Terraform [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3) backend.
 
 ## Terraform Local Backend
 
@@ -144,8 +143,9 @@ There are two ways of doing this:
   }
   ```
 
-- Configure Atmos to automatically generate a terraform backend file for each Atmos component. This is the recommended way of configuring Terraform
-  state backend since it offers many advantages and will save you from manually creating a backend configuration file for each component
+- Configure Terraform S3 backend with Atmos to automatically generate a backend file for each Atmos component. This is the recommended way
+  of configuring Terraform state backend since it offers many advantages and will save you from manually creating a backend configuration file for
+  each component
 
 ### Configure Terraform S3 Backend with Atmos
 
@@ -166,8 +166,10 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
   region, or per account.
 
   :::note
-  The `_defaults.yaml` manifests contain the default settings for the Organization(s), Organizational Units and AWS accounts.
+  The `_defaults.yaml` manifests contain the default settings for Organizations, Organizational Units and accounts.
   :::
+
+  <br/>
 
   To configure the S3 backend for the entire Organization, add the following config in `stacks/orgs/acme/_defaults.yaml`:
 
@@ -203,6 +205,7 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
           component: vpc
         settings: {}
         vars: {}
+        env: {}
   ```
 
   Note that this is optional. If you don’t add `backend.s3.workspace_key_prefix` to the component manifest, the Atmos component name will be used
@@ -215,7 +218,7 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
 Once all the above is configured, when you run the commands `atmos terraform plan vpc -s <stack>`
 or `atmos terraform apply vpc -s <stack>`, before executing the Terraform commands, Atmos will deep-merge the backend configurations from
 the `_defaults.yaml` manifest and from the component itself, and will generate a backend config JSON file `backend.tf.json` in the component's folder,
-similar to this:
+similar to the following example:
 
 ```json
 {
@@ -241,3 +244,9 @@ similar to this:
 You can also generate the backend configuration file for a component in a stack by executing the
 command [atmos terraform generate backend](/cli/commands/terraform/generate-backend). Or generate the backend configuration files for all components
 by executing the command [atmos terraform generate backends](/cli/commands/terraform/generate-backends).
+
+<br/>
+
+# Terraform Backend Inheritance
+
+## Terraform Backend with Multiple Component Instances

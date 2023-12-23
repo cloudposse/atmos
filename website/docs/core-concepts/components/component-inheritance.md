@@ -53,10 +53,12 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
+      ComponentA : backend
       class ComponentB {
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -65,6 +67,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -195,15 +198,18 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
+      ComponentA : backend
       class ComponentB {
           vars
           settings
           env
+          backend
       }
       class ComponentC {
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -352,10 +358,12 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
+      ComponentA : backend
       class ComponentB {
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -364,6 +372,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
@@ -394,10 +403,12 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
+      ComponentA : backend
       class ComponentB {
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -406,6 +417,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -414,6 +426,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
@@ -422,6 +435,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
@@ -431,6 +445,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentC&nbsp;&nbsp;
@@ -439,6 +454,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentI&nbsp;&nbsp;
@@ -448,11 +464,13 @@ classDiagram
           vars
           settings
           env
+          backend
       }
       class ComponentI {
           vars
           settings
           env
+          backend
       }
 ```
 
@@ -542,18 +560,21 @@ classDiagram
       class `base-component-1` {
           settings
           env
+          backend
           vars:
           &nbsp;&nbsp;hierarchical_inheritance_test: base-component-1
       }
       class `base-component-2` {
           settings
           env
+          backend
           vars:
           &nbsp;&nbsp;hierarchical_inheritance_test: base-component-2
       }
       class `derived-component-1` {
           settings
           env
+          backend
           vars
           metadata:
           &nbsp;&nbsp;inherits:
@@ -562,6 +583,7 @@ classDiagram
       class `derived-component-2` {
           settings
           env
+          backend
           vars
           metadata:
           &nbsp;&nbsp;inherits:
