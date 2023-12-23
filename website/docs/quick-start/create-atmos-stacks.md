@@ -308,7 +308,7 @@ the context variables in each top-level stack, making the configuration DRY.
 
 ### Configure Defaults for Organization, OU and accounts
 
-The `_defaults.yaml` files contain the default settings for the Organization(s), Organizational Unit(s) and AWS accounts.
+The `_defaults.yaml` files contain the default settings for the Organization(s), Organizational Units and AWS accounts.
 
 In `stacks/orgs/acme/_defaults.yaml`, add the following config:
 
