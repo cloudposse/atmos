@@ -249,4 +249,95 @@ by executing the command [atmos terraform generate backends](/cli/commands/terra
 
 # Terraform Backend Inheritance
 
+In the previous section, we configured the S3 backend for the entire Organization by adding the `terraform.backend.s3` section to
+the `stacks/orgs/acme/_defaults.yaml` stack manifest. The same backend configuration (S3 bucket, DynamoDB table, and IAM role) will be used for all
+OUs, accounts and regions.
+
+Suppose that for security and audit reasons, you want to use different Terraform backends for the `dev`, `staging` and `prod` accounts. Each account
+needs to have a separate S3 bucket, DynamoDB table, and IAM role with different permissions (for example, the `development` Team should be able to
+access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
+
+Atmos supports this use-case by using deep-merging of stack manifests and [Inheritance](/core-concepts/components/inheritance), which makes the
+backend configuration reusable and DRY.
+
+We'll split the backend config between the Organization and the accounts.
+
+Add the following config to the Organization stack manifest in `stacks/orgs/acme/_defaults.yaml`:
+
+  ```yaml title="stacks/orgs/acme/_defaults.yaml"
+  terraform:
+    backend_type: s3
+    backend:
+      s3:
+        acl: "bucket-owner-full-control"
+        encrypt: true
+        key: "terraform.tfstate"
+        region: "your-aws-region"
+  ```
+
+Add the following config to the `dev` stack manifest in `stacks/orgs/acme/plat/dev/_defaults.yaml`:
+
+  ```yaml title="stacks/orgs/acme/plat/dev/_defaults.yaml"
+  terraform:
+    backend_type: s3
+    backend:
+      s3:
+        bucket: "your-dev-s3-bucket-name"
+        dynamodb_table: "your-dev-dynamodb-table-name"
+        role_arn: "<IAM Role with permissions to access the `dev` Terraform backend>"
+  ```
+
+Add the following config to the `staging` stack manifest in `stacks/orgs/acme/plat/staging/_defaults.yaml`:
+
+  ```yaml title="stacks/orgs/acme/plat/staging/_defaults.yaml"
+  terraform:
+    backend_type: s3
+    backend:
+      s3:
+        bucket: "your-staging-s3-bucket-name"
+        dynamodb_table: "your-staging-dynamodb-table-name"
+        role_arn: "<IAM Role with permissions to access the `staging` Terraform backend>"
+  ```
+
+Add the following config to the `prod` stack manifest in `stacks/orgs/acme/plat/prod/_defaults.yaml`:
+
+  ```yaml title="stacks/orgs/acme/plat/prod/_defaults.yaml"
+  terraform:
+    backend_type: s3
+    backend:
+      s3:
+        bucket: "your-prod-s3-bucket-name"
+        dynamodb_table: "your-prod-dynamodb-table-name"
+        role_arn: "<IAM Role with permissions to access the `prod` Terraform backend>"
+  ```
+
+When you provision the `vpc` component into the `dev` account (by executing the command `atmos terraform apply vpc -s plat-ue2-dev`), Atmos will
+deep-merge the backend configuration from the Organization-level manifest with the configuration from the `dev` manifest, and will automatically
+add `workspace_key_prefix` for the component, generating the following final deep-merged backend config for the `vpc` component in the `dev` account:
+
+```json
+{
+  "terraform": {
+    "backend": {
+      "s3": {
+        "acl": "bucket-owner-full-control",
+        "bucket": "your-dev-s3-bucket-name",
+        "dynamodb_table": "your-dev-dynamodb-table-name",
+        "encrypt": true,
+        "key": "terraform.tfstate",
+        "region": "your-aws-region",
+        "role_arn": "<IAM Role with permissions to access the `dev` Terraform backend>",
+        "workspace_key_prefix": "vpc"
+      }
+    }
+  }
+}
+```
+
+<br/>
+
+In the same way, you can create different Terraform backends per Organizational Unit, per region, per account (or a group of accounts, e.g. `prod`
+and `non-prod`), and configure parts of the backend config in the corresponding Atmos stack manifests. Atmos will deep-merge all the parts from the
+different scopes and generate the final backend config for the components in the stacks.
+
 ## Terraform Backend with Multiple Component Instances

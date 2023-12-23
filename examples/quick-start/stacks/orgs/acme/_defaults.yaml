@@ -1,2 +1,15 @@
 vars:
   namespace: acme
+
+# Terraform S3 backend configuration
+#terraform:
+#  backend_type: s3
+#  backend:
+#    s3:
+#      acl: "bucket-owner-full-control"
+#      encrypt: true
+#      bucket: "your-s3-bucket-name"
+#      dynamodb_table: "your-dynamodb-table-name"
+#      key: "terraform.tfstate"
+#      region: "your-aws-region"
+#      role_arn: "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
