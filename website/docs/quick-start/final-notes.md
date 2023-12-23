@@ -24,27 +24,31 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
   import:
     - mixins/region/us-east-2
     - orgs/acme/plat/dev/_defaults
-    - catalog/vpc
+    # Import the defaults for all VPC components
+    - catalog/vpc/defaults
 
   components:
     terraform:
-
       vpc:
         metadata:
-          # Point to the Terraform component
+          # Point to the Terraform component in `components/terraform`
           component: vpc
+          # Inherit the defaults for all VPC components
           inherits:
             - vpc/defaults
+        # Define variables specific to this `vpc` component
         vars:
           name: vpc
           ipv4_primary_cidr_block: 10.9.0.0/18
 
       vpc-2:
         metadata:
-          # Point to the Terraform component
+          # Point to the Terraform component `components/terraform`
           component: vpc
+          # Inherit the defaults for all VPC components
           inherits:
             - vpc/defaults
+        # Define variables specific to this `vpc-2` component
         vars:
           name: vpc-2
           ipv4_primary_cidr_block: 10.10.0.0/18

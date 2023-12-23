@@ -257,8 +257,8 @@ Suppose that for security and audit reasons, you want to use different Terraform
 needs to have a separate S3 bucket, DynamoDB table, and IAM role with different permissions (for example, the `development` Team should be able to
 access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
 
-Atmos supports this use-case by using deep-merging of stack manifests and [Inheritance](/core-concepts/components/inheritance), which makes the
-backend configuration reusable and DRY.
+Atmos supports this use-case by using deep-merging of stack manifests, [Imports](/core-concepts/stacks/imports)
+and [Inheritance](/core-concepts/components/inheritance), which makes the backend configuration reusable and DRY.
 
 We'll split the backend config between the Organization and the accounts.
 
@@ -337,7 +337,47 @@ add `workspace_key_prefix` for the component, generating the following final dee
 <br/>
 
 In the same way, you can create different Terraform backends per Organizational Unit, per region, per account (or a group of accounts, e.g. `prod`
-and `non-prod`), and configure parts of the backend config in the corresponding Atmos stack manifests. Atmos will deep-merge all the parts from the
+and `non-prod`), or even per component or a set of components (e.g. root-level components like `account` and IAM roles can have a separate backend),
+and then configure parts of the backend config in the corresponding Atmos stack manifests. Atmos will deep-merge all the parts from the
 different scopes and generate the final backend config for the components in the stacks.
 
 ## Terraform Backend with Multiple Component Instances
+
+We mentioned before that you can configure the Terraform backend for the components manually (by creating a file `backend.tf` in each Terraform
+component's folder), or you can set up Atmos to generate the backend configuration for each component in the stacks automatically.
+
+You can provision more than one instance of the same Terraform component (with the same or different settings) into the same environment by defining
+many Atmos components that define configuration for the Terraform component. For example, the following config shows how to define two Atmos
+components, `vpc` and `vpc-2`, which both point to the same Terraform component `vpc`:
+
+```yaml
+import:
+  # Import the defaults for all VPC components
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        # Point to the Terraform component `components/terraform`
+        component: vpc
+        # Inherit the defaults for all VPC components
+        inherits:
+          - vpc/defaults
+      # Define variables specific to this `vpc` component
+      vars:
+        name: vpc
+        ipv4_primary_cidr_block: 10.9.0.0/18
+
+    vpc-2:
+      metadata:
+        # Point to the Terraform component `components/terraform`
+        component: vpc
+        # Inherit the defaults for all VPC components
+        inherits:
+          - vpc/defaults
+      # Define variables specific to this `vpc-2` component
+      vars:
+        name: vpc-2
+        ipv4_primary_cidr_block: 10.10.0.0/18
+```
