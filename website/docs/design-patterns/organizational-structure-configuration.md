@@ -147,9 +147,9 @@ schemas:
 
 ### Configure Component Manifests
 
-Add the following default configuration to the `stacks/defaults/vpc-flow-logs-bucket.yaml` manifest:
+Add the following default configuration to the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` manifest:
 
-```yaml title="stacks/defaults/vpc-flow-logs-bucket.yaml"
+```yaml title="stacks/catalog/vpc-flow-logs-bucket/defaults.yaml"
 components:
   terraform:
     vpc-flow-logs-bucket:
@@ -164,9 +164,9 @@ components:
         lifecycle_rule_enabled: false
 ```
 
-Add the following default configuration to the `stacks/defaults/vpc.yaml` manifest:
+Add the following default configuration to the `stacks/catalog/vpc/defaults.yaml` manifest:
 
-```yaml title="stacks/defaults/vpc.yaml"
+```yaml title="stacks/catalog/vpc/defaults.yaml"
 components:
   terraform:
     vpc:
