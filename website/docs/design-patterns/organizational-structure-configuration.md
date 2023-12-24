@@ -28,12 +28,15 @@ Use the **Organizational Structure Configuration** pattern when:
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   ├── catalog
+   │   ├── catalog (component-specific defaults)
    │   │   ├── vpc-flow-logs-bucket
    │   │   │   └── defaults.yaml
    │   │   └── vpc
    │   │       └── defaults.yaml
    │   ├── mixins
+   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   │   ├── core.yaml
+   │   │   │   └── plat.yaml
    │   │   ├── region  (region-specific defaults)
    │   │   │   ├── global-region.yaml
    │   │   │   ├── us-east-2.yaml
@@ -142,6 +145,8 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
+### Configure Component Manifests
+
 Add the following default configuration to the `stacks/defaults/vpc-flow-logs-bucket.yaml` manifest:
 
 ```yaml title="stacks/defaults/vpc-flow-logs-bucket.yaml"
@@ -194,6 +199,14 @@ components:
         vpc_flow_logs_traffic_type: "ALL"
         vpc_flow_logs_log_destination_type: "s3"
 ```
+
+### Configure Tenant Manifests
+
+### Configure Account Manifests
+
+### Configure Region Manifests
+
+### Configure Organization Manifests
 
 Configure the `stacks/dev.yaml` top-level stack manifest:
 
