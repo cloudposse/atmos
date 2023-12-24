@@ -7,3 +7,5 @@ import:
 vars:
   region: us-east-2
   environment: ue2
+
+# Other defaults for the `us-east-2` region

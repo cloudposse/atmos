@@ -183,9 +183,6 @@ components:
           check-vpc-component-config-with-opa-policy:
             schema_type: opa
             schema_path: "vpc/validate-vpc-component.rego"
-            # An array of filesystem paths (folders or individual files) to the additional modules for schema validation
-            # Each path can be an absolute path or a path relative to `schemas.opa.base_path` defined in `atmos.yaml`
-            # In this example, we have the additional Rego modules in `stacks/schemas/opa/catalog/constants`
             module_paths:
               - "catalog/constants"
             description: Check 'vpc' component configuration using OPA policy
@@ -200,11 +197,11 @@ components:
         vpc_flow_logs_log_destination_type: "s3"
 ```
 
-### Configure Tenant Manifests
-
-### Configure Account Manifests
+### Configure OU/Tenant Manifests
 
 ### Configure Region Manifests
+
+### Configure Stage/Account Manifests
 
 ### Configure Organization Manifests
 
