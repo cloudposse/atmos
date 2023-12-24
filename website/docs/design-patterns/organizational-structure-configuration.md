@@ -506,18 +506,29 @@ The **Organizational Structure Configuration** pattern provides the following be
 
 The **Organizational Structure Configuration** pattern has the following limitations and drawbacks:
 
-- The pattern is useful to customize components per account or region, but if you have more than one Organization, Organizational Unit (OU) or region,
-  then the inline customizations would be repeated in the stack manifests, making the entire stack configuration
-  not [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- The configuration structure described by the pattern can be complex for very simple infrastructures (e.g. just one organization, one organizational
+  unit, a few accounts and regions)
 
-- Should be used only for specific use-cases, e.g. when you use just one region, Organization or Organizational Unit (OU)
+:::note
+
+Even if you are just starting with a very simple infrastructure (e.g. just one organization, one organizational unit, a few accounts, one or a few
+regions), we still recommends that you start with the configuration described by the **Organizational Structure Configuration** design pattern.
+
+In the future, when you modify your infrastructure to provision multi-organization, multi-account, multi-region environments at scale, it will be
+easy to extend the configuration without changing anything for the exiting environments.
+
+:::
+
+<br/>
 
 ## Related Patterns
 
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+- [Inline Component Customization](/design-patterns/inline-component-customization)
 - [Component Catalog](/design-patterns/component-catalog)
 - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
 - [Component Catalog Template](/design-patterns/component-catalog-template)
 - [Component Inheritance](/design-patterns/component-inheritance)
 - [Partial Component Configuration](/design-patterns/partial-component-configuration)
+- [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
+- [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
