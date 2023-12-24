@@ -17,7 +17,7 @@ accounts.
 
 Use the **Organizational Structure Configuration** pattern when:
 
-- You have one or more organizations with multiple OUs/departments/tenants
+- You have one or more organizations with multiple organizational units/departments/tenants
 
 - Each OU/department/tenant has multiple accounts
 
@@ -506,13 +506,15 @@ The **Organizational Structure Configuration** pattern provides the following be
 
 The **Organizational Structure Configuration** pattern has the following limitations and drawbacks:
 
-- The configuration structure described by the pattern can be complex for very simple infrastructures (e.g. just one organization, one organizational
+- The configuration described by the pattern can be complex for very simple infrastructures (e.g. just one organization, one organizational
   unit, a few accounts and regions)
+
+<br/>
 
 :::note
 
 Even if you are just starting with a very simple infrastructure (e.g. just one organization, one organizational unit, a few accounts, one or a few
-regions), we still recommends that you start with the configuration described by the **Organizational Structure Configuration** design pattern.
+regions), it's still recommended that you start with the configuration described by the **Organizational Structure Configuration** design pattern.
 
 In the future, when you modify your infrastructure to provision multi-organization, multi-account, multi-region environments at scale, it will be
 easy to extend the configuration without changing anything for the exiting environments.
