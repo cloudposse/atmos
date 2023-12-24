@@ -145,7 +145,7 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-### Configure Component Manifests
+### Configure Component Catalog
 
 Add the following default configuration to the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` manifest:
 
@@ -280,7 +280,7 @@ vars:
 # Other defaults for the `staging` stage/account
 ```
 
-### Configure Organization Manifests
+### Configure Organization Defaults
 
 In `stacks/orgs/org1/_defaults.yaml`, add the following config:
 
@@ -299,6 +299,8 @@ vars:
 ```
 
 The file defines the context variable `namespace` for the entire `org2` Organization.
+
+### Configure Tenant/OU Defaults
 
 In `stacks/orgs/org1/core/_defaults.yaml`, add the following config for the `org1` Organization and `core` OU (tenant):
 
@@ -332,6 +334,42 @@ import:
   - mixins/tenant/plat
 ```
 
+### Configure Stage/Account Defaults
+
+In `stacks/orgs/org1/plat/dev/_defaults.yaml`, add the following config for the `org1` Organization, `plat` tenant, `dev` account:
+
+```yaml title="stacks/orgs/org1/plat/dev/_defaults.yaml"
+import:
+  - orgs/org1/plat/_defaults
+  - mixins/stage/dev
+```
+
+In `stacks/orgs/org2/plat/dev/_defaults.yaml`, add the following config for the `org2` Organization, `plat` tenant, `dev` account:
+
+```yaml title="stacks/orgs/org2/plat/dev/_defaults.yaml"
+import:
+  - orgs/org2/plat/_defaults
+  - mixins/stage/dev
+```
+
+In `stacks/orgs/org1/plat/prod/_defaults.yaml`, add the following config for the `org1` Organization, `plat` tenant, `prod` account:
+
+```yaml title="stacks/orgs/org1/plat/prod/_defaults.yaml"
+import:
+  - orgs/org1/plat/_defaults
+  - mixins/stage/prod
+```
+
+In `stacks/orgs/org2/plat/prod/_defaults.yaml`, add the following config for the `org2` Organization, `plat` tenant, `prod` account:
+
+```yaml title="stacks/orgs/org2/plat/prod/_defaults.yaml"
+import:
+  - orgs/org2/plat/_defaults
+  - mixins/stage/prod
+```
+
+Similarly, configure the defaults for the other accounts in the `core` and `plat` tenants in the `org1` and `org2` Organizations.
+
 ### Configure Top-Level Stack Manifests
 
 ### Provision Atmos Components into the Stacks
@@ -339,17 +377,29 @@ import:
 To provision the components, execute the following commands:
 
 ```shell
-# `dev` stack
+# `dev` account, `us-east-2` region
 atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-dev
 atmos terraform apply vpc -s plat-ue2-dev
 
-# `staging` stack
+# `dev` account, `us-west-2` region
+atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-dev
+atmos terraform apply vpc -s plat-uw2-dev
+
+# `staging` account, `us-east-2` region
 atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-staging
 atmos terraform apply vpc -s plat-ue2-staging
 
-# `prod` stack
+# `staging` account, `us-west-2` region
+atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-staging
+atmos terraform apply vpc -s plat-uw2-staging
+
+# `prod` account, `us-east-2` region
 atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-prod
 atmos terraform apply vpc -s plat-ue2-prod
+
+# `prod` account, `us-west-2` region
+atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-prod
+atmos terraform apply vpc -s plat-uw2-prod
 ```
 
 ## Benefits
@@ -379,7 +429,6 @@ The Organizational Structure Configuration pattern has the following limitations
 
 To address the limitations of the Organizational Structure Configuration pattern, use the following patterns:
 
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
 - [Component Catalog](/design-patterns/component-catalog)
 - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
 
