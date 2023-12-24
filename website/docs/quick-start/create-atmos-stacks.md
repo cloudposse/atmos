@@ -339,7 +339,7 @@ parent Atmos stacks without defining the context variables in each top-level sta
 
 ### Configure Defaults for Organization, OU and accounts
 
-The `_defaults.yaml` files contain the default settings for the Organization(s), Organizational Units and AWS accounts.
+The `_defaults.yaml` files contain the default settings for the Organization(s), Organizational Units and accounts.
 
 In `stacks/orgs/acme/_defaults.yaml`, add the following config:
 

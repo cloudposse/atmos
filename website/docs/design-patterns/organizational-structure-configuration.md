@@ -199,86 +199,157 @@ components:
 
 ### Configure OU/Tenant Manifests
 
+In `stacks/mixins/tenant/core.yaml`, add the following config:
+
+```yaml title="stacks/mixins/tenant/core.yaml"
+vars:
+  tenant: core
+
+# Other defaults for the `core` tenant/OU
+```
+
+In `stacks/mixins/tenant/plat.yaml`, add the following config:
+
+```yaml title="stacks/mixins/tenant/plat.yaml"
+vars:
+  tenant: plat
+
+# Other defaults for the `plat` tenant/OU
+```
+
 ### Configure Region Manifests
+
+In `stacks/mixins/region/us-east-2.yaml`, add the following config:
+
+```yaml title="stacks/mixins/region/us-east-2.yaml"
+import:
+  # All accounts (stages) in `us-east-2` region will have the `vpc-flow-logs-bucket` component
+  - catalog/vpc-flow-logs-bucket/defaults
+  # All accounts (stages) in `us-east-2` region will have the `vpc` component
+  - catalog/vpc/defaults
+
+vars:
+  region: us-east-2
+  environment: ue2
+
+# Other defaults for the `us-east-2` region
+```
+
+In `stacks/mixins/region/us-west-2.yaml`, add the following config:
+
+```yaml title="stacks/mixins/region/us-west-2.yaml"
+import:
+  # All accounts (stages) in `us-west-2` region will have the `vpc-flow-logs-bucket` component
+  - catalog/vpc-flow-logs-bucket/defaults
+  # All accounts (stages) in `us-east-2` region will have the `vpc` component
+  - catalog/vpc/defaults
+
+vars:
+  region: us-west-2
+  environment: uw2
+
+# Other defaults for the `us-west-2` region
+```
 
 ### Configure Stage/Account Manifests
 
-### Configure Organization Manifests
+In `stacks/mixins/stage/dev.yaml`, add the following config:
 
-Configure the `stacks/dev.yaml` top-level stack manifest:
-
-```yaml title="stacks/dev.yaml"
+```yaml title="stacks/mixins/stage/dev.yaml"
 vars:
   stage: dev
 
-# Import the component default configurations
-import:
-  - defaults/vpc
-
-components:
-  terraform:
-    # Customize the `vpc` component for the `dev` account
-    # You can define variables or override the imported defaults
-    vpc:
-      vars:
-        max_subnet_count: 2
-        vpc_flow_logs_enabled: false
+# Other defaults for the `dev` stage/account
 ```
 
-Configure the `stacks/staging.yaml` top-level stack manifest:
+In `stacks/mixins/stage/prod.yaml`, add the following config:
 
-```yaml title="stacks/staging.yaml"
-vars:
-  stage: staging
-
-# Import the component default configurations
-import:
-  - defaults/vpc-flow-logs-bucket
-  - defaults/vpc
-
-components:
-  terraform:
-    # Customize the `vpc` component for the `staging` account
-    # You can define variables or override the imported defaults
-    vpc:
-      vars:
-        map_public_ip_on_launch: false
-        vpc_flow_logs_traffic_type: "REJECT"
-```
-
-Configure the `stacks/prod.yaml` top-level stack manifest:
-
-```yaml title="stacks/prod.yaml"
+```yaml title="stacks/mixins/stage/prod.yaml"
 vars:
   stage: prod
 
-# Import the component default configurations
-import:
-  - defaults/vpc-flow-logs-bucket
-  - defaults/vpc
-
-components:
-  terraform:
-    # Customize the `vpc` component for the `prod` account
-    # You can define variables or override the imported defaults
-    vpc:
-      vars:
-        map_public_ip_on_launch: false
+# Other defaults for the `prod` stage/account
 ```
+
+In `stacks/mixins/stage/staging.yaml`, add the following config:
+
+```yaml title="stacks/mixins/stage/staging.yaml"
+vars:
+  stage: staging
+
+# Other defaults for the `staging` stage/account
+```
+
+### Configure Organization Manifests
+
+In `stacks/orgs/org1/_defaults.yaml`, add the following config:
+
+```yaml title="stacks/orgs/org1/_defaults.yaml"
+vars:
+  namespace: org1
+```
+
+The file defines the context variable `namespace` for the entire `org1` Organization.
+
+In `stacks/orgs/org2/_defaults.yaml`, add the following config:
+
+```yaml title="stacks/orgs/org2/_defaults.yaml"
+vars:
+  namespace: org2
+```
+
+The file defines the context variable `namespace` for the entire `org2` Organization.
+
+In `stacks/orgs/org1/core/_defaults.yaml`, add the following config for the `org1` Organization and `core` OU (tenant):
+
+```yaml title="stacks/orgs/org1/core/_defaults.yaml"
+import:
+  - orgs/org1/_defaults
+  - mixins/tenant/core
+```
+
+In `stacks/orgs/org1/plat/_defaults.yaml`, add the following config for the `org1` Organization and `plat` OU (tenant):
+
+```yaml title="stacks/orgs/org1/plat/_defaults.yaml"
+import:
+  - orgs/org1/_defaults
+  - mixins/tenant/plat
+```
+
+In `stacks/orgs/org2/core/_defaults.yaml`, add the following config for the `org2` Organization and `core` OU (tenant):
+
+```yaml title="stacks/orgs/org2/core/_defaults.yaml"
+import:
+  - orgs/org2/_defaults
+  - mixins/tenant/core
+```
+
+In `stacks/orgs/org2/plat/_defaults.yaml`, add the following config for the `org2` Organization and `plat` OU (tenant):
+
+```yaml title="stacks/orgs/org2/plat/_defaults.yaml"
+import:
+  - orgs/org2/_defaults
+  - mixins/tenant/plat
+```
+
+### Configure Top-Level Stack Manifests
+
+### Provision Atmos Components into the Stacks
 
 To provision the components, execute the following commands:
 
 ```shell
 # `dev` stack
-atmos terraform apply vpc -s dev
+atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-dev
+atmos terraform apply vpc -s plat-ue2-dev
 
 # `staging` stack
-atmos terraform apply vpc-flow-logs-bucket -s staging
-atmos terraform apply vpc -s staging
+atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-staging
+atmos terraform apply vpc -s plat-ue2-staging
 
 # `prod` stack
-atmos terraform apply vpc-flow-logs-bucket -s prod
-atmos terraform apply vpc -s prod
+atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-prod
+atmos terraform apply vpc -s plat-ue2-prod
 ```
 
 ## Benefits
