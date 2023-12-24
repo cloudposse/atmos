@@ -372,34 +372,140 @@ Similarly, configure the defaults for the other accounts in the `core` and `plat
 
 ### Configure Top-Level Stack Manifests
 
-### Provision Atmos Components into the Stacks
+After we've configured the catalog for the components, the mixins for the tenants, regions and stages, and the defaults for the Organizations, OUs and
+accounts, the final step is to configure the Atmos root (top-level) stacks and the Atmos components in the stacks.
 
-To provision the components, execute the following commands:
+In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, add the following config:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2.yaml"
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+# File extensions are optional (if not specified, `.yaml` is used by default).
+import:
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+```
+
+In the file, we import the region mixin and the defaults for the Organization, OU and account (using hierarchical imports).
+
+In `stacks/orgs/acme/plat/dev/us-east-2-extras.yaml`, add the following config:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-extras.yaml"
+import:
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # In this `orgs/acme/plat/dev/us-east-2-extras.yaml` manifest,
+  # you can import or define other components that are not defined in the `orgs/acme/plat/dev/us-east-2.yaml` manifest
+  # This pattern is called `Atmos Partial Stack Configuration`
+
+components:
+  terraform: { }
+```
+
+Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2` region:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
+import:
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-west-2
+```
+
+In `stacks/orgs/acme/plat/staging/us-east-2.yaml`, add the following config:
+
+```yaml title="stacks/orgs/acme/plat/staging/us-east-2.yaml"
+import:
+  - orgs/acme/plat/staging/_defaults
+  - mixins/region/us-east-2
+```
+
+Similarly, create the top-level Atmos stack for the `staging` account in `us-west-2` region:
+
+```yaml title="stacks/orgs/acme/plat/staging/us-west-2.yaml"
+import:
+  - orgs/acme/plat/staging/_defaults
+  - mixins/region/us-west-2
+```
+
+In `stacks/orgs/acme/plat/prod/us-east-2.yaml`, add the following config:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
+# Import the tenant and region mixins, and the defaults for the components from the `catalog`.
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+# File extensions are optional (if not specified, `.yaml` is used by default).
+import:
+  - orgs/acme/plat/prod/_defaults
+  - mixins/region/us-east-2
+  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
+  - catalog/vpc/prod
+```
+
+In the file, we import the region mixin and the defaults for the Organization, OU and account (using hierarchical imports).
+
+Similarly, create the top-level Atmos stack for the `prod` account in `us-west-2` region:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-west-2.yaml"
+import:
+  - orgs/acme/plat/prod/_defaults
+  - mixins/region/us-west-2
+  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
+  - catalog/vpc/prod
+```
+
+### Provision the Atmos Components into the Stacks
+
+To provision the components in the `org1` Organization, execute the following commands:
 
 ```shell
 # `dev` account, `us-east-2` region
-atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-dev
-atmos terraform apply vpc -s plat-ue2-dev
+atmos terraform apply vpc-flow-logs-bucket -s org1-plat-ue2-dev
+atmos terraform apply vpc -s org1-plat-ue2-dev
 
 # `dev` account, `us-west-2` region
-atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-dev
-atmos terraform apply vpc -s plat-uw2-dev
+atmos terraform apply vpc-flow-logs-bucket -s org1-plat-uw2-dev
+atmos terraform apply vpc -s org1-plat-uw2-dev
 
 # `staging` account, `us-east-2` region
-atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-staging
-atmos terraform apply vpc -s plat-ue2-staging
+atmos terraform apply vpc-flow-logs-bucket -s org1-plat-ue2-staging
+atmos terraform apply vpc -s org1-plat-ue2-staging
 
 # `staging` account, `us-west-2` region
-atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-staging
-atmos terraform apply vpc -s plat-uw2-staging
+atmos terraform apply vpc-flow-logs-bucket -s org1-plat-uw2-staging
+atmos terraform apply vpc -s org1-plat-uw2-staging
 
 # `prod` account, `us-east-2` region
-atmos terraform apply vpc-flow-logs-bucket -s plat-ue2-prod
-atmos terraform apply vpc -s plat-ue2-prod
+atmos terraform apply vpc-flow-logs-bucket -s org1-plat-ue2-prod
+atmos terraform apply vpc -s org1-plat-ue2-prod
 
 # `prod` account, `us-west-2` region
-atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-prod
-atmos terraform apply vpc -s plat-uw2-prod
+atmos terraform apply vpc-flow-logs-bucket -s org1-plat-uw2-prod
+atmos terraform apply vpc -s org1-plat-uw2-prod
+```
+
+To provision the components in the `org2` Organization, execute the following commands:
+
+```shell
+# `dev` account, `us-east-2` region
+atmos terraform apply vpc-flow-logs-bucket -s org2-plat-ue2-dev
+atmos terraform apply vpc -s org2-plat-ue2-dev
+
+# `dev` account, `us-west-2` region
+atmos terraform apply vpc-flow-logs-bucket -s org2-plat-uw2-dev
+atmos terraform apply vpc -s org2-plat-uw2-dev
+
+# `staging` account, `us-east-2` region
+atmos terraform apply vpc-flow-logs-bucket -s org2-plat-ue2-staging
+atmos terraform apply vpc -s org2-plat-ue2-staging
+
+# `staging` account, `us-west-2` region
+atmos terraform apply vpc-flow-logs-bucket -s org2-plat-uw2-staging
+atmos terraform apply vpc -s org2-plat-uw2-staging
+
+# `prod` account, `us-east-2` region
+atmos terraform apply vpc-flow-logs-bucket -s org2-plat-ue2-prod
+atmos terraform apply vpc -s org2-plat-ue2-prod
+
+# `prod` account, `us-west-2` region
+atmos terraform apply vpc-flow-logs-bucket -s org2-plat-uw2-prod
+atmos terraform apply vpc -s org2-plat-uw2-prod
 ```
 
 ## Benefits
