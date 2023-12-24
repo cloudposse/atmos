@@ -49,7 +49,7 @@ Use the **Organizational Structure Configuration** pattern when:
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
-   │   └── orgs  (Organizations)
+   │   └── orgs  (organizations)
    │       ├── org1
    │       │   ├── _defaults.yaml
    │       │   ├── core  ('core' OU/tenant)
@@ -131,9 +131,9 @@ stacks:
   excluded_paths:
     # Tell Atmos that all `_defaults.yaml` files are not top-level stack manifests
     - "**/_defaults.yaml"
-  # If you are using multiple Organizations (namespaces), use the following `name_pattern`:
+  # If you are using multiple organizations (namespaces), use the following `name_pattern`:
   name_pattern: "{namespace}-{tenant}-{environment}-{stage}"
-  # If you are using a single Organization (namespace), use the following `name_pattern`:
+  # If you are using a single organization (namespace), use the following `name_pattern`:
   # name_pattern: "{tenant}-{environment}-{stage}"
 
 schemas:
@@ -289,7 +289,7 @@ vars:
   namespace: org1
 ```
 
-The file defines the context variable `namespace` for the entire `org1` Organization.
+The file defines the context variable `namespace` for the entire `org1` organization.
 
 In `stacks/orgs/org2/_defaults.yaml`, add the following config:
 
@@ -298,11 +298,11 @@ vars:
   namespace: org2
 ```
 
-The file defines the context variable `namespace` for the entire `org2` Organization.
+The file defines the context variable `namespace` for the entire `org2` organization.
 
 ### Configure Tenant/OU Defaults
 
-In `stacks/orgs/org1/core/_defaults.yaml`, add the following config for the `org1` Organization and `core` OU (tenant):
+In `stacks/orgs/org1/core/_defaults.yaml`, add the following config for the `org1` organization and `core` OU (tenant):
 
 ```yaml title="stacks/orgs/org1/core/_defaults.yaml"
 import:
@@ -310,7 +310,7 @@ import:
   - mixins/tenant/core
 ```
 
-In `stacks/orgs/org1/plat/_defaults.yaml`, add the following config for the `org1` Organization and `plat` OU (tenant):
+In `stacks/orgs/org1/plat/_defaults.yaml`, add the following config for the `org1` organization and `plat` OU (tenant):
 
 ```yaml title="stacks/orgs/org1/plat/_defaults.yaml"
 import:
@@ -318,7 +318,7 @@ import:
   - mixins/tenant/plat
 ```
 
-In `stacks/orgs/org2/core/_defaults.yaml`, add the following config for the `org2` Organization and `core` OU (tenant):
+In `stacks/orgs/org2/core/_defaults.yaml`, add the following config for the `org2` organization and `core` OU (tenant):
 
 ```yaml title="stacks/orgs/org2/core/_defaults.yaml"
 import:
@@ -326,7 +326,7 @@ import:
   - mixins/tenant/core
 ```
 
-In `stacks/orgs/org2/plat/_defaults.yaml`, add the following config for the `org2` Organization and `plat` OU (tenant):
+In `stacks/orgs/org2/plat/_defaults.yaml`, add the following config for the `org2` organization and `plat` OU (tenant):
 
 ```yaml title="stacks/orgs/org2/plat/_defaults.yaml"
 import:
@@ -336,7 +336,7 @@ import:
 
 ### Configure Stage/Account Defaults
 
-In `stacks/orgs/org1/plat/dev/_defaults.yaml`, add the following config for the `org1` Organization, `plat` tenant, `dev` account:
+In `stacks/orgs/org1/plat/dev/_defaults.yaml`, add the following config for the `org1` organization, `plat` tenant, `dev` account:
 
 ```yaml title="stacks/orgs/org1/plat/dev/_defaults.yaml"
 import:
@@ -344,7 +344,7 @@ import:
   - mixins/stage/dev
 ```
 
-In `stacks/orgs/org2/plat/dev/_defaults.yaml`, add the following config for the `org2` Organization, `plat` tenant, `dev` account:
+In `stacks/orgs/org2/plat/dev/_defaults.yaml`, add the following config for the `org2` organization, `plat` tenant, `dev` account:
 
 ```yaml title="stacks/orgs/org2/plat/dev/_defaults.yaml"
 import:
@@ -352,7 +352,7 @@ import:
   - mixins/stage/dev
 ```
 
-In `stacks/orgs/org1/plat/prod/_defaults.yaml`, add the following config for the `org1` Organization, `plat` tenant, `prod` account:
+In `stacks/orgs/org1/plat/prod/_defaults.yaml`, add the following config for the `org1` organization, `plat` tenant, `prod` account:
 
 ```yaml title="stacks/orgs/org1/plat/prod/_defaults.yaml"
 import:
@@ -360,7 +360,7 @@ import:
   - mixins/stage/prod
 ```
 
-In `stacks/orgs/org2/plat/prod/_defaults.yaml`, add the following config for the `org2` Organization, `plat` tenant, `prod` account:
+In `stacks/orgs/org2/plat/prod/_defaults.yaml`, add the following config for the `org2` organization, `plat` tenant, `prod` account:
 
 ```yaml title="stacks/orgs/org2/plat/prod/_defaults.yaml"
 import:
@@ -368,91 +368,66 @@ import:
   - mixins/stage/prod
 ```
 
-Similarly, configure the defaults for the other accounts in the `core` and `plat` tenants in the `org1` and `org2` Organizations.
+Similarly, configure the defaults for the other accounts in the `core` and `plat` tenants in the `org1` and `org2` organizations.
 
 ### Configure Top-Level Stack Manifests
 
-After we've configured the catalog for the components, the mixins for the tenants, regions and stages, and the defaults for the Organizations, OUs and
+After we've configured the catalog for the components, the mixins for the tenants, regions and stages, and the defaults for the organizations, OUs and
 accounts, the final step is to configure the Atmos root (top-level) stacks and the Atmos components in the stacks.
 
-In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, add the following config:
+In `stacks/orgs/org1/plat/dev/us-east-2.yaml`, add the following config:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2.yaml"
-# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
-# File extensions are optional (if not specified, `.yaml` is used by default).
+```yaml title="stacks/orgs/org1/plat/dev/us-east-2.yaml"
 import:
-  - orgs/acme/plat/dev/_defaults
+  - orgs/org1/plat/dev/_defaults
   - mixins/region/us-east-2
 ```
 
-In the file, we import the region mixin and the defaults for the Organization, OU and account (using hierarchical imports).
+In `stacks/orgs/org1/plat/dev/us-west-2.yaml`, add the following config:
 
-In `stacks/orgs/acme/plat/dev/us-east-2-extras.yaml`, add the following config:
-
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-extras.yaml"
+```yaml title="stacks/orgs/org1/plat/dev/us-west-2.yaml"
 import:
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # In this `orgs/acme/plat/dev/us-east-2-extras.yaml` manifest,
-  # you can import or define other components that are not defined in the `orgs/acme/plat/dev/us-east-2.yaml` manifest
-  # This pattern is called `Atmos Partial Stack Configuration`
-
-components:
-  terraform: { }
-```
-
-Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2` region:
-
-```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
-import:
-  - orgs/acme/plat/dev/_defaults
+  - orgs/org1/plat/dev/_defaults
   - mixins/region/us-west-2
 ```
 
-In `stacks/orgs/acme/plat/staging/us-east-2.yaml`, add the following config:
+In `stacks/orgs/org1/plat/prod/us-east-2.yaml`, add the following config:
 
-```yaml title="stacks/orgs/acme/plat/staging/us-east-2.yaml"
+```yaml title="stacks/orgs/org1/plat/prod/us-east-2.yaml"
 import:
-  - orgs/acme/plat/staging/_defaults
+  - orgs/org1/plat/prod/_defaults
   - mixins/region/us-east-2
 ```
 
-Similarly, create the top-level Atmos stack for the `staging` account in `us-west-2` region:
+In `stacks/orgs/org1/plat/prod/us-west-2.yaml`, add the following config:
 
-```yaml title="stacks/orgs/acme/plat/staging/us-west-2.yaml"
+```yaml title="stacks/orgs/org1/plat/prod/us-west-2.yaml"
 import:
-  - orgs/acme/plat/staging/_defaults
+  - orgs/org1/plat/prod/_defaults
   - mixins/region/us-west-2
 ```
 
-In `stacks/orgs/acme/plat/prod/us-east-2.yaml`, add the following config:
+In `stacks/orgs/org1/plat/staging/us-east-2.yaml`, add the following config:
 
-```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
-# Import the tenant and region mixins, and the defaults for the components from the `catalog`.
-# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
-# File extensions are optional (if not specified, `.yaml` is used by default).
+```yaml title="stacks/orgs/org1/plat/staging/us-east-2.yaml"
 import:
-  - orgs/acme/plat/prod/_defaults
+  - orgs/org1/plat/staging/_defaults
   - mixins/region/us-east-2
-  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
-  - catalog/vpc/prod
 ```
 
-In the file, we import the region mixin and the defaults for the Organization, OU and account (using hierarchical imports).
+In `stacks/orgs/org1/plat/staging/us-west-2.yaml`, add the following config:
 
-Similarly, create the top-level Atmos stack for the `prod` account in `us-west-2` region:
-
-```yaml title="stacks/orgs/acme/plat/prod/us-west-2.yaml"
+```yaml title="stacks/orgs/org1/plat/staging/us-west-2.yaml"
 import:
-  - orgs/acme/plat/prod/_defaults
+  - orgs/org1/plat/staging/_defaults
   - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
-  - catalog/vpc/prod
 ```
+
+Similarly, configure the top-level stack manifests for the `org2` organization.
 
 ### Provision the Atmos Components into the Stacks
 
-To provision the components in the `org1` Organization, execute the following commands:
+To provision the components in the `org1` organization, execute the following commands:
 
 ```shell
 # `dev` account, `us-east-2` region
@@ -480,7 +455,7 @@ atmos terraform apply vpc-flow-logs-bucket -s org1-plat-uw2-prod
 atmos terraform apply vpc -s org1-plat-uw2-prod
 ```
 
-To provision the components in the `org2` Organization, execute the following commands:
+To provision the components in the `org2` organization, execute the following commands:
 
 ```shell
 # `dev` account, `us-east-2` region
@@ -510,35 +485,32 @@ atmos terraform apply vpc -s org2-plat-uw2-prod
 
 ## Benefits
 
-The Organizational Structure Configuration pattern provides the following benefits:
+The **Organizational Structure Configuration** pattern provides the following benefits:
 
-- The defaults for the components are defined in just one place making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- The defaults for the components, organizations, tenants/OUs, regions, account/stages are defined in just one place (and then imported) making the
+  entire configuration extremely [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself), reusable, and easy to understand and manage
 
-- The defaults for the components are reusable across many stacks
+- New Organizations can be easily added and configured without affecting the configurations for the existing organizations
 
-- Simple stack and component configurations
+- New tenants/OUs can be easily added to an organization without affecting the configurations for the existing tenants/OUs
+
+- New stages/accounts can be easily added to a tenant/OU without affecting the configurations for the existing stages/accounts
+
+- New regions can be added to the infrastructure, configured with Atmos, and components provisioned into the regions. New regions can be used for
+  te general infrastructure, or for disaster recovery (DR), or for compliance and audit
+
+- After adding new organizations, tenants, accounts or regions, the entire configuration will still remain DRY, reusable and easy to manage thanks to
+  using the described folder structure, catalogs, mixins, and hierarchical [imports](/core-concepts/stacks/imports)
 
 ## Limitations
 
-The Organizational Structure Configuration pattern has the following limitations and drawbacks:
+The **Organizational Structure Configuration** pattern has the following limitations and drawbacks:
 
 - The pattern is useful to customize components per account or region, but if you have more than one Organization, Organizational Unit (OU) or region,
   then the inline customizations would be repeated in the stack manifests, making the entire stack configuration
   not [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 - Should be used only for specific use-cases, e.g. when you use just one region, Organization or Organizational Unit (OU)
-
-<br/>
-
-:::note
-
-To address the limitations of the Organizational Structure Configuration pattern, use the following patterns:
-
-- [Component Catalog](/design-patterns/component-catalog)
-- [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
-
-:::
 
 ## Related Patterns
 
