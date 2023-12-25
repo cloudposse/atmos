@@ -21,8 +21,8 @@ The **Component Catalog** pattern prescribes the following:
 
   - `stacks/catalog/vpc/disabled.yaml` - component manifest with the component disabled (`vars.enabled: false`)
   - `stacks/catalog/vpc/dev.yaml` - component manifest with the settings related to the `dev` account
-  - `stacks/catalog/vpc/staging.yaml` - component manifest with the settings related to `staging` account
-  - `stacks/catalog/vpc/prod.yaml` - component manifest with the settings related to `prod` account
+  - `stacks/catalog/vpc/staging.yaml` - component manifest with the settings related to the `staging` account
+  - `stacks/catalog/vpc/prod.yaml` - component manifest with the settings related to the `prod` account
   - `stacks/catalog/vpc/ue2.yaml` - component manifest with the settings for `us-east-2` region
   - `stacks/catalog/vpc/uw2.yaml` - component manifest with the settings for `us-west-2` region
   - `stacks/catalog/vpc/feature-1.yaml` - component manifest with `feature-1` setting enabled

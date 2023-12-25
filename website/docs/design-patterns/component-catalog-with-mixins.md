@@ -18,19 +18,20 @@ The **Component Catalog with Mixins** design pattern prescribes the following:
 - For a Terraform component, create a folder with the same name in `stacks/catalog` to make it symmetrical and easy to find.
   For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
 
-- In the component's catalog folder, create `defaults.yaml` manifest with all the default values for the component (the defaults that can be reused
-  across multiple environments). Define all the required Atmos sections, e.g. `metadata`, `settings`, `vars`, `env`.
+- In the component's catalog folder, in the `mixins` sub-folder, add manifests with component configurations for specific environments (organizations,
+  tenants, regions, accounts). For example:
 
-- In the component's catalog folder, add manifests with component configurations for specific environments (organizations, tenants, regions,
-  accounts). For example:
-
-  - `stacks/catalog/vpc/disabled.yaml` - component manifest with the component disabled (`vars.enabled: false`)
-  - `stacks/catalog/vpc/dev.yaml` - component manifest with the settings related to the `dev` account
-  - `stacks/catalog/vpc/staging.yaml` - component manifest with the settings related to `staging` account
-  - `stacks/catalog/vpc/prod.yaml` - component manifest with the settings related to `prod` account
-  - `stacks/catalog/vpc/ue2.yaml` - component manifest with the settings for `us-east-2` region
-  - `stacks/catalog/vpc/uw2.yaml` - component manifest with the settings for `us-west-2` region
-  - `stacks/catalog/vpc/feature-1.yaml` - component manifest with `feature-1` setting enabled
+  - `stacks/catalog/vpc/mixins/defaults.yaml` - component manifest with all the default values for the component (the defaults that can be reused
+    across multiple environments)
+  - `stacks/catalog/vpc/mixins/dev.yaml` - component manifest with the settings related to the `dev` account
+  - `stacks/catalog/vpc/mixins/staging.yaml` - component manifest with the settings related to the `staging` account
+  - `stacks/catalog/vpc/mixins/prod.yaml` - component manifest with the settings related to the `prod` account
+  - `stacks/catalog/vpc/mixins/ue2.yaml` - component manifest with the settings for `us-east-2` region
+  - `stacks/catalog/vpc/mixins/uw2.yaml` - component manifest with the settings for `us-west-2` region
+  - `stacks/catalog/vpc/mixins/core.yaml` - component manifest with the settings related to the `core` tenant
+  - `stacks/catalog/vpc/mixins/plat.yaml` - component manifest with the settings related to the `plat` tenant
+  - `stacks/catalog/vpc/mixins/org1.yaml` - component manifest with the settings related to the `org1` organization
+  - `stacks/catalog/vpc/mixins/org2.yaml` - component manifest with the settings related to the `org2` organization
 
 - After we have defined the manifests for different use-cases, we import them into different top-level stacks depending on a particular use-case.
   For example:
