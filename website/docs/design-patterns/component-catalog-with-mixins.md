@@ -159,7 +159,7 @@ components:
         subnet_type_tag_key: "acme/subnet/type"
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/ue2.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/ue2.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/ue2.yaml"
 components:
@@ -172,7 +172,7 @@ components:
           - us-east-2c
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/uw2.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/uw2.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/uw2.yaml"
 components:
@@ -185,7 +185,7 @@ components:
           - us-west-2c
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/dev.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/dev.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/dev.yaml"
 components:
@@ -199,7 +199,7 @@ components:
         vpc_flow_logs_enabled: false
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/prod.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/prod.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/prod.yaml"
 components:
@@ -213,7 +213,7 @@ components:
         assign_generated_ipv6_cidr_block: true
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/staging.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/staging.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/staging.yaml"
 components:
@@ -227,7 +227,7 @@ components:
         map_public_ip_on_launch: false
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/core.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/core.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/core.yaml"
 components:
@@ -239,7 +239,7 @@ components:
         vpc_flow_logs_traffic_type: "REJECT"
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/plat.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/plat.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/plat.yaml"
 components:
@@ -251,7 +251,7 @@ components:
         nat_eip_aws_shield_protection_enabled: true
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/org1.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/org1.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/org1.yaml"
 components:
@@ -262,7 +262,7 @@ components:
         subnet_type_tag_key: "org1/subnet/type"
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/mixins/org2.yaml` manifest:
+Add the following configuration to the `stacks/catalog/vpc/mixins/org2.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/mixins/org2.yaml"
 components:
