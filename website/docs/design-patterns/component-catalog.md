@@ -272,8 +272,11 @@ The **Component Catalog** pattern has the following limitations and drawbacks:
 
 :::note
 
-Use the [Inline Component Customization](/design-patterns/inline-component-customization) pattern to address the limitations of the
-**Component Catalog** pattern when you are provisioning a very basic infrastructure
+To address the limitations of the **Component Catalog** pattern when you are provisioning a very basic infrastructure, use the following
+patterns:
+
+- [Inline Component Configuration](/design-patterns/inline-component-configuration)
+- [Inline Component Customization](/design-patterns/inline-component-customization)
 
 :::
 
