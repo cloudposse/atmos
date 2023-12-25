@@ -273,15 +273,59 @@ components:
         subnet_type_tag_key: "org2/subnet/type"
 ```
 
-Import `mixins/region/us-west-2` and `stacks/catalog/vpc/prod.yaml` into the `stacks/orgs/acme/plat/prod/us-west-2.yaml` top-level stack:
+Assemble the `stacks/catalog/vpc/org1-plat-ue2-dev.yaml` environment manifest from the corresponding mixins:
 
-```yaml title="stacks/orgs/acme/plat/prod/us-west-2.yaml"
+```yaml title="stacks/catalog/vpc/org1-plat-ue2-dev.yaml"
 import:
-  - orgs/acme/plat/prod/_defaults
-  - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
-  - catalog/vpc/prod
+  # The imports are processed in the order they are defined.
+  # The next imported manifest will override the configurations from the previously imported manifests
+  - catalog/vpc/mixins/defaults
+  - catalog/vpc/mixins/org1
+  - catalog/vpc/mixins/plat
+  - catalog/vpc/mixins/ue2
+  - catalog/vpc/mixins/dev
 ```
+
+Assemble the `stacks/catalog/vpc/org1-plat-ue2-prod.yaml` environment manifest from the corresponding mixins:
+
+```yaml title="stacks/catalog/vpc/org1-plat-ue2-prod.yaml"
+import:
+  # The imports are processed in the order they are defined.
+  # The next imported manifest will override the configurations from the previously imported manifests
+  - catalog/vpc/mixins/defaults
+  - catalog/vpc/mixins/org1
+  - catalog/vpc/mixins/plat
+  - catalog/vpc/mixins/ue2
+  - catalog/vpc/mixins/prod
+```
+
+Assemble the `stacks/catalog/vpc/org1-plat-uw2-staging.yaml` environment manifest from the corresponding mixins:
+
+```yaml title="stacks/catalog/vpc/org1-plat-uw2-staging.yaml"
+import:
+  # The imports are processed in the order they are defined.
+  # The next imported manifest will override the configurations from the previously imported manifests
+  - catalog/vpc/mixins/defaults
+  - catalog/vpc/mixins/org1
+  - catalog/vpc/mixins/plat
+  - catalog/vpc/mixins/uw2
+  - catalog/vpc/mixins/staging
+```
+
+Assemble the `stacks/catalog/vpc/org2-core-ue2-dev.yaml` environment manifest from the corresponding mixins:
+
+```yaml title="stacks/catalog/vpc/org2-core-ue2-dev.yaml"
+import:
+  # The imports are processed in the order they are defined.
+  # The next imported manifest will override the configurations from the previously imported manifests
+  - catalog/vpc/mixins/defaults
+  - catalog/vpc/mixins/org2
+  - catalog/vpc/mixins/core
+  - catalog/vpc/mixins/ue2
+  - catalog/vpc/mixins/dev
+```
+
+Similarly, assemble the mixins for the other environments.
 
 ## Benefits
 
