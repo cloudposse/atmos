@@ -62,13 +62,13 @@ Use the **Component Catalog** pattern when:
    ├── stacks
    │   └── catalog (component-specific defaults)
    │       ├── vpc
-   │       │   └── defaults.yaml
-   │       │   └── disabled.yaml
-   │       │   └── prod.yaml
-   │       │   └── ue2.yaml
+   │       │   ├── defaults.yaml
+   │       │   ├── disabled.yaml
+   │       │   ├── prod.yaml
+   │       │   ├── ue2.yaml
    │       │   └── uw2.yaml
    │       └── vpc-flow-logs-bucket
-   │           └── defaults.yaml
+   │           ├── defaults.yaml
    │           └── disabled.yaml
    │   # Centralized components configuration
    └── components
@@ -88,7 +88,7 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{stage}"
+  name_pattern: "{tenant}-{environment}-{stage}"
   included_paths:
     # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
@@ -105,7 +105,7 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-Add the following default configuration to the `stacks/defaults/vpc-flow-logs-bucket.yaml` manifest:
+Add the following configuration to the `stacks/defaults/vpc-flow-logs-bucket.yaml` manifest:
 
 ```yaml title="stacks/defaults/vpc-flow-logs-bucket.yaml"
 components:
