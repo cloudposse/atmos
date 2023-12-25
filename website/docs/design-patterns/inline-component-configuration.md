@@ -138,7 +138,7 @@ The **Inline Component Configuration** pattern has the following limitations and
 :::note
 
 Use the [Inline Component Customization](/design-patterns/inline-component-customization) pattern to address the limitations of the
-Inline Component Configuration pattern.
+**Inline Component Configuration** pattern.
 
 :::
 
