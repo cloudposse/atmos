@@ -24,8 +24,8 @@ The **Component Catalog with Mixins** design pattern prescribes the following:
   - `stacks/catalog/vpc/mixins/defaults.yaml` - component manifest with all the default values for the component (the defaults that can be reused
     across multiple environments)
   - `stacks/catalog/vpc/mixins/dev.yaml` - component manifest with the settings related to the `dev` account
-  - `stacks/catalog/vpc/mixins/staging.yaml` - component manifest with the settings related to the `staging` account
   - `stacks/catalog/vpc/mixins/prod.yaml` - component manifest with the settings related to the `prod` account
+  - `stacks/catalog/vpc/mixins/staging.yaml` - component manifest with the settings related to the `staging` account
   - `stacks/catalog/vpc/mixins/ue2.yaml` - component manifest with the settings for `us-east-2` region
   - `stacks/catalog/vpc/mixins/uw2.yaml` - component manifest with the settings for `us-west-2` region
   - `stacks/catalog/vpc/mixins/core.yaml` - component manifest with the settings related to the `core` tenant
@@ -72,13 +72,31 @@ Use the **Component Catalog** pattern when:
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── catalog (component-specific defaults)
-   │       ├── vpc
-   │       │   ├── defaults.yaml
-   │       │   ├── disabled.yaml
-   │       │   ├── prod.yaml
-   │       │   ├── ue2.yaml
-   │       │   └── uw2.yaml
+   │   └── catalog
+   │       └── vpc
+   │           ├── mixins
+   │           │   ├── defaults.yaml
+   │           │   ├── dev.yaml
+   │           │   ├── prod.yaml
+   │           │   ├── staging.yaml
+   │           │   ├── ue2.yaml
+   │           │   ├── uw2.yaml
+   │           │   ├── core.yaml
+   │           │   ├── plat.yaml
+   │           │   ├── org1.yaml
+   │           │   └── org2.yaml
+   │           ├── org1-plat-ue2-dev.yaml
+   │           ├── org1-plat-ue2-prod.yaml
+   │           ├── org1-plat-ue2-staging.yaml
+   │           ├── org1-plat-uw2-dev.yaml
+   │           ├── org1-plat-uw2-prod.yaml
+   │           ├── org1-plat-uw2-staging.yaml
+   │           ├── org2-plat-ue2-dev.yaml
+   │           ├── org2-plat-ue2-prod.yaml
+   │           ├── org2-plat-ue2-staging.yaml
+   │           ├── org2-plat-uw2-dev.yaml
+   │           ├── org2-plat-uw2-prod.yaml
+   │           └── org2-plat-uw2-staging.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
@@ -116,45 +134,15 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-Add the following configuration to the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` manifest:
+Add the following default configuration to the `stacks/catalog/vpc/mixins/defaults.yaml` manifest:
 
-```yaml title="stacks/catalog/vpc-flow-logs-bucket/defaults.yaml"
-components:
-  terraform:
-    vpc-flow-logs-bucket:
-      metadata:
-        # Point to the Terraform component
-        component: vpc-flow-logs-bucket
-      vars:
-        enabled: true
-        name: "vpc-flow-logs"
-        traffic_type: "ALL"
-        force_destroy: true
-        lifecycle_rule_enabled: false
-```
-
-Add the following default configuration to the `stacks/catalog/vpc/defaults.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc/defaults.yaml"
+```yaml title="stacks/catalog/vpc/mixins/defaults.yaml"
 components:
   terraform:
     vpc:
       metadata:
         # Point to the Terraform component
         component: vpc
-      settings:
-        # All validation steps must succeed to allow the component to be provisioned
-        validation:
-          validate-vpc-component-with-jsonschema:
-            schema_type: jsonschema
-            schema_path: "vpc/validate-vpc-component.json"
-            description: Validate 'vpc' component variables using JSON Schema
-          check-vpc-component-config-with-opa-policy:
-            schema_type: opa
-            schema_path: "vpc/validate-vpc-component.rego"
-            module_paths:
-              - "catalog/constants"
-            description: Check 'vpc' component configuration using OPA policy
       vars:
         enabled: true
         name: "common"
@@ -166,9 +154,9 @@ components:
         vpc_flow_logs_log_destination_type: "s3"
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/ue2.yaml` manifest:
+Add the following default configuration to the `stacks/catalog/vpc/mixins/ue2.yaml` manifest:
 
-```yaml title="stacks/catalog/vpc/ue2.yaml"
+```yaml title="stacks/catalog/vpc/mixins/ue2.yaml"
 import:
   - catalog/vpc/defaults
 
@@ -182,9 +170,9 @@ components:
           - us-east-2c
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/uw2.yaml` manifest:
+Add the following default configuration to the `stacks/catalog/vpc/mixins/uw2.yaml` manifest:
 
-```yaml title="stacks/catalog/vpc/uw2.yaml"
+```yaml title="stacks/catalog/vpc/mixins/uw2.yaml"
 import:
   - catalog/vpc/defaults
 
@@ -198,9 +186,9 @@ components:
           - us-west-2c
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/prod.yaml` manifest:
+Add the following default configuration to the `stacks/catalog/vpc/mixins/prod.yaml` manifest:
 
-```yaml title="stacks/catalog/vpc/prod.yaml"
+```yaml title="stacks/catalog/vpc/mixins/prod.yaml"
 components:
   terraform:
     vpc:

@@ -60,7 +60,7 @@ Use the **Component Catalog** pattern when:
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── catalog (component-specific defaults)
+   │   └── catalog
    │       ├── vpc
    │       │   ├── defaults.yaml
    │       │   ├── disabled.yaml
