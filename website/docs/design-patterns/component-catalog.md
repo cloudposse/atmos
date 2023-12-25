@@ -9,52 +9,49 @@ description: Component Catalog Atmos Design Pattern
 
 The **Component Catalog** pattern prescribes the following:
 
-- For each Terraform component, create the same folder structure in `stacks/catalog` so everything is symmetrical and easy to find.
-  For example, the `stacks/catalog/eks/echo-server` folder should mirror the `components/terraform/eks/echo-server` folder
+- For each Terraform component, create the same folder in `stacks/catalog` to make it symmetrical and easy to find.
+  For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
 
-- In the catalog, create `defaults.yaml` config with all the default values for the component.
-  Define all Atmos sections, e.g. `metadata`, `settings`, `vars`. Enable the component by
-  setting `vars.enabled: true`. Enable the Spacelift stack for the component by setting `settings.spacelift.workspace_enabled: true`
+- In the component's catalog folder, create `defaults.yaml` manifest with all the default values for the component.
+  Define all the required Atmos sections, e.g. `metadata`, `settings`, `vars`, `env`.
 
-- In the catalog, add other files for different combinations of component configuration.
-  We call them feature config files. Each feature config file should import the `defaults.yaml`
-  file to reuse the default values and make the entire config DRY. For example:
+- In the component's catalog folder, add other manifests for different combinations of component configurations.
+  We refer to them as feature manifests. Each feature manifest should import the `defaults.yaml` file to reuse the default values and make the entire
+  config DRY. For example:
 
-  - `disabled.yaml` - component config with the component disabled (`vars.enabled: false`) and Spacelift stack for the component
-    disabled (`settings.spacelift.workspace_enabled: false`)
-  - `dev.yaml` - component config with the settings related to `dev` (imports `defaults.yaml`)
-  - `dev-disabled.yaml` - component config that imports `dev.yaml` and disables the component and Spacelift stack
-  - `staging.yaml` - component config with the settings related to `staging` (imports `defaults.yaml`)
-  - `staging-disabled.yaml` - component config that imports `staging.yaml` and disables the component and Spacelift stack
-  - `prod.yaml` - component config with the settings related to `prod` (imports `defaults.yaml`)
-  - `prod-disabled.yaml` - component config that imports `prod.yaml` and disables the component and Spacelift stack
-  - `feature-1.yaml` - component config with `feature-1` enabled (imports `defaults.yaml`)
+  - `stacks/catalog/vpc/disabled.yaml` - component manifest with the component disabled (`vars.enabled: false`)
+  - `stacks/catalog/vpc/dev.yaml` - component manifest with the settings related to the `dev` account
+  - `stacks/catalog/vpc/staging.yaml` - component manifest with the settings related to `staging` account
+  - `stacks/catalog/vpc/prod.yaml` - component manifest with the settings related to `prod` account
+  - `stacks/catalog/vpc/ue2.yaml` - component manifest with the settings for `us-east-2` region
+  - `stacks/catalog/vpc/uw2.yaml` - component manifest with the settings for `us-west-2` region
+  - `stacks/catalog/vpc/feature-1.yaml` - component manifest with `feature-1` setting enabled
 
-- Now that we have the feature-defining catalog of configurations for different use-cases,
-  we can import those catalog files into different top-level stacks depending on a particular use-case. For example:
+- After we have defined the manifests for different use-cases, we import them into different top-level stacks depending on a particular use-case.
+  For example:
 
-  - Import `catalog/eks/echo-server/dev` into the `stacks/orgs/dev/us-east-1.yaml`stack because we need the `eks/echo-server`
-    with the dev-related config provisioned in the stack
-  - Import `catalog/eks/echo-server/staging` into the `stacks/orgs/staging/us-east-1.yaml` stack because we need the `eks/echo-server` with the
-    staging-related config provisioned in the stack
-  - Import `catalog/eks/echo-server/disabled` into a stack where we want the component and Spacelift stack to be
-    disabled (e.g. temporarily until it's needed)
+  - Import the `catalog/vpc/ue2.yaml` manifest into the `stacks/mixins/region/us-east-2.yaml` mixin because we need the `vpc`
+    component with the `us-east-2` region-related config provisioned in the region
+  - Import the `catalog/vpc/uw2.yaml` manifest into the `stacks/mixins/region/us-west-2.yaml` mixin because we need the `vpc`
+    component with the `us-west-2` region-related config provisioned in the region
+  - Import the `catalog/vpc/dev.yaml` manifest into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` top-level stack because we need the `vpc`
+    component with the dev-related config provisioned in the stack
+  - Import the `catalog/vpc/prod.yaml` manifest into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack because we need the `vpc`
+    component with the prod-related config provisioned in the stack
+  - Import the `catalog/vpc/staging.yaml` manifest into the `stacks/orgs/acme/plat/staging/us-east-2.yaml` top-level stack because we need the `vpc`
+    component with the dev-related config provisioned in the stack
+  - Import the `catalog/vpc/disabled.yaml` manifest into a stack where we want the `vpc` component to be disabled (e.g. temporarily until it's needed)
   - Etc.
-
-- The design pattern simplifies all stack configurations, makes them DRY and easy to understand based on specific use-cases
-
-The **Component Catalog** pattern is used when the defaults for the [components](/core-concepts/components) in
-a [stack](/core-concepts/stacks)
-are configured in default/base manifests, the manifests are [imported](/core-concepts/stacks/imports) into the top-level stacks, and the components
-are customized inline in each top-level stack overriding the configuration for each environment (OU, account, region).
 
 ## Applicability
 
 Use the **Component Catalog** pattern when:
 
-- You have components that are provisioned in multiple stacks (e.g. `dev`, `staging`, `prod` accounts) with different configurations for each stack
+- You have many components that are provisioned into multiple stacks with different configurations for each stack
 
-- You need to make the components' default/baseline configurations reusable across different stacks
+- You need to make the components' default configurations reusable across different stacks
+
+- You want the component catalog folders structures to mirror the Terraform components folder structure to make it easy to find and manage
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
@@ -66,8 +63,13 @@ Use the **Component Catalog** pattern when:
    │   └── catalog (component-specific defaults)
    │       ├── vpc
    │       │   └── defaults.yaml
+   │       │   └── disabled.yaml
+   │       │   └── prod.yaml
+   │       │   └── ue2.yaml
+   │       │   └── uw2.yaml
    │       └── vpc-flow-logs-bucket
    │           └── defaults.yaml
+   │           └── disabled.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
