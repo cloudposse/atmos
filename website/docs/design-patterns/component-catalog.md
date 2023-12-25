@@ -30,18 +30,18 @@ The **Component Catalog** pattern prescribes the following:
 - After we have defined the manifests for different use-cases, we import them into different top-level stacks depending on a particular use-case.
   For example:
 
-  - Import the `catalog/vpc/ue2.yaml` manifest into the `stacks/mixins/region/us-east-2.yaml` mixin since we need the `vpc`
+  - import the `catalog/vpc/ue2.yaml` manifest into the `stacks/mixins/region/us-east-2.yaml` mixin since we need the `vpc`
     component with the `us-east-2` region-related config provisioned in the region
-  - Import the `catalog/vpc/uw2.yaml` manifest into the `stacks/mixins/region/us-west-2.yaml` mixin since we need the `vpc`
+  - import the `catalog/vpc/uw2.yaml` manifest into the `stacks/mixins/region/us-west-2.yaml` mixin since we need the `vpc`
     component with the `us-west-2` region-related config provisioned in the region
-  - Import the `catalog/vpc/dev.yaml` manifest into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` top-level stack since we need the `vpc`
+  - import the `catalog/vpc/dev.yaml` manifest into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` top-level stack since we need the `vpc`
     component with the dev-related config provisioned in the stack
-  - Import the `catalog/vpc/prod.yaml` manifest into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack since we need the `vpc`
+  - import the `catalog/vpc/prod.yaml` manifest into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack since we need the `vpc`
     component with the prod-related config provisioned in the stack
-  - Import the `catalog/vpc/staging.yaml` manifest into the `stacks/orgs/acme/plat/staging/us-east-2.yaml` top-level stack since we need the `vpc`
+  - import the `catalog/vpc/staging.yaml` manifest into the `stacks/orgs/acme/plat/staging/us-east-2.yaml` top-level stack since we need the `vpc`
     component with the dev-related config provisioned in the stack
-  - Import the `catalog/vpc/disabled.yaml` manifest into a stack where we want the `vpc` component to be disabled (e.g. temporarily until it's needed)
-  - Etc.
+  - import the `catalog/vpc/disabled.yaml` manifest into a stack where we want the `vpc` component to be disabled (e.g. temporarily until it's needed)
+  - etc.
 
 ## Applicability
 

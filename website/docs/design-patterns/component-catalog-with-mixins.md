@@ -33,31 +33,37 @@ The **Component Catalog with Mixins** design pattern prescribes the following:
   - `stacks/catalog/vpc/mixins/org1.yaml` - component manifest with the settings related to the `org1` organization
   - `stacks/catalog/vpc/mixins/org2.yaml` - component manifest with the settings related to the `org2` organization
 
-- After we have defined the manifests for different use-cases, we import them into different top-level stacks depending on a particular use-case.
-  For example:
+- In the component's catalog folder, add manifests for specific environments by assembling the corresponding mixins together (using imports). For
+  example:
 
-  - Import the `catalog/vpc/ue2.yaml` manifest into the `stacks/mixins/region/us-east-2.yaml` mixin since we need the `vpc`
-    component with the `us-east-2` region-related config provisioned in the region
-  - Import the `catalog/vpc/uw2.yaml` manifest into the `stacks/mixins/region/us-west-2.yaml` mixin since we need the `vpc`
-    component with the `us-west-2` region-related config provisioned in the region
-  - Import the `catalog/vpc/dev.yaml` manifest into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` top-level stack since we need the `vpc`
-    component with the dev-related config provisioned in the stack
-  - Import the `catalog/vpc/prod.yaml` manifest into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack since we need the `vpc`
-    component with the prod-related config provisioned in the stack
-  - Import the `catalog/vpc/staging.yaml` manifest into the `stacks/orgs/acme/plat/staging/us-east-2.yaml` top-level stack since we need the `vpc`
-    component with the dev-related config provisioned in the stack
-  - Import the `catalog/vpc/disabled.yaml` manifest into a stack where we want the `vpc` component to be disabled (e.g. temporarily until it's needed)
-  - Etc.
+  - `stacks/catalog/vpc/org1-plat-ue2-dev.yaml` - manifest for the `org1` organization, `plat` tenant, `ue2` region, `dev` account
+  - `stacks/catalog/vpc/org1-plat-ue2-prod.yaml` - manifest for the `org1` organization, `plat` tenant, `ue2` region, `prod` account
+  - `stacks/catalog/vpc/org1-plat-ue2-staging.yaml` - manifest for the `org1` organization, `plat` tenant, `ue2` region, `staging` account
+  - `stacks/catalog/vpc/org1-plat-uw2-dev.yaml` - manifest for the `org1` organization, `plat` tenant, `uw2` region, `dev` account
+  - `stacks/catalog/vpc/org1-plat-uw2-prod.yaml` - manifest for the `org1` organization, `plat` tenant, `uw2` region, `prod` account
+  - `stacks/catalog/vpc/org1-plat-uw2-staging.yaml` - manifest for the `org1` organization, `plat` tenant, `uw2` region, `staging` account
+  - `stacks/catalog/vpc/org2-plat-ue2-dev.yaml` - manifest for the `org2` organization, `plat` tenant, `ue2` region, `dev` account
+  - `stacks/catalog/vpc/org2-plat-ue2-prod.yaml` - manifest for the `org2` organization, `plat` tenant, `ue2` region, `prod` account
+  - `stacks/catalog/vpc/org2-plat-ue2-staging.yaml` - manifest for the `org2` organization, `plat` tenant, `ue2` region, `staging` account
+  - `stacks/catalog/vpc/org2-plat-uw2-dev.yaml` - manifest for the `org2` organization, `plat` tenant, `uw2` region, `dev` account
+  - `stacks/catalog/vpc/org2-plat-uw2-prod.yaml` - manifest for the `org2` organization, `plat` tenant, `uw2` region, `prod` account
+  - `stacks/catalog/vpc/org2-plat-uw2-staging.yaml` - manifest for the `org2` organization, `plat` tenant, `uw2` region, `staging` account
+
+- Import the environment manifests into the top-level stacks. For example:
+
+  - import the `stacks/catalog/vpc/org1-plat-ue2-dev.yaml` manifest into the `stacks/orgs/org1/plat/dev/us-east-2.yaml` top-level stack
+  - import the `stacks/catalog/vpc/org1-plat-ue2-prod.yaml` manifest into the `stacks/orgs/org1/plat/prod/us-east-2.yaml` top-level stack
+  - import the `stacks/catalog/vpc/org1-plat-uw2-staging.yaml` manifest into the `stacks/orgs/org1/plat/staging/us-west-2.yaml` top-level stack
+  - import the `stacks/catalog/vpc/org2-plat-ue2-dev.yaml` manifest into the `stacks/orgs/org2/plat/dev/us-east-2.yaml` top-level stack
+  - etc.
 
 ## Applicability
 
 Use the **Component Catalog** pattern when:
 
-- You have many components that are provisioned into multiple stacks with different configurations for each stack
+- You have components that are provisioned into multiple top-level stacks with different configurations for each stack
 
-- You need to make the components' default configurations reusable across different stacks
-
-- You want the component catalog folders structures to mirror the Terraform components folder structure to make it easy to find and manage
+- You need to make the component configurations reusable across different environments
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
@@ -73,14 +79,10 @@ Use the **Component Catalog** pattern when:
    │       │   ├── prod.yaml
    │       │   ├── ue2.yaml
    │       │   └── uw2.yaml
-   │       └── vpc-flow-logs-bucket
-   │           ├── defaults.yaml
-   │           └── disabled.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
-           ├── vpc
-           └── vpc-flow-logs-bucket
+           └── vpc
 ```
 
 ## Example
@@ -94,13 +96,16 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{tenant}-{environment}-{stage}"
   included_paths:
     # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
   excluded_paths:
-    # Tell Atmos that the `defaults` folder and all sub-folders don't contain top-level stack manifests
-    - "defaults/**/*"
+    # Tell Atmos that all `_defaults.yaml` files are not top-level stack manifests
+    - "**/_defaults.yaml"
+  # If you are using multiple organizations (namespaces), use the following `name_pattern`:
+  name_pattern: "{namespace}-{tenant}-{environment}-{stage}"
+  # If you are using a single organization (namespace), use the following `name_pattern`:
+  # name_pattern: "{tenant}-{environment}-{stage}"
 
 schemas:
   jsonschema:
