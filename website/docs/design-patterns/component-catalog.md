@@ -150,9 +150,14 @@ components:
         max_subnet_count: 3
         map_public_ip_on_launch: true
         dns_hostnames_enabled: true
+        assign_generated_ipv6_cidr_block: false
+        nat_gateway_enabled: true
+        nat_instance_enabled: false
         vpc_flow_logs_enabled: true
         vpc_flow_logs_traffic_type: "ALL"
         vpc_flow_logs_log_destination_type: "s3"
+        nat_eip_aws_shield_protection_enabled: false
+        subnet_type_tag_key: "acme/subnet/type"
 ```
 
 Add the following default configuration to the `stacks/catalog/vpc/ue2.yaml` manifest:
