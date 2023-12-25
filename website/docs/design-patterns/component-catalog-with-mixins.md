@@ -327,17 +327,58 @@ import:
 
 Similarly, assemble the mixins for the other environments.
 
+Import the `stacks/catalog/vpc/org1-plat-ue2-dev.yaml` environment manifest into the `stacks/orgs/org1/plat/dev/us-east-2.yaml` top-level stack:
+
+```yaml title="stacks/orgs/org1/plat/dev/us-east-2.yaml"
+import:
+  - orgs/org1/plat/dev/_defaults
+  - mixins/region/us-east-2
+  - catalog/vpc/org1-plat-ue2-dev
+```
+
+Import the `stacks/catalog/vpc/org1-plat-ue2-prod.yaml` environment manifest into the `stacks/orgs/org1/plat/prod/us-east-2.yaml` top-level stack:
+
+```yaml title="stacks/orgs/org1/plat/prod/us-east-2.yaml"
+import:
+  - orgs/org1/plat/prod/_defaults
+  - mixins/region/us-east-2
+  - catalog/vpc/org1-plat-ue2-prod
+```
+
+Import the `stacks/catalog/vpc/org1-plat-uw2-staging.yaml` environment manifest into the `stacks/orgs/org1/plat/staging/us-west-2.yaml` top-level
+stack:
+
+```yaml title="stacks/orgs/org1/plat/staging/us-west-2.yaml"
+import:
+  - orgs/org1/plat/staging/_defaults
+  - mixins/region/us-west-2
+  - catalog/vpc/org1-plat-uw2-staging
+```
+
+Import the `stacks/catalog/vpc/org2-core-ue2-dev.yaml` environment manifest into the `stacks/orgs/org2/core/dev/us-east-2.yaml` top-level
+stack:
+
+```yaml title="stacks/orgs/org2/core/dev/us-east-2.yaml"
+import:
+  - orgs/org2/core/dev/_defaults
+  - mixins/region/us-east-2
+  - catalog/vpc/org2-core-ue2-dev
+```
+
+Similarly, import the other environment mixins into the corresponding top-level stacks.
+
 ## Benefits
 
 The **Component Catalog with Mixins** pattern provides the following benefits:
+
+- Easy to see where the configuration for each environment is defined
+
+- Easy to manage different variations of the configurations
 
 - The defaults for the components are defined in just one place (in the catalog) making the entire
   configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 - The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
-
-- It's easy to add a new manifest in the component's catalog to enable a new component's feature, then import the manifest into the corresponding
-  stacks where the feature is required
 
 ## Limitations
 
@@ -348,12 +389,12 @@ The **Component Catalog with Mixins** pattern has the following limitations and 
 
 :::note
 
-To address the limitations of the **Component Catalog with Mixins** pattern when you are provisioning a very basic infrastructure, use the following
-patterns:
+To address the limitations of the **Component Catalog with Mixins** design pattern when you are provisioning a very basic infrastructure, consider
+using the following patterns:
 
-- [Component Catalog](/design-patterns/component-catalog)
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
 - [Inline Component Customization](/design-patterns/inline-component-customization)
+- [Component Catalog](/design-patterns/component-catalog)
 
 :::
 

@@ -224,7 +224,7 @@ The **Inline Component Customization** pattern has the following limitations and
 
 :::note
 
-To address the limitations of the **Inline Component Customization** pattern, use the following patterns:
+To address the limitations of the **Inline Component Customization** design pattern, consider using the following patterns:
 
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
 - [Component Catalog](/design-patterns/component-catalog)
