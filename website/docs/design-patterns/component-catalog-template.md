@@ -99,17 +99,17 @@ components:
       vars:
         enabled: true
         tags:
-          Service: { { .app_name } }
-        service_account_name: { { .service_account_name } }
-        service_account_namespace: { { .service_account_namespace } }
+          Service: {{ .app_name }}
+        service_account_name: {{ .service_account_name }}
+        service_account_namespace: {{ .service_account_namespace }}
         # Example of using the Sprig functions in `Go` templates.
         # Refer to https://masterminds.github.io/sprig for more details.
         { { if hasKey . "iam_managed_policy_arns" } }
         iam_managed_policy_arns:
-          { { range $i, $iam_managed_policy_arn := .iam_managed_policy_arns } }
+          {{ range $i, $iam_managed_policy_arn := .iam_managed_policy_arns }}
           - '{{ $iam_managed_policy_arn }}'
-          { { end } }
-        { { - end } }
+          {{ end }}
+        {{ - end }}
 ```
 
 Import `stacks/catalog/eks/iam-role/defaults.tmpl` into a top-level stack, for example `stacks/orgs/acme/plat/prod/us-east-2.yaml`:
