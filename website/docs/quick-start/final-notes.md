@@ -37,7 +37,7 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
           # Inherit the defaults for all VPC components
           inherits:
             - vpc/defaults
-        # Define variables specific to this `vpc-1` component
+        # Define/override variables specific to this `vpc-1` component
         vars:
           name: vpc-1
           ipv4_primary_cidr_block: 10.9.0.0/18
@@ -50,7 +50,7 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
           # Inherit the defaults for all VPC components
           inherits:
             - vpc/defaults
-        # Define variables specific to this `vpc-2` component
+        # Define/override variables specific to this `vpc-2` component
         vars:
           name: vpc-2
           ipv4_primary_cidr_block: 10.10.0.0/18

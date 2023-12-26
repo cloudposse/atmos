@@ -17,7 +17,7 @@ a way that makes conceptual sense. The side effect of this are extremely DRY and
 In Object-Oriented Programming (OOP), Inheritance is the mechanism of basing an object or class upon another object (prototype-based inheritance) or
 class (class-based inheritance), retaining similar implementation.
 
-Similarly, in Atmos, Component Inheritance is the mechanism of deriving a component from one or more base components, inheriting all the
+Similarly, in Atmos, **Component Inheritance** is the mechanism of deriving a component from one or more base components, inheriting all the
 properties of the base component(s) and overriding only some fields specific to the derived component. The derived component acquires all the
 properties of the "parent" component(s), allowing creating very DRY configurations that are built upon existing components.
 
@@ -385,7 +385,7 @@ classDiagram
 
 Hierarchical Inheritance is a combination of Multiple Inheritance and Multilevel Inheritance.
 
-In Hierarchical Inheritance, every component can act as a base component for one or more child (derived) components, and each child component can
+In Hierarchical Inheritance, every component can act as a base component for one or more child (derived) components, and each derived component can
 inherit from one of more base components.
 
 <br/>
