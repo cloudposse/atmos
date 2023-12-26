@@ -53,6 +53,14 @@ Use the **Component Catalog Template** pattern when:
 
 ## Example
 
+Suppose that we have an EKS cluster provisioned in one of the accounts and regions.
+The cluster is running many different applications, each one requires
+an [IAM role for service accounts](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) (IRSA) with permissions
+to access various AWS resources.
+
+The Development team can create a new application anytime, and we need to provision a new IRSA in the EKS cluster.
+We'll use the **Component Catalog Template** design pattern to configure the IAM roles with diffrent settings for each application.
+
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 
 ```yaml title="atmos.yaml"
@@ -79,155 +87,71 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-Add the following configuration to the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` manifest:
+Add the following configuration to the `stacks/catalog/eks/iam-role/defaults.tmpl` `Go` template manifest:
 
-```yaml title="stacks/catalog/vpc-flow-logs-bucket/defaults.yaml"
+```yaml title="stacks/catalog/eks/iam-role/defaults.tmpl"
 components:
   terraform:
-    vpc-flow-logs-bucket:
+    eks/iam-role/{{ .app_name }}:
       metadata:
         # Point to the Terraform component
-        component: vpc-flow-logs-bucket
+        component: eks/iam-role
       vars:
         enabled: true
-        name: "vpc-flow-logs"
-        traffic_type: "ALL"
-        force_destroy: true
-        lifecycle_rule_enabled: false
+        tags:
+          Service: { { .app_name } }
+        service_account_name: { { .service_account_name } }
+        service_account_namespace: { { .service_account_namespace } }
+        # Example of using the Sprig functions in `Go` templates.
+        # Refer to https://masterminds.github.io/sprig for more details.
+        { { if hasKey . "iam_managed_policy_arns" } }
+        iam_managed_policy_arns:
+          { { range $i, $iam_managed_policy_arn := .iam_managed_policy_arns } }
+          - '{{ $iam_managed_policy_arn }}'
+          { { end } }
+        { { - end } }
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/defaults.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc/defaults.yaml"
-components:
-  terraform:
-    vpc:
-      metadata:
-        # Point to the Terraform component
-        component: vpc
-      settings:
-        # All validation steps must succeed to allow the component to be provisioned
-        validation:
-          validate-vpc-component-with-jsonschema:
-            schema_type: jsonschema
-            schema_path: "vpc/validate-vpc-component.json"
-            description: Validate 'vpc' component variables using JSON Schema
-          check-vpc-component-config-with-opa-policy:
-            schema_type: opa
-            schema_path: "vpc/validate-vpc-component.rego"
-            module_paths:
-              - "catalog/constants"
-            description: Check 'vpc' component configuration using OPA policy
-      vars:
-        enabled: true
-        name: "common"
-        max_subnet_count: 3
-        map_public_ip_on_launch: true
-        dns_hostnames_enabled: true
-        assign_generated_ipv6_cidr_block: false
-        nat_gateway_enabled: true
-        nat_instance_enabled: false
-        vpc_flow_logs_enabled: true
-        vpc_flow_logs_traffic_type: "ALL"
-        vpc_flow_logs_log_destination_type: "s3"
-        nat_eip_aws_shield_protection_enabled: false
-        subnet_type_tag_key: "acme/subnet/type"
-```
-
-Add the following default configuration to the `stacks/catalog/vpc/ue2.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc/ue2.yaml"
-import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    vpc:
-      vars:
-        availability_zones:
-          - us-east-2a
-          - us-east-2b
-          - us-east-2c
-```
-
-Add the following default configuration to the `stacks/catalog/vpc/uw2.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc/uw2.yaml"
-import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    vpc:
-      vars:
-        availability_zones:
-          - us-west-2a
-          - us-west-2b
-          - us-west-2c
-```
-
-Add the following default configuration to the `stacks/catalog/vpc/prod.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc/prod.yaml"
-components:
-  terraform:
-    vpc:
-      vars:
-        # In `prod`, don't map public IPs on launch
-        # Override `map_public_ip_on_launch` from the defaults
-        map_public_ip_on_launch: false
-```
-
-Import `stacks/catalog/vpc/ue2.yaml` into the `stacks/mixins/region/us-east-2.yaml` manifest:
-
-```yaml title="stacks/mixins/region/us-east-2.yaml"
-import:
-  # Import the `ue2` manifest with `vpc` configuration for `us-east-2` region
-  - catalog/vpc/ue2
-  # All accounts (stages) in `us-east-2` region will have the `vpc-flow-logs-bucket` component
-  - catalog/vpc-flow-logs-bucket/defaults
-
-vars:
-  region: us-east-2
-  environment: ue2
-
-# Other defaults for the `us-east-2` region
-```
-
-Import `stacks/catalog/vpc/uw2.yaml` into the `stacks/mixins/region/us-west-2.yaml` manifest:
-
-```yaml title="stacks/mixins/region/us-west-2.yaml"
-import:
-  # Import the `uw2` manifest with `vpc` configuration for `us-west-2` region
-  - catalog/vpc/uw2
-  # All accounts (stages) in `us-west-2` region will have the `vpc-flow-logs-bucket` component
-  - catalog/vpc-flow-logs-bucket/defaults
-
-vars:
-  region: us-west-2
-  environment: uw2
-
-# Other defaults for the `us-west-2` region
-```
-
-Import `mixins/region/us-east-2` and `stacks/catalog/vpc/prod.yaml` into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack:
+Import `stacks/catalog/eks/iam-role/defaults.tmpl` into a top-level stack, for example `stacks/orgs/acme/plat/prod/us-east-2.yaml`:
 
 ```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
 import:
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-east-2
-  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
-  - catalog/vpc/prod
+
+  # This import will dynamically generate a new Atmos component `eks/iam-role/admin-ui`
+  - path: catalog/eks/iam-role/defaults.tmpl
+    context:
+      app_name: "admin-ui"
+      service_account_name: "admin-ui"
+      service_account_namespace: "admin"
+      iam_managed_policy_arns: [ "<arn1>", "<arn2>" ]
+
+  # This import will dynamically generate a new Atmos component `eks/iam-role/auth`
+  - path: catalog/eks/iam-role/defaults.tmpl
+    context:
+      app_name: "auth"
+      service_account_name: "auth"
+      service_account_namespace: "auth"
+      iam_managed_policy_arns: [ "<arn3>" ]
+
+  # This import will dynamically generate a new Atmos component `eks/iam-role/payment-processing`
+  - path: catalog/eks/iam-role/defaults.tmpl
+    context:
+      app_name: "payment-processing"
+      service_account_name: "payment-processing"
+      service_account_namespace: "payments"
+      iam_managed_policy_arns: [ "<arn4>", "<arn5>" ]
+
+  # Add new application configurations here
 ```
 
-Import `mixins/region/us-west-2` and `stacks/catalog/vpc/prod.yaml` into the `stacks/orgs/acme/plat/prod/us-west-2.yaml` top-level stack:
+To provision the Atmos components, execute the following commands:
 
-```yaml title="stacks/orgs/acme/plat/prod/us-west-2.yaml"
-import:
-  - orgs/acme/plat/prod/_defaults
-  - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
-  - catalog/vpc/prod
+```shell
+atmos terraform apply eks/iam-role/admin-ui --stack plat-ue2-prod
+atmos terraform apply eks/iam-role/auth -s plat-ue2-prod
+atmos terraform apply eks/iam-role/payment-processing -s plat-ue2-prod
 ```
 
 ## Benefits
