@@ -143,22 +143,22 @@ import:
     # Import the `vpc/defaults` component from the `catalog/vpc/defaults.yaml` manifest
     - catalog/vpc/defaults
 
-  components:
-    terraform:
-      # Atmos component `vpc`
-      vpc:
-        metadata:
-          # Point to the Terraform component in `components/terraform/vpc`
-          component: vpc
-          # Inherit from the `vpc/defaults` Atmos base component
-          # This is Single Inheritance: the Atmos component inherits from one base Atmos component
-          inherits:
-            - vpc/defaults
-        # Define/override variables specific to this `vpc` component
-        vars:
-          name: my-vpc
-          vpc_flow_logs_enabled: false
-          ipv4_primary_cidr_block: 10.9.0.0/18
+components:
+  terraform:
+    # Atmos component `vpc`
+    vpc:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+        # Inherit from the `vpc/defaults` Atmos base component
+        # This is Single Inheritance: the Atmos component inherits from one base Atmos component
+        inherits:
+          - vpc/defaults
+      # Define/override variables specific to this `vpc` component
+      vars:
+        name: my-vpc
+        vpc_flow_logs_enabled: false
+        ipv4_primary_cidr_block: 10.9.0.0/18
 ```
 
 <br/>

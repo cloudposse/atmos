@@ -141,7 +141,7 @@ components:
   terraform:
     vpc:
       metadata:
-        # Point to the Terraform component
+        # Point to the Terraform component in `components/terraform/vpc`
         component: vpc
       vars:
         enabled: true

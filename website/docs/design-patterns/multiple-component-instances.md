@@ -140,34 +140,34 @@ import:
     # Import the defaults for all VPC components
     - catalog/vpc/defaults
 
-  components:
-    terraform:
-      # Atmos component `vpc-1`
-      vpc-1:
-        metadata:
-          # Point to the Terraform component in `components/terraform/vpc`
-          component: vpc
-          # Inherit the defaults for all VPC components
-          inherits:
-            - vpc/defaults
-        # Define/override variables specific to this `vpc-1` component
-        vars:
-          name: vpc-1
-          ipv4_primary_cidr_block: 10.9.0.0/18
+components:
+  terraform:
+    # Atmos component `vpc-1`
+    vpc-1:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+        # Inherit the defaults for all VPC components
+        inherits:
+          - vpc/defaults
+      # Define/override variables specific to this `vpc-1` component
+      vars:
+        name: vpc-1
+        ipv4_primary_cidr_block: 10.9.0.0/18
 
-      # Atmos component `vpc-2`
-      vpc-2:
-        metadata:
-          # Point to the Terraform component in `components/terraform/vpc`
-          component: vpc
-          # Inherit the defaults for all VPC components
-          inherits:
-            - vpc/defaults
-        # Define/override variables specific to this `vpc-2` component
-        vars:
-          name: vpc-2
-          ipv4_primary_cidr_block: 10.10.0.0/18
-          map_public_ip_on_launch: false
+    # Atmos component `vpc-2`
+    vpc-2:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+        # Inherit the defaults for all VPC components
+        inherits:
+          - vpc/defaults
+      # Define/override variables specific to this `vpc-2` component
+      vars:
+        name: vpc-2
+        ipv4_primary_cidr_block: 10.10.0.0/18
+        map_public_ip_on_launch: false
 ```
 
 <br/>

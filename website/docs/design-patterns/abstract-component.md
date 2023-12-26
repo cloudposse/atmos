@@ -7,74 +7,75 @@ description: Abstract Component Atmos Design Pattern
 
 # Abstract Component
 
-The **Abstract Component** pattern prescribes the following:
+The **Abstract Component** pattern describes the mechanism of deriving Atmos components from one or more **abstract** base components (blueprints),
+allowing reusing the base components' configurations and prohibiting the abstract base component from being provisioned.
 
-- For each Terraform component, create a folder with the same name in `stacks/catalog` to make it symmetrical and easy to find.
-  For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
+Atmos supports two types of components:
 
-- In the component's catalog folder, create `defaults.yaml` manifest with all the default values for the component (the defaults that can be reused
-  across multiple environments). Define all the required Atmos sections, e.g. `metadata`, `settings`, `vars`, `env`.
+- `real` - is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance that can be provisioned
 
-- In the component's catalog folder, add other manifests for different combinations of component configurations.
-  We refer to them as feature manifests. Each feature manifest can import the `defaults.yaml` file to reuse the default values and make the entire
-  config DRY. For example:
+- `abstract` - a component configuration, which cannot be instantiated directly. The concept is borrowed
+  from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming.
 
-  - `stacks/catalog/vpc/disabled.yaml` - component manifest with the component disabled (`vars.enabled: false`)
-  - `stacks/catalog/vpc/dev.yaml` - component manifest with the settings related to the `dev` account
-  - `stacks/catalog/vpc/staging.yaml` - component manifest with the settings related to the `staging` account
-  - `stacks/catalog/vpc/prod.yaml` - component manifest with the settings related to the `prod` account
-  - `stacks/catalog/vpc/ue2.yaml` - component manifest with the settings for `us-east-2` region
-  - `stacks/catalog/vpc/uw2.yaml` - component manifest with the settings for `us-west-2` region
-  - `stacks/catalog/vpc/feature-1.yaml` - component manifest with `feature-1` setting enabled
+The type of a component is expressed in the `metadata.type` parameter of a given component configuration.
 
-- After we have defined the manifests for different use-cases, we import them into different top-level stacks depending on a particular use-case.
-  For example:
+:::note
+For more details, refer to:
 
-  - import the `catalog/vpc/ue2.yaml` manifest into the `stacks/mixins/region/us-east-2.yaml` mixin since we need the `vpc`
-    component with the `us-east-2` region-related config provisioned in the region
-  - import the `catalog/vpc/uw2.yaml` manifest into the `stacks/mixins/region/us-west-2.yaml` mixin since we need the `vpc`
-    component with the `us-west-2` region-related config provisioned in the region
-  - import the `catalog/vpc/dev.yaml` manifest into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` top-level stack since we need the `vpc`
-    component with the dev-related config provisioned in the stack
-  - import the `catalog/vpc/prod.yaml` manifest into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack since we need the `vpc`
-    component with the prod-related config provisioned in the stack
-  - import the `catalog/vpc/staging.yaml` manifest into the `stacks/orgs/acme/plat/staging/us-east-2.yaml` top-level stack since we need the `vpc`
-    component with the dev-related config provisioned in the stack
-  - import the `catalog/vpc/disabled.yaml` manifest into a stack where we want the `vpc` component to be disabled (e.g. temporarily until it's needed)
-  - etc.
+- [Atmos Components](/core-concepts/components)
+- [Glossary](/reference/glossary)
+
+:::
 
 ## Applicability
 
 Use the **Abstract Component** pattern when:
 
-- You have many components that are provisioned into multiple stacks with different configurations for each stack
+- You need to have reusable base components that serve as blueprints for the derived Atmos components
 
-- You need to make the components' default configurations reusable across different stacks
+- You need to prevent the abstract base components from being provisioned
 
-- You want the component catalog folders structures to mirror the Terraform components folder structure to make it easy to find and manage
-
-- You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- You need to keep the configuration of all components [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Structure
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── catalog
-   │       ├── vpc
-   │       │   ├── defaults.yaml
-   │       │   ├── disabled.yaml
-   │       │   ├── prod.yaml
-   │       │   ├── ue2.yaml
-   │       │   └── uw2.yaml
-   │       └── vpc-flow-logs-bucket
-   │           ├── defaults.yaml
-   │           └── disabled.yaml
+   │   ├── catalog
+   │   │   └── vpc
+   │   │       └── defaults.yaml
+   │   ├── mixins
+   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   │   └── plat.yaml
+   │   │   ├── region  (region-specific defaults)
+   │   │   │   ├── us-east-2.yaml
+   │   │   │   └── us-west-2.yaml
+   │   │   └── stage  (stage-specific defaults)
+   │   │       ├── dev.yaml
+   │   │       ├── staging.yaml
+   │   │       └── prod.yaml
+   │   └── orgs  (organizations)
+   │       └── acme
+   │           ├── _defaults.yaml
+   │           └── plat ('plat' OU/tenant)
+   │               ├── _defaults.yaml
+   │               ├── dev
+   │               │   ├── _defaults.yaml
+   │               │   ├── us-east-2.yaml
+   │               │   └── us-west-2.yaml
+   │               ├── staging
+   │               │   ├── _defaults.yaml
+   │               │   ├── us-east-2.yaml
+   │               │   └── us-west-2.yaml
+   │               └── prod
+   │                   ├── _defaults.yaml
+   │                   ├── us-east-2.yaml
+   │                   └── us-west-2.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
-           ├── vpc
-           └── vpc-flow-logs-bucket
+           └── vpc
 ```
 
 ## Example
@@ -105,32 +106,17 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-Add the following configuration to the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc-flow-logs-bucket/defaults.yaml"
-components:
-  terraform:
-    vpc-flow-logs-bucket:
-      metadata:
-        # Point to the Terraform component
-        component: vpc-flow-logs-bucket
-      vars:
-        enabled: true
-        name: "vpc-flow-logs"
-        traffic_type: "ALL"
-        force_destroy: true
-        lifecycle_rule_enabled: false
-```
-
-Add the following default configuration to the `stacks/catalog/vpc/defaults.yaml` manifest:
+Add the following configuration for the abstract base component `vpc/defaults` to the `stacks/catalog/vpc/defaults.yaml` manifest:
 
 ```yaml title="stacks/catalog/vpc/defaults.yaml"
 components:
   terraform:
-    vpc:
+    vpc/defaults:
       metadata:
-        # Point to the Terraform component
-        component: vpc
+        # Abstract components can't be provisioned, they just serve as base components (blueprints) for real components
+        # `metadata.type` can be `abstract` or `real`
+        # `real` is the default and can be omitted
+        type: abstract
       settings:
         # All validation steps must succeed to allow the component to be provisioned
         validation:
@@ -158,137 +144,78 @@ components:
         vpc_flow_logs_log_destination_type: "s3"
         nat_eip_aws_shield_protection_enabled: false
         subnet_type_tag_key: "acme/subnet/type"
-        ipv4_primary_cidr_block: 10.9.0.0/18
+        ipv4_primary_cidr_block: 10.0.0.0/18
 ```
 
-Add the following default configuration to the `stacks/catalog/vpc/ue2.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc/ue2.yaml"
-import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    vpc:
-      vars:
-        availability_zones:
-          - us-east-2a
-          - us-east-2b
-          - us-east-2c
-```
-
-Add the following default configuration to the `stacks/catalog/vpc/uw2.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc/uw2.yaml"
-import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    vpc:
-      vars:
-        availability_zones:
-          - us-west-2a
-          - us-west-2b
-          - us-west-2c
-```
-
-Add the following default configuration to the `stacks/catalog/vpc/prod.yaml` manifest:
-
-```yaml title="stacks/catalog/vpc/prod.yaml"
-components:
-  terraform:
-    vpc:
-      vars:
-        # In `prod`, don't map public IPs on launch
-        # Override `map_public_ip_on_launch` from the defaults
-        map_public_ip_on_launch: false
-```
-
-Import `stacks/catalog/vpc/ue2.yaml` into the `stacks/mixins/region/us-east-2.yaml` manifest:
-
-```yaml title="stacks/mixins/region/us-east-2.yaml"
-import:
-  # Import the `ue2` manifest with `vpc` configuration for `us-east-2` region
-  - catalog/vpc/ue2
-  # All accounts (stages) in `us-east-2` region will have the `vpc-flow-logs-bucket` component
-  - catalog/vpc-flow-logs-bucket/defaults
-
-vars:
-  region: us-east-2
-  environment: ue2
-
-# Other defaults for the `us-east-2` region
-```
-
-Import `stacks/catalog/vpc/uw2.yaml` into the `stacks/mixins/region/us-west-2.yaml` manifest:
-
-```yaml title="stacks/mixins/region/us-west-2.yaml"
-import:
-  # Import the `uw2` manifest with `vpc` configuration for `us-west-2` region
-  - catalog/vpc/uw2
-  # All accounts (stages) in `us-west-2` region will have the `vpc-flow-logs-bucket` component
-  - catalog/vpc-flow-logs-bucket/defaults
-
-vars:
-  region: us-west-2
-  environment: uw2
-
-# Other defaults for the `us-west-2` region
-```
-
-Import `mixins/region/us-east-2` and `stacks/catalog/vpc/prod.yaml` into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack:
+Configure the `vpc` Atmos component in the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack. The `vpc` component inherits from
+the `vpc/defaults` abstract base component:
 
 ```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
 import:
-  - orgs/acme/plat/prod/_defaults
-  - mixins/region/us-east-2
-  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
-  - catalog/vpc/prod
+  import:
+    - orgs/acme/plat/prod/_defaults
+    - mixins/region/us-east-2
+    # Import the `vpc/defaults` component from the `catalog/vpc/defaults.yaml` manifest
+    - catalog/vpc/defaults
+
+components:
+  terraform:
+    # Atmos component `vpc`
+    vpc:
+      metadata:
+        # `metadata.type` can be `abstract` or `real`
+        # `real` is the default and can be omitted
+        # Real components can be provisioned
+        type: real
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+        # Inherit from the `vpc/defaults` Atmos base component
+        # This is Single Inheritance: the Atmos component inherits from one base Atmos component
+        inherits:
+          - vpc/defaults
+      # Define/override variables specific to this `vpc` component
+      vars:
+        name: my-vpc
+        vpc_flow_logs_enabled: false
+        ipv4_primary_cidr_block: 10.9.0.0/18
 ```
 
-Import `mixins/region/us-west-2` and `stacks/catalog/vpc/prod.yaml` into the `stacks/orgs/acme/plat/prod/us-west-2.yaml` top-level stack:
+<br/>
 
-```yaml title="stacks/orgs/acme/plat/prod/us-west-2.yaml"
-import:
-  - orgs/acme/plat/prod/_defaults
-  - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
-  - catalog/vpc/prod
+To provision the `vpc` component into the `plat-ue2-prod` top-level stack, execute the following command:
+
+```shell
+atmos terraform apply vpc -s plat-ue2-prod
+```
+
+If you try to execute the following commands to provision the `vpc/defaults` abstract base component:
+
+```shell
+atmos terraform plan vpc/defaults -s plat-ue2-prod
+atmos terraform apply vpc/defaults -s plat-ue2-prod
+```
+
+the following error will be thrown:
+
+```console
+abstract component 'vpc/defaults' cannot be provisioned since it's explicitly prohibited from 
+being deployed by 'metadata.type: abstract' attribute
 ```
 
 ## Benefits
 
 The **Abstract Component** pattern provides the following benefits:
 
-- The defaults for the components are defined in just one place (in the catalog) making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- Allows creating very DRY and reusable configurations that are built upon existing abstract base components (blueprints)
 
-- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
+- Prevents the abstract base components from being provisioned
 
-- It's easy to add a new manifest in the component's catalog to enable a new component's feature, then import the manifest into the corresponding
-  stacks where the feature is required
-
-## Limitations
-
-The **Abstract Component** pattern has the following limitations and drawbacks:
-
-- Although it's always recommended to use, the catalog structure described by the pattern can be complex for basic infrastructures,
-  e.g. for a very simple organizational structure (one organization and OU), and just a few components deployed into a few accounts and regions
-
-:::note
-
-To address the limitations of the **Abstract Component** design pattern when you are provisioning a very basic infrastructure, use the following
-patterns:
-
-- [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Inline Component Customization](/design-patterns/inline-component-customization)
-
-:::
+- The `metadata.type: abstract` attribute serves as a guard against accidentally deploying the components that are not meant to be deployed
 
 ## Related Patterns
 
 - [Component Inheritance](/design-patterns/component-inheritance)
+- [Multiple Component Instances](/design-patterns/multiple-component-instances)
 - [Component Catalog](/design-patterns/component-catalog)
 - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
 - [Component Catalog Template](/design-patterns/component-catalog-template)
