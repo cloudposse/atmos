@@ -117,6 +117,26 @@ components:
           - us-west-2c
 ```
 
+In the `stacks/catalog/vpc/dev.yaml` file, add the following manifest for the `vpc` Atmos component:
+
+```yaml title="stacks/catalog/vpc/dev.yaml"
+components:
+  terraform:
+    vpc:
+      vars:
+        ipv4_primary_cidr_block: 10.7.0.0/18
+```
+
+In the `stacks/catalog/vpc/staging.yaml` file, add the following manifest for the `vpc` Atmos component:
+
+```yaml title="stacks/catalog/vpc/staging.yaml"
+components:
+  terraform:
+    vpc:
+      vars:
+        ipv4_primary_cidr_block: 10.9.0.0/18
+```
+
 In the `stacks/catalog/vpc/prod.yaml` file, add the following manifest for the `vpc` Atmos component:
 
 ```yaml title="stacks/catalog/vpc/prod.yaml"
@@ -124,7 +144,9 @@ components:
   terraform:
     vpc:
       vars:
+        ipv4_primary_cidr_block: 10.8.0.0/18
         # In `prod`, don't map public IPs on launch
+        # Override `map_public_ip_on_launch` from the defaults
         map_public_ip_on_launch: false
 ```
 
@@ -416,6 +438,8 @@ In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, add the following config:
 import:
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
+  # Override the `vpc` component configuration for `dev` by importing the `catalog/vpc/dev` manifest
+  - catalog/vpc/dev
 ```
 
 In the file, we import the region mixin and the defaults for the Organization, OU and account (using hierarchical imports).
@@ -440,6 +464,8 @@ Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2`
 import:
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-west-2
+  # Override the `vpc` component configuration for `dev` by importing the `catalog/vpc/dev` manifest
+  - catalog/vpc/dev
 ```
 
 In `stacks/orgs/acme/plat/staging/us-east-2.yaml`, add the following config:
@@ -448,6 +474,8 @@ In `stacks/orgs/acme/plat/staging/us-east-2.yaml`, add the following config:
 import:
   - orgs/acme/plat/staging/_defaults
   - mixins/region/us-east-2
+  # Override the `vpc` component configuration for `staging` by importing the `catalog/vpc/staging` manifest
+  - catalog/vpc/staging
 ```
 
 Similarly, create the top-level Atmos stack for the `staging` account in `us-west-2` region:
@@ -456,6 +484,8 @@ Similarly, create the top-level Atmos stack for the `staging` account in `us-wes
 import:
   - orgs/acme/plat/staging/_defaults
   - mixins/region/us-west-2
+  # Override the `vpc` component configuration for `staging` by importing the `catalog/vpc/staging` manifest
+  - catalog/vpc/staging
 ```
 
 In `stacks/orgs/acme/plat/prod/us-east-2.yaml`, add the following config:
@@ -467,7 +497,7 @@ In `stacks/orgs/acme/plat/prod/us-east-2.yaml`, add the following config:
 import:
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-east-2
-  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
+  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
   - catalog/vpc/prod
 ```
 
@@ -479,6 +509,6 @@ Similarly, create the top-level Atmos stack for the `prod` account in `us-west-2
 import:
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `prod` by importing the `vpc/prod` manifest
+  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
   - catalog/vpc/prod
 ```
