@@ -104,7 +104,7 @@ components:
         service_account_namespace: {{ .service_account_namespace }}
         # Example of using the Sprig functions in `Go` templates.
         # Refer to https://masterminds.github.io/sprig for more details.
-        { { if hasKey . "iam_managed_policy_arns" } }
+        {{ if hasKey . "iam_managed_policy_arns" }}
         iam_managed_policy_arns:
           {{ range $i, $iam_managed_policy_arn := .iam_managed_policy_arns }}
           - '{{ $iam_managed_policy_arn }}'
@@ -112,7 +112,8 @@ components:
         {{ - end }}
 ```
 
-Import `stacks/catalog/eks/iam-role/defaults.tmpl` into a top-level stack, for example `stacks/orgs/acme/plat/prod/us-east-2.yaml`:
+Import the `stacks/catalog/eks/iam-role/defaults.tmpl` manifest template into a top-level stack, 
+for example `stacks/orgs/acme/plat/prod/us-east-2.yaml`, and provide the configuration for each application in the `context` object:
 
 ```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
 import:
@@ -146,7 +147,7 @@ import:
   # Add new application configurations here
 ```
 
-To provision the Atmos components, execute the following commands:
+To provision the Atmos components into the stack, execute the following commands:
 
 ```shell
 atmos terraform apply eks/iam-role/admin-ui --stack plat-ue2-prod
