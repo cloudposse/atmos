@@ -82,6 +82,7 @@ components:
         vpc_flow_logs_log_destination_type: "s3"
         nat_eip_aws_shield_protection_enabled: false
         subnet_type_tag_key: "acme/subnet/type"
+        ipv4_primary_cidr_block: 10.9.0.0/18
 ```
 
 In the `stacks/catalog/vpc/ue2.yaml` file, add the following manifest for the `vpc` Atmos component:

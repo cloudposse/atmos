@@ -9,9 +9,9 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
 - Terraform components can be in different sub-folders in the `components/terraform` directory. The sub-folders can be organized by type, by teams
   that are responsible for the components, by operations that are performed on the components, or by any other category
 
-- Atmos stacks can have arbitrary names and can be located in any sub-folder in the `stacks` directory. Atmos stack filesystem layout is for people to
-  better organize the stacks and make the configurations DRY. Atmos (the CLI) does not care about the filesystem layout, all it cares about is how
-  to find the stacks and the components in the stacks by using the context variables `namespace`, `tenant`, `environment` and `stage`
+- Atmos stack manifests can have arbitrary names and can be located in any sub-folder in the `stacks` directory. Atmos stack filesystem layout is for
+  people to better organize the stacks and make the configurations DRY. Atmos (the CLI) does not care about the filesystem layout, all it cares about
+  is how to find the stacks and the components in the stacks by using the context variables `namespace`, `tenant`, `environment` and `stage`
 
 - An Atmos component can have any name different from the Terraform component name. For example, two different Atmos components `vpc-1` and `vpc-2`
   can provide configuration for the same Terraform component `vpc`
@@ -22,8 +22,8 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
 
   ```yaml
   import:
-    - mixins/region/us-east-2
     - orgs/acme/plat/dev/_defaults
+    - mixins/region/us-east-2
     # Import the defaults for all VPC components
     - catalog/vpc/defaults
 

@@ -157,6 +157,7 @@ components:
         vpc_flow_logs_log_destination_type: "s3"
         nat_eip_aws_shield_protection_enabled: false
         subnet_type_tag_key: "acme/subnet/type"
+        ipv4_primary_cidr_block: 10.9.0.0/18
 ```
 
 Add the following configuration to the `stacks/catalog/vpc/mixins/ue2.yaml` manifest:
@@ -192,7 +193,8 @@ components:
   terraform:
     vpc:
       vars:
-        # Override `max_subnet_count` and `vpc_flow_logs_enabled` from the defaults
+        # Override `ipv4_primary_cidr_block`, `max_subnet_count` and `vpc_flow_logs_enabled` from the defaults
+        ipv4_primary_cidr_block: 10.7.0.0/18
         # In `dev`, use only 2 subnets
         max_subnet_count: 2
         # In `dev`, disable the VPC flow logs
@@ -206,7 +208,8 @@ components:
   terraform:
     vpc:
       vars:
-        # Override `map_public_ip_on_launch` and `assign_generated_ipv6_cidr_block` from the defaults
+        # Override `ipv4_primary_cidr_block`, `map_public_ip_on_launch` and `assign_generated_ipv6_cidr_block` from the defaults
+        ipv4_primary_cidr_block: 10.8.0.0/18
         # In `prod`, don't map public IPs on launch
         map_public_ip_on_launch: false
         # In `prod`, use IPv6
@@ -220,7 +223,8 @@ components:
   terraform:
     vpc:
       vars:
-        # Override `max_subnet_count` and `map_public_ip_on_launch` from the defaults
+        # Override `ipv4_primary_cidr_block`, `max_subnet_count` and `map_public_ip_on_launch` from the defaults
+        ipv4_primary_cidr_block: 10.9.0.0/18
         # In `staging`, use only 2 subnets
         max_subnet_count: 2
         # In `staging`, don't map public IPs on launch
