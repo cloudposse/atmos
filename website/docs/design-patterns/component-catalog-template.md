@@ -43,7 +43,7 @@ Use the **Component Catalog Template** pattern when:
    │   └── catalog
    │       └── eks
    │           └── iam-role
-   │               └── component.tmpl
+   │               └── defaults.tmpl
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
@@ -234,25 +234,23 @@ import:
 
 The **Component Catalog Template** pattern provides the following benefits:
 
-- The defaults for the components are defined in just one place (in the catalog) making the entire
+- All settings for a component are defined in just one place (in the component's template) making the entire
   configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
+- Many instances of the component can be provisioned without repeating all the configuration values
 
-- It's easy to add a new manifest in the component's catalog to enable a new component's feature, then import the manifest into the corresponding
-  stacks where the feature is required
+- New Atmos components are generated dynamically
 
 ## Limitations
 
 The **Component Catalog Template** pattern has the following limitations and drawbacks:
 
-- Although it's always recommended to use, the catalog structure described by the pattern can be complex for basic infrastructures,
-  e.g. for a very simple organizational structure (one organization and OU), and just a few components deployed into a few accounts and regions
+- Since new Atmos components are generated dynamically, sometimes it's not easy to know the names of the Atmos components that need to be provisioned
+  without looking at the `Go` template and figuring out all the Atmos component names
 
 :::note
 
-To address the limitations of the **Component Catalog Template** design pattern when you are provisioning a very basic infrastructure, use the
-following patterns:
+To address the limitations of the **Component Catalog Template** design pattern, consider using the following patterns:
 
 - [Component Catalog](/design-patterns/component-catalog)
 - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
