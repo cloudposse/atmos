@@ -1,6 +1,6 @@
 ---
 title: Abstract Component Atmos Design Pattern
-sidebar_position: 10
+sidebar_position: 9
 sidebar_label: Abstract Component
 description: Abstract Component Atmos Design Pattern
 ---

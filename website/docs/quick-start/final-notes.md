@@ -13,8 +13,8 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
   people to better organize the stacks and make the configurations DRY. Atmos (the CLI) does not care about the filesystem layout, all it cares about
   is how to find the stacks and the components in the stacks by using the context variables `namespace`, `tenant`, `environment` and `stage`
 
-- An Atmos component can have any name different from the Terraform component name. For example, two different Atmos components `vpc-1` and `vpc-2`
-  can provide configuration for the same Terraform component `vpc`
+- An Atmos component can have any name that can be different from the Terraform component name. For example, two different Atmos components `vpc-1`
+  and `vpc-2` can provide configuration for the same Terraform component `vpc`
 
 - We can provision more than one instance of the same Terraform component (with the same or different settings) into the same environment by defining
   many Atmos components that provide configuration for the Terraform component. For example, the following config shows how to define two Atmos

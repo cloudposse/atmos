@@ -1,50 +1,62 @@
 ---
 title: Multiple Component Instances Atmos Design Pattern
-sidebar_position: 8
+sidebar_position: 10
 sidebar_label: Multiple Component Instances
 description: Multiple Component Instances Atmos Design Pattern
 ---
 
 # Multiple Component Instances
 
-Atmos provides unlimited flexibility in defining and configuring stacks and components in the stacks.
+The **Multiple Component Instances** pattern describes how to provision many instances of a Terraform component in the same environment by
+configuring multiple Atmos component instances.
 
-- Terraform components can be in different sub-folders in the `components/terraform` directory. The sub-folders can be organized by type, by teams
-  that are responsible for the components, by operations that are performed on the components, or by any other category
+An Atmos component can have any name that can be different from the Terraform component name. More than one instance of the same Terraform component
+(with the same or different settings) can be provisioned into the same environment by defining multiple Atmos components that provide configuration
+for the Terraform component.
 
-- Atmos stack manifests can have arbitrary names and can be located in any sub-folder in the `stacks` directory. Atmos stack filesystem layout is for
-  people to better organize the stacks and make the configurations DRY. Atmos (the CLI) does not care about the filesystem layout, all it cares about
-  is how to find the stacks and the components in the stacks by using the context variables `namespace`, `tenant`, `environment` and `stage`
-
-- An Atmos component can have any name different from the Terraform component name. For example, two different Atmos components `vpc-1` and `vpc-2`
-  can provide configuration for the same Terraform component `vpc`
-
-- We can provision more than one instance of the same Terraform component (with the same or different settings) into the same environment by defining
-  many Atmos components that provide configuration for the Terraform component. For example, the following config shows how to define two Atmos
-  components, `vpc-1` and `vpc-2`, which both point to the same Terraform component `vpc`:
-
-The **Multiple Component Instances** pattern prescribes the following:
-
-- For each Terraform component, create a folder with the same name in `stacks/catalog` to make it symmetrical and easy to find.
-  For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
-
-- In the component's catalog folder, create `defaults.yaml` manifest with all the default values for the component (the defaults that can be reused
-  across multiple environments). Define all the required Atmos sections, e.g. `metadata`, `settings`, `vars`, `env`.
+For example, two different Atmos components `vpc-1` and `vpc-2` can provide configuration for the same Terraform component `vpc`.
 
 ## Applicability
 
 Use the **Multiple Component Instances** pattern when:
 
-- You have many components that are provisioned into multiple stacks with different configurations for each stack
+- You need to provision multiple instances of a Terraform component in the same environment (organization, OU, account, region)
 
 ## Structure
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── catalog
-   │       └── vpc
-   │           └── defaults.yaml
+   │   ├── catalog
+   │   │   └── vpc
+   │   │       └── defaults.yaml
+   │   ├── mixins
+   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   │   └── plat.yaml
+   │   │   ├── region  (region-specific defaults)
+   │   │   │   ├── us-east-2.yaml
+   │   │   │   └── us-west-2.yaml
+   │   │   └── stage  (stage-specific defaults)
+   │   │       ├── dev.yaml
+   │   │       ├── staging.yaml
+   │   │       └── prod.yaml
+   │   └── orgs  (organizations)
+   │       └── acme
+   │           ├── _defaults.yaml
+   │           └── plat ('plat' OU/tenant)
+   │               ├── _defaults.yaml
+   │               ├── dev
+   │               │   ├── _defaults.yaml
+   │               │   ├── us-east-2.yaml
+   │               │   └── us-west-2.yaml
+   │               ├── staging
+   │               │   ├── _defaults.yaml
+   │               │   ├── us-east-2.yaml
+   │               │   └── us-west-2.yaml
+   │               └── prod
+   │                   ├── _defaults.yaml
+   │                   ├── us-east-2.yaml
+   │                   └── us-west-2.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
@@ -86,8 +98,8 @@ components:
   terraform:
     vpc/defaults:
       metadata:
-        # Point to the Terraform component
-        component: vpc
+        # Abstract components can't be provisioned and serve as base components (blueprints) for real components
+        type: abstract
       settings:
         # All validation steps must succeed to allow the component to be provisioned
         validation:
@@ -115,15 +127,15 @@ components:
         vpc_flow_logs_log_destination_type: "s3"
         nat_eip_aws_shield_protection_enabled: false
         subnet_type_tag_key: "acme/subnet/type"
-        ipv4_primary_cidr_block: 10.9.0.0/18
+        ipv4_primary_cidr_block: 10.0.0.0/18
 ```
 
 Configure multiple `vpc` component instances in the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack:
 
-```yaml title="stacks/orgs/acme/plat/prod/us-west-2.yaml"
+```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
 import:
   import:
-    - orgs/acme/plat/dev/_defaults
+    - orgs/acme/plat/prod/_defaults
     - mixins/region/us-east-2
     # Import the defaults for all VPC components
     - catalog/vpc/defaults
@@ -155,6 +167,29 @@ import:
         vars:
           name: vpc-2
           ipv4_primary_cidr_block: 10.10.0.0/18
+          map_public_ip_on_launch: false
+```
+
+<br/>
+
+To provision the components into the stack, execute the following commands:
+
+```shell
+atmos terraform apply vpc-1 -s plat-ue2-prod
+atmos terraform apply vpc-2 -s plat-ue2-prod
+```
+
+The provisioned VPCs will have the following names:
+
+```console
+acme-plat-ue2-prod-vpc-1
+acme-plat-ue2-prod-vpc-2
+```
+
+The names are generated from the context using the following template:
+
+```console
+{namespace}-{tenant}-{environment}-{stage}-{name}
 ```
 
 ## Benefits
@@ -163,12 +198,10 @@ The **Multiple Component Instances** pattern provides the following benefits:
 
 - Separation of the code (Terraform component) from the configuration (Atmos components)
 
-- The same Terraform component code is reused by multiple Atmos component instances with different configurations
+- The same Terraform code is reused by multiple Atmos component instances with different configurations
 
-- The defaults for the components are defined in just one place (in the catalog) making the entire
+- The defaults for the components are defined in just one place making the entire
   configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-- The defaults for the components are reusable across many environments by using [imports](/core-concepts/stacks/imports)
 
 ## Related Patterns
 
