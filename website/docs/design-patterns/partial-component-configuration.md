@@ -7,14 +7,14 @@ description: Partial Component Configuration Atmos Design Pattern
 
 # Partial Component Configuration
 
-The **Partial Component Configuration** design pattern describes the mechanism of splitting an Atmos component configuration across many Atmos
+The **Partial Component Configuration** design pattern describes the mechanism of splitting an Atmos component's configuration across many Atmos
 manifests to manage, modify and apply them separately and independently in one top-level stack without affecting the others.
 
 The mechanism is similar to [Partial Classes in
 C#](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
 
 This is not the same as Atmos [Component Inheritance](/core-concepts/components/inheritance) where more than one Atmos component
-takes part in the inheritance chain. The **Partial Component Configuration** pattern deals with one Atmos component with its configuration split
+takes part in the inheritance chain. The **Partial Component Configuration** pattern deals with just one Atmos component with its configuration split
 across a few configuration files.
 
 :::note
@@ -30,13 +30,12 @@ Variations of the **Partial Component Configuration** design pattern were also i
 
 Use the **Partial Component Configuration** pattern when:
 
-- You have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region)
+- You have a component with a complex configuration. Some parts of the configuration must be managed and modified independently of the other parts
+  of the component's configuration
 
-- New instances of the component with different settings can be configured and provisioned anytime
+- Different parts of the component's configuration can be applied to different stacks independently of the other stacks
 
-- The old instances of the component must be kept unchanged and never destroyed
-
-- You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- You want to keep the parts of the configuration reusable and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Structure
 
@@ -60,7 +59,9 @@ Use the **Partial Component Configuration** pattern when:
 
 ## Example
 
-Suppose that we have EKS clusters provisioned in many accounts and regions.
+Suppose that we have EKS clusters provisioned in many accounts and regions. The clusters can run different Kubernetes versions.
+Each cluster will need to be upgraded to the next Kubernetes version independently without affecting the configurations for the other clusters in
+the other accounts and regions.
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 
@@ -209,30 +210,12 @@ clusters in the other accounts and regions will stay at the current Kubernetes v
 
 The **Partial Component Configuration** pattern provides the following benefits:
 
-- All settings for a component are defined in just one place (in the component's template) making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- Allows managing components with complex configurations where some parts of the configurations must be managed and modified independently of the
+  other parts
 
-- Many instances of the component can be provisioned without repeating all the configuration values
+- Different parts of component' configurations can be applied to different stacks independently of the other stacks
 
-- New Atmos components are generated dynamically
-
-## Limitations
-
-The **Partial Component Configuration** pattern has the following limitations and drawbacks:
-
-- Since new Atmos components are generated dynamically, sometimes it's not easy to know the names of the Atmos components that need to be provisioned
-  without looking at the `Go` template and figuring out all the Atmos component names
-
-:::note
-
-To address the limitations of the **Component Catalog Template** design pattern, consider the following patterns:
-
-- [Component Catalog](/design-patterns/component-catalog)
-- [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
-- [Component Catalog Template](/design-patterns/component-catalog-template)
-- [Component Inheritance](/design-patterns/component-inheritance)
-
-:::
+- Allows keeping the parts of the configurations reusable and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Related Patterns
 
