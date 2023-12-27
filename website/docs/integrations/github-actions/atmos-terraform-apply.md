@@ -27,7 +27,7 @@ In the following screenshot, we see a successful "apply" Job Summary report. The
 
 ![Example Image](/img/github-actions/apply.png)
 
-## Usage Example
+## Usage
 
 :::tip Passing Affected Stacks
 
