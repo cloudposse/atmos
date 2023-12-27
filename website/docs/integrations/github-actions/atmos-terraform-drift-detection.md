@@ -46,7 +46,7 @@ stateDiagram-v2
     apply --> close
     close --> [*]
 
-    state "Retrieve Terraform Plan" as plan
+    state "Retrieve Terraform Plan" as fetch
     state "Atmos Terraform Apply" as apply
     state "Close GitHub Issue" as close
   }
