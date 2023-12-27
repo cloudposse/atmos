@@ -16,6 +16,8 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 * **No hardcoded credentials.** Use GitHub OIDC to assume roles.
 * **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility. 
 * **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments
+* **Automated Drift Detection** Regularly check and track all resources for drift.
+* **Free Tier GitHub** Use GitHub Issues to track drifted resources.
 * **100% Open Source with Permissive APACHE2 License** means you have no expensive subscriptions or long-term commitments.
 
 ## Usage
