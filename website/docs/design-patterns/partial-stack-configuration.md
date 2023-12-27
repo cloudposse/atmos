@@ -7,24 +7,8 @@ description: Partial Stack Configuration Atmos Design Pattern
 
 # Partial Stack Configuration
 
-The **Partial Stack Configuration** design pattern describes the mechanism of splitting an Atmos component's configuration across many Atmos
-manifests to manage, modify and apply them separately and independently in one top-level stack without affecting the others.
-
-The mechanism is similar to [Partial Classes in
-C#](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
-
-This is not the same as Atmos [Component Inheritance](/core-concepts/components/inheritance) where more than one Atmos components
-take part in the inheritance chain. The **Partial Stack Configuration** pattern deals with just one Atmos component with its configuration split
-across a few configuration files.
-
-:::note
-
-Variations of the **Partial Stack Configuration** design pattern were also implemented and described in the following patterns:
-
-- [Component Catalog](/design-patterns/component-catalog)
-- [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
-
-:::
+The **Partial Stack Configuration** design pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
+manifests to manage, modify and apply them separately and independently.
 
 ## Applicability
 
@@ -65,13 +49,7 @@ Use the **Partial Stack Configuration** pattern when:
    │               │   ├── us-east-2.yaml
    │               │   └── us-west-2.yaml
    │               ├── staging
-   │               │   ├── _defaults.yaml
-   │               │   ├── us-east-2.yaml
-   │               │   └── us-west-2.yaml
    │               └── prod
-   │                   ├── _defaults.yaml
-   │                   ├── us-east-2.yaml
-   │                   └── us-west-2.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
