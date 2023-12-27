@@ -215,7 +215,7 @@ The **Partial Component Configuration** pattern provides the following benefits:
 
 - Different parts of component' configurations can be applied to different stacks independently of the other stacks
 
-- Allows keeping the parts of the configurations reusable and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- Allows keeping the parts of the configurations reusable across many stacks and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Related Patterns
 
