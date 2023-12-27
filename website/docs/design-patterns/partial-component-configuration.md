@@ -7,10 +7,15 @@ description: Partial Component Configuration Atmos Design Pattern
 
 # Partial Component Configuration
 
-The **Partial Component Configuration** design pattern is used when you have an unbounded number of a component's instances provisioned in one
-environment
-(the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old
-instances must be kept unchanged and never destroyed.
+The **Partial Component Configuration** design pattern describes the mechanism of splitting an Atmos component configuration across many Atmos
+manifests to manage, modify and apply them separately and independently in one top-level stack without affecting the others.
+
+The mechanism is similar to [Partial Classes in
+C#](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
+
+This is not the same as Atmos [Component Inheritance](/core-concepts/components/inheritance) where more than one Atmos component
+takes part in the inheritance chain. The **Partial Component Configuration** pattern deals with one Atmos component with its configuration split
+across a few configuration files.
 
 :::note
 
@@ -185,7 +190,7 @@ import:
   - catalog/eks/clusters/mixins/k8s-1-27
 ```
 
-Provision the component in the stack by running the following command:
+Provision the component in the stack by executing the following command:
 
 ```shell
 atmos terraform apply eks/cluster -s plat-ue2-prod
