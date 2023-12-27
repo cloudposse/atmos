@@ -15,9 +15,9 @@ Atmos supports two types of components:
 - `real` - is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance that can be provisioned
 
 - `abstract` - a component configuration, which cannot be instantiated directly. The concept is borrowed
-  from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming.
+  from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming
 
-The type of a component is expressed in the `metadata.type` parameter of a given component configuration.
+The type of component is expressed in the `metadata.type` parameter of a given component configuration.
 
 :::note
 For more details, refer to:

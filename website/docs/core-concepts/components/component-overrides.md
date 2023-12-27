@@ -6,7 +6,7 @@ description: Use the 'overrides' pattern to modify component(s) configuration an
 id: overrides
 ---
 
-Atmos supports the __overrides__ pattern to modify component(s) configuration and behavior using the `overrides` section in Atmos stack manifests.
+Atmos supports the **overrides** pattern to modify component(s) configuration and behavior using the `overrides` section in Atmos stack manifests.
 
 You can override the following sections in the component(s) configuration:
 
@@ -65,13 +65,13 @@ supported by Atmos
 
 ## Use-case: Overrides for Teams
 
-The __overrides__ pattern is used to override the components only in a particular Atmos stack manifest and all the imported
+The **overrides** pattern is used to override the components only in a particular Atmos stack manifest and all the imported
 manifests. This is different from the other configuration sections (e.g. `vars`, `settings`, `env`). If we define a `vars`, `settings` or `env`
 section at the global, Terraform or Helmfile levels, all the components in the top-level stack will get the updated configurations. On
 the other hand, if we define an `overrides` section in a stack manifest, only the components directly defined in the manifest and its imports will get
 the overridden values, not all the components in the top-level Atmos stack.
 
-This is especially useful when you have Atmos stack manifests split per Teams; each Team manages a set of components, and you need to define a common
+This is especially useful when you have Atmos stack manifests split per Teams. Each Team manages a set of components, and you need to define a common
 configuration (or override the existing one) for the components that only a particular Team manages.
 
 For example, we have two Teams: `devops` and `testing`.
