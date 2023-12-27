@@ -100,3 +100,6 @@ stateDiagram-v2
   state "Atmos Terraform Plan (Composite Action) - Component 9" as component9
 ```
 
+## Requirements
+
+This action has the same requirements as [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan). Use the same S3 Bucket, DynamoDB table, and IAM Roles created with the requirements described there.

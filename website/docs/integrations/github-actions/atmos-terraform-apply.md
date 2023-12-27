@@ -82,6 +82,6 @@ with the following configuration as an example:
 ```
 
 
-### Requirements
+## Requirements
 
 This action has the same requirements as [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan). Use the same S3 Bucket, DynamoDB table, and IAM Roles created with the requirements described there.

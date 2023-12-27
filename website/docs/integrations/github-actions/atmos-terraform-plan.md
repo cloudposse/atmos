@@ -91,14 +91,14 @@ with the following configuration as an example:
   terraform-version: 1.5.2
 ```
 
-### Requirements
+## Requirements
 
 This GitHub Action depends on a few resources:
 * **S3 bucket** for storing planfiles
 * **DynamoDB table** for retrieving metadata about planfiles
 * **2x IAM roles** for "planning" and accessing the "state" bucket
 
-#### S3 Bucket
+### S3 Bucket
 
 This action can use any S3 Bucket to keep track of your planfiles. Just ensure the bucket is properly locked down since planfiles may contain secrets.
 
@@ -124,7 +124,7 @@ components:
 
 Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
 
-#### DynamoDB Table
+### DynamoDB Table
 
 Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://docs.cloudposse.com/components/library/aws/dynamodb/). Set the **Hash Key** and create a **Global Secondary Index** as follows:
 
@@ -168,7 +168,7 @@ components:
 
 Pass the ARN of this table as the input to the `terraform-plan-table` of the [`cloudposse/github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) GitHub Action.
 
-#### IAM Access Roles
+### IAM Access Roles
 
 First create an access role for storing and retrieving planfiles from the S3 Bucket and DynamoDB table. We deploy this role using the [`gitops` component](https://docs.cloudposse.com/components/library/aws/gitops/). Assign this role ARN to the `terraform-state-role` input.
 
