@@ -8,18 +8,22 @@ description: Partial Stack Configuration Atmos Design Pattern
 # Partial Stack Configuration
 
 The **Partial Stack Configuration** design pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
-manifests to manage, modify and apply them separately and independently.
+stack manifests to manage and modify them separately and independently.
+
+Each partial top-level stack manifest imports or configures a set of Atmos components. Each component belongs to just one of the partial top-level
+stack manifests. The pattern helps to group the components per category or function and to make each partial stack manifest smaller and easier to
+manage.
 
 ## Applicability
 
 Use the **Partial Stack Configuration** pattern when:
 
-- You have a component with a complex configuration. Some parts of the configuration must be managed and modified independently of the other parts
-  of the component's configuration
+- You have top-level stacks with complex configurations. Some parts of the configurations must be managed and modified independently of the other
+  parts
 
-- Different parts of the component's configuration can be applied to different stacks independently of the other stacks
+- You need to group the components in a stack per category or function
 
-- You want to keep the parts of the configuration reusable and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- You want to keep the configuration easy to manage and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Structure
 
@@ -27,29 +31,54 @@ Use the **Partial Stack Configuration** pattern when:
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
    │   ├── catalog
-   │   │   └── vpc
+   │   │   ├── alb
+   │   │   │   └── defaults.yaml
+   │   │   ├── aurora-postgres
+   │   │   │   └── defaults.yaml
+   │   │   ├── dns
+   │   │   │   └── defaults.yaml
+   │   │   ├── eks
+   │   │   │   └── defaults.yaml
+   │   │   ├── efs
+   │   │   │   └── defaults.yaml
+   │   │   ├── msk
+   │   │   │   └── defaults.yaml
+   │   │   ├── ses
+   │   │   │   └── defaults.yaml
+   │   │   ├── sns-topic
+   │   │   │   └── defaults.yaml
+   │   │   ├── network-firewall
+   │   │   │   └── defaults.yaml
+   │   │   ├── network-firewall-logs-bucket
+   │   │   │   └── defaults.yaml
+   │   │   ├── waf
+   │   │   │   └── defaults.yaml
+   │   │   ├── vpc
+   │   │   │   └── defaults.yaml
+   │   │   └── vpc-flow-logs-bucket
    │   │       └── defaults.yaml
    │   ├── mixins
    │   │   ├── tenant  (tenant-specific defaults)
    │   │   │   └── plat.yaml
    │   │   ├── region  (region-specific defaults)
-   │   │   │   ├── us-east-2.yaml
-   │   │   │   └── us-west-2.yaml
+   │   │   │   └── us-east-2.yaml
    │   │   └── stage  (stage-specific defaults)
-   │   │       ├── dev.yaml
-   │   │       ├── staging.yaml
-   │   │       └── prod.yaml
+   │   │       └── dev.yaml
    │   └── orgs  (organizations)
    │       └── acme
    │           ├── _defaults.yaml
    │           └── plat ('plat' OU/tenant)
    │               ├── _defaults.yaml
-   │               ├── dev
-   │               │   ├── _defaults.yaml
-   │               │   ├── us-east-2.yaml
-   │               │   └── us-west-2.yaml
-   │               ├── staging
-   │               └── prod
+   │               └── dev ('dev' account)
+   │                  ├── _defaults.yaml
+   │                  ├── # Split the top-level stack 'plat-ue2-dev' into parts per component category
+   │                  ├── us-east-2-load-balancers.yaml
+   │                  ├── us-east-2-data.yaml
+   │                  ├── us-east-2-dns.yaml
+   │                  ├── us-east-2-logs.yaml
+   │                  ├── us-east-2-notifications.yaml
+   │                  ├── us-east-2-firewalls.yaml
+   │                  └── us-east-2-eks.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
