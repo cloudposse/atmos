@@ -34,6 +34,8 @@ Here are some recommendations:
   - [Component Inheritance](/design-patterns/component-inheritance)
   - [Abstract Component](/design-patterns/abstract-component)
   - [Multiple Component Instances](/design-patterns/multiple-component-instances)
+  - [Partial Component Configuration](/design-patterns/partial-component-configuration)
+  - [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
 
 The [Atmos Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start) repository, that is described in
 the [Quick Start](/category/quick-start) guide, uses the following Atmos Design Patterns:
