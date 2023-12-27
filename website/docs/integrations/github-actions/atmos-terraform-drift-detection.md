@@ -58,7 +58,7 @@ Drift Detection with Atmos requires two separate workflows.
 
 First on a schedule we trigger the "Atmos Terraform Drift Detection" workflow. This workflow will gather every single component and stack in the repository. Then using that list of components and stacks, run `atmos terraform plan <component> --stack-name <stack>` for the given component and stack. If there are any changes, the workflow will create a GitHub Issue.
 
-For example in this screenshot, the workflow has gather two components. Only one has drift, and therefore a new Issue has been created.
+For example in this screenshot, the workflow has gathered two components. Only one has drift, and therefore one new Issue has been created.
 
 ![Example Issue Summary](/img/github-actions/drift-summary.png)
 
@@ -80,7 +80,7 @@ We can quickly see a complete list of all drift components in the "Issues" tab i
 
 ![Example Issue List](/img/github-actions/drift-issue-list.png)
 
-### Example Usage
+#### Example Usage
 
 ```yaml
   name: 👽 Atmos Terraform Drift Detection
@@ -145,58 +145,7 @@ We can quickly see a complete list of all drift components in the "Issues" tab i
             max-opened-issues: '3'
 ```
 
-### Atmos Terraform Drift Remediation
-
-Once we have an open Issue for a drifted component, we can trigger another workflow to remediate the drifted Terraform resources. When an Issue is label with `apply`, the "Atmos Terraform Drift Remediation" workflow will take the component and stack in the given Issue and run `atmos terraform apply <component> --stack-name <stack>` using the latest Terraform Planfile. If the apply is successful, the workflow will close the given Issue as resolved.
-
-### Example Usage
-
-```yaml
-name: 👽 Atmos Terraform Drift Remediation
-run-name: 👽 Atmos Terraform Drift Remediation
-
-on:
-  issues:
-    types:
-      - labeled
-      - closed
-
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  remediate-drift:
-    runs-on: ubuntu-latest
-    name: Remediate Drift
-    if: |
-      github.event.action == 'labeled' &&
-      contains(join(github.event.issue.labels.*.name, ','), 'apply')
-    steps:
-      - name: Remediate Drift
-        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v1
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          action: remediate
-          atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
-
-  discard-drift:
-    runs-on: ubuntu-latest
-    name: Discard Drift
-    if: |
-      github.event.action == 'closed' &&
-      !contains(join(github.event.issue.labels.*.name, ','), 'remediated')
-    steps:
-      - name: Discard Drift
-        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v1
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          action: discard
-          atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
-```
-
-
-### 256 Matrix Limitation
+#### 256 Matrix Limitation
 
 :::warning 
 
@@ -241,6 +190,57 @@ stateDiagram-v2
   state "Atmos Terraform Plan (Composite Action) - Component 7" as component7
   state "Atmos Terraform Plan (Composite Action) - Component 8" as component8
   state "Atmos Terraform Plan (Composite Action) - Component 9" as component9
+```
+
+
+### Atmos Terraform Drift Remediation
+
+Once we have an open Issue for a drifted component, we can trigger another workflow to remediate the drifted Terraform resources. When an Issue is label with `apply`, the "Atmos Terraform Drift Remediation" workflow will take the component and stack in the given Issue and run `atmos terraform apply <component> --stack-name <stack>` using the latest Terraform Planfile. If the apply is successful, the workflow will close the given Issue as resolved.
+
+#### Example Usage
+
+```yaml
+name: 👽 Atmos Terraform Drift Remediation
+run-name: 👽 Atmos Terraform Drift Remediation
+
+on:
+  issues:
+    types:
+      - labeled
+      - closed
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  remediate-drift:
+    runs-on: ubuntu-latest
+    name: Remediate Drift
+    if: |
+      github.event.action == 'labeled' &&
+      contains(join(github.event.issue.labels.*.name, ','), 'apply')
+    steps:
+      - name: Remediate Drift
+        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v1
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          action: remediate
+          atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
+
+  discard-drift:
+    runs-on: ubuntu-latest
+    name: Discard Drift
+    if: |
+      github.event.action == 'closed' &&
+      !contains(join(github.event.issue.labels.*.name, ','), 'remediated')
+    steps:
+      - name: Discard Drift
+        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v1
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          action: discard
+          atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
 ```
 
 ## Requirements
