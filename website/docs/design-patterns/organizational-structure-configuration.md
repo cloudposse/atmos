@@ -431,7 +431,7 @@ import:
 
 Similarly, configure the top-level stack manifests for the `org2` organization.
 
-### Provision the Atmos Components into the Stacks
+### Provision the Atmos Components in the Stacks
 
 To provision the components in the `org1` organization, execute the following commands:
 

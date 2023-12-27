@@ -147,7 +147,7 @@ import:
   # Add new application configurations here
 ```
 
-To provision the Atmos components into the stack, execute the following commands:
+To provision the Atmos components in the stack, execute the following commands:
 
 ```shell
 atmos terraform apply eks/iam-role/admin-ui --stack plat-ue2-prod

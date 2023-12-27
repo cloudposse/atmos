@@ -172,7 +172,7 @@ components:
 
 <br/>
 
-To provision the components into the stack, execute the following commands:
+To provision the components in the stack, execute the following commands:
 
 ```shell
 atmos terraform apply vpc-1 -s plat-ue2-prod
