@@ -10,18 +10,18 @@ description: Partial Stack Configuration Atmos Design Pattern
 The **Partial Stack Configuration** design pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
 stack manifests to manage and modify them separately and independently.
 
-Each partial top-level stack manifest imports or configures a set of Atmos components. Each component belongs to just one of the partial top-level
-stack manifests. The pattern helps to group the components per category or function and to make each partial stack manifest smaller and easier to
-manage.
+Each partial top-level stack manifest imports or configures a set of related Atmos components. Each Atmos component belongs to just one of the partial
+top-level stack manifests. The pattern helps to group all components by category or function and to make each partial stack manifest smaller and
+easier to manage.
 
 ## Applicability
 
 Use the **Partial Stack Configuration** pattern when:
 
-- You have top-level stacks with complex configurations. Some parts of the configurations must be managed and modified independently of the other
-  parts
+- You have top-level stacks with complex configurations. Some parts of the configurations must be managed and modified independent of the other
+  parts, possibly by different people or teams
 
-- You need to group the components in a top-level stack per category or function
+- You need to group the components in a top-level stack by category or function
 
 - You want to keep the configuration easy to manage and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
@@ -71,7 +71,7 @@ Use the **Partial Stack Configuration** pattern when:
    │               ├── _defaults.yaml
    │               └── dev ('dev' account)
    │                  ├── _defaults.yaml
-   │                  ├── # Split the top-level stack 'plat-ue2-dev' into parts per component category
+   │                  ├── # Split the top-level stack 'plat-ue2-dev' into parts by component category
    │                  ├── us-east-2-load-balancers.yaml
    │                  ├── us-east-2-data.yaml
    │                  ├── us-east-2-dns.yaml
@@ -105,7 +105,7 @@ As the structure above shows, we have various Terraform components (Terraform ro
 In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
 Design Pattern.
 
-In the `orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts per category:
+In the `orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts by category:
 
 - `us-east-2-load-balancers.yaml`
 - `us-east-2-data.yaml`
@@ -250,10 +250,10 @@ import:
 
 The **Partial Stack Configuration** pattern provides the following benefits:
 
-- Allows defining Atmos stacks with complex configurations by splitting the configurations into smaller manifests and by grouping the components per
+- Allows defining Atmos stacks with complex configurations by splitting the configurations into smaller manifests and by grouping the components by
   category or function
 
-- Makes the configurations easy to understand
+- Makes the configurations easier to understand
 
 - Allows creating and modifying the partial stack manifests independently, possibly by different teams
 

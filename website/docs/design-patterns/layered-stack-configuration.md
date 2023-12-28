@@ -7,21 +7,28 @@ description: Layered Stack Configuration Atmos Design Pattern
 
 # Layered Stack Configuration
 
-The **Layered Stack Configuration** design pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
-stack manifests to manage and modify them separately and independently.
+The **Layered Stack Configuration** design pattern describes the mechanism of grouping Atmos components by category or function,
+adding the groups of components to layers, and importing the layers into top-level Atmos stacks.
 
-Each partial top-level stack manifest imports or configures a set of Atmos components. Each component belongs to just one of the partial top-level
-stack manifests. The pattern helps to group the components per category or function and to make each partial stack manifest smaller and easier to
-manage.
+Each layer imports or configures a set of related Atmos components. Each Atmos component belongs to just one layer.
+Each layer can be managed separately, possibly by different teams.
+
+<br/>
+
+:::note
+The **Layered Stack Configuration** design pattern is similar to the [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
+pattern, but instead of splitting top-level Atmos stacks into smaller parts by category or function, the **Layered Stack Configuration** design
+pattern prescribes adding separate layers to group the related Atmos components, and then importing the layers into top-level Atmos stacks.
+:::
 
 ## Applicability
 
 Use the **Layered Stack Configuration** pattern when:
 
-- You have top-level stacks with complex configurations. Some parts of the configurations must be managed and modified independently of the other
-  parts
+- You have many Atmos components, and you need to group the components by category or function
 
-- You need to group the components in a top-level stack per category or function
+- You want to split the components into layers. Each layer should be managed and modified independent of the other layers, possibly by different
+  people or teams
 
 - You want to keep the configuration easy to manage and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
@@ -57,6 +64,15 @@ Use the **Layered Stack Configuration** pattern when:
    │   │   │   └── defaults.yaml
    │   │   └── vpc-flow-logs-bucket
    │   │       └── defaults.yaml
+   │   ├── layers (grouping of components by category/function)
+   │   │   ├── load-balancers.yaml
+   │   │   ├── data.yaml
+   │   │   ├── dns.yaml
+   │   │   ├── logs.yaml
+   │   │   ├── notifications.yaml
+   │   │   ├── firewalls.yaml
+   │   │   ├── networking.yaml
+   │   │   └── eks.yaml
    │   ├── mixins
    │   │   ├── tenant  (tenant-specific defaults)
    │   │   │   └── plat.yaml
@@ -112,7 +128,7 @@ As the structure above shows, we have various Terraform components (Terraform ro
 In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
 Design Pattern.
 
-In the `orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts per category:
+In the `orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts by category:
 
 - `us-east-2-load-balancers.yaml`
 - `us-east-2-data.yaml`
@@ -257,12 +273,12 @@ import:
 
 The **Layered Stack Configuration** pattern provides the following benefits:
 
-- Allows defining Atmos stacks with complex configurations by splitting the configurations into smaller manifests and by grouping the components per
-  category or function
+- Allows to group Atmos components by category or function
 
-- Makes the configurations easy to understand
+- Allows splitting the components into layers. Each layer can be managed and modified independent of the other layers, possibly by different
+  people or teams
 
-- Allows creating and modifying the partial stack manifests independently, possibly by different teams
+- Makes the configurations easier to understand
 
 ## Related Patterns
 
