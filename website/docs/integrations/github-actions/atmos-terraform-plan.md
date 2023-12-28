@@ -37,7 +37,7 @@ Furthermore when a resource is marked for deletion, the Plan Summary will includ
 
 ## Usage
 
-In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "plan" job, the "component" and "stack" are hardcoded. In practice, these are usually derived from another action. 
+In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "plan" job, the "component" and "stack" are hardcoded (`foobar` and `plat-ue2-sandbox`). In practice, these are usually derived from another action. 
 
 :::tip Passing Affected Stacks
 

@@ -29,6 +29,8 @@ In the following screenshot, we see a successful "apply" Job Summary report. The
 
 ## Usage
 
+In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "apply" job, the "component" and "stack" are hardcoded (`foobar` and `plat-ue2-sandbox`). In practice, these are usually derived from another action. 
+
 :::tip Passing Affected Stacks
 
 Please note that in practice, we recommend combining this action with the [`affected-stacks`](/integrations/github-actions/affected-stacks) GitHub Action inside a matrix to plan all affected stacks in parallel.
@@ -39,28 +41,29 @@ Please note that in practice, we recommend combining this action with the [`affe
 ```yaml
   # .github/workflows/atmos-terraform-apply.yaml
   name: "atmos-terraform-apply"
+
   on:
+    workflow_dispatch:
     pull_request:
       types:
-        - opened
-        - synchronize
-        - reopened
+        - closed
       branches:
         - main
+
   # These permissions are required for GitHub to assume roles in AWS
   permissions:
     id-token: write
     contents: read
+
   jobs:
-    plan:
+    apply:
       runs-on: ubuntu-latest
       steps:
-        - name: Apply Atmos Component
-          uses: cloudposse/github-action-atmos-terraform-apply@v1
+        - name: Terraform Apply
+          uses: cloudposse/github-action-atmos-terraform-apply@v2
           with:
             component: "foobar"
             stack: "plat-ue2-sandbox"
-            atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
 ```
 
 with the following configuration as an example:
@@ -80,7 +83,6 @@ with the following configuration as an example:
   terraform-state-table: cptest-core-ue2-auto-gitops
   terraform-version: 1.5.2
 ```
-
 
 ## Requirements
 
