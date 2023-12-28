@@ -6,3 +6,261 @@ description: Layered Stack Configuration Atmos Design Pattern
 ---
 
 # Layered Stack Configuration
+
+# Partial Stack Configuration
+
+The **Layered Stack Configuration** design pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
+stack manifests to manage and modify them separately and independently.
+
+Each partial top-level stack manifest imports or configures a set of Atmos components. Each component belongs to just one of the partial top-level
+stack manifests. The pattern helps to group the components per category or function and to make each partial stack manifest smaller and easier to
+manage.
+
+## Applicability
+
+Use the **Layered Stack Configuration** pattern when:
+
+- You have top-level stacks with complex configurations. Some parts of the configurations must be managed and modified independently of the other
+  parts
+
+- You need to group the components in a top-level stack per category or function
+
+- You want to keep the configuration easy to manage and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+## Structure
+
+```console
+   │   # Centralized stacks configuration (stack manifests)
+   ├── stacks
+   │   ├── catalog
+   │   │   ├── alb
+   │   │   │   └── defaults.yaml
+   │   │   ├── aurora-postgres
+   │   │   │   └── defaults.yaml
+   │   │   ├── dns
+   │   │   │   └── defaults.yaml
+   │   │   ├── eks
+   │   │   │   └── defaults.yaml
+   │   │   ├── efs
+   │   │   │   └── defaults.yaml
+   │   │   ├── msk
+   │   │   │   └── defaults.yaml
+   │   │   ├── ses
+   │   │   │   └── defaults.yaml
+   │   │   ├── sns-topic
+   │   │   │   └── defaults.yaml
+   │   │   ├── network-firewall
+   │   │   │   └── defaults.yaml
+   │   │   ├── network-firewall-logs-bucket
+   │   │   │   └── defaults.yaml
+   │   │   ├── waf
+   │   │   │   └── defaults.yaml
+   │   │   ├── vpc
+   │   │   │   └── defaults.yaml
+   │   │   └── vpc-flow-logs-bucket
+   │   │       └── defaults.yaml
+   │   ├── mixins
+   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   │   └── plat.yaml
+   │   │   ├── region  (region-specific defaults)
+   │   │   │   └── us-east-2.yaml
+   │   │   └── stage  (stage-specific defaults)
+   │   │       └── dev.yaml
+   │   └── orgs  (organizations)
+   │       └── acme
+   │           ├── _defaults.yaml
+   │           └── plat ('plat' OU/tenant)
+   │               ├── _defaults.yaml
+   │               └── dev ('dev' account)
+   │                  ├── _defaults.yaml
+   │                  ├── # Split the top-level stack 'plat-ue2-dev' into parts per component category
+   │                  ├── us-east-2-load-balancers.yaml
+   │                  ├── us-east-2-data.yaml
+   │                  ├── us-east-2-dns.yaml
+   │                  ├── us-east-2-logs.yaml
+   │                  ├── us-east-2-notifications.yaml
+   │                  ├── us-east-2-firewalls.yaml
+   │                  ├── us-east-2-networking.yaml
+   │                  └── us-east-2-eks.yaml
+   │   # Centralized components configuration
+   └── components
+       └── terraform  # Terraform components (Terraform root modules)
+           ├── alb
+           ├── aurora-postgres
+           ├── dns
+           ├── eks
+           ├── efs
+           ├── msk
+           ├── ses
+           ├── sns-topic
+           ├── network-firewall
+           ├── network-firewall-logs-bucket
+           ├── waf
+           ├── vpc
+           └── vpc-flow-logs-bucket
+```
+
+## Example
+
+As the structure above shows, we have various Terraform components (Terraform root modules) in the `components/terraform` folder.
+
+In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
+Design Pattern.
+
+In the `orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts per category:
+
+- `us-east-2-load-balancers.yaml`
+- `us-east-2-data.yaml`
+- `us-east-2-dns.yaml`
+- `us-east-2-logs.yaml`
+- `us-east-2-notifications.yaml`
+- `us-east-2-firewalls.yaml`
+- `us-east-2-networking.yaml`
+- `us-east-2-eks.yaml`
+
+Note that these partial stack manifests are parts of the same top-level Atmos stack `plat-ue2-dev` since they all import the same context variables
+`namespace`, `tenant`, `environment` and `stage`. A top-level Atmos stack is defined by the context variables, not by the file names or locations
+in the filesystem (file names can be anything, they are for people to better organize the entire configuration).
+
+Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
+
+```yaml title="atmos.yaml"
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{tenant}-{environment}-{stage}"
+  included_paths:
+    # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
+    - "orgs/**/*"
+  excluded_paths:
+    # Tell Atmos that the `defaults` folder and all sub-folders don't contain top-level stack manifests
+    - "defaults/**/*"
+
+schemas:
+  jsonschema:
+    base_path: "stacks/schemas/jsonschema"
+  opa:
+    base_path: "stacks/schemas/opa"
+  atmos:
+    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-load-balancers.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-load-balancers.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/alb/defaults
+  # Import other Load Balancer components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-data.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-data.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/aurora-postgres/defaults
+  - catalog/msk/defaults
+  - catalog/efs/defaults
+  # Import other Data components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-dns.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-dns.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/dns/defaults
+  # Import other DNS components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-logs.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-logs.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/network-firewall-logs-bucket/defaults
+  - catalog/vpc-flow-logs-bucket/defaults
+  # Import other Logs components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-notifications.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-notifications.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/ses/defaults
+  - catalog/sns-topic/defaults
+  # Import other Notification components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-firewalls.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-firewalls.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/network-firewall/defaults
+  - catalog/waf/defaults
+  # Import other Firewall components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-networking.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-networking.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/vpc/defaults
+  # Import other Networking components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-eks.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-eks.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/eks/defaults
+```
+
+## Benefits
+
+The **Layered Stack Configuration** pattern provides the following benefits:
+
+- Allows defining Atmos stacks with complex configurations by splitting the configurations into smaller manifests and by grouping the components per
+  category or function
+
+- Makes the configurations easy to understand
+
+- Allows creating and modifying the partial stack manifests independently, possibly by different teams
+
+## Related Patterns
+
+- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+- [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
+- [Component Overrides](/design-patterns/component-overrides)

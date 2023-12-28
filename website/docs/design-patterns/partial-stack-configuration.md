@@ -257,6 +257,24 @@ The **Partial Stack Configuration** pattern provides the following benefits:
 
 - Allows creating and modifying the partial stack manifests independently, possibly by different teams
 
+## Limitations
+
+The **Partial Stack Configuration** pattern has the following limitations and drawbacks:
+
+- The structure described by the pattern can become big and complex in a production-ready enterprise-grade infrastructure
+
+- In the example above, we showed how to split just one top-level stack manifest (one organization, one OU/tenant, one account, one region) into
+  smaller parts and import the related components. This is useful and not complicated with one or a few top-level stacks, but the configuration
+  can become too complex when we need to do the same for all organizations, OUs/tenants, accounts and regions. We'll have to repeat the same
+  filesystem layout many times and import the same components into many partial stack manifests
+
+:::note
+
+To address the limitations of the **Partial Stack Configuration** design pattern, consider
+the [Layered Stack Configuration](/design-patterns/layered-stack-configuration) design pattern
+
+:::
+
 ## Related Patterns
 
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
