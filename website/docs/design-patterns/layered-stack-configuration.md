@@ -241,6 +241,63 @@ import:
   - catalog/eks/defaults
 ```
 
+Import the required layers into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` top-level stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the layers (groups of components)
+  - layers/load-balancers
+  - layers/data
+  - layers/dns
+  - layers/logs
+  - layers/notifications
+  - layers/firewalls
+  - layers/networking
+  - layers/eks
+```
+
+Import the required layers into the `stacks/orgs/acme/plat/dev/us-west-2.yaml` top-level stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-west-2` manifests define the top-level Atmos stack `plat-uw2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-west-2
+  # Import the layers (groups of components)
+  - layers/load-balancers
+  - layers/data
+  - layers/dns
+  - layers/logs
+  - layers/notifications
+  - layers/firewalls
+  - layers/networking
+  - layers/eks
+```
+
+Import the required layers into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
+import:
+  # The `orgs/acme/plat/prod/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-prod`
+  - orgs/acme/plat/prod/_defaults
+  - mixins/region/us-east-2
+  # Import the layers (groups of components)
+  - layers/load-balancers
+  - layers/data
+  - layers/dns
+  - layers/logs
+  - layers/notifications
+  - layers/firewalls
+  - layers/networking
+  - layers/eks
+```
+
+Similarly, import the required layers into the other top-level stacks for the other organizations, OUs/tenants, accounts and regions.
+Make sure to import only the layers that define the component that need to be provisioned into the stacks.
+
 ## Benefits
 
 The **Layered Stack Configuration** pattern provides the following benefits:
@@ -249,6 +306,8 @@ The **Layered Stack Configuration** pattern provides the following benefits:
 
 - Allows splitting the components into layers. Each layer can be managed and modified independent of the other layers, possibly by different
   people or teams
+
+- Allows importing only the required layers into the top-level stacks (only the groups of components that need to be provisioned in the stacks)
 
 - Makes the configurations easier to understand
 
