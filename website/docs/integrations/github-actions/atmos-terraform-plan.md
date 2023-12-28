@@ -41,7 +41,7 @@ In this example, the action is triggered when certain events occur, such as a ma
 
 :::tip Passing Affected Stacks
 
-Please note that in practice, we recommend combining this action with the [`affected-stacks`](/integrations/github-actions/affected-stacks) GitHub Action inside a matrix to plan all affected stacks in parallel.
+We recommend combining this action with the [`affected-stacks`](/integrations/github-actions/affected-stacks) GitHub Action inside a matrix to plan all affected stacks in parallel.
 
 :::
 
