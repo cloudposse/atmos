@@ -165,103 +165,79 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-load-balancers.yaml` partial stack manifest:
+Add the following configuration to the `stacks/layers/load-balancers.yaml` layer manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-load-balancers.yaml"
+```yaml title="stacks/layers/load-balancers.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the related component manifests into this partial stack manifest
+  # Import the related component manifests into this layer manifest
   - catalog/alb/defaults
   # Import other Load Balancer components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-data.yaml` partial stack manifest:
+Add the following configuration to the `stacks/layers/data.yaml` layer manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-data.yaml"
+```yaml title="stacks/layers/data.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the related component manifests into this partial stack manifest
+  # Import the related component manifests into this layer manifest
   - catalog/aurora-postgres/defaults
   - catalog/msk/defaults
   - catalog/efs/defaults
   # Import other Data components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-dns.yaml` partial stack manifest:
+Add the following configuration to the `stacks/layers/dns.yaml` layer manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-dns.yaml"
+```yaml title="stacks/layers/dns.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the related component manifests into this partial stack manifest
+  # Import the related component manifests into this layer manifest
   - catalog/dns/defaults
   # Import other DNS components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-logs.yaml` partial stack manifest:
+Add the following configuration to the `stacks/layers/logs.yaml` layer manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-logs.yaml"
+```yaml title="stacks/layers/logs.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the related component manifests into this partial stack manifest
+  # Import the related component manifests into this layer manifest
   - catalog/network-firewall-logs-bucket/defaults
   - catalog/vpc-flow-logs-bucket/defaults
   # Import other Logs components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-notifications.yaml` partial stack manifest:
+Add the following configuration to the `stacks/layers/notifications.yaml` layer manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-notifications.yaml"
+```yaml title="stacks/layers/notifications.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the related component manifests into this partial stack manifest
+  # Import the related component manifests into this layer manifest
   - catalog/ses/defaults
   - catalog/sns-topic/defaults
   # Import other Notification components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-firewalls.yaml` partial stack manifest:
+Add the following configuration to the `stacks/layers/firewalls.yaml` layer manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-firewalls.yaml"
+```yaml title="stacks/layers/firewalls.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the related component manifests into this partial stack manifest
+  # Import the related component manifests into this layer manifest
   - catalog/network-firewall/defaults
   - catalog/waf/defaults
   # Import other Firewall components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-networking.yaml` partial stack manifest:
+Add the following configuration to the `stacks/layers/networking.yaml` layer manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-networking.yaml"
+```yaml title="stacks/layers/networking.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the related component manifests into this partial stack manifest
+  # Import the related component manifests into this layer manifest
   - catalog/vpc/defaults
   # Import other Networking components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-eks.yaml` partial stack manifest:
+Add the following configuration to the `stacks/layers/eks.yaml` layer manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-eks.yaml"
+```yaml title="stacks/layers/eks.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the related component manifests into this partial stack manifest
+  # Import the related component manifests into this layer manifest
   - catalog/eks/defaults
 ```
 
