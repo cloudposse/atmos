@@ -301,7 +301,7 @@ import:
 <br/>
 
 Similarly, import the required layers into the other top-level stacks for the other organizations, OUs/tenants, accounts and regions.
-Make sure to import only the layers that define the component that need to be provisioned into the stacks.
+Make sure to import only the layers that define the component that need to be provisioned in the stacks.
 
 ## Benefits
 

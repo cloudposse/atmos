@@ -2,11 +2,12 @@
 title: Component Overrides
 sidebar_position: 9
 sidebar_label: Overrides
-description: Use the 'overrides' pattern to modify component(s) configuration and behavior in the current scope.
+description: Use the 'Component Overrides' pattern to modify components' configuration and behavior in the current scope.
 id: overrides
 ---
 
-Atmos supports the **overrides** pattern to modify component(s) configuration and behavior using the `overrides` section in Atmos stack manifests.
+Atmos supports the [Component Overrides](/design-patterns/component-overrides) Design Pattern to modify components' configuration and behavior using
+the `overrides` section in Atmos stack manifests.
 
 You can override the following sections in the component(s) configuration:
 
@@ -51,9 +52,9 @@ helmfile:
     command: "<command to execute>"
 ```
 
-You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance. 
+You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance.
 The scope of the `override` configuration is limited to all the Atmos components defined within the manifest and all its imports up until that point.
-In other words, the `overrides` configuration defined within a stack manifest does not affect any other components defined in different stack 
+In other words, the `overrides` configuration defined within a stack manifest does not affect any other components defined in different stack
 manifests for the same top-level stack.
 
 <br/>
@@ -174,8 +175,8 @@ In the manifest above, we configure the following:
   Team will be affected by the new values (but not the Helmfile components). The Terraform `overrides` are deep-merged with the global `overrides`
   and takes higher priority (it will override the same keys from the global `overrides`).
 
-- The Helmfile-level `helmfile.overrides` section to override an ENV variable in the `env` section. All the Helmfile components managed by 
-  the `testing` Team will get the new ENV variable value (but not the Terraform components). The Helmfile `overrides` are deep-merged with the 
+- The Helmfile-level `helmfile.overrides` section to override an ENV variable in the `env` section. All the Helmfile components managed by
+  the `testing` Team will get the new ENV variable value (but not the Terraform components). The Helmfile `overrides` are deep-merged with the
   global `overrides` and takes higher priority (it will override the same keys from the global `overrides`).
 
 <br/>

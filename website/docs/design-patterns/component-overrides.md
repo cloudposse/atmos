@@ -7,11 +7,10 @@ description: Component Overrides Atmos Design Pattern
 
 # Component Overrides
 
-The **Component Overrides** Design Pattern describes the mechanism of grouping Atmos components by category or function,
-adding the groups of components to layers, and importing the layers into top-level Atmos stacks.
+The **Component Overrides** Design Pattern describes the mechanism of modifying and overriding the configuration and behavior of groups of Atmos
+components in the current scope.
 
-Each layer imports or configures a set of related Atmos components. Each Atmos component belongs to just one layer.
-Each layer can be managed separately, possibly by different teams.
+This is achieved by using the `overrides` section in Atmos stack manifests.
 
 <br/>
 
@@ -23,12 +22,11 @@ Refer to [Component Overrides](/core-concepts/components/overrides) for more inf
 
 Use the **Component Overrides** pattern when:
 
-- You have many Atmos components, and you need to group the components by category or function
+- You need to modify or override the configuration and behavior of groups of Atmos components
 
-- You want to split the components into layers. Each layer should be managed and modified independent of the other layers, possibly by different
-  people or teams
+- The groups of Atmos components can be managed by different people or teams
 
-- You want to keep the configuration easy to manage and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- You want to keep the configurations of the groups of Atmos components [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Structure
 
@@ -125,11 +123,13 @@ Use the **Component Overrides** pattern when:
 The **Component Overrides** Design Pattern can be applied to the configuration structures described by
 the [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
 and [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
-Design Patterns.
+Atmos Design Patterns.
 
 In this example, we'll use the structure described by the [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
 Design Pattern.
 :::
+
+<br/>
 
 As the structure above shows, we have many different Terraform components (Terraform root modules) in the `components/terraform` folder.
 
@@ -381,23 +381,18 @@ import:
 <br/>
 
 Similarly, import the required layers into the other top-level stacks for the other organizations, OUs/tenants, accounts and regions.
-Make sure to import only the layers that define the component that need to be provisioned into the stacks.
+Make sure to import only the layers that define the component that need to be provisioned in the stacks.
 
-After the components are provisioned in the top-level stacks, all Terraform components will get the `Layer` and `Team` tags from the corresponding
-layers.
+After the Atmos components are provisioned in the top-level stacks, all Terraform components will get the `Layer` and `Team` tags from the
+corresponding layers.
 
 ## Benefits
 
 The **Component Overrides** pattern provides the following benefits:
 
-- Allows to group Atmos components by category or function
+- Allows to modify or override the configuration and behavior of groups of Atmos components without affecting other groups of Atmos components
 
-- Allows splitting the components into layers. Each layer can be managed and modified independent of the other layers, possibly by different
-  people or teams
-
-- Allows importing only the required layers into the top-level stacks (only the groups of components that need to be provisioned in the stacks)
-
-- Makes the configurations easier to understand
+- Makes the configurations of the groups of Atmos components easier to understand and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Related Patterns
 
