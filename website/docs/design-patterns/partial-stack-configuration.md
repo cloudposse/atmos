@@ -78,6 +78,7 @@ Use the **Partial Stack Configuration** pattern when:
    │                  ├── us-east-2-logs.yaml
    │                  ├── us-east-2-notifications.yaml
    │                  ├── us-east-2-firewalls.yaml
+   │                  ├── us-east-2-networking.yaml
    │                  └── us-east-2-eks.yaml
    │   # Centralized components configuration
    └── components
@@ -112,6 +113,7 @@ In the `orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the f
 - `us-east-2-logs.yaml`
 - `us-east-2-notifications.yaml`
 - `us-east-2-firewalls.yaml`
+- `us-east-2-networking.yaml`
 - `us-east-2-eks.yaml`
 
 Note that these partial stack manifests are parts of the same top-level Atmos stack `plat-ue2-dev` since they all import the same context variables
@@ -144,54 +146,116 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-Add the following configuration to the `stacks/catalog/eks/clusters/defaults.yaml` manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-load-balancers.yaml` partial stack manifest:
 
-```yaml title="stacks/catalog/eks/clusters/defaults.yaml"
-components:
-  terraform:
-    eks/cluster:
-      metadata:
-        # Point to the Terraform component in `components/terraform/eks/cluster`
-        component: eks/cluster
-      vars:
-        name: eks
-        availability_zones: [ ] # Use the VPC subnet AZs
-        managed_node_groups_enabled: true
-        node_groups:
-          # will create 1 node group for each item in map
-          main:
-            # EKS AMI version to use, e.g. "1.16.13-20200821" (no "v").
-            ami_release_version: null
-            # Type of Amazon Machine Image (AMI) associated with the EKS Node Group
-            ami_type: AL2_x86_64
-            # Whether to enable Node Group to scale its AutoScaling Group
-            cluster_autoscaler_enabled: false
-            # Configure storage for the root block device for instances in the Auto Scaling Group
-            block_device_map:
-              "/dev/xvda":
-                ebs:
-                  encrypted: true
-                  volume_size: 200 # GB
-                  volume_type: "gp3"
-            # Set of instance types associated with the EKS Node Group
-            instance_types:
-              - c6a.large
-            # Desired number of worker nodes when initially provisioned
-            desired_group_size: 2
-            max_group_size: 3
-            min_group_size: 2
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-load-balancers.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/alb/defaults
+  # Import other Load Balancer components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-data.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-data.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/aurora-postgres/defaults
+  - catalog/msk/defaults
+  - catalog/efs/defaults
+  # Import other Data components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-dns.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-dns.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/dns/defaults
+  # Import other DNS components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-logs.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-logs.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/network-firewall-logs-bucket/defaults
+  - catalog/vpc-flow-logs-bucket/defaults
+  # Import other Logs components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-notifications.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-notifications.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/ses/defaults
+  - catalog/sns-topic/defaults
+  # Import other Notification components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-firewalls.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-firewalls.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/network-firewall/defaults
+  - catalog/waf/defaults
+  # Import other Firewall components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-networking.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-networking.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/vpc/defaults
+  # Import other Networking components
+```
+
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-eks.yaml` partial stack manifest:
+
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2-eks.yaml"
+import:
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the related component manifests into this partial stack manifest
+  - catalog/eks/defaults
 ```
 
 ## Benefits
 
 The **Partial Stack Configuration** pattern provides the following benefits:
 
-- Allows managing components with complex configurations where some parts of the configurations must be managed and modified independently of the
-  other parts
+- Allows defining Atmos stacks with complex configurations by splitting the configurations into smaller manifests and by grouping the components per
+  category or function
 
-- Different parts of component' configurations can be applied to different stacks independently of the other stacks
+- Makes the configurations easy to understand
 
-- Allows keeping the parts of the configurations reusable across many stacks and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- Allows creating and modifying the partial stack manifests independently, possibly by different teams
 
 ## Related Patterns
 
