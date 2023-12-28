@@ -31,7 +31,7 @@ By expanding the "Terraform Plan Summary" block (clicking on the `<details/>` bl
 
 ![Example Create Extended](/img/github-actions/create-extended.png)
 
-Furthermore when a resource is marked for deletion, the Plan Summary will include a warning admonition.
+Furthermore, when a resource is marked for deletion, the Plan Summary will include a warning admonition.
 
 ![Example Destroy](/img/github-actions/destroy.png)
 
