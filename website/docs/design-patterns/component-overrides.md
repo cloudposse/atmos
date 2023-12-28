@@ -136,7 +136,7 @@ As the structure above shows, we have many different Terraform components (Terra
 In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
 Design Pattern.
 
-In the `stacks/layers` folder, we define layers (groups of components), and import the related components into the layer manifests:
+In the `stacks/layers` folder, we define the following layers (groups of components), and import the related components into the layer manifests:
 
 - `load-balancers.yaml`
 - `data.yaml`
