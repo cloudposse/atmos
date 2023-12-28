@@ -4,7 +4,7 @@ sidebar_position: 60
 sidebar_label: Terraform Drift Detection
 ---
 
-The Cloud Posse GitHub Action for "Atmos Terraform Drift Detection" and "Atmos Terraform Drift Remediation" define a scalable pattern for detecting and remediating Terraform drift from within GitHub using workflows and Issues. "Atmos Terraform Drift Detection" will determine drifted Terraform state by running [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-apply) and creating GitHub Issues for any drifted component and stack. Furthermore, "Atmos Terraform Drift Remediation" will run [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply) for any open Issue if called and close the given Issue. With these two actions, we can fully support drift detection for Terraform directly within the GitHub UI.
+The Cloud Posse GitHub Action for "Atmos Terraform Drift Detection" and "Atmos Terraform Drift Remediation" define a scalable pattern for detecting and remediating Terraform drift from within GitHub using workflows and Issues. "Atmos Terraform Drift Detection" will determine drifted Terraform state by running [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan) and creating GitHub Issues for any drifted component and stack. Furthermore, "Atmos Terraform Drift Remediation" will run [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply) for any open Issue if called and close the given Issue. With these two actions, we can fully support drift detection for Terraform directly within the GitHub UI.
 
 This action is intended to be used together with [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan) and [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply).
 
@@ -12,10 +12,10 @@ This action is intended to be used together with [Atmos Terraform Plan](/integra
 
 This GitHub Action incorporates superior GitOps support for Terraform by utilizing the capabilities of Atmos, enabling efficient management of large enterprise-scale environments.
 
-* **Implements Native GitOps** with Atmos and Terraform
+* **Implements Native GitOps** with Atmos and Terraform.
 * **No hardcoded credentials.** Use GitHub OIDC to assume roles.
 * **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility. 
-* **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments
+* **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments.
 * **Automated Drift Detection** Regularly check and track all resources for drift.
 * **Free Tier GitHub** Use GitHub Issues to track drifted resources.
 * **100% Open Source with Permissive APACHE2 License** means you have no expensive subscriptions or long-term commitments.
@@ -58,11 +58,11 @@ Drift Detection with Atmos requires two separate workflows.
 
 ### Atmos Terraform Drift Detection
 
-First on a schedule we trigger the "Atmos Terraform Drift Detection" workflow. This workflow will gather every single component and stack in the repository. Then using that list of components and stacks, run `atmos terraform plan <component> --stack-name <stack>` for the given component and stack. If there are any changes, the workflow will create a GitHub Issue.
+First, we trigger the "Atmos Terraform Drift Detection" workflow on a schedule. This workflow will gather every single component and stack in the repository. Then using that list of components and stacks, run `atmos terraform plan <component> --stack <stack>` for the given component and stack. If there are any changes, the workflow will create a GitHub Issue.
 
 For example in this screenshot, the workflow has gathered two components. Only one has drift, and therefore one new Issue has been created.
 
-![Example Issue Summary](/img/github-actions/drift-summary.png)
+![Example Drift Summary](/img/github-actions/drift-summary.png)
 
 Now we can see the new Issue, including a Terraform Plan summary and metadata for applying.
 
@@ -155,7 +155,7 @@ GitHub Actions support 256 matrix jobs in a single workflow at most, [ref](https
 
 :::
 
-When planning all stacks in an Atmos environment, we frequently plan more than 256 component and stacks at a time. In order to work around this limitation by GitHub, we can add an additional layer of abstraction using reusuable workflows. 
+When planning all stacks in an Atmos environment, we frequently plan more than 256 component in the stacks at a time. In order to work around this limitation by GitHub, we can add an additional layer of abstraction using reusable workflows. 
 
 For example, the "Atmos Terraform Plan" workflow can call "Atmos Terraform Plan Matrix" workflow which then calls the "Atmos Terraform Plan" Composite Action.
 
@@ -197,7 +197,7 @@ stateDiagram-v2
 
 ### Atmos Terraform Drift Remediation
 
-Once we have an open Issue for a drifted component, we can trigger another workflow to remediate the drifted Terraform resources. When an Issue is label with `apply`, the "Atmos Terraform Drift Remediation" workflow will take the component and stack in the given Issue and run `atmos terraform apply <component> --stack-name <stack>` using the latest Terraform Planfile. If the apply is successful, the workflow will close the given Issue as resolved.
+Once we have an open Issue for a drifted component, we can trigger another workflow to remediate the drifted Terraform resources. When an Issue is labeled with `apply`, the "Atmos Terraform Drift Remediation" workflow will take the component and stack in the given Issue and run `atmos terraform apply <component> --stack <stack>` using the latest Terraform Planfile. If the apply is successful, the workflow will close the given Issue as resolved.
 
 #### Example Usage
 

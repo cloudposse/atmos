@@ -68,7 +68,7 @@ with the following configuration as an example:
 ```yaml
   # .github/config/atmos-gitops.yaml
   atmos-config-path: ./rootfs/usr/local/etc/atmos/
-  atmos-version: 1.45.3
+  atmos-version: 1.52.0
   aws-region: us-east-2
   enable-infracost: false
   group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")

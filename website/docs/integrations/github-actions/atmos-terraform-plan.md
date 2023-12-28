@@ -29,11 +29,11 @@ The following screenshot showcases a successful "plan" Job Summary report. The r
 
 By expanding the "Terraform Plan Summary" block (clicking on the `<details/>` block), the full details of the plan are visible.
 
-![Example Image Expanded](/img/github-actions/create-extended.png)
+![Example Create Extended](/img/github-actions/create-extended.png)
 
 Furthermore when a resource is marked for deletion, the Plan Summary will include a warning admonition.
 
-![Example Image Deletion](/img/github-actions/destroy.png)
+![Example Destroy](/img/github-actions/destroy.png)
 
 ## Usage
 
@@ -78,7 +78,7 @@ with the following configuration as an example:
 ```yaml
   # .github/config/atmos-gitops.yaml
   atmos-config-path: ./rootfs/usr/local/etc/atmos/
-  atmos-version: 1.45.3
+  atmos-version: 1.52.0
   aws-region: us-east-2
   enable-infracost: false
   group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
