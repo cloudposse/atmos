@@ -7,7 +7,7 @@ description: Multiple Component Instances Atmos Design Pattern
 
 # Multiple Component Instances
 
-The **Multiple Component Instances** pattern describes how to provision many instances of a Terraform component in the same environment by
+The **Multiple Component Instances** Design Pattern describes how to provision many instances of a Terraform component in the same environment by
 configuring multiple Atmos component instances.
 
 An Atmos component can have any name that can be different from the Terraform component name. More than one instance of the same Terraform component

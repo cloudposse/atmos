@@ -7,8 +7,8 @@ description: Abstract Component Atmos Design Pattern
 
 # Abstract Component
 
-The **Abstract Component** pattern describes the mechanism of deriving Atmos components from one or more **abstract** base components (blueprints),
-allowing reusing the base components' configurations and prohibiting the abstract base component from being provisioned.
+The **Abstract Component** Design Pattern describes the mechanism of deriving Atmos components from one or more **abstract** base components (
+blueprints), allowing reusing the base components' configurations and prohibiting the abstract base component from being provisioned.
 
 Atmos supports two types of components:
 

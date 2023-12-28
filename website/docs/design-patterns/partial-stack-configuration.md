@@ -7,7 +7,7 @@ description: Partial Stack Configuration Atmos Design Pattern
 
 # Partial Stack Configuration
 
-The **Partial Stack Configuration** design pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
+The **Partial Stack Configuration** Design Pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
 stack manifests to manage and modify them separately and independently.
 
 Each partial top-level stack manifest imports or configures a set of related Atmos components. Each Atmos component belongs to just one of the partial
@@ -278,8 +278,8 @@ The **Partial Stack Configuration** pattern has the following limitations and dr
 
 :::note
 
-To address the limitations of the **Partial Stack Configuration** design pattern, consider
-the [Layered Stack Configuration](/design-patterns/layered-stack-configuration) design pattern
+To address the limitations of the **Partial Stack Configuration** Design Pattern, consider
+the [Layered Stack Configuration](/design-patterns/layered-stack-configuration) Design Pattern
 
 :::
 
@@ -288,3 +288,5 @@ the [Layered Stack Configuration](/design-patterns/layered-stack-configuration) 
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
 - [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
 - [Component Overrides](/design-patterns/component-overrides)
+- [Component Catalog](/design-patterns/component-catalog)
+- [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)

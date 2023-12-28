@@ -520,7 +520,7 @@ The **Organizational Structure Configuration** pattern has the following limitat
 :::note
 
 Even if you are just starting with a very simple infrastructure (e.g. just one organization, one organizational unit, a few accounts, one or a few
-regions), it's still recommended that you start with the configuration described by the **Organizational Structure Configuration** design pattern.
+regions), it's still recommended that you start with the configuration described by the **Organizational Structure Configuration** Design Pattern.
 
 In the future, when you modify your infrastructure to provision multi-organization, multi-account, multi-region environments at scale, it will be
 easy to extend the configuration without changing anything for the exiting environments.

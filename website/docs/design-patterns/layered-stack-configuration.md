@@ -7,7 +7,7 @@ description: Layered Stack Configuration Atmos Design Pattern
 
 # Layered Stack Configuration
 
-The **Layered Stack Configuration** design pattern describes the mechanism of grouping Atmos components by category or function,
+The **Layered Stack Configuration** Design Pattern describes the mechanism of grouping Atmos components by category or function,
 adding the groups of components to layers, and importing the layers into top-level Atmos stacks.
 
 Each layer imports or configures a set of related Atmos components. Each Atmos component belongs to just one layer.
@@ -16,7 +16,7 @@ Each layer can be managed separately, possibly by different teams.
 <br/>
 
 :::note
-The **Layered Stack Configuration** design pattern is similar to the [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
+The **Layered Stack Configuration** Design Pattern is similar to the [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
 pattern, but instead of splitting top-level Atmos stacks into smaller parts by category or function, the **Layered Stack Configuration** design
 pattern prescribes adding separate layers to group the related Atmos components, and then importing the layers into top-level Atmos stacks.
 :::

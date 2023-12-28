@@ -7,13 +7,13 @@ description: Component Catalog with Mixins Atmos Design Pattern
 
 # Component Catalog with Mixins
 
-The **Component Catalog with Mixins** design pattern is a variation of the [Component Catalog](/design-patterns/component-catalog) pattern, with the
+The **Component Catalog with Mixins** Design Pattern is a variation of the [Component Catalog](/design-patterns/component-catalog) pattern, with the
 difference being that we first create parts of a component's configuration related to different environments (in `mixins` folder), and then assemble
 environment-specific manifests by importing the parts, and then import the environment-specific manifests themselves into the top-level stacks.
 
 It's similar to how [Helm](https://helm.sh/) and [helmfile](https://helmfile.readthedocs.io/en/latest/#environment) handle environments.
 
-The **Component Catalog with Mixins** design pattern prescribes the following:
+The **Component Catalog with Mixins** Design Pattern prescribes the following:
 
 - For a Terraform component, create a folder with the same name in `stacks/catalog` to make it symmetrical and easy to find.
   For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
@@ -393,7 +393,7 @@ The **Component Catalog with Mixins** pattern has the following limitations and 
 
 :::note
 
-To address the limitations of the **Component Catalog with Mixins** design pattern when you are provisioning a very basic infrastructure, consider
+To address the limitations of the **Component Catalog with Mixins** Design Pattern when you are provisioning a very basic infrastructure, consider
 using the following patterns:
 
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)

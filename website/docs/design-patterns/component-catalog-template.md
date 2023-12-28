@@ -7,7 +7,7 @@ description: Component Catalog Template Atmos Design Pattern
 
 # Component Catalog Template
 
-The **Component Catalog Template** design pattern is used when you have an unbounded number of a component's instances provisioned in one environment
+The **Component Catalog Template** Design Pattern is used when you have an unbounded number of a component's instances provisioned in one environment
 (the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old
 instances must be kept unchanged and never destroyed.
 
@@ -59,7 +59,7 @@ an [IAM role for service accounts](https://docs.aws.amazon.com/eks/latest/usergu
 to access various AWS resources.
 
 The Development team can create a new application anytime, and we need to provision a new IRSA in the EKS cluster.
-We'll use the **Component Catalog Template** design pattern to configure the IAM roles with diffrent settings for each application.
+We'll use the **Component Catalog Template** Design Pattern to configure the IAM roles with diffrent settings for each application.
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 
@@ -175,7 +175,7 @@ The **Component Catalog Template** pattern has the following limitations and dra
 
 :::note
 
-To address the limitations of the **Component Catalog Template** design pattern, consider using the following patterns:
+To address the limitations of the **Component Catalog Template** Design Pattern, consider using the following patterns:
 
 - [Component Catalog](/design-patterns/component-catalog)
 - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)

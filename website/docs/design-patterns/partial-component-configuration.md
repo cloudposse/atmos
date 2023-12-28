@@ -7,7 +7,7 @@ description: Partial Component Configuration Atmos Design Pattern
 
 # Partial Component Configuration
 
-The **Partial Component Configuration** design pattern describes the mechanism of splitting an Atmos component's configuration across many Atmos
+The **Partial Component Configuration** Design Pattern describes the mechanism of splitting an Atmos component's configuration across many Atmos
 manifests to manage, modify and apply them separately and independently in one top-level stack without affecting the others.
 
 The mechanism is similar to [Partial Classes in
@@ -19,7 +19,7 @@ across a few configuration files.
 
 :::note
 
-Variations of the **Partial Component Configuration** design pattern were also implemented and described in the following patterns:
+Variations of the **Partial Component Configuration** Design Pattern were also implemented and described in the following patterns:
 
 - [Component Catalog](/design-patterns/component-catalog)
 - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
