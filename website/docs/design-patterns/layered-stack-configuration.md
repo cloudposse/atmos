@@ -245,7 +245,8 @@ Import the required layers into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` t
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-dev`
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
   # Import the layers (groups of components)
@@ -263,7 +264,8 @@ Import the required layers into the `stacks/orgs/acme/plat/dev/us-west-2.yaml` t
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-west-2` manifests define the top-level Atmos stack `plat-uw2-dev`
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-west-2` manifests 
+  # define the top-level Atmos stack `plat-uw2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-west-2
   # Import the layers (groups of components)
@@ -281,7 +283,8 @@ Import the required layers into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` 
 
 ```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
 import:
-  # The `orgs/acme/plat/prod/_defaults` and `mixins/region/us-east-2` manifests define the top-level Atmos stack `plat-ue2-prod`
+  # The `orgs/acme/plat/prod/_defaults` and `mixins/region/us-east-2` manifests 
+  # define the top-level Atmos stack `plat-ue2-prod`
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-east-2
   # Import the layers (groups of components)
@@ -294,6 +297,8 @@ import:
   - layers/networking
   - layers/eks
 ```
+
+<br/>
 
 Similarly, import the required layers into the other top-level stacks for the other organizations, OUs/tenants, accounts and regions.
 Make sure to import only the layers that define the component that need to be provisioned into the stacks.
