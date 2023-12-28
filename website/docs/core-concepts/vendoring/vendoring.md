@@ -190,9 +190,6 @@ spec:
   and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the artifact
   versions specified in the `version` attribute.
 
-- The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the 
-  specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
-
   Here's an advanced example showcasing how templates and Sprig functions can be used together with `targets`:
 
   ```yaml
@@ -200,6 +197,9 @@ spec:
     # Vendor a component into a major-minor versioned folder like 1.2
     - "components/terraform/infra/vpc-flow-logs-bucket/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
   ```
+
+- The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the
+  specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
 
 - The `imports` section defines the additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported
   at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all
