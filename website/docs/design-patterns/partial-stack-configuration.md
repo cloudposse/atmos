@@ -105,7 +105,7 @@ As the structure above shows, we have various Terraform components (Terraform ro
 In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
 Design Pattern.
 
-In the `orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts by category:
+In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts by category:
 
 - `us-east-2-load-balancers.yaml`
 - `us-east-2-data.yaml`

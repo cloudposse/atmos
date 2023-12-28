@@ -128,20 +128,16 @@ As the structure above shows, we have various Terraform components (Terraform ro
 In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
 Design Pattern.
 
-In the `orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts by category:
+In the `stacks/layers` folder, we define layers (groups of components), and import the related components into the layer manifests:
 
-- `us-east-2-load-balancers.yaml`
-- `us-east-2-data.yaml`
-- `us-east-2-dns.yaml`
-- `us-east-2-logs.yaml`
-- `us-east-2-notifications.yaml`
-- `us-east-2-firewalls.yaml`
-- `us-east-2-networking.yaml`
-- `us-east-2-eks.yaml`
-
-Note that these partial stack manifests are parts of the same top-level Atmos stack `plat-ue2-dev` since they all import the same context variables
-`namespace`, `tenant`, `environment` and `stage`. A top-level Atmos stack is defined by the context variables, not by the file names or locations
-in the filesystem (file names can be anything, they are for people to better organize the entire configuration).
+- `load-balancers.yaml`
+- `data.yaml`
+- `dns.yaml`
+- `logs.yaml`
+- `notifications.yaml`
+- `firewalls.yaml`
+- `networking.yaml`
+- `eks.yaml`
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 
