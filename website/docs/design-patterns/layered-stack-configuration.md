@@ -7,8 +7,6 @@ description: Layered Stack Configuration Atmos Design Pattern
 
 # Layered Stack Configuration
 
-# Partial Stack Configuration
-
 The **Layered Stack Configuration** design pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
 stack manifests to manage and modify them separately and independently.
 
@@ -63,25 +61,32 @@ Use the **Layered Stack Configuration** pattern when:
    │   │   ├── tenant  (tenant-specific defaults)
    │   │   │   └── plat.yaml
    │   │   ├── region  (region-specific defaults)
-   │   │   │   └── us-east-2.yaml
+   │   │   │   ├── us-east-2.yaml
+   │   │   │   └── us-west-2.yaml
    │   │   └── stage  (stage-specific defaults)
-   │   │       └── dev.yaml
+   │   │       ├── dev.yaml
+   │   │       ├── staging.yaml
+   │   │       └── prod.yaml
    │   └── orgs  (organizations)
    │       └── acme
    │           ├── _defaults.yaml
    │           └── plat ('plat' OU/tenant)
    │               ├── _defaults.yaml
-   │               └── dev ('dev' account)
-   │                  ├── _defaults.yaml
-   │                  ├── # Split the top-level stack 'plat-ue2-dev' into parts per component category
-   │                  ├── us-east-2-load-balancers.yaml
-   │                  ├── us-east-2-data.yaml
-   │                  ├── us-east-2-dns.yaml
-   │                  ├── us-east-2-logs.yaml
-   │                  ├── us-east-2-notifications.yaml
-   │                  ├── us-east-2-firewalls.yaml
-   │                  ├── us-east-2-networking.yaml
-   │                  └── us-east-2-eks.yaml
+   │               ├── dev
+   │               │   ├── _defaults.yaml
+   │               │   ├── global-region.yaml
+   │               │   ├── us-east-2.yaml
+   │               │   └── us-west-2.yaml
+   │               ├── staging
+   │               │   ├── _defaults.yaml
+   │               │   ├── global-region.yaml
+   │               │   ├── us-east-2.yaml
+   │               │   └── us-west-2.yaml
+   │               └── prod
+   │                   ├── _defaults.yaml
+   │                   ├── global-region.yaml
+   │                   ├── us-east-2.yaml
+   │                   └── us-west-2.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
