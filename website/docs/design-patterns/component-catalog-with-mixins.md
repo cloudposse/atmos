@@ -61,7 +61,7 @@ The **Component Catalog with Mixins** Design Pattern prescribes the following:
 
 Use the **Component Catalog** pattern when:
 
-- You have components that are provisioned into multiple top-level stacks with different configurations for each stack
+- You have components that are provisioned in multiple top-level stacks with different configurations for each stack
 
 - You need to make the component configurations reusable across different environments
 

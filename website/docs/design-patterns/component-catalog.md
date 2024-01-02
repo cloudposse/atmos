@@ -47,13 +47,20 @@ The **Component Catalog** pattern prescribes the following:
 
 Use the **Component Catalog** pattern when:
 
-- You have many components that are provisioned into multiple stacks with different configurations for each stack
+- You have many components that are provisioned in multiple stacks (many OUs, accounts, regions) with different configurations for each stack
 
 - You need to make the components' default configurations reusable across different stacks
 
 - You want the component catalog folders structures to mirror the Terraform components folder structure to make it easy to find and manage
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+<br/>
+
+:::note
+Having `dev`, `staging`, `prod`, `ue2` and `uw2` manifests in the component's catalog makes the most sense for multi-OU and/or multi-region
+architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple top-level stack manifests.
+:::
 
 ## Structure
 
