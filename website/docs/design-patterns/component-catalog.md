@@ -58,8 +58,9 @@ Use the **Component Catalog** pattern when:
 <br/>
 
 :::note
-Having `dev`, `staging`, `prod`, `ue2` and `uw2` manifests in the component's catalog makes the most sense for multi-OU and/or multi-region
-architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple top-level stack manifests.
+Having the `dev`, `staging`, `prod`, `ue2` and `uw2` manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
+multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
+top-level stack manifests.
 :::
 
 ## Structure
@@ -364,3 +365,8 @@ patterns:
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
 - [Inline Component Customization](/design-patterns/inline-component-customization)
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+
+## References
+
+- [Catalogs](/core-concepts/stacks/catalogs)
+- [Mixins](/core-concepts/stacks/mixins)

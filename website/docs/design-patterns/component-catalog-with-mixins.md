@@ -8,8 +8,8 @@ description: Component Catalog with Mixins Atmos Design Pattern
 # Component Catalog with Mixins
 
 The **Component Catalog with Mixins** Design Pattern is a variation of the [Component Catalog](/design-patterns/component-catalog) pattern, with the
-difference being that we first create parts of a component's configuration related to different environments (in `mixins` folder), and then assemble
-environment-specific manifests by importing the parts, and then import the environment-specific manifests themselves into the top-level stacks.
+difference being that we first create parts of a component's configuration related to different environments (e.g. in `mixins` folder), then
+assemble environment-specific manifests from the parts, and then import the environment-specific manifests themselves into the top-level stacks.
 
 It's similar to how [Helm](https://helm.sh/) and [helmfile](https://helmfile.readthedocs.io/en/latest/#environment) handle environments.
 
@@ -61,11 +61,17 @@ The **Component Catalog with Mixins** Design Pattern prescribes the following:
 
 Use the **Component Catalog** pattern when:
 
-- You have components that are provisioned in multiple top-level stacks with different configurations for each stack
+- You have many components that are provisioned in multiple stacks (many OUs, accounts, regions) with different configurations for each stack
 
 - You need to make the component configurations reusable across different environments
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+:::note
+Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
+multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
+top-level stack manifests.
+:::
 
 ## Structure
 
@@ -410,3 +416,8 @@ using the following patterns:
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
 - [Inline Component Customization](/design-patterns/inline-component-customization)
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+
+## References
+
+- [Catalogs](/core-concepts/stacks/catalogs)
+- [Mixins](/core-concepts/stacks/mixins)

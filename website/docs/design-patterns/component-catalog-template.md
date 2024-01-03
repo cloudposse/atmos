@@ -190,3 +190,7 @@ To address the limitations of the **Component Catalog Template** Design Pattern,
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
 - [Inline Component Customization](/design-patterns/inline-component-customization)
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+
+## References
+
+- [Catalogs](/core-concepts/stacks/catalogs)
