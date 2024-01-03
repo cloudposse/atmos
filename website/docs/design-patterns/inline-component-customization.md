@@ -9,7 +9,7 @@ description: Inline Component Customization Atmos Design Pattern
 
 The **Inline Component Customization** pattern is used when the defaults for the [components](/core-concepts/components) in
 a [stack](/core-concepts/stacks)
-are configured in default/base manifests, the manifests are [imported](/core-concepts/stacks/imports) into the top-level stacks, and the components
+are configured in default manifests, the manifests are [imported](/core-concepts/stacks/imports) into the top-level stacks, and the components
 are customized inline in each top-level stack overriding the configuration for each environment (OU, account, region).
 
 ## Applicability
