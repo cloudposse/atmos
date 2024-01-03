@@ -674,3 +674,8 @@ Component: derived-component-2
 Terraform component: test/test-component
 Inheritance: derived-component-2 -> base-component-2 -> derived-component-1 -> base-component-1
 ```
+
+## References
+
+- [Abstract Component Atmos Design Pattern](/design-patterns/abstract-component)
+- [Component Inheritance Atmos Design Pattern](/design-patterns/component-inheritance)

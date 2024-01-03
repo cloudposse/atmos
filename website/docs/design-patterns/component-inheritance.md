@@ -180,3 +180,8 @@ The **Component Inheritance** pattern provides the following benefits:
 - [Component Catalog Template](/design-patterns/component-catalog-template)
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
 - [Inline Component Customization](/design-patterns/inline-component-customization)
+
+## References
+
+- [Component-Oriented Programming](/core-concepts/components/component-oriented-programming)
+- [Component Inheritance](/core-concepts/components/inheritance)

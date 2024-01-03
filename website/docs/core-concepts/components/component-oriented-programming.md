@@ -37,3 +37,8 @@ These concepts and principles are implemented and used in Atmos by combining two
 and `metadata` component's configuration section.
 
 :::
+
+## References
+
+- [Abstract Component Atmos Design Pattern](/design-patterns/abstract-component)
+- [Component Inheritance Atmos Design Pattern](/design-patterns/component-inheritance)
