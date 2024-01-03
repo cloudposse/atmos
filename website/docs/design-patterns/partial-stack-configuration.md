@@ -25,7 +25,7 @@ Use the **Partial Stack Configuration** pattern when:
 
 - You want to keep the configuration easy to manage and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-## Structure
+## Example
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -97,8 +97,6 @@ Use the **Partial Stack Configuration** pattern when:
            ├── vpc
            └── vpc-flow-logs-bucket
 ```
-
-## Example
 
 As the structure above shows, we have various Terraform components (Terraform root modules) in the `components/terraform` folder.
 

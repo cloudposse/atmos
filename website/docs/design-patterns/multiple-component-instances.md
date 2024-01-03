@@ -22,7 +22,7 @@ Use the **Multiple Component Instances** pattern when:
 
 - You need to provision multiple instances of a Terraform component in the same environment (organization, OU, account, region)
 
-## Structure
+## Example
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -62,8 +62,6 @@ Use the **Multiple Component Instances** pattern when:
        └── terraform  # Terraform components (Terraform root modules)
            └── vpc
 ```
-
-## Example
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 

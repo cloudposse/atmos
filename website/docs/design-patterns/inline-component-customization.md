@@ -22,7 +22,7 @@ Use the **Inline Component Customization** pattern when:
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-## Structure
+## Example
 
 For example, suppose you need a simple setup with only `dev`, `staging` and `prod` stages (accounts). Here's how you might organize the stacks and
 component configurations for the `vpc` and `vpc-flow-logs-bucket` components, and then customize the components in the stacks.
@@ -44,8 +44,6 @@ component configurations for the `vpc` and `vpc-flow-logs-bucket` components, an
            ├── vpc-flow-logs-bucket
            ├── < other components >
 ```
-
-## Example
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 

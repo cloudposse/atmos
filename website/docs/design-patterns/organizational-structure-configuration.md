@@ -23,7 +23,7 @@ Use the **Organizational Structure Configuration** pattern when:
 
 - You want to provision the infrastructure into many regions
 
-## Structure
+## Example
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -113,8 +113,6 @@ Use the **Organizational Structure Configuration** pattern when:
            ├── vpc-flow-logs-bucket
            ├── < other components >
 ```
-
-## Example
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 

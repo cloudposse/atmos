@@ -37,7 +37,7 @@ Use the **Abstract Component** pattern when:
 
 - You need to keep the configuration of all components [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-## Structure
+## Example
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -77,8 +77,6 @@ Use the **Abstract Component** pattern when:
        └── terraform  # Terraform components (Terraform root modules)
            └── vpc
 ```
-
-## Example
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 

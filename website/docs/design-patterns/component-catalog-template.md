@@ -35,7 +35,7 @@ Use the **Component Catalog Template** pattern when:
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-## Structure
+## Example
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -50,8 +50,6 @@ Use the **Component Catalog Template** pattern when:
            └── eks
                └── iam-role
 ```
-
-## Example
 
 Suppose that we have an EKS cluster provisioned in one of the accounts and regions.
 The cluster is running many different applications, each one requires

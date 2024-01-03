@@ -21,9 +21,9 @@ Use the **Inline Component Configuration** pattern when:
 
 - For testing or development purposes
 
-## Structure
+## Example
 
-For example, suppose you need a simple setup with only `dev`, `staging` and `prod` stages (accounts). Here's how you might organize the stacks and
+Suppose you need a simple setup with only `dev`, `staging` and `prod` stages (accounts). Here's how you might organize the stacks and
 inline-component configuration for the `vpc` and `vpc-flow-logs-bucket` components.
 
 ```console
@@ -40,8 +40,6 @@ inline-component configuration for the `vpc` and `vpc-flow-logs-bucket` componen
            ├── vpc-flow-logs-bucket
            ├── < other components >
 ```
-
-## Example
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 

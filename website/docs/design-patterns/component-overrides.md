@@ -28,7 +28,7 @@ Use the **Component Overrides** pattern when:
 
 - You want to keep the configurations of the groups of Atmos components [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-## Structure
+## Example
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -116,8 +116,6 @@ Use the **Component Overrides** pattern when:
            ├── vpc
            └── vpc-flow-logs-bucket
 ```
-
-## Example
 
 :::note
 The **Component Overrides** Design Pattern can be applied to the configuration structures described by

@@ -73,7 +73,7 @@ multi-region architectures, such that there will be multiple dev/staging/prod or
 top-level stack manifests.
 :::
 
-## Structure
+## Example
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -108,8 +108,6 @@ top-level stack manifests.
        └── terraform  # Terraform components (Terraform root modules)
            └── vpc
 ```
-
-## Example
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 

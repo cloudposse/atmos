@@ -37,7 +37,11 @@ Use the **Partial Component Configuration** pattern when:
 
 - You want to keep the parts of the configuration reusable and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-## Structure
+## Example
+
+Suppose that we have EKS clusters provisioned in many accounts and regions. The clusters can run different Kubernetes versions.
+Each cluster will need to be upgraded to the next Kubernetes version independently without affecting the configurations for the other clusters in
+the other accounts and regions.
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -56,12 +60,6 @@ Use the **Partial Component Configuration** pattern when:
            └── eks
                └── cluster
 ```
-
-## Example
-
-Suppose that we have EKS clusters provisioned in many accounts and regions. The clusters can run different Kubernetes versions.
-Each cluster will need to be upgraded to the next Kubernetes version independently without affecting the configurations for the other clusters in
-the other accounts and regions.
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 
