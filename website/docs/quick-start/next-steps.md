@@ -12,7 +12,7 @@ Atmos is a powerful enterprise-grade workflow automation tool with so **much mor
 
 Here are some of the major differentiators of Atmos:
 
-* [Atmos Design Patterns](/category/design-patterns)
+* [Atmos Design Patterns](/design-patterns)
 * [Third-party Integrations](/category/integrations)
 * [Atmos Vendoring](/core-concepts/vendoring)
 * [Component Vendoring](/core-concepts/components/vendoring)
