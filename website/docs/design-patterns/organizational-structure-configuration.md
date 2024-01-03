@@ -145,7 +145,7 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-### Configure Component Catalog
+### Configure Component Catalogs
 
 Add the following default configuration to the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` manifest:
 
@@ -286,7 +286,18 @@ vars:
 # Other defaults for the `staging` stage/account
 ```
 
+<br/>
+
 ### Configure Organization Defaults
+
+<br/>
+
+:::note
+The `_defaults.yaml` files is a recommended way to use the stack manifests with the default configurations for organizations, OUs/tenants, accounts
+and regions
+:::
+
+<br/>
 
 In `stacks/orgs/org1/_defaults.yaml`, add the following config:
 
@@ -540,3 +551,8 @@ easy to extend the configuration without changing anything for the exiting envir
 - [Partial Component Configuration](/design-patterns/partial-component-configuration)
 - [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
 - [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
+
+## References
+
+- [Catalogs](/core-concepts/stacks/catalogs)
+- [Mixins](/core-concepts/stacks/mixins)
