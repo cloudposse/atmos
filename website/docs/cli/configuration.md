@@ -98,7 +98,7 @@ components:
 
 ## Stacks
 
-Specify where to find stacks and the stack name pattern.
+Define the stack name pattern and specify where to find stacks.
 
 ```yaml
 stacks:
@@ -126,31 +126,57 @@ stacks:
 
 - `stacks.included_paths` tells Atmos where to search for the top-level stack manifests
 
-:::note
-Atmos top-level stack manifests are configuration files that define **all** settings and components for the corresponding environment (organization,
-OU/tenant, account, region), and they are used in `atmos` CLI commands like `atmos terraform plan <component> -s <top-level-stack>` and
-`atmos terraform apply <component> -s <top-level-stack>`
-:::
+  :::note
+  Atmos top-level stack manifests are configuration files that define **all** settings and components for the corresponding environment (organization,
+  OU/tenant, account, region), and they are used in `atmos` CLI commands like `atmos terraform plan <component> -s <top-level-stack>` and
+  `atmos terraform apply <component> -s <top-level-stack>`
+  :::
 
 <br/>
 
 - `stacks.excluded_paths` tells Atmos which paths from `stacks.included_paths` to exclude. For example, we will exclude the config files that don't
   contain the top-level stack manifests, but just define the default values that get imported into top-level stack manifests
 
-:::note
-The `_defaults.yaml` files is the recommended way to define the stack manifests with the
-default configurations for organizations, OUs/tenants, accounts and regions. The `_defaults.yaml` files themselves are not top-level Atmos stacks,
-they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
-:::
+  :::note
+  The `_defaults.yaml` files is the recommended way to define the stack manifests with the
+  default configurations for organizations, OUs/tenants, accounts and regions. The `_defaults.yaml` files themselves are not top-level Atmos stacks,
+  they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
+  :::
 
 <br/>
 
-- `stacks.name_pattern`
+- `stacks.name_pattern` configures the name pattern for the top-level Atmos stacks using the context variables `namespace`, `tenant`, `environment`
+  and `stage` as the template tokens. Depending on the structure of your organization, OUs, accounts and regions, set `stacks.name_pattern` to the
+  following:
+
+  - `name_pattern: {stage}` - if you use just one region and a few accounts (stages) in just one organization and one OU. In this case, the
+    top-level Atmos stacks will use just the `stage` (account) in their names, and to provision the Atmos components in the top-level stacks, you will
+    be executing Atmos commands like `atmos terraform apply <component> --stack dev`, `atmos terraform apply <component> --stack staging`
+    and `atmos terraform apply <component> --stack prod`
+
+  - `name_pattern: {environment}-{stage}` - if you have multiple regions and accounts (stages) in just one organization and one OU. In this case, the
+    top-level Atmos stacks will use the `environment` (region) and `stage` (account) in their names, and to provision the Atmos components in the
+    top-level stacks, you will be executing Atmos commands
+    like `atmos terraform apply <component> --stack ue2-dev`, `atmos terraform apply <component> --stack uw2-staging`
+    and `atmos terraform apply <component> --stack ue1-prod`. Note that the `name_pattern` can also be defined
+    as `{stage}-{environment}`, in which case the Atmos commands will look like `atmos terraform apply <component> --stack dev-ue2`
+
+  - `name_pattern: {tenant}-{environment}-{stage}` - if you have multiple regions, OUs (tenants) and accounts (stages) in just one organization. In
+    this case, the top-level Atmos stacks will use the `tenant`, `environment` (region) and `stage` (account) in their names, and to provision the
+    Atmos components in the top-level stacks, you will be executing Atmos commands
+    like `atmos terraform apply <component> --stack plat-ue2-dev`, `atmos terraform apply <component> --stack core-uw2-staging`
+    and `atmos terraform apply <component> --stack plat-ue1-prod`, where `plat` and `core` are the OUs/tenants in your organization
+
+  - `name_pattern: {namespace}-{tenant}-{environment}-{stage}` - if you have a multi-org, multi-tenant, multi-account and multi-region architecture.
+    In this case, the top-level Atmos stacks will use the `namespace`, `tenant`, `environment` (region) and `stage` (account) in their names, and to
+    provision the Atmos components in the top-level stacks, you will be executing Atmos commands
+    like `atmos terraform apply <component> --stack org1-plat-ue2-dev`, `atmos terraform apply <component> --stack org2-core-uw2-staging`
+    and `atmos terraform apply <component> --stack org2-plat-ue1-prod`, where `org1` and `org2` are the organization names
 
 <br/>
 
 :::tip
-Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to configure the `stacks` section in `atmos.yaml`
+Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to configure the `stacks` section in `atmos.yaml` for different use-cases
 :::
 
 <br/>
