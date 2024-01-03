@@ -25,6 +25,10 @@ Use the **Organizational Structure Configuration** pattern when:
 
 ## Example
 
+The following example shows the Atmos stack and component configurations to provision the `vpc` and `vpc-flow-logs-bucket` components into
+a multi-org, multi-tenant, multi-account, multi-region environment. There are two organizations (`org1` and `org2`) with two
+OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two regions (`us-east-2` and `us-west-2`).
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
@@ -108,7 +112,6 @@ Use the **Organizational Structure Configuration** pattern when:
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (Terraform root modules)
-           ├── account
            ├── vpc
            ├── vpc-flow-logs-bucket
            ├── < other components >
