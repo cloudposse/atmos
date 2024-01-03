@@ -7,7 +7,7 @@ description: Inline Component Configuration Atmos Design Pattern
 
 # Inline Component Configuration
 
-The **Inline Component Configuration** pattern is used when the [components](/core-concepts/components) in a [stack](/core-concepts/stacks) 
+The **Inline Component Configuration** pattern is used when the [components](/core-concepts/components) in a [stack](/core-concepts/stacks)
 are configured inline in the stack manifest without [importing](/core-concepts/stacks/imports) and reusing default/base configurations.
 
 ## Applicability
@@ -22,6 +22,9 @@ Use the **Inline Component Configuration** pattern when:
 - For testing or development purposes
 
 ## Structure
+
+For example, suppose you need a simple setup with only `dev`, `staging` and `prod` stages (accounts). Here's how you might organize the stacks and
+inline-component configuration for the `vpc` and `vpc-flow-logs-bucket` components.
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -130,7 +133,7 @@ The **Inline Component Configuration** pattern provides the following benefits:
 
 - Very simple stack and component configurations
 
-- All components are defined in just one place (in one stack manifest) - easier to see what is provisioned and where
+- All components are defined in just one place (in one stack manifest), so it's easier to see what is provisioned and where
 
 ## Limitations
 

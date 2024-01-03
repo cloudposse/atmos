@@ -171,7 +171,8 @@ stacks:
     In this case, the top-level Atmos stacks will use the `namespace`, `tenant`, `environment` (region) and `stage` (account) in their names, and to
     provision the Atmos components in the top-level stacks, you will be executing Atmos commands
     like `atmos terraform apply <component> --stack org1-plat-ue2-dev`, `atmos terraform apply <component> --stack org2-core-uw2-staging`
-    and `atmos terraform apply <component> --stack org2-plat-ue1-prod`, where `org1` and `org2` are the organization names
+    and `atmos terraform apply <component> --stack org2-plat-ue1-prod`, where `org1` and `org2` are the organization names (defined as `namespace` in
+    the corresponding `_defaults.yaml` config files for the organizations)
 
 <br/>
 

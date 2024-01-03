@@ -24,6 +24,9 @@ Use the **Inline Component Customization** pattern when:
 
 ## Structure
 
+For example, suppose you need a simple setup with only `dev`, `staging` and `prod` stages (accounts). Here's how you might organize the stacks and
+component configurations for the `vpc` and `vpc-flow-logs-bucket` components, and then customize the components in the stacks.
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
