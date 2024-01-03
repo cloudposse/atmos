@@ -293,8 +293,8 @@ vars:
 <br/>
 
 :::note
-The `_defaults.yaml` files is a recommended way to use the stack manifests with the default configurations for organizations, OUs/tenants, accounts
-and regions
+The `_defaults.yaml` files in the organization, tenant, account and region folders is a recommended way to define the stack manifests with the
+default configurations for organizations, OUs/tenants, accounts and regions
 :::
 
 <br/>
