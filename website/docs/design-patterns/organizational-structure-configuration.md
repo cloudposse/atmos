@@ -293,8 +293,9 @@ vars:
 <br/>
 
 :::note
-The `_defaults.yaml` files in the organization, tenant, account and region folders is a recommended way to define the stack manifests with the
-default configurations for organizations, OUs/tenants, accounts and regions
+The `_defaults.yaml` files in the organization, tenant, account and region folders is the recommended way to define the stack manifests with the
+default configurations for organizations, OUs/tenants, accounts and regions. The `_defaults.yaml` files themselves are not top-level Atmos stacks,
+they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
 :::
 
 <br/>
