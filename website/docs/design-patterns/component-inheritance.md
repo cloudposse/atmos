@@ -9,7 +9,11 @@ description: Component Inheritance Atmos Design Pattern
 
 The **Component Inheritance** Design Pattern describes the mechanism of deriving Atmos components from one or more base components, allowing reusing
 the base components' configurations.
+:::info Derived Components
 
+Inherited Components are often referred to as Derived Components, which describe the same type of Atmos components.
+
+:::
 In Atmos, **Component Inheritance** is the mechanism of deriving a component from one or more base components, inheriting all the
 properties of the base component(s) and overriding only some fields specific to the derived component. The derived component acquires all the
 properties of the base component(s), allowing creating very DRY configurations that are built upon existing components.
