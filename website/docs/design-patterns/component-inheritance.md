@@ -29,6 +29,10 @@ Use the **Component Inheritance** pattern when:
 
 ## Example
 
+The following example shows the Atmos stack and component configurations to provision the `vpc` component into
+a multi-account, multi-region environment. In the `catalog/vpc` folder, we have the `defaults.yaml` manifest that configures the base abstract
+component `vpc/defaults` to be inherited by all the derived VPC components in all stacks.
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks

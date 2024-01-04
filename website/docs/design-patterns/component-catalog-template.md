@@ -37,6 +37,14 @@ Use the **Component Catalog Template** pattern when:
 
 ## Example
 
+Suppose that we have an EKS cluster provisioned in one of the accounts and regions.
+The cluster is running many different applications, each one requires
+an [IAM role for service accounts](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) (IRSA) with permissions
+to access various AWS resources.
+
+The Development team can create a new application anytime, and we need to provision a new IRSA in the EKS cluster.
+We'll use the **Component Catalog Template** Design Pattern to configure the IAM roles with different settings for each application.
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
@@ -50,14 +58,6 @@ Use the **Component Catalog Template** pattern when:
            └── eks
                └── iam-role
 ```
-
-Suppose that we have an EKS cluster provisioned in one of the accounts and regions.
-The cluster is running many different applications, each one requires
-an [IAM role for service accounts](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) (IRSA) with permissions
-to access various AWS resources.
-
-The Development team can create a new application anytime, and we need to provision a new IRSA in the EKS cluster.
-We'll use the **Component Catalog Template** Design Pattern to configure the IAM roles with diffrent settings for each application.
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 
@@ -97,20 +97,20 @@ components:
       vars:
         enabled: true
         tags:
-          Service: {{ .app_name }}
-        service_account_name: {{ .service_account_name }}
-        service_account_namespace: {{ .service_account_namespace }}
+          Service: { { .app_name } }
+        service_account_name: { { .service_account_name } }
+        service_account_namespace: { { .service_account_namespace } }
         # Example of using the Sprig functions in `Go` templates.
         # Refer to https://masterminds.github.io/sprig for more details.
-        {{ if hasKey . "iam_managed_policy_arns" }}
+        { { if hasKey . "iam_managed_policy_arns" } }
         iam_managed_policy_arns:
-          {{ range $i, $iam_managed_policy_arn := .iam_managed_policy_arns }}
+          { { range $i, $iam_managed_policy_arn := .iam_managed_policy_arns } }
           - '{{ $iam_managed_policy_arn }}'
-          {{ end }}
-        {{ - end }}
+          { { end } }
+        { { - end } }
 ```
 
-Import the `stacks/catalog/eks/iam-role/defaults.tmpl` manifest template into a top-level stack, 
+Import the `stacks/catalog/eks/iam-role/defaults.tmpl` manifest template into a top-level stack,
 for example `stacks/orgs/acme/plat/prod/us-east-2.yaml`, and provide the configuration for each application in the `context` object:
 
 ```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
