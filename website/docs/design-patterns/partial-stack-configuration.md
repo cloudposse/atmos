@@ -27,6 +27,24 @@ Use the **Partial Stack Configuration** pattern when:
 
 ## Example
 
+In the following structure, we have many Terraform components (Terraform root modules) in the `components/terraform` folder.
+
+In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
+Design Pattern.
+
+In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` stack manifest into the following parts by category:
+
+- `us-east-2-load-balancers.yaml`
+- `us-east-2-data.yaml`
+- `us-east-2-dns.yaml`
+- `us-east-2-logs.yaml`
+- `us-east-2-notifications.yaml`
+- `us-east-2-firewalls.yaml`
+- `us-east-2-networking.yaml`
+- `us-east-2-eks.yaml`
+
+<br/>
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
@@ -98,23 +116,7 @@ Use the **Partial Stack Configuration** pattern when:
            └── vpc-flow-logs-bucket
 ```
 
-As the structure above shows, we have various Terraform components (Terraform root modules) in the `components/terraform` folder.
-
-In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
-Design Pattern.
-
-In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` manifest into the following parts by category:
-
-- `us-east-2-load-balancers.yaml`
-- `us-east-2-data.yaml`
-- `us-east-2-dns.yaml`
-- `us-east-2-logs.yaml`
-- `us-east-2-notifications.yaml`
-- `us-east-2-firewalls.yaml`
-- `us-east-2-networking.yaml`
-- `us-east-2-eks.yaml`
-
-Note that these partial stack manifests are parts of the same top-level Atmos stack `plat-ue2-dev` since they all import the same context variables
+Note that the partial stack manifests are parts of the same top-level Atmos stack `plat-ue2-dev` since they all import the same context variables
 `namespace`, `tenant`, `environment` and `stage`. A top-level Atmos stack is defined by the context variables, not by the file names or locations
 in the filesystem (file names can be anything, they are for people to better organize the entire configuration).
 
@@ -288,3 +290,8 @@ the [Layered Stack Configuration](/design-patterns/layered-stack-configuration) 
 - [Component Overrides](/design-patterns/component-overrides)
 - [Component Catalog](/design-patterns/component-catalog)
 - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
+
+## References
+
+- [Catalogs](/core-concepts/stacks/catalogs)
+- [Mixins](/core-concepts/stacks/mixins)

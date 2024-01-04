@@ -43,6 +43,11 @@ Suppose that we have EKS clusters provisioned in many accounts and regions. The 
 Each cluster will need to be upgraded to the next Kubernetes version independently without affecting the configurations for the other clusters in
 the other accounts and regions.
 
+The following example shows how to configure partial manifests for the `eks/cluster` Atmos component. The defaults for all clusters are defined in the
+`stacks/catalog/eks/cluster/defaults.yaml` manifest, while the settings related to different Kubernetes versions are defined in the manifests in the
+`stacks/catalog/eks/cluster/mixins` folder. Then, the defaults and one of the mixins are imported into a top-level stack to provide the final
+configuration for the `eks/cluster` component in the stack.
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
@@ -225,3 +230,8 @@ The **Partial Component Configuration** pattern provides the following benefits:
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
 - [Inline Component Customization](/design-patterns/inline-component-customization)
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+
+## References
+
+- [Catalogs](/core-concepts/stacks/catalogs)
+- [Mixins](/core-concepts/stacks/mixins)

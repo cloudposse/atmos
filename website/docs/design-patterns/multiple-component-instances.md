@@ -24,6 +24,11 @@ Use the **Multiple Component Instances** pattern when:
 
 ## Example
 
+The following example shows the Atmos stack and component configurations to provision two Atmos components (`vpc-1` and `vpc-2`) that use the
+same Terraform component `vpc`. The `vpc-1` and `vpc-2` components are provisioned in the same stack. In the `catalog/vpc` folder, we have
+the `defaults.yaml` manifest that configures the base abstract component `vpc/defaults` to be inherited by the derived VPC components `vpc-1`
+and `vpc-2`.
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
