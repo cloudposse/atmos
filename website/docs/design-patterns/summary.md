@@ -21,8 +21,10 @@ Here are some recommendations:
   by Atmos. You can clone it and configure to your own needs. The repository should be a good start to get yourself familiar with Atmos and the
   Design Patterns. The [Quick Start Guide](/category/quick-start) describes the step required to configure and start using the repository
 
-- If you are just developing or testing your infrastructure, you can use any of the Design Patterns described in this guide, and find out which ones
-  are best suited to your requirements
+- If you are just developing or kicking the tires on Atmos, you can use any of the Design Patterns described in this guide, and find out which ones
+  are best suited to your requirements. The easiest ones to get started with will be:
+   - [Inline Component Configuration](/design-patterns/inline-component-configuration)
+   - [Inline Component Customization](/design-patterns/inline-component-customization)
 
 - If you are architecting the infrastructure to provision multi-account multi-region environments at scale, we suggest you start with the
   following Design Patterns:
