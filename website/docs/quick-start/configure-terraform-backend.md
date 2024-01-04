@@ -8,7 +8,8 @@ In the previous steps, we've configured the `vpc-flow-logs-bucket` and `vpc` Ter
 (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
 
 By default, Terraform will use a backend called [local](https://developer.hashicorp.com/terraform/language/settings/backends/local), which stores
-Terraform state on the local filesystem, locks that state using system APIs, and performs operations locally. For any scenario beyond a basic playground setup, such as staging or production environments, we'll provision and
+Terraform state on the local filesystem, locks that state using system APIs, and performs operations locally. For any scenario beyond a basic
+playground setup, such as staging or production environments, we'll provision and
 configure the Terraform [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3) backend.
 
 ## Terraform Local Backend
