@@ -9,7 +9,7 @@ Architecting and provisioning enterprise-grade infrastructure is challenging, an
 configurations [reusable](https://en.wikipedia.org/wiki/Reusability) and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) is even more
 difficult.
 
-Atmos Design Patterns can help with structuring and organizing your design to provision multi-account enterprise-grade environments for complex
+These Atmos Design Patterns can help with structuring and organizing your design to provision multi-account enterprise-grade environments for complex
 organizations.
 
 We've already identified and documented many Atmos Design Patterns.
