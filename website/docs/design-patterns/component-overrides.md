@@ -397,7 +397,7 @@ The **Component Overrides** pattern provides the following benefits:
 
 - Allows to modify or override the configuration and behavior of groups of Atmos components without affecting other groups of Atmos components
 
-- Makes the configurations of the groups of Atmos components easier to understand and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+- Makes the configurations of groups of Atmos components easier to understand and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Related Patterns
 
