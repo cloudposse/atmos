@@ -13,7 +13,7 @@ These Atmos Design Patterns can help with structuring and organizing your design
 organizations.
 
 We've already identified and documented many Atmos Design Patterns.
-You might be asking yourself: "How do I start with all of that and what steps to take?"
+You may be wondering, "Where do I begin and what steps should I follow?"
 
 Here are some recommendations:
 
