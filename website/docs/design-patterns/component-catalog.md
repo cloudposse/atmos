@@ -58,12 +58,15 @@ Use the **Component Catalog** pattern when:
 <br/>
 
 :::note
-Having the `dev`, `staging`, `prod`, `ue2` and `uw2` manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
+Having the `dev`, `staging`, `prod`, `ue2` and `uw2` manifests in the component's catalog makes the most sense for multi-org, multi-OU and/or
 multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
 top-level stack manifests.
 :::
 
 ## Example
+
+The following example shows the Atmos stack and component configurations to provision the `vpc` and `vpc-flow-logs-bucket` components into
+a multi-account, multi-region environment. The components' configurations for each account and region are defined in the components' catalog.
 
 ```console
    │   # Centralized stacks configuration (stack manifests)

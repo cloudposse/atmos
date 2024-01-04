@@ -75,6 +75,11 @@ top-level stack manifests.
 
 ## Example
 
+The following example shows the Atmos stack and component configurations to provision the `vpc` component into
+a multi-org, multi-tenant, multi-account, multi-region environment. The component's configuration for each organization, tenant, account and region
+are defined as mixins in the component's catalog. The mixins then combined into the environment manifests, and the environment manifests are imported
+into the top-level Atmos stacks.
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
