@@ -30,6 +30,41 @@ Use the **Component Overrides** pattern when:
 
 ## Example
 
+:::note
+The **Component Overrides** Design Pattern can be applied to the configuration structures described by
+the [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
+and [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
+Atmos Design Patterns.
+
+In this example, we'll use the structure described by the [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
+Design Pattern.
+:::
+
+<br/>
+
+In the following structure, we have many different Terraform components (Terraform root modules) in the `components/terraform` folder.
+
+In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
+Design Pattern.
+
+In the `stacks/layers` folder, we define the following layers (groups of components), and import the related components into the layer manifests:
+
+- `load-balancers.yaml`
+- `data.yaml`
+- `dns.yaml`
+- `logs.yaml`
+- `notifications.yaml`
+- `firewalls.yaml`
+- `networking.yaml`
+- `eks.yaml`
+
+We use the `terraform.overrides` section in each layer manifest to override the configurations of all the components in the layer (all Terraform
+components in the layer will get the `Layer` and `Team` tags).
+
+Finally, we import all the layer manifests into the top-level stacks.
+
+<br/>
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
@@ -116,34 +151,6 @@ Use the **Component Overrides** pattern when:
            ├── vpc
            └── vpc-flow-logs-bucket
 ```
-
-:::note
-The **Component Overrides** Design Pattern can be applied to the configuration structures described by
-the [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
-and [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
-Atmos Design Patterns.
-
-In this example, we'll use the structure described by the [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
-Design Pattern.
-:::
-
-<br/>
-
-As the structure above shows, we have many different Terraform components (Terraform root modules) in the `components/terraform` folder.
-
-In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
-Design Pattern.
-
-In the `stacks/layers` folder, we define the following layers (groups of components), and import the related components into the layer manifests:
-
-- `load-balancers.yaml`
-- `data.yaml`
-- `dns.yaml`
-- `logs.yaml`
-- `notifications.yaml`
-- `firewalls.yaml`
-- `networking.yaml`
-- `eks.yaml`
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 
@@ -399,3 +406,8 @@ The **Component Overrides** pattern provides the following benefits:
 - [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
 - [Component Catalog](/design-patterns/component-catalog)
 - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
+
+## References
+
+- [Catalogs](/core-concepts/stacks/catalogs)
+- [Mixins](/core-concepts/stacks/mixins)

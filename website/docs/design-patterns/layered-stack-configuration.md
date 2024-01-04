@@ -34,6 +34,24 @@ Use the **Layered Stack Configuration** pattern when:
 
 ## Example
 
+In the following structure, we have various Terraform components (Terraform root modules) in the `components/terraform` folder.
+
+In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
+Design Pattern.
+
+In the `stacks/layers` folder, we define layers (groups of components), and import the related components into the layer manifests:
+
+- `load-balancers.yaml`
+- `data.yaml`
+- `dns.yaml`
+- `logs.yaml`
+- `notifications.yaml`
+- `firewalls.yaml`
+- `networking.yaml`
+- `eks.yaml`
+
+<br/>
+
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
@@ -120,22 +138,6 @@ Use the **Layered Stack Configuration** pattern when:
            ├── vpc
            └── vpc-flow-logs-bucket
 ```
-
-As the structure above shows, we have various Terraform components (Terraform root modules) in the `components/terraform` folder.
-
-In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
-Design Pattern.
-
-In the `stacks/layers` folder, we define layers (groups of components), and import the related components into the layer manifests:
-
-- `load-balancers.yaml`
-- `data.yaml`
-- `dns.yaml`
-- `logs.yaml`
-- `notifications.yaml`
-- `firewalls.yaml`
-- `networking.yaml`
-- `eks.yaml`
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
 
@@ -319,3 +321,8 @@ The **Layered Stack Configuration** pattern provides the following benefits:
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
 - [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
 - [Component Overrides](/design-patterns/component-overrides)
+
+## References
+
+- [Catalogs](/core-concepts/stacks/catalogs)
+- [Mixins](/core-concepts/stacks/mixins)
