@@ -20,10 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: hashicorp/setup-terraform@v2
+      #- uses: hashicorp/setup-terraform@v2
   
-      - name: Setup atmos
-        uses: cloudposse/github-action-setup-atmos@v1
+      #- name: Setup atmos
+      #  uses: cloudposse/github-action-setup-atmos@v1
+      - name: Install atmos
+        uses: jaxxstorm/action-install-gh-release@v1.10.0
+        with: # Grab the latest version
+          repo: cloudposse/atmos
 
       - uses: charmbracelet/vhs-action@v1
         with: 
