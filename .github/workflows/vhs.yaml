@@ -26,6 +26,7 @@ jobs:
           repo: cloudposse/atmos
           chmod: 0755
           extension-matching: disable 
+          rename-to: atmos
 
       - name: Setup shell rc
         run: |
