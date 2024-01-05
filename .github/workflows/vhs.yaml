@@ -20,8 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup atmos
-        uses: cloudposse/github-action-setup-atmos@v1
+      - name: Install atmos
+        uses: jaxxstorm/action-install-gh-release@v1.10.0
+        with: # Grab the latest version
+          repo: cloudposse/atmos
+#          tag: v1.52.0
+          chmod: 0755
+          extension-matching: disable 
 
       - name: Setup shell rc
         run: |
