@@ -24,13 +24,12 @@ jobs:
         uses: jaxxstorm/action-install-gh-release@v1.10.0
         with: # Grab the latest version
           repo: cloudposse/atmos
-#          tag: v1.52.0
           chmod: 0755
           extension-matching: disable 
 
       - name: Setup shell rc
         run: |
-          echo "alias ls='ls --color=auto'" >> ~/.bashrc
+          echo "alias ls='ls --color=always'" >> ~/.bashrc
 
       - uses: charmbracelet/vhs-action@v1
         with: 
