@@ -28,6 +28,7 @@ jobs:
         uses: jaxxstorm/action-install-gh-release@v1.10.0
         with: # Grab the latest version
           repo: cloudposse/atmos
+          tag: v1.52.0
 
       - uses: charmbracelet/vhs-action@v1
         with: 
