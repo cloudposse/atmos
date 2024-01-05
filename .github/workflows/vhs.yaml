@@ -31,7 +31,7 @@ jobs:
           tag: v1.52.0
           chmod: 0755
           extension-matching: disable
-
+          rename-to: atmos
 
       - uses: charmbracelet/vhs-action@v1
         with: 
