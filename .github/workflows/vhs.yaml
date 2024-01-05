@@ -20,18 +20,16 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      #- uses: hashicorp/setup-terraform@v2
-  
-      #- name: Setup atmos
-      #  uses: cloudposse/github-action-setup-atmos@v1
-      - name: Install atmos
-        uses: jaxxstorm/action-install-gh-release@v1.10.0
-        with: # Grab the latest version
-          repo: cloudposse/atmos
-          tag: v1.52.0
-          chmod: 0755
-          extension-matching: disable
-          rename-to: atmos
+      - uses: hashicorp/setup-terraform@v2
+         with:
+           terraform_wrapper: false  
+
+      - name: Setup atmos
+        uses: cloudposse/github-action-setup-atmos@v1
+
+      - name: Setup shell rc
+        run: |
+          echo "alias ls='ls --color=auto'" >> ~/.bashrc
 
       - uses: charmbracelet/vhs-action@v1
         with: 
