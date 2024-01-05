@@ -29,6 +29,9 @@ jobs:
         with: # Grab the latest version
           repo: cloudposse/atmos
           tag: v1.52.0
+          chmod: 0755
+          extension-matching: disable
+
 
       - uses: charmbracelet/vhs-action@v1
         with: 
