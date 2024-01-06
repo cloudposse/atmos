@@ -8,7 +8,7 @@ The Cloud Posse GitHub Action for "Atmos Terraform Plan" simplifies provisioning
 
 Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) will run `atmos terraform plan`, generate a Terraform [planfile](https://developer.hashicorp.com/terraform/tutorials/automation/automate-terraform), store this planfile in an S3 Bucket with metadata in DynamodDB, and finally format the Terraform Plan result as part of a [GitHub Workflow Job Summary](https://github.blog/2022-05-09-supercharging-github-actions-with-job-summaries/).
 
-This action is intended to be used together with [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply) and [Atmos Affected Stacks](/integrations/github-actions/affected-stacks).
+This action is intended to be used together with [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply) and [Atmos Affected Stacks](/integrations/github-actions/affected-stacks), as well as integrated into drift detection with [Atmos Terraform Detection and Remediation](/integrations/github-actions/atmos-terraform-drift-detection).
 
 ## Features
 
@@ -25,59 +25,80 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 
 The following screenshot showcases a successful "plan" Job Summary report. The report effectively utilizes badges to clearly indicate success or failure. Furthermore, it specifically highlights any potentially destructive operations, mitigating the risk of unintentional destructive actions. A `diff`-style format is employed to illustrate the creation, recreation, destruction, or modification of resources. Unnecessary details are neatly hidden behind a collapsible `<details/>` block, ensuring a streamlined view. Additionally, developers are provided with a direct link to access the job run, eliminating the need for manual searching to gather information about any potential issues.
 
-![Example Image](/img/github-actions/tf_plan.png)
+![Example Image](/img/github-actions/create.png)
 
 By expanding the "Terraform Plan Summary" block (clicking on the `<details/>` block), the full details of the plan are visible.
 
-![Example Image Expanded](/img/github-actions/tf_plan_expanded.png)
+![Example Create Extended](/img/github-actions/create-extended.png)
 
-## Usage Example
-In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "plan" job, the "component" and "stack" are hardcoded. In practice, these are usually derived from another action. 
+Furthermore, when a resource is marked for deletion, the Plan Summary will include a warning admonition.
+
+![Example Destroy](/img/github-actions/destroy.png)
+
+## Usage
+
+In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "plan" job, the "component" and "stack" are hardcoded (`foobar` and `plat-ue2-sandbox`). In practice, these are usually derived from another action. 
+
+:::tip Passing Affected Stacks
+
+We recommend combining this action with the [`affected-stacks`](/integrations/github-actions/affected-stacks) GitHub Action inside a matrix to plan all affected stacks in parallel.
+
+:::
+
+
 ```yaml
-name: "atmos-terraform-plan"
-
-on:
-  workflow_dispatch:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-    branches:
-      - main
-
-# These permissions are required for GitHub to assume roles in AWS
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  plan:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Plan Atmos Component
-        uses: cloudposse/github-action-atmos-terraform-plan@v1
-        with:
-          component: "foobar"
-          stack: "plat-ue2-sandbox"
-          component-path: "components/terraform/s3-bucket"
-          terraform-plan-role: "arn:aws:iam::111111111111:role/acme-core-gbl-identity-gitops"
-          terraform-state-bucket: "acme-core-ue2-auto-gitops"
-          terraform-state-role: "arn:aws:iam::999999999999:role/acme-core-ue2-auto-gitops-gha"
-          terraform-state-table: "acme-core-ue2-auto-gitops"
-          aws-region: "us-east-2"
-
+  # .github/workflows/atmos-terraform-plan.yaml
+  name: "atmos-terraform-plan"
+  on:
+    pull_request:
+      types:
+        - opened
+        - synchronize
+        - reopened
+      branches:
+        - main
+  # These permissions are required for GitHub to assume roles in AWS
+  permissions:
+    id-token: write
+    contents: read
+  jobs:
+    plan:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Plan Atmos Component
+          uses: cloudposse/github-action-atmos-terraform-plan@v1
+          with:
+            component: "foobar"
+            stack: "plat-ue2-sandbox"
+            atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
 ```
 
-Please note that in practice, we recommend combining this action with the [`affected-stacks`](/integrations/github-actions/affected-stacks) GitHub Action inside a matrix to plan all affected stacks in parallel.
-### Requirements
+with the following configuration as an example:
+
+```yaml
+  # .github/config/atmos-gitops.yaml
+  atmos-config-path: ./rootfs/usr/local/etc/atmos/
+  atmos-version: 1.52.0
+  aws-region: us-east-2
+  enable-infracost: false
+  group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
+  sort-by: .stack_slug
+  terraform-apply-role: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+  terraform-plan-role: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+  terraform-state-bucket: cptest-core-ue2-auto-gitops
+  terraform-state-role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
+  terraform-state-table: cptest-core-ue2-auto-gitops
+  terraform-version: 1.5.2
+```
+
+## Requirements
 
 This GitHub Action depends on a few resources:
 * **S3 bucket** for storing planfiles
 * **DynamoDB table** for retrieving metadata about planfiles
 * **2x IAM roles** for "planning" and accessing the "state" bucket
 
-#### S3 Bucket
+### S3 Bucket
 
 This action can use any S3 Bucket to keep track of your planfiles. Just ensure the bucket is properly locked down since planfiles may contain secrets.
 
@@ -103,7 +124,7 @@ components:
 
 Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
 
-#### DynamoDB Table
+### DynamoDB Table
 
 Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://docs.cloudposse.com/components/library/aws/dynamodb/). Set the **Hash Key** and create a **Global Secondary Index** as follows:
 
@@ -147,7 +168,7 @@ components:
 
 Pass the ARN of this table as the input to the `terraform-plan-table` of the [`cloudposse/github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) GitHub Action.
 
-#### IAM Access Roles
+### IAM Access Roles
 
 First create an access role for storing and retrieving planfiles from the S3 Bucket and DynamoDB table. We deploy this role using the [`gitops` component](https://docs.cloudposse.com/components/library/aws/gitops/). Assign this role ARN to the `terraform-state-role` input.
 
