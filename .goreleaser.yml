@@ -1,6 +1,6 @@
 # Visit https://goreleaser.com for documentation on how to customize this behavior.
 
-before:
+#before:
   #hooks:
     # - 'go mod tidy'
 
@@ -34,7 +34,7 @@ checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
 
-release:
+#release:
 # If you want to manually examine the release before it is live, uncomment this line:
 # draft: true
 

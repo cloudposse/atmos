@@ -8,7 +8,7 @@ infrastructure from this repository.
 
 ## Run Atmos Docker Image
 
-To run the Atmos Docker image, execute the foloowing command:
+To run the Atmos Docker image, execute the following command:
 
 ```shell
 make all
@@ -60,3 +60,7 @@ atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-staging
 atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-prod
 ```
 </details>
+
+<br/>
+
+For the description of all Atmos CLI commands, refer to [Atmos CLI](https://atmos.tools/cli/configuration).
