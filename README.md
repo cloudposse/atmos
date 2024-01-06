@@ -40,6 +40,11 @@
 
 
 
+## Screenshots
+
+
+![Demo](docs/demo.gif)
+*<br/>Example of running atmos to describe infrastructure.*
 
 
 ## Introduction

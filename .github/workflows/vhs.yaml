@@ -1,0 +1,62 @@
+name: vhs
+on:
+  pull_request:
+    paths:
+      - '*.tape'
+
+env:
+  TERM: "xterm-256color"
+  COLORTERM: "truecolor"
+  LANG: "en_US.UTF-8"
+  ATMOS_LOGS_LEVEL: "Info"
+
+jobs:
+  vhs:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install atmos
+        uses: jaxxstorm/action-install-gh-release@v1.10.0
+        with: # Grab the latest version
+          repo: cloudposse/atmos
+          chmod: 0755
+          extension-matching: disable 
+          rename-to: atmos
+
+      - name: Setup shell rc
+        run: |
+          echo "alias ls='ls --color=always'" >> ~/.bashrc
+
+      - uses: charmbracelet/vhs-action@v1
+        with: 
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: demo.tape
+          install-fonts: true
+
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        id: auto-commit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          commit_message: "chore: update demo gif"
+          commit_user_name: vhs-action 📼
+          commit_user_email: actions@github.com
+          commit_author: vhs-action 📼 <actions@github.com>
+          file_pattern: '*.gif'
+
+      - name: Add Image to Job Summary
+        if: steps.auto-commit.outputs.changes_detected == 'true'
+        run: |
+          echo "## Demo GIF" >> $GITHUB_STEP_SUMMARY
+          echo "![Demo GIF](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.commit_hash }}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
+
+      - name: No changes
+        if: steps.auto-commit.outputs.changes_detected == 'false'
+        run: |
+          echo "No changes to demo" >> $GITHUB_STEP_SUMMARY
+
