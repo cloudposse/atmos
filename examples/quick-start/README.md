@@ -63,4 +63,4 @@ atmos terraform apply vpc-flow-logs-bucket -s plat-uw2-prod
 
 <br/>
 
-For the description of all Atmos CLI commands, refer to [Atmos CLI](https://atmos.tools/cli/configuration).
+For the description of the Atmos CLI configuration and all CLI commands, refer to [Atmos CLI](https://atmos.tools/cli/configuration).
