@@ -37,7 +37,7 @@ type Order struct {
 	Side         string
 	Name         string
 	Instructions string
-	Discount     bool
+	Execute      bool
 }
 
 type Burger struct {
@@ -57,7 +57,12 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Options(huh.NewOptions("Charmburger Classic", "Chickwich", "Fishburger", "Charmpossible™ Burger")...).
+				Options(huh.NewOptions(
+					"1",
+					"2",
+					"3",
+					"4",
+				)...).
 				Title("Choose your burger").
 				Description("At Charm we truly have a burger for everyone.").
 				Validate(func(t string) error {
@@ -117,7 +122,7 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("Execute?").
-				Value(&order.Discount).
+				Value(&order.Execute).
 				Affirmative("Yes").
 				Negative("No"),
 		),
@@ -128,7 +133,7 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	{
+	if order.Execute {
 		var sb strings.Builder
 		keyword := func(s string) string {
 			return lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render(s)
