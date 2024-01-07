@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -50,11 +49,6 @@ func initConfig() {
 		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
 
 	styles := boa.DefaultStyles()
-	styles.Title.BorderForeground(lipgloss.AdaptiveColor{Light: `#E3BD2D`, Dark: `#E3BD2D`})
-	styles.Border.BorderForeground(lipgloss.AdaptiveColor{Light: `#E3BD2D`, Dark: `#E3BD2D`})
-	styles.SelectedItem.Foreground(lipgloss.AdaptiveColor{Light: `#353C3B`, Dark: `#353C3B`}).
-		Background(lipgloss.AdaptiveColor{Light: `#E3BD2D`, Dark: `#E3BD2D`})
-
 	b := boa.New(boa.WithStyles(styles))
 
 	RootCmd.SetUsageFunc(b.UsageFunc)
