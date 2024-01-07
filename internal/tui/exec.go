@@ -111,13 +111,15 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 				Title("Special Instructions").
 				Description("Anything we should know?").
 				CharLimit(400).
-				Lines(5),
+				Lines(1),
+		),
 
+		huh.NewGroup(
 			huh.NewConfirm().
-				Title("Would you like 15% off?").
+				Title("Execute?").
 				Value(&order.Discount).
-				Affirmative("Yes!").
-				Negative("No."),
+				Affirmative("Yes").
+				Negative("No"),
 		),
 	).WithAccessible(accessible)
 
