@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	e "github.com/cloudposse/atmos/internal/exec"
+	tui "github.com/cloudposse/atmos/internal/tui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -14,7 +14,7 @@ var execCmd = &cobra.Command{
 	Long:               `This command launches TUI that allows to interactively select an Atmos component and stack, and a command to execute`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteValidateStacksCmd(cmd, args)
+		err := tui.ExecuteExecCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
