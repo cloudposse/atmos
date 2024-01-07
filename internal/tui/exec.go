@@ -1,17 +1,13 @@
 package tui
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/huh/spinner"
 	"github.com/charmbracelet/lipgloss"
-	xstrings "github.com/charmbracelet/x/exp/strings"
 	"github.com/spf13/cobra"
 )
 
@@ -56,15 +52,9 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 	var order = Order{Burger: burger}
 
 	// Should we run in accessible mode?
-	accessible, _ := strconv.ParseBool(os.Getenv("ACCESSIBLE"))
+	accessible, _ := strconv.ParseBool(os.Getenv("ATMOS_TUI_ACCESSIBLE"))
 
 	form := huh.NewForm(
-		huh.NewGroup(huh.NewNote().
-			Title("Charmburger").
-			Description("Welcome to _Charmburger™_.\n\nHow may we take your order?")),
-
-		// Choose a burger.
-		// We'll need to know what topping to add too.
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Options(huh.NewOptions("Charmburger Classic", "Chickwich", "Fishburger", "Charmpossible™ Burger")...).
@@ -99,11 +89,7 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 				Value(&order.Burger.Toppings).
 				Filterable(true).
 				Limit(4),
-		),
 
-		// Prompt for toppings and special instructions.
-		// The customer can ask for up to 4 toppings.
-		huh.NewGroup(
 			huh.NewSelect[Spice]().
 				Title("Spice level").
 				Options(
@@ -118,21 +104,6 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 				Value(&order.Side).
 				Title("Sides").
 				Description("You get one free side with this order."),
-		),
-
-		// Gather final details for the order.
-		huh.NewGroup(
-			huh.NewInput().
-				Value(&order.Name).
-				Title("What's your name?").
-				Placeholder("Margaret Thatcher").
-				Validate(func(s string) error {
-					if s == "Frank" {
-						return errors.New("no franks, sorry")
-					}
-					return nil
-				}).
-				Description("For when your order is ready."),
 
 			huh.NewText().
 				Value(&order.Instructions).
@@ -151,42 +122,23 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 	).WithAccessible(accessible)
 
 	err := form.Run()
-
 	if err != nil {
-		fmt.Println("Uh oh:", err)
-		os.Exit(1)
+		return err
 	}
 
-	prepareBurger := func() {
-		time.Sleep(2 * time.Second)
-	}
-
-	_ = spinner.New().Title("Preparing your burger...").Accessible(accessible).Action(prepareBurger).Run()
-
-	// Print order summary.
 	{
 		var sb strings.Builder
 		keyword := func(s string) string {
 			return lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render(s)
 		}
+
 		fmt.Fprintf(&sb,
 			"%s\n\nOne %s%s, topped with %s with %s on the side.",
 			lipgloss.NewStyle().Bold(true).Render("BURGER RECEIPT"),
 			keyword(order.Burger.Spice.String()),
 			keyword(order.Burger.Type),
-			keyword(xstrings.EnglishJoin(order.Burger.Toppings, true)),
 			keyword(order.Side),
 		)
-
-		name := order.Name
-		if name != "" {
-			name = ", " + name
-		}
-		fmt.Fprintf(&sb, "\n\nThanks for your order%s!", name)
-
-		if order.Discount {
-			fmt.Fprint(&sb, "\n\nEnjoy 15% off.")
-		}
 
 		fmt.Println(
 			lipgloss.NewStyle().
