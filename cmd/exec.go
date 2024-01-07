@@ -14,7 +14,7 @@ var execCmd = &cobra.Command{
 	Long:               `This command launches TUI that allows to interactively select an Atmos component and stack, and a command to execute`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := tui.ExecuteExecCmd(cmd, args)
+		err := tui.ExecuteExecCmd3(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
