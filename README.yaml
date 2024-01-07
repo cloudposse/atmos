@@ -26,6 +26,12 @@ categories:
   - kubernetes
   - aws
 
+# Screenshots
+screenshots:
+  - name: "Demo"
+    description: "<br/>Example of running atmos to describe infrastructure."
+    url: "docs/demo.gif"
+
 description: |-
   
   `atmos` - Universal Tool for DevOps and Cloud Automation.
