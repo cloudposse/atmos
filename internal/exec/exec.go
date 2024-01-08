@@ -8,11 +8,12 @@ import (
 )
 
 func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
-	if err := tui.Execute(); err != nil {
+	component, stack, err := tui.Execute()
+	if err != nil {
 		return err
 	}
 
-	c, err := ExecuteDescribeComponent("vpc", "plat-ue2-dev")
+	c, err := ExecuteDescribeComponent(component, stack)
 	if err != nil {
 		return err
 	}
