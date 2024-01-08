@@ -256,7 +256,6 @@ Create the following filesystem layout (which will be the final layout for this 
    │                 ├── dev
    │                 │   ├── _defaults.yaml
    │                 │   ├── us-east-2.yaml
-   │                 │   ├── us-east-2-extras.yaml
    │                 │   └── us-west-2.yaml
    │                 ├── prod
    │                 │   ├── _defaults.yaml
@@ -443,22 +442,6 @@ import:
 ```
 
 In the file, we import the region mixin and the defaults for the Organization, OU and account (using hierarchical imports).
-
-In `stacks/orgs/acme/plat/dev/us-east-2-extras.yaml`, add the following config:
-
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-extras.yaml"
-import:
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # In this `orgs/acme/plat/dev/us-east-2-extras.yaml` manifest,
-  # you can import or define other components that are not defined in the `orgs/acme/plat/dev/us-east-2.yaml` manifest
-  # This Atmos Design Pattern is called `Partial Stack Configuration`
-
-components:
-  # Configure other Atmos components here using the `Inline Component Configuration` 
-  # or `Inline Component Customization` Atmos Design Patterns
-  terraform: {}
-```
 
 Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2` region:
 

@@ -31,14 +31,13 @@ Here are some recommendations:
   following Design Patterns:
 
   - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
-  - [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
   - [Component Catalog](/design-patterns/component-catalog)
-  - [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
   - [Inline Component Customization](/design-patterns/inline-component-customization)
   - [Component Inheritance](/design-patterns/component-inheritance)
   - [Abstract Component](/design-patterns/abstract-component)
   - [Multiple Component Instances](/design-patterns/multiple-component-instances)
   - [Partial Component Configuration](/design-patterns/partial-component-configuration)
+  - [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
 
 The [Atmos Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start) repository, that is described in
 the [Quick Start](/category/quick-start) guide, uses the following Atmos Design Patterns:
@@ -46,5 +45,4 @@ the [Quick Start](/category/quick-start) guide, uses the following Atmos Design 
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
 - [Component Catalog](/design-patterns/component-catalog)
 - [Partial Component Configuration](/design-patterns/partial-component-configuration)
-- [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
 - [Inline Component Customization](/design-patterns/inline-component-customization)
