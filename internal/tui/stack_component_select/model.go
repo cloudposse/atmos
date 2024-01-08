@@ -8,13 +8,13 @@ import (
 )
 
 type App struct {
-	help      help.Model
-	loaded    bool
-	focused   columnPointer
-	cols      []column
-	quitting  bool
-	component string
-	stack     string
+	help          help.Model
+	loaded        bool
+	columnPointer columnPointer
+	cols          []column
+	quitting      bool
+	component     string
+	stack         string
 }
 
 func NewApp() *App {
@@ -22,10 +22,10 @@ func NewApp() *App {
 	h.ShowAll = true
 
 	return &App{
-		help:      h,
-		focused:   stacks,
-		component: "vpc",
-		stack:     "plat-ue2-dev",
+		help:          h,
+		columnPointer: stacks,
+		component:     "vpc",
+		stack:         "plat-ue2-dev",
 	}
 }
 
@@ -53,19 +53,19 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.quitting = true
 			return app, tea.Quit
 		case key.Matches(msg, keys.Left):
-			app.cols[app.focused].Blur()
-			app.focused = app.focused.getPrev()
-			app.cols[app.focused].Focus()
+			app.cols[app.columnPointer].Blur()
+			app.columnPointer = app.columnPointer.getPrev()
+			app.cols[app.columnPointer].Focus()
 		case key.Matches(msg, keys.Right):
-			app.cols[app.focused].Blur()
-			app.focused = app.focused.getNext()
-			app.cols[app.focused].Focus()
+			app.cols[app.columnPointer].Blur()
+			app.columnPointer = app.columnPointer.getNext()
+			app.cols[app.columnPointer].Focus()
 		}
 	}
 
-	res, cmd := app.cols[app.focused].Update(msg)
+	res, cmd := app.cols[app.columnPointer].Update(msg)
 	if _, ok := res.(*column); ok {
-		app.cols[app.focused] = *res.(*column)
+		app.cols[app.columnPointer] = *res.(*column)
 	} else {
 		return res, cmd
 	}
