@@ -2,53 +2,75 @@ package stack_component_select
 
 import "github.com/charmbracelet/bubbles/list"
 
-// Provides the mock data to fill the kanban board
+type columnPointer int
 
-type status int
-
-func (s status) getNext() status {
-	if s == done {
-		return todo
+func (pointer columnPointer) getNext() columnPointer {
+	if pointer == execute {
+		return stacks
 	}
-	return s + 1
+	return pointer + 1
 }
 
-func (s status) getPrev() status {
-	if s == todo {
-		return done
+func (pointer columnPointer) getPrev() columnPointer {
+	if pointer == stacks {
+		return execute
 	}
-	return s - 1
+	return pointer - 1
 }
 
-var board *Board
+var app *App
 
 const (
-	todo status = iota
-	inProgress
-	done
+	stacks columnPointer = iota
+	components
+	execute
 )
 
-func (b *Board) InitLists() {
-	b.cols = []column{
-		newColumn(todo),
-		newColumn(inProgress),
-		newColumn(done),
+type item struct {
+	title, desc string
+}
+
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return i.desc }
+func (i item) FilterValue() string { return i.title }
+
+func (app *App) InitViews() {
+	app.cols = []column{
+		newColumn(stacks),
+		newColumn(components),
+		newColumn(execute),
 	}
-	// Init To Do
-	b.cols[todo].list.Title = "To Do"
-	b.cols[todo].list.SetItems([]list.Item{
-		Task{status: todo, title: "buy milk", description: "strawberry milk"},
-		Task{status: todo, title: "eat sushi", description: "negitoro roll, miso soup, rice"},
-		Task{status: todo, title: "fold laundry", description: "or wear wrinkly t-shirts"},
-	})
-	// Init in progress
-	b.cols[inProgress].list.Title = "In Progress"
-	b.cols[inProgress].list.SetItems([]list.Item{
-		Task{status: inProgress, title: "write code", description: "don't worry, it's Go"},
-	})
-	// Init done
-	b.cols[done].list.Title = "Done"
-	b.cols[done].list.SetItems([]list.Item{
-		Task{status: done, title: "stay cool", description: "as a cucumber"},
-	})
+
+	app.cols[stacks].list.Title = "Stacks"
+	items := []list.Item{
+		item{title: "Raspberry Pi’s", desc: "I have ’em all over my house"},
+		item{title: "Nutella", desc: "It's good on toast"},
+		item{title: "Bitter melon", desc: "It cools you down"},
+		item{title: "Nice socks", desc: "And by that I mean socks without holes"},
+		item{title: "Eight hours of sleep", desc: "I had this once"},
+		item{title: "Cats", desc: "Usually"},
+		item{title: "Plantasia, the album", desc: "My plants love it too"},
+		item{title: "Pour over coffee", desc: "It takes forever to make though"},
+		item{title: "VR", desc: "Virtual reality...what is there to say?"},
+		item{title: "Noguchi Lamps", desc: "Such pleasing organic forms"},
+		item{title: "Linux", desc: "Pretty much the best OS"},
+		item{title: "Business school", desc: "Just kidding"},
+		item{title: "Pottery", desc: "Wet clay is a great feeling"},
+		item{title: "Shampoo", desc: "Nothing like clean hair"},
+		item{title: "Table tennis", desc: "It’s surprisingly exhausting"},
+		item{title: "Milk crates", desc: "Great for packing in your extra stuff"},
+		item{title: "Afternoon tea", desc: "Especially the tea sandwich part"},
+		item{title: "Stickers", desc: "The thicker the vinyl the better"},
+		item{title: "20° Weather", desc: "Celsius, not Fahrenheit"},
+		item{title: "Warm light", desc: "Like around 2700 Kelvin"},
+		item{title: "The vernal equinox", desc: "The autumnal equinox is pretty good too"},
+		item{title: "Gaffer’s tape", desc: "Basically sticky fabric"},
+		item{title: "Terrycloth", desc: "In other words, towel fabric"},
+	}
+	app.cols[stacks].list.SetItems(items)
+
+	app.cols[components].list.Title = "Components"
+	app.cols[components].list.SetItems(items)
+
+	app.cols[execute].list.Title = "Execute"
 }

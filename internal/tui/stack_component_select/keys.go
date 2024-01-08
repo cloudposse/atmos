@@ -2,8 +2,7 @@ package stack_component_select
 
 import "github.com/charmbracelet/bubbles/key"
 
-// ShortHelp returns keybindings to be shown in the mini help view. It's part
-// of the key.Map interface.
+// ShortHelp returns keybindings to be shown in the mini help view. It's part of the key.Map interface
 func (k keyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.Filter, k.Quit}
 }

@@ -6,15 +6,15 @@ import (
 
 // Execute starts the TUI app
 func Execute() (string, string, error) {
-	board = NewBoard()
-	board.InitLists()
+	app = NewApp()
+	app.InitViews()
 
-	p := tea.NewProgram(board)
+	p := tea.NewProgram(app)
 
 	_, err := p.Run()
 	if err != nil {
 		return "", "", err
 	}
 
-	return board.component, board.stack, nil
+	return app.component, app.stack, nil
 }
