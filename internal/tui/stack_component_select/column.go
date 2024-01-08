@@ -10,7 +10,7 @@ const APPEND = -1
 
 const margin = 4
 
-type column struct {
+type columnView struct {
 	focus         bool
 	columnPointer columnPointer
 	list          list.Model
@@ -18,19 +18,19 @@ type column struct {
 	width         int
 }
 
-func (c *column) Focus() {
+func (c *columnView) Focus() {
 	c.focus = true
 }
 
-func (c *column) Blur() {
+func (c *columnView) Blur() {
 	c.focus = false
 }
 
-func (c *column) Focused() bool {
+func (c *columnView) Focused() bool {
 	return c.focus
 }
 
-func newColumn(columnPointer columnPointer) column {
+func newColumn(columnPointer columnPointer) columnView {
 	var focus bool
 	if columnPointer == stacksPointer {
 		focus = true
@@ -38,16 +38,16 @@ func newColumn(columnPointer columnPointer) column {
 
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	defaultList.SetShowHelp(false)
-	return column{focus: focus, columnPointer: columnPointer, list: defaultList}
+	return columnView{focus: focus, columnPointer: columnPointer, list: defaultList}
 }
 
-// Init does initial setup for the column.
-func (c *column) Init() tea.Cmd {
+// Init does initial setup for the columnView.
+func (c *columnView) Init() tea.Cmd {
 	return nil
 }
 
 // Update handles all the I/O for columns
-func (c *column) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -58,11 +58,11 @@ func (c *column) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return c, cmd
 }
 
-func (c *column) View() string {
+func (c *columnView) View() string {
 	return c.getStyle().Render(c.list.View())
 }
 
-func (c *column) DeleteCurrent() tea.Cmd {
+func (c *columnView) DeleteCurrent() tea.Cmd {
 	if len(c.list.VisibleItems()) > 0 {
 		c.list.RemoveItem(c.list.Index())
 	}
@@ -72,11 +72,11 @@ func (c *column) DeleteCurrent() tea.Cmd {
 	return cmd
 }
 
-func (c *column) setSize(width, height int) {
+func (c *columnView) setSize(width, height int) {
 	c.width = width / margin
 }
 
-func (c *column) getStyle() lipgloss.Style {
+func (c *columnView) getStyle() lipgloss.Style {
 	if c.Focused() {
 		return lipgloss.NewStyle().
 			Padding(1, 2).
@@ -85,6 +85,7 @@ func (c *column) getStyle() lipgloss.Style {
 			Height(c.height).
 			Width(c.width)
 	}
+
 	return lipgloss.NewStyle().
 		Padding(1, 2).
 		Border(lipgloss.HiddenBorder()).
