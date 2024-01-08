@@ -5,15 +5,14 @@ import "github.com/charmbracelet/bubbles/key"
 // ShortHelp returns keybindings to be shown in the mini help view. It's part
 // of the key.Map interface.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Quit}
+	return []key.Binding{k.Filter, k.Quit}
 }
 
-// FullHelp returns keybindings for the expanded help view. It's part of the
-// key.Map interface.
+// FullHelp returns keybindings for the expanded help view. It's part of the key.Map interface
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right}, // first column
-		{k.Help, k.Quit},                // second column
+		{k.Filter, k.Quit},              // second column
 	}
 }
 
@@ -26,7 +25,7 @@ type keyMap struct {
 	Right  key.Binding
 	Left   key.Binding
 	Enter  key.Binding
-	Help   key.Binding
+	Filter key.Binding
 	Quit   key.Binding
 	Back   key.Binding
 }
@@ -53,8 +52,8 @@ var keys = keyMap{
 		key.WithHelp("↓/j", "move down"),
 	),
 	Right: key.NewBinding(
-		key.WithKeys("right", "l"),
-		key.WithHelp("→/l", "move right"),
+		key.WithKeys("right", "r"),
+		key.WithHelp("→/r", "move right"),
 	),
 	Left: key.NewBinding(
 		key.WithKeys("left", "h"),
@@ -64,9 +63,9 @@ var keys = keyMap{
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "enter"),
 	),
-	Help: key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "toggle help"),
+	Filter: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "filter"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),

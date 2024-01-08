@@ -42,7 +42,7 @@ func (m *Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i := 0; i < len(m.cols); i++ {
 			var res tea.Model
 			res, cmd = m.cols[i].Update(msg)
-			m.cols[i] = res.(column)
+			m.cols[i] = *res.(*column)
 			cmds = append(cmds, cmd)
 		}
 		m.loaded = true
@@ -66,16 +66,19 @@ func (m *Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cols[m.focused].Focus()
 		}
 	}
+
 	res, cmd := m.cols[m.focused].Update(msg)
-	if _, ok := res.(column); ok {
-		m.cols[m.focused] = res.(column)
+	if _, ok := res.(*column); ok {
+		m.cols[m.focused] = *res.(*column)
 	} else {
 		return res, cmd
 	}
+
 	return m, cmd
 }
 
-// Changing to pointer receiver to get back to this model after adding a new task via the form... Otherwise I would need to pass this model along to the form and it becomes highly coupled to the other models.
+// Changing to pointer receiver to get back to this model after adding a new task via the form...
+// Otherwise I would need to pass this model along to the form and it becomes highly coupled to the other models.
 func (m *Board) View() string {
 	if m.quitting {
 		return ""

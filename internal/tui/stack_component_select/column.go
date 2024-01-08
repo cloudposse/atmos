@@ -42,12 +42,12 @@ func newColumn(status status) column {
 }
 
 // Init does initial setup for the column.
-func (c column) Init() tea.Cmd {
+func (c *column) Init() tea.Cmd {
 	return nil
 }
 
 // Update handles all the I/O for columns.
-func (c column) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (c *column) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -60,13 +60,13 @@ func (c column) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task := c.list.SelectedItem().(Task)
 				f := NewForm(task.title, task.description)
 				f.index = c.list.Index()
-				f.col = c
+				f.col = *c
 				return f.Update(nil)
 			}
 		case key.Matches(msg, keys.New):
 			f := newDefaultForm()
 			f.index = APPEND
-			f.col = c
+			f.col = *c
 			return f.Update(nil)
 		case key.Matches(msg, keys.Delete):
 			return c, c.DeleteCurrent()
@@ -78,7 +78,7 @@ func (c column) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return c, cmd
 }
 
-func (c column) View() string {
+func (c *column) View() string {
 	return c.getStyle().Render(c.list.View())
 }
 
