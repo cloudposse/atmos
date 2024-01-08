@@ -8,17 +8,25 @@ import (
 )
 
 type Board struct {
-	help     help.Model
-	loaded   bool
-	focused  status
-	cols     []column
-	quitting bool
+	help      help.Model
+	loaded    bool
+	focused   status
+	cols      []column
+	quitting  bool
+	component string
+	stack     string
 }
 
 func NewBoard() *Board {
 	help := help.New()
 	help.ShowAll = true
-	return &Board{help: help, focused: todo}
+
+	return &Board{
+		help:      help,
+		focused:   todo,
+		component: "vpc",
+		stack:     "plat-ue2-dev",
+	}
 }
 
 func (m *Board) Init() tea.Cmd {

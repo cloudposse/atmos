@@ -11,9 +11,10 @@ func Execute() (string, string, error) {
 
 	p := tea.NewProgram(board)
 
-	if _, err := p.Run(); err != nil {
+	_, err := p.Run()
+	if err != nil {
 		return "", "", err
 	}
 
-	return "vpc", "plat-ue2-dev", nil
+	return board.component, board.stack, nil
 }
