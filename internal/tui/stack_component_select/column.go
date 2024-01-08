@@ -32,7 +32,7 @@ func (c *column) Focused() bool {
 
 func newColumn(columnPointer columnPointer) column {
 	var focus bool
-	if columnPointer == stacks {
+	if columnPointer == stacksPointer {
 		focus = true
 	}
 

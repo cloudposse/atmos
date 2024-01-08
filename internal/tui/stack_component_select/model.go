@@ -8,24 +8,28 @@ import (
 )
 
 type App struct {
-	help          help.Model
-	loaded        bool
-	columnPointer columnPointer
-	cols          []column
-	quitting      bool
-	component     string
-	stack         string
+	help              help.Model
+	loaded            bool
+	columnPointer     columnPointer
+	cols              []column
+	quitting          bool
+	components        []string
+	stacks            []string
+	selectedComponent string
+	selectedStack     string
 }
 
-func NewApp() *App {
+func NewApp(components []string, stacks []string) *App {
 	h := help.New()
 	h.ShowAll = true
 
 	return &App{
-		help:          h,
-		columnPointer: stacks,
-		component:     "vpc",
-		stack:         "plat-ue2-dev",
+		help:              h,
+		columnPointer:     stacksPointer,
+		components:        components,
+		stacks:            stacks,
+		selectedComponent: "vpc",
+		selectedStack:     "plat-ue2-dev",
 	}
 }
 
@@ -82,9 +86,9 @@ func (app *App) View() string {
 	}
 	board := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		app.cols[stacks].View(),
-		app.cols[components].View(),
-		app.cols[execute].View(),
+		app.cols[stacksPointer].View(),
+		app.cols[componentsPointer].View(),
+		app.cols[executePointer].View(),
 	)
 	return lipgloss.JoinVertical(lipgloss.Left, board, app.help.View(keys))
 }

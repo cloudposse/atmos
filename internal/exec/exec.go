@@ -8,7 +8,7 @@ import (
 )
 
 func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
-	component, stack, err := tui.Execute()
+	component, stack, err := tui.Execute(nil, nil)
 	if err != nil {
 		return err
 	}

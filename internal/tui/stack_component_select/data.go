@@ -13,25 +13,23 @@ import (
 type columnPointer int
 
 func (pointer columnPointer) getNext() columnPointer {
-	if pointer == execute {
-		return stacks
+	if pointer == executePointer {
+		return stacksPointer
 	}
 	return pointer + 1
 }
 
 func (pointer columnPointer) getPrev() columnPointer {
-	if pointer == stacks {
-		return execute
+	if pointer == stacksPointer {
+		return executePointer
 	}
 	return pointer - 1
 }
 
-var app *App
-
 const (
-	stacks columnPointer = iota
-	components
-	execute
+	stacksPointer columnPointer = iota
+	componentsPointer
+	executePointer
 )
 
 var (
@@ -53,7 +51,7 @@ func (d listItemDelegate) Spacing() int { return 0 }
 
 func (d listItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
-func (i listItem) FilterValue() string { return (string(i)) }
+func (i listItem) FilterValue() string { return string(i) }
 
 func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	i, ok := item.(listItem)
@@ -70,14 +68,14 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 		}
 	}
 
-	fmt.Fprint(w, fn(str))
+	_, _ = fmt.Fprint(w, fn(str))
 }
 
-func (app *App) InitViews() {
+func (app *App) InitViews(components []string, stacks []string) {
 	app.cols = []column{
-		newColumn(stacks),
-		newColumn(components),
-		newColumn(execute),
+		newColumn(stacksPointer),
+		newColumn(componentsPointer),
+		newColumn(executePointer),
 	}
 
 	items := []list.Item{
@@ -93,17 +91,17 @@ func (app *App) InitViews() {
 		listItem("Just Wine"),
 	}
 
-	app.cols[stacks].list.Title = "Stacks"
-	app.cols[stacks].list.SetDelegate(listItemDelegate{})
-	app.cols[stacks].list.SetItems(items)
-	app.cols[stacks].list.SetFilteringEnabled(true)
-	app.cols[stacks].list.SetShowFilter(true)
+	app.cols[stacksPointer].list.Title = "Stacks"
+	app.cols[stacksPointer].list.SetDelegate(listItemDelegate{})
+	app.cols[stacksPointer].list.SetItems(items)
+	app.cols[stacksPointer].list.SetFilteringEnabled(true)
+	app.cols[stacksPointer].list.SetShowFilter(true)
 
-	app.cols[components].list.Title = "Components"
-	app.cols[components].list.SetDelegate(listItemDelegate{})
-	app.cols[components].list.SetItems(items)
-	app.cols[components].list.SetFilteringEnabled(true)
-	app.cols[components].list.SetShowFilter(true)
+	app.cols[componentsPointer].list.Title = "Components"
+	app.cols[componentsPointer].list.SetDelegate(listItemDelegate{})
+	app.cols[componentsPointer].list.SetItems(items)
+	app.cols[componentsPointer].list.SetFilteringEnabled(true)
+	app.cols[componentsPointer].list.SetShowFilter(true)
 
-	app.cols[execute].list.Title = "Execute"
+	app.cols[executePointer].list.Title = "Execute"
 }
