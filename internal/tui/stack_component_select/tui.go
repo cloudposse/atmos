@@ -1,6 +1,9 @@
 package stack_component_select
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	e "github.com/cloudposse/atmos/internal/exec"
+)
 
 // Execute starts the TUI app
 func Execute() error {
@@ -12,6 +15,9 @@ func Execute() error {
 		return err
 	}
 
-	return nil
+	if _, err := e.ExecuteDescribeComponent("vpc", "plat-ue2-dev"); err != nil {
+		return err
+	}
 
+	return nil
 }
