@@ -11,5 +11,9 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if _, err := ExecuteDescribeComponent("vpc", "plat-ue2-dev"); err != nil {
+		return err
+	}
+
 	return nil
 }
