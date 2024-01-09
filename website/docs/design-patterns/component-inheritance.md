@@ -169,7 +169,7 @@ components:
 
 The **Component Inheritance** pattern provides the following benefits:
 
-- Allows creating very DRY and reusable configurations that are built upon existing components
+- Allows creating very DRY, consistent, and reusable configurations that are built upon existing components
 
 - Any Atmos component can serve as a building block for other Atmos components
 
