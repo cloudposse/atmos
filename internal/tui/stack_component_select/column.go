@@ -6,10 +6,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const APPEND = -1
-
-const margin = 4
-
 type columnView struct {
 	focus         bool
 	columnPointer columnPointer
@@ -52,7 +48,7 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		c.setSize(msg.Width, msg.Height)
-		c.list.SetSize(msg.Width/margin, msg.Height/2)
+		c.list.SetSize(msg.Width/4, msg.Height/3)
 	}
 	c.list, cmd = c.list.Update(msg)
 	return c, cmd
@@ -62,18 +58,8 @@ func (c *columnView) View() string {
 	return c.getStyle().Render(c.list.View())
 }
 
-func (c *columnView) DeleteCurrent() tea.Cmd {
-	if len(c.list.VisibleItems()) > 0 {
-		c.list.RemoveItem(c.list.Index())
-	}
-
-	var cmd tea.Cmd
-	c.list, cmd = c.list.Update(nil)
-	return cmd
-}
-
 func (c *columnView) setSize(width, height int) {
-	c.width = width / margin
+	c.width = width / 4
 }
 
 func (c *columnView) getStyle() lipgloss.Style {

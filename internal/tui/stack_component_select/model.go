@@ -65,7 +65,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		var cmd tea.Cmd
 		var cmds []tea.Cmd
-		app.help.Width = msg.Width - margin
+		app.help.Width = msg.Width
 		for i := 0; i < len(app.colViews); i++ {
 			var res tea.Model
 			res, cmd = app.colViews[i].Update(msg)

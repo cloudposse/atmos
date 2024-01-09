@@ -10,23 +10,29 @@ func (k keyMap) ShortHelp() []key.Binding {
 // FullHelp returns keybindings for the expanded help view. It's part of the key.Map interface
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.Left, k.Right}, // first columnView
-		{k.Filter, k.Back, k.Quit},      // second columnView
+		{k.Up},
+		{k.Down},
+		{k.Left},
+		{k.Right},
+		{k.Filter},
+		{k.ResetFilter},
+		{k.Quit},
 	}
 }
 
 type keyMap struct {
-	New    key.Binding
-	Edit   key.Binding
-	Delete key.Binding
-	Up     key.Binding
-	Down   key.Binding
-	Right  key.Binding
-	Left   key.Binding
-	Enter  key.Binding
-	Filter key.Binding
-	Quit   key.Binding
-	Back   key.Binding
+	New         key.Binding
+	Edit        key.Binding
+	Delete      key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	Right       key.Binding
+	Left        key.Binding
+	Enter       key.Binding
+	Filter      key.Binding
+	ResetFilter key.Binding
+	Quit        key.Binding
+	Back        key.Binding
 }
 
 var keys = keyMap{
@@ -65,6 +71,10 @@ var keys = keyMap{
 	Filter: key.NewBinding(
 		key.WithKeys("/"),
 		key.WithHelp("/", "filter"),
+	),
+	ResetFilter: key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "reset filter"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),
