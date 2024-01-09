@@ -7,6 +7,6 @@ spec:
   sources:
     - component: "my-vpc6"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
-      version: "1.315.0"
+      version: "1.372.0"
       targets:
         - "components/terraform/infra/my-vpc6"

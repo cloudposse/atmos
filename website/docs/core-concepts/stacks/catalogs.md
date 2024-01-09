@@ -6,6 +6,8 @@ id: catalogs
 description: Catalogs are how to organize all Stack configurations for easy imports. 
 ---
 
+# Catalogs
+
 Catalogs are how to logically organize all the [Stack](/core-concepts/stacks) configurations for use by [imports](/core-concepts/stacks/imports). 
 There's no "right or wrong" way to do it, and Atmos does not enforce any one convention.  
 What we've come to realize is there's no "one way" to organize Stack configurations. 
@@ -13,8 +15,7 @@ The best way to organize them will come down to the way an organization wants to
 
 Below is how we implement them at [Cloud Posse](https://cloudposse.com).
 
-
-# Conventions
+## Conventions
 
 We provide a number of recommended conventions for your Stack catalogs. You can use all of them or some of them. These conventions have come about from our [customer engagements](https://cloudposse.com/services).
 
@@ -166,3 +167,9 @@ For everything else, we usually have catalog that we just call `catalog/`. We pl
 ## Refactoring Configurations
 
 One of the amazing things about the Atmos [Stack](/core-concepts/stacks) configurations is that the entire state of configuration is stored in the YAML configurations. The filesystem layout has no bearing on the desired state of the configuration. This means that configurations can be easily refactored at at time in the future, if you discover there's a better way to organize your Stack configurations. So long as the deep-merged configuration is the same, it will not affect any of the [Components](/core-concepts/components).
+
+## References
+
+- [Component Catalog Atmos Design Pattern](/design-patterns/component-catalog)
+- [Component Catalog with Mixins Atmos Design Pattern](/design-patterns/component-catalog-with-mixins)
+- [Component Catalog Template Atmos Design Pattern](/design-patterns/component-catalog-template)

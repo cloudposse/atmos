@@ -1,9 +1,8 @@
 # Visit https://goreleaser.com for documentation on how to customize this behavior.
 
-before:
-  #hooks:
-    # - 'go mod tidy'
-
+#before:
+#  hooks:
+#  - 'go mod tidy'
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate
@@ -34,7 +33,7 @@ checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
 
-release:
+#release:
 # If you want to manually examine the release before it is live, uncomment this line:
 # draft: true
 

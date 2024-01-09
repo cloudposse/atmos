@@ -204,7 +204,7 @@ components:
 
 <br/>
 
-In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-1` Atmos component in the `ue2-dev` stack:
+In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc/1` Atmos component in the `ue2-dev` stack:
 
 ```yaml title="stacks/ue2-dev.yaml"
 # Import the base component configuration from the `catalog`.
@@ -215,7 +215,7 @@ import:
 
 components:
   terraform:
-    vpc-1:
+    vpc/1:
       metadata:
         # Point to the Terraform component in `components/terraform` folder
         component: infra/vpc
@@ -253,12 +253,12 @@ components:
 
 <br/>
 
-Having the stacks configured as shown above, we can now provision the `vpc-1` Atmos component into the `ue2-dev` stack by
+Having the stacks configured as shown above, we can now provision the `vpc/1` Atmos component into the `ue2-dev` stack by
 executing the following Atmos commands:
 
 ```shell
-atmos terraform plan vpc-1 -s ue2-dev
-atmos terraform apply vpc-1 -s ue2-dev
+atmos terraform plan vpc/1 -s ue2-dev
+atmos terraform apply vpc/1 -s ue2-dev
 ```
 
 ## Caveats

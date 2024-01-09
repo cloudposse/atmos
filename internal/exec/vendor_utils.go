@@ -52,8 +52,22 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	tagsCsv, err := flags.GetString("tags")
+	if err != nil {
+		return err
+	}
+
+	var tags []string
+	if tagsCsv != "" {
+		tags = strings.Split(tagsCsv, ",")
+	}
+
 	if component != "" && stack != "" {
-		return fmt.Errorf("either '--component' or '--stack' flag needs to be provided, but not both")
+		return fmt.Errorf("either '--component' or '--stack' flag can to be provided, but not both")
+	}
+
+	if component != "" && len(tags) > 0 {
+		return fmt.Errorf("either '--component' or '--tags' flag can to be provided, but not both")
 	}
 
 	if stack != "" {
@@ -61,14 +75,15 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return ExecuteStackVendorInternal(stack, dryRun)
 	}
 
-	// Check and process `vendor.yaml`
+	// Check `vendor.yaml`
 	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName)
 	if vendorConfigExists && err != nil {
 		return err
 	}
 
 	if vendorConfigExists {
-		return ExecuteAtmosVendorInternal(cliConfig, foundVendorConfigFile, vendorConfig.Spec, component, dryRun)
+		// Process `vendor.yaml`
+		return ExecuteAtmosVendorInternal(cliConfig, foundVendorConfigFile, vendorConfig.Spec, component, tags, dryRun)
 	} else {
 		// Check and process `component.yaml`
 		if component != "" {
@@ -157,6 +172,7 @@ func ExecuteAtmosVendorInternal(
 	vendorConfigFileName string,
 	atmosVendorSpec schema.AtmosVendorSpec,
 	component string,
+	tags []string,
 	dryRun bool,
 ) error {
 
@@ -187,6 +203,16 @@ func ExecuteAtmosVendorInternal(
 		return fmt.Errorf("'spec.sources' is empty in the vendor config file '%s' and the imports", vendorConfigFileName)
 	}
 
+	if len(tags) > 0 {
+		componentTags := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
+			return s.Tags
+		})
+
+		if len(lo.Intersect(tags, componentTags)) == 0 {
+			return fmt.Errorf("there are no components in the vendor config file '%s' tagged with the tags %v", vendorConfigFileName, tags)
+		}
+	}
+
 	components := lo.FilterMap(sources, func(s schema.AtmosVendorSource, index int) (string, bool) {
 		if s.Component != "" {
 			return s.Component, true
@@ -197,7 +223,7 @@ func ExecuteAtmosVendorInternal(
 	duplicateComponents := lo.FindDuplicates(components)
 
 	if len(duplicateComponents) > 0 {
-		return fmt.Errorf("dublicate component names %v in the vendor config file '%s' and the imports",
+		return fmt.Errorf("duplicate component names %v in the vendor config file '%s' and the imports",
 			duplicateComponents,
 			vendorConfigFileName,
 		)
@@ -210,22 +236,32 @@ func ExecuteAtmosVendorInternal(
 		)
 	}
 
-	targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
-		return s.Targets
-	})
-
-	duplicateTargets := lo.FindDuplicates(targets)
-
-	if len(duplicateTargets) > 0 {
-		return fmt.Errorf("dublicate targets %v in the vendor config file '%s' and the imports",
-			duplicateTargets,
-			vendorConfigFileName,
-		)
-	}
+	// Allow having duplicate targets in different sources.
+	// This can be used to vendor mixins (from local and remote sources) and write them to the same targets.
+	// TODO: consider adding a flag to `atmos vendor pull` to specify if duplicate targets are allowed or not.
+	//targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
+	//	return s.Targets
+	//})
+	//
+	//duplicateTargets := lo.FindDuplicates(targets)
+	//
+	//if len(duplicateTargets) > 0 {
+	//	return fmt.Errorf("duplicate targets %v in the vendor config file '%s' and the imports",
+	//		duplicateTargets,
+	//		vendorConfigFileName,
+	//	)
+	//}
 
 	// Process sources
 	for indexSource, s := range sources {
+		// If `--component` is specified, and it's not equal to this component, skip this component
 		if component != "" && s.Component != component {
+			continue
+		}
+
+		// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component
+		// https://github.com/samber/lo?tab=readme-ov-file#intersect
+		if len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0 {
 			continue
 		}
 
@@ -256,8 +292,11 @@ func ExecuteAtmosVendorInternal(
 			uri = s.Source
 		}
 
-		// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
 		useOciScheme := false
+		useLocalFileSystem := false
+		sourceIsLocalFile := false
+
+		// Check if `uri` uses the `oci://` scheme (to download the source from an OCI-compatible registry).
 		if strings.HasPrefix(uri, "oci://") {
 			useOciScheme = true
 			uri = strings.TrimPrefix(uri, "oci://")
@@ -266,6 +305,11 @@ func ExecuteAtmosVendorInternal(
 		if !useOciScheme {
 			if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, uri); err == nil {
 				uri = absPath
+				useLocalFileSystem = true
+
+				if u.FileExists(uri) {
+					sourceIsLocalFile = true
+				}
 			}
 		}
 
@@ -313,23 +357,41 @@ func ExecuteAtmosVendorInternal(
 			defer removeTempDir(cliConfig, tempDir)
 
 			// Download the source into the temp directory
-			if !useOciScheme {
+			if useOciScheme {
+				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
+				err = processOciImage(cliConfig, uri, tempDir)
+				if err != nil {
+					return err
+				}
+			} else if useLocalFileSystem {
+				copyOptions := cp.Options{
+					PreserveTimes: false,
+					PreserveOwner: false,
+					// OnSymlink specifies what to do on symlink
+					// Override the destination file if it already exists
+					OnSymlink: func(src string) cp.SymlinkAction {
+						return cp.Deep
+					},
+				}
+
+				if sourceIsLocalFile {
+					tempDir = path.Join(tempDir, filepath.Base(uri))
+				}
+
+				if err = cp.Copy(uri, tempDir, copyOptions); err != nil {
+					return err
+				}
+			} else {
 				client := &getter.Client{
 					Ctx: context.Background(),
 					// Define the destination where the files will be stored. This will create the directory if it doesn't exist
 					Dst: tempDir,
 					// Source
 					Src:  uri,
-					Mode: getter.ClientModeDir,
+					Mode: getter.ClientModeAny,
 				}
 
 				if err = client.Get(); err != nil {
-					return err
-				}
-			} else {
-				// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-				err = processOciImage(cliConfig, uri, tempDir)
-				if err != nil {
 					return err
 				}
 			}
@@ -399,6 +461,18 @@ func ExecuteAtmosVendorInternal(
 
 				// Preserve the uid and the gid of all entries
 				PreserveOwner: false,
+
+				// OnSymlink specifies what to do on symlink
+				// Override the destination file if it already exists
+				OnSymlink: func(src string) cp.SymlinkAction {
+					return cp.Deep
+				},
+			}
+
+			if sourceIsLocalFile {
+				if filepath.Ext(targetPath) == "" {
+					targetPath = path.Join(targetPath, filepath.Base(uri))
+				}
 			}
 
 			if err = cp.Copy(tempDir, targetPath, copyOptions); err != nil {

@@ -17,7 +17,7 @@ func TestValidateStacksCommand(t *testing.T) {
 }
 
 func TestValidateStacksCommandWithAtmosManifestJsonSchema(t *testing.T) {
-	err := e.ExecuteValidateStacksCmd(cmd.ValidateStacksCmd, []string{"--schemas-atmos-manifest", "../quick-start/schemas/atmos-manifest/1.0/atmos-manifest.json"})
+	err := e.ExecuteValidateStacksCmd(cmd.ValidateStacksCmd, []string{"--schemas-atmos-manifest", "../quick-start/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"})
 	u.LogError(err)
 	assert.NotNil(t, err)
 }

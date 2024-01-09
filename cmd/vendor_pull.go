@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 // vendorPullCmd executes 'vendor pull' CLI commands
@@ -21,10 +22,11 @@ var vendorPullCmd = &cobra.Command{
 }
 
 func init() {
-	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "atmos vendor pull --component <component>")
-	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "atmos vendor pull --stack <stack>")
+	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component: atmos vendor pull --component <component>")
+	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack: atmos vendor pull --stack <stack>")
 	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "atmos vendor pull --component <component> --type=terraform|helmfile")
 	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "atmos vendor pull --component <component> --dry-run")
+	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags: atmos vendor pull --tags=dev,test")
 
 	vendorCmd.AddCommand(vendorPullCmd)
 }

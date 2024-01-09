@@ -5,7 +5,7 @@ id: configuration
 description: Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI.
 ---
 
-<br/>
+# CLI Configuration
 
 :::note Purpose
 Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI
@@ -16,9 +16,7 @@ Use the `atmos.yaml` configuration file to control the behavior of the `atmos` C
 Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
 be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
-<br/>
-
-# Configuration File (`atmos.yaml`)
+## Configuration File (`atmos.yaml`)
 
 The CLI config is loaded from the following locations (from lowest to highest priority):
 
@@ -33,7 +31,7 @@ Each configuration file discovered is deep-merged with the preceeding configurat
 
 :::tip Pro-Tip
 Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
-names/paths (double-star/globstar `**`)
+names/paths (double-star/globstar `**` is supported as well)
 :::
 
 <br/>
@@ -42,7 +40,7 @@ What follows are all the sections of the `atmos.yaml` configuration file.
 
 ## Base Path
 
-The base path for components, stacks and workflows configurations.
+The base path for components, stacks, workflows and validation configurations.
 It can also be set using `ATMOS_BASE_PATH` environment variable, or by passing the `--base-path` command-line argument.
 It supports both absolute and relative paths.
 
@@ -77,7 +75,7 @@ components:
     init_run_reconfigure: true
 
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
-    auto_generate_backend_file: false
+    auto_generate_backend_file: true
 
   helmfile:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
@@ -100,7 +98,7 @@ components:
 
 ## Stacks
 
-Specify where to find stacks.
+Define the stack name pattern and specify where to find stacks.
 
 ```yaml
 stacks:
@@ -110,15 +108,79 @@ stacks:
 
   # Can also be set using 'ATMOS_STACKS_INCLUDED_PATHS' ENV var (comma-separated values string)
   included_paths:
+    # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
 
   # Can also be set using 'ATMOS_STACKS_EXCLUDED_PATHS' ENV var (comma-separated values string)
   excluded_paths:
+    # Tell Atmos that all `_defaults.yaml` files are not top-level stack manifests
     - "**/_defaults.yaml"
 
   # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
   name_pattern: "{tenant}-{environment}-{stage}"
 ```
+
+- `stacks.base_path` specifies the path to the folder where **all** Atmos stack config files (stack manifests) are defined.
+  If the global `base_path` is not provided or is an empty string, `stacks.base_path` is an independent setting that supports both absolute and
+  relative paths. If the global `base_path` is defined, `stacks.base_path` is relative to the global `base_path`
+
+- `stacks.included_paths` tells Atmos where to search for the top-level stack manifests
+
+  :::note
+  Atmos top-level stack manifests are configuration files that define **all** settings and components for the corresponding environment (organization,
+  OU/tenant, account, region), and they are used in `atmos` CLI commands like `atmos terraform plan <component> -s <top-level-stack>` and
+  `atmos terraform apply <component> -s <top-level-stack>`
+  :::
+
+<br/>
+
+- `stacks.excluded_paths` tells Atmos which paths from `stacks.included_paths` to exclude. For example, we will exclude the config files that don't
+  contain the top-level stack manifests, but just define the default values that get imported into top-level stack manifests
+
+  :::note
+  The `_defaults.yaml` files is the recommended way to define the stack manifests with the
+  default configurations for organizations, OUs/tenants, accounts and regions. The `_defaults.yaml` files themselves are not top-level Atmos stacks,
+  they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
+  :::
+
+<br/>
+
+- `stacks.name_pattern` configures the name pattern for the top-level Atmos stacks using the context variables `namespace`, `tenant`, `environment`
+  and `stage` as the template tokens. Depending on the structure of your organization, OUs, accounts and regions, set `stacks.name_pattern` to the
+  following:
+
+  - `name_pattern: {stage}` - if you use just one region and a few accounts (stages) in just one organization and one OU. In this case, the
+    top-level Atmos stacks will use just the `stage` (account) in their names, and to provision the Atmos components in the top-level stacks, you will
+    be executing Atmos commands like `atmos terraform apply <component> --stack dev`, `atmos terraform apply <component> --stack staging`
+    and `atmos terraform apply <component> --stack prod`
+
+  - `name_pattern: {environment}-{stage}` - if you have multiple regions and accounts (stages) in just one organization and one OU. In this case, the
+    top-level Atmos stacks will use the `environment` (region) and `stage` (account) in their names, and to provision the Atmos components in the
+    top-level stacks, you will be executing Atmos commands
+    like `atmos terraform apply <component> --stack ue2-dev`, `atmos terraform apply <component> --stack uw2-staging`
+    and `atmos terraform apply <component> --stack ue1-prod`. Note that the `name_pattern` can also be defined
+    as `{stage}-{environment}`, in which case the Atmos commands will look like `atmos terraform apply <component> --stack dev-ue2`
+
+  - `name_pattern: {tenant}-{environment}-{stage}` - if you have multiple regions, OUs (tenants) and accounts (stages) in just one organization. In
+    this case, the top-level Atmos stacks will use the `tenant`, `environment` (region) and `stage` (account) in their names, and to provision the
+    Atmos components in the top-level stacks, you will be executing Atmos commands
+    like `atmos terraform apply <component> --stack plat-ue2-dev`, `atmos terraform apply <component> --stack core-uw2-staging`
+    and `atmos terraform apply <component> --stack plat-ue1-prod`, where `plat` and `core` are the OUs/tenants in your organization
+
+  - `name_pattern: {namespace}-{tenant}-{environment}-{stage}` - if you have a multi-org, multi-tenant, multi-account and multi-region architecture.
+    In this case, the top-level Atmos stacks will use the `namespace`, `tenant`, `environment` (region) and `stage` (account) in their names, and to
+    provision the Atmos components in the top-level stacks, you will be executing Atmos commands
+    like `atmos terraform apply <component> --stack org1-plat-ue2-dev`, `atmos terraform apply <component> --stack org2-core-uw2-staging`
+    and `atmos terraform apply <component> --stack org2-plat-ue1-prod`, where `org1` and `org2` are the organization names (defined as `namespace` in
+    the corresponding `_defaults.yaml` config files for the organizations)
+
+<br/>
+
+:::tip
+Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to configure the `stacks` section in `atmos.yaml` for different use-cases
+:::
+
+<br/>
 
 ## Workflows
 
@@ -430,19 +492,16 @@ schemas:
     # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line arguments
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
-  # https://cuelang.org
-  cue:
-    # Can also be set using 'ATMOS_SCHEMAS_CUE_BASE_PATH' ENV var, or '--schemas-cue-dir' command-line arguments
-    # Supports both absolute and relative paths
-    base_path: "stacks/schemas/cue"
   # JSON Schema to validate Atmos manifests
-  # https://www.schemastore.org/json
+  # https://atmos.tools/reference/schemas/
+  # https://atmos.tools/cli/commands/validate/stacks/
+  # https://atmos.tools/quick-start/configure-validation/
+  # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
-  # https://github.com/SchemaStore/schemastore
   atmos:
     # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
-    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
+    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 ## Logs

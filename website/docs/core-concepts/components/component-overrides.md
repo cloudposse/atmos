@@ -2,11 +2,12 @@
 title: Component Overrides
 sidebar_position: 9
 sidebar_label: Overrides
-description: Use the 'overrides' pattern to modify component(s) configuration and behavior in the current scope.
+description: Use the 'Component Overrides' pattern to modify components' configuration and behavior in the current scope.
 id: overrides
 ---
 
-Atmos supports the __overrides__ pattern to modify component(s) configuration and behavior using the `overrides` section in Atmos stack manifests.
+Atmos supports the [Component Overrides](/design-patterns/component-overrides) Design Pattern to modify components' configuration and behavior using
+the `overrides` section in Atmos stack manifests.
 
 You can override the following sections in the component(s) configuration:
 
@@ -51,9 +52,9 @@ helmfile:
     command: "<command to execute>"
 ```
 
-You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance. 
+You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance.
 The scope of the `override` configuration is limited to all the Atmos components defined within the manifest and all its imports up until that point.
-In other words, the `overrides` configuration defined within a stack manifest does not affect any other components defined in different stack 
+In other words, the `overrides` configuration defined within a stack manifest does not affect any other components defined in different stack
 manifests for the same top-level stack.
 
 <br/>
@@ -65,13 +66,13 @@ supported by Atmos
 
 ## Use-case: Overrides for Teams
 
-The __overrides__ pattern is used to override the components only in a particular Atmos stack manifest and all the imported
+The **overrides** pattern is used to override the components only in a particular Atmos stack manifest and all the imported
 manifests. This is different from the other configuration sections (e.g. `vars`, `settings`, `env`). If we define a `vars`, `settings` or `env`
 section at the global, Terraform or Helmfile levels, all the components in the top-level stack will get the updated configurations. On
 the other hand, if we define an `overrides` section in a stack manifest, only the components directly defined in the manifest and its imports will get
 the overridden values, not all the components in the top-level Atmos stack.
 
-This is especially useful when you have Atmos stack manifests split per Teams; each Team manages a set of components, and you need to define a common
+This is especially useful when you have Atmos stack manifests split per Teams. Each Team manages a set of components, and you need to define a common
 configuration (or override the existing one) for the components that only a particular Team manages.
 
 For example, we have two Teams: `devops` and `testing`.
@@ -174,8 +175,8 @@ In the manifest above, we configure the following:
   Team will be affected by the new values (but not the Helmfile components). The Terraform `overrides` are deep-merged with the global `overrides`
   and takes higher priority (it will override the same keys from the global `overrides`).
 
-- The Helmfile-level `helmfile.overrides` section to override an ENV variable in the `env` section. All the Helmfile components managed by 
-  the `testing` Team will get the new ENV variable value (but not the Terraform components). The Helmfile `overrides` are deep-merged with the 
+- The Helmfile-level `helmfile.overrides` section to override an ENV variable in the `env` section. All the Helmfile components managed by
+  the `testing` Team will get the new ENV variable value (but not the Terraform components). The Helmfile `overrides` are deep-merged with the
   global `overrides` and takes higher priority (it will override the same keys from the global `overrides`).
 
 <br/>
@@ -184,8 +185,8 @@ To confirm that the components managed by the `testing` Team get the new values 
 commands:
 
 ```shell
-atmos atmos describe component test/test-component -s tenant1-uw2-dev
-atmos atmos describe component test/test-component-override -s tenant1-uw2-dev
+atmos describe component test/test-component -s tenant1-uw2-dev
+atmos describe component test/test-component-override -s tenant1-uw2-dev
 ```
 
 You should see the following output:
@@ -233,7 +234,7 @@ To confirm that the components managed by the `devops` Team are not affected by 
 command:
 
 ```shell
-atmos atmos describe component top-level-component1 -s tenant1-uw2-dev
+atmos describe component top-level-component1 -s tenant1-uw2-dev
 ```
 
 You should see the following output:

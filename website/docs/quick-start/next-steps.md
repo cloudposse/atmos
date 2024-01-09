@@ -1,7 +1,7 @@
 ---
 title: Next Steps
 sidebar_label: Next Steps
-sidebar_position: 12
+sidebar_position: 13
 ---
 
 You have just learned the **basics of Atmos**.
@@ -12,6 +12,7 @@ Atmos is a powerful enterprise-grade workflow automation tool with so **much mor
 
 Here are some of the major differentiators of Atmos:
 
+* [Atmos Design Patterns](/design-patterns)
 * [Third-party Integrations](/category/integrations)
 * [Atmos Vendoring](/core-concepts/vendoring)
 * [Component Vendoring](/core-concepts/components/vendoring)

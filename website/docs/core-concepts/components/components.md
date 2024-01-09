@@ -7,7 +7,7 @@ description: Components are opinionated building blocks of infrastructure as cod
 
 Components are opinionated, self-contained building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case. Atmos was
 written to support any number of tools, but also supports a couple of native integration with tools like `terraform` and `helmfile`. A common use-case
-for Atmos is implementing workflows for `terraform` "root modules".
+for Atmos is implementing workflows for Terraform "root modules".
 
 ## Component Schema
 
@@ -137,9 +137,9 @@ The type of a component is expressed in the `metadata.type` parameter of a given
 
 There are two types of components:
 
-- `real` - is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance
+- `real` - is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance that can be provisioned
 - `abstract` - a component configuration, which cannot be instantiated directly. The concept is borrowed
-  from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object Oriented Programming.
+  from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming
 
 ## Flavors of Components
 

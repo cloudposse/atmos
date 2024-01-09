@@ -7,8 +7,19 @@ description: Use this command to pull sources and mixins from remote repositorie
 ---
 
 :::note Purpose
-This command implements [Atmos Vendoring](/core-concepts/vendoring/). Use this command to download all sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
+This command implements [Atmos Vendoring](/core-concepts/vendoring/). Use this command to download sources from local and remote 
+repositories for Terraform and Helmfile components and stacks.
 :::
+
+With Atmos vendoring, you can copy components and other artifacts from the following sources:
+
+- Copy all files from an [OCI Registry](https://opencontainers.org) into a local folder
+- Copy all files from Git, Mercurial, Amazon S3, Google GCP into a local folder
+- Copy all files from an HTTP/HTTPS endpoint into a local folder
+- Copy a single file from an HTTP/HTTPS endpoint to a local file
+- Copy a local file into a local folder (keeping the same file name)
+- Copy a local file to a local file with a different file name
+- Copy a local folder (all files) into a local folder
 
 ## Usage
 
@@ -18,6 +29,7 @@ Execute the `vendor pull` command like this:
 atmos vendor pull
 atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
+atmos vendor pull --tags <tag1>,<tag2> [options]
 ```
 
 ## Description
@@ -45,12 +57,15 @@ configurations.
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
   [OCI registries](https://opencontainers.org).
 
-- The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths 
-  are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths 
+- The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
+  are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
   will be considered relative to the `base_path`. Multiple targets can be specified.
 
 - `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
   (double-star/globstar `**` is supported as well).
+
+- The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the
+  specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
 
 :::tip
 Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
@@ -99,10 +114,11 @@ Run `atmos vendor pull --help` to see all the available options
 
 ```shell
 atmos vendor pull
-atmos vendor pull -c infra/account-map
-atmos vendor pull -c infra/vpc-flow-logs-bucket
-atmos vendor pull -c echo-server -t helmfile
-atmos vendor pull -c infra/account-map --dry-run
+atmos vendor pull --component vpc
+atmos vendor pull -c vpc-flow-logs-bucket
+atmos vendor pull -c echo-server --type helmfile
+atmos vendor pull --tags dev,test
+atmos vendor pull --tags networking --dry-run
 ```
 
 <br/>
@@ -122,8 +138,9 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 
 ## Flags
 
-| Flag          | Description                                                        | Alias | Required |
-|:--------------|:-------------------------------------------------------------------|:------|:---------|
-| `--component` | Atmos component to pull sources and mixins for                     | `-c`  | no       |
-| `--type`      | Component type: `terraform` or `helmfile` (`terraform` is default) | `-t`  | no       |
-| `--dry-run`   | Dry run                                                            |       | no       |
+| Flag          | Description                                                                                                  | Alias | Required |
+|:--------------|:-------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--component` | Atmos component to pull                                                                                      | `-c`  | no       |
+| `--tags`      | Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string |       | no       |
+| `--type`      | Component type: `terraform` or `helmfile` (`terraform` is default)                                           | `-t`  | no       |
+| `--dry-run`   | Dry run                                                                                                      |       | no       |

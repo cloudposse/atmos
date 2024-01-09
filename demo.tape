@@ -42,18 +42,19 @@ Sleep 1
 
 Type "# Let's see what components we have available!" Sleep 500ms Enter
 Type "atmos list components" Sleep 500ms Enter
-Sleep 500ms 
+Sleep 1
 
 Type "# Let's see where they can be deployed" Sleep 500ms Enter
 Type "atmos list stacks" Sleep 500ms Enter
+Sleep 1
 
-Type "# Let's review the production VPC configuration in the ue2 region..." Sleep 500ms Enter
-Type "atmos describe stacks --components=vpc --stack=plat-uw2-prod --sections=vars" Sleep 500ms Enter
-Sleep 500ms
+Type "# Let's review the production VPC configuration in the us-east-2 region..." Sleep 500ms Enter
+Type "atmos describe stacks --components=vpc --stack=plat-ue2-prod --sections=vars" Sleep 500ms Enter
+Sleep 1
 
 Type "# Or checkout all VPCs" Sleep 500ms Enter
 Type "atmos describe stacks --components=vpc --sections=vars | less" Sleep 500ms Enter
-Sleep 500ms
+Sleep 1
 
 Down 25 Sleep 500ms
 Down 25 Sleep 500ms
@@ -72,4 +73,3 @@ Type "# check out the docs at https://atmos.tools/" Sleep 500ms Enter
 Sleep 500ms
 Type "# or join us in #atmos at https://slack.cloudposse.com!" Sleep 500ms Enter
 Sleep 2s
-

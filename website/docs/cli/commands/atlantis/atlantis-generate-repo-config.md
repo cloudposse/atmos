@@ -13,7 +13,7 @@ Use this command to generate a repository configuration for Atlantis.
 <br/>
 
 ```shell
-atmos atmos atlantis generate repo-config [options]
+atmos atlantis generate repo-config [options]
 ```
 
 <br/>

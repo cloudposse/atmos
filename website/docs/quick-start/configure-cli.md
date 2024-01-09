@@ -98,13 +98,15 @@ schemas:
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
   # JSON Schema to validate Atmos manifests
-  # https://www.schemastore.org/json
+  # https://atmos.tools/reference/schemas/
+  # https://atmos.tools/cli/commands/validate/stacks/
+  # https://atmos.tools/quick-start/configure-validation/
+  # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
-  # https://github.com/SchemaStore/schemastore
   atmos:
     # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
-    manifest: "schemas/atmos-manifest/1.0/atmos-manifest.json"
+    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 <br/>
