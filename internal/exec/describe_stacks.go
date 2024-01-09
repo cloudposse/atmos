@@ -2,8 +2,9 @@ package exec
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"strings"
+
+	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -191,6 +192,17 @@ func ExecuteDescribeStacks(
 
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["workspace"] = workspace
 								}
+
+								// Atmos component, stack, and stack manifest file
+								if len(sections) == 0 || u.SliceContainsString(sections, "atmos_component") {
+									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["atmos_component"] = componentName
+								}
+								if len(sections) == 0 || u.SliceContainsString(sections, "atmos_stack") {
+									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["atmos_stack"] = stackName
+								}
+								if len(sections) == 0 || u.SliceContainsString(sections, "atmos_stack_file") {
+									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["atmos_stack_file"] = stackFileName
+								}
 							}
 						}
 					}
@@ -250,6 +262,17 @@ func ExecuteDescribeStacks(
 							for sectionName, section := range componentSection {
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
+
+									// Atmos component, stack, and stack manifest file
+									if len(sections) == 0 || u.SliceContainsString(sections, "atmos_component") {
+										finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)["atmos_component"] = componentName
+									}
+									if len(sections) == 0 || u.SliceContainsString(sections, "atmos_stack") {
+										finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)["atmos_stack"] = stackName
+									}
+									if len(sections) == 0 || u.SliceContainsString(sections, "atmos_stack_file") {
+										finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)["atmos_stack_file"] = stackFileName
+									}
 								}
 							}
 						}

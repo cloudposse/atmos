@@ -17,7 +17,7 @@ a way that makes conceptual sense. The side effect of this are extremely DRY and
 In Object-Oriented Programming (OOP), Inheritance is the mechanism of basing an object or class upon another object (prototype-based inheritance) or
 class (class-based inheritance), retaining similar implementation.
 
-Similarly, in Atmos, Component Inheritance is the mechanism of deriving a component from one or more base components, inheriting all the
+Similarly, in Atmos, **Component Inheritance** is the mechanism of deriving a component from one or more base components, inheriting all the
 properties of the base component(s) and overriding only some fields specific to the derived component. The derived component acquires all the
 properties of the "parent" component(s), allowing creating very DRY configurations that are built upon existing components.
 
@@ -53,10 +53,12 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
+      ComponentA : backend
       class ComponentB {
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -65,6 +67,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -123,7 +126,7 @@ import:
 components:
   terraform:
 
-    vpc-1:
+    vpc/1:
       metadata:
         component: infra/vpc # Point to the Terraform component in `components/terraform` folder
         inherits:
@@ -137,7 +140,7 @@ components:
         nat_gateway_enabled: true
         vpc_flow_logs_enabled: false
 
-    vpc-2:
+    vpc/2:
       metadata:
         component: infra/vpc # Point to the same Terraform component in `components/terraform` folder
         inherits:
@@ -155,21 +158,21 @@ components:
 
 In the configuration above, the following **Component-Oriented Programming** concepts are implemented:
 
-- **Component Inheritance**: In the `ue2-dev` stack (`stacks/ue2-dev.yaml` stack config file), the Atmos components `vpc-1` and `vpc-2` inherit from
-  the base component `vpc-defaults`. This makes `vpc-1` and `vpc-2` derived components
+- **Component Inheritance**: In the `ue2-dev` stack (`stacks/ue2-dev.yaml` stack config file), the Atmos components `vpc/1` and `vpc/2` inherit from
+  the base component `vpc-defaults`. This makes `vpc/1` and `vpc/2` derived components
 - **Principle of Abstraction**: In the `ue2-dev` stack, only the relevant information about the derived components in the stack is shown. All the base
   component settings are "hidden" (in the imported `catalog`), which reduces the configuration size and complexity
-- **Dynamic Polymorphism**: The derived `vpc-1` and `vpc-2` components override and use the base component properties to be able to provision the same
+- **Dynamic Polymorphism**: The derived `vpc/1` and `vpc/2` components override and use the base component properties to be able to provision the same
   Terraform configuration many times but with different settings
 
 <br/>
 
-Having the components in the stack configured as shown above, we can now provision the `vpc-1` and `vpc-2` components into the `ue2-dev` stack by
+Having the components in the stack configured as shown above, we can now provision the `vpc/1` and `vpc/2` components into the `ue2-dev` stack by
 executing the following `atmos` commands:
 
 ```shell
-atmos terraform apply vpc-1 -s ue2-dev
-atmos terraform apply vpc-2 -s ue2-dev
+atmos terraform apply vpc/1 -s ue2-dev
+atmos terraform apply vpc/2 -s ue2-dev
 ```
 
 <br/>
@@ -195,15 +198,18 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
+      ComponentA : backend
       class ComponentB {
           vars
           settings
           env
+          backend
       }
       class ComponentC {
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -352,10 +358,12 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
+      ComponentA : backend
       class ComponentB {
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -364,6 +372,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
@@ -376,7 +385,7 @@ classDiagram
 
 Hierarchical Inheritance is a combination of Multiple Inheritance and Multilevel Inheritance.
 
-In Hierarchical Inheritance, every component can act as a base component for one or more child (derived) components, and each child component can
+In Hierarchical Inheritance, every component can act as a base component for one or more child (derived) components, and each derived component can
 inherit from one of more base components.
 
 <br/>
@@ -394,10 +403,12 @@ classDiagram
       ComponentA : vars
       ComponentA : settings
       ComponentA : env
+      ComponentA : backend
       class ComponentB {
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -406,6 +417,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentA&nbsp;&nbsp;
@@ -414,6 +426,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
@@ -422,6 +435,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
@@ -431,6 +445,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentC&nbsp;&nbsp;
@@ -439,6 +454,7 @@ classDiagram
           vars
           settings
           env
+          backend
           metadata:
           &nbsp;&nbsp;inherits:
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentI&nbsp;&nbsp;
@@ -448,11 +464,13 @@ classDiagram
           vars
           settings
           env
+          backend
       }
       class ComponentI {
           vars
           settings
           env
+          backend
       }
 ```
 
@@ -542,18 +560,21 @@ classDiagram
       class `base-component-1` {
           settings
           env
+          backend
           vars:
           &nbsp;&nbsp;hierarchical_inheritance_test: base-component-1
       }
       class `base-component-2` {
           settings
           env
+          backend
           vars:
           &nbsp;&nbsp;hierarchical_inheritance_test: base-component-2
       }
       class `derived-component-1` {
           settings
           env
+          backend
           vars
           metadata:
           &nbsp;&nbsp;inherits:
@@ -562,6 +583,7 @@ classDiagram
       class `derived-component-2` {
           settings
           env
+          backend
           vars
           metadata:
           &nbsp;&nbsp;inherits:
@@ -652,3 +674,8 @@ Component: derived-component-2
 Terraform component: test/test-component
 Inheritance: derived-component-2 -> base-component-2 -> derived-component-1 -> base-component-1
 ```
+
+## References
+
+- [Abstract Component Atmos Design Pattern](/design-patterns/abstract-component)
+- [Component Inheritance Atmos Design Pattern](/design-patterns/component-inheritance)

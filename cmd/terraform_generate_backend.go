@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 // terraformGenerateBackendCmd generates backend config for a terraform component

@@ -1,0 +1,5 @@
+components:
+  terraform:
+    vpc:
+      vars:
+        ipv4_primary_cidr_block: 10.7.0.0/18

@@ -8,6 +8,16 @@ id: vendoring
 
 Atmos natively supports the concept of "vendoring", which is making copies of the 3rd party components, stacks, and other artifacts in your own repo.
 
+With Atmos vendoring, you can copy components and other artifacts from the following sources:
+
+- Copy all files from an [OCI Registry](https://opencontainers.org) into a local folder
+- Copy all files from Git, Mercurial, Amazon S3, Google GCP into a local folder
+- Copy all files from an HTTP/HTTPS endpoint into a local folder
+- Copy a single file from an HTTP/HTTPS endpoint to a local file
+- Copy a local file into a local folder (keeping the same file name)
+- Copy a local file to a local file with a different file name
+- Copy a local folder (all files) into a local folder
+
 The vendoring configuration is defined in the `vendor.yaml` manifest (vendor config file).
 
 Atmos searches for the vendoring manifest in the following locations, and uses the first one found:
@@ -28,6 +38,12 @@ To vendor a particular component or other artifact, execute the following comman
 atmos vendor pull -c <component>
 ```
 
+To vendor components and artifacts tagged with specific tags, execute the following command:
+
+```bash
+atmos vendor pull --tags <tag1>,<tag2>
+```
+
 <br/>
 
 :::tip
@@ -39,6 +55,14 @@ Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more d
 To vendor remote artifacts, create a `vendor.yaml` file similar to the example below:
 
 ```yaml title="vendor.yaml"
+# atmos vendor pull
+# atmos vendor pull --component vpc-mixin-1
+# atmos vendor pull -c vpc-mixin-2
+# atmos vendor pull -c vpc-mixin-3
+# atmos vendor pull -c vpc-mixin-4
+# atmos vendor pull --tags test
+# atmos vendor pull --tags networking,storage
+
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -47,14 +71,13 @@ metadata:
 spec:
   # `imports` or `sources` (or both) must be defined in a vendoring manifest
   imports:
-    - "vendor/vendor2.yaml"
-    # The imported file extension is optional. 
-    # If an import is defined without an extension, the `.yaml` extension is assumed and used by default.
-    - "vendor/vendor3"
+    - "vendor/vendor2"
+    - "vendor/vendor3.yaml"
 
   sources:
-    # `source` supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
-    # and all the URL and archive formats as described in https://github.com/hashicorp/go-getter.
+    # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
+    # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
     # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
     # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
@@ -72,6 +95,12 @@ spec:
         - "**/*.tf"
         - "**/*.tfvars"
         - "**/*.md"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+        - networking
     - component: "vpc-flow-logs-bucket"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
       version: "1.323.0"
@@ -80,6 +109,54 @@ spec:
       excluded_paths:
         - "**/*.yaml"
         - "**/*.yml"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags networking,storage`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+        - storage
+    - component: "vpc-mixin-1"
+      source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
+      targets:
+        - "components/terraform/infra/vpc3"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+    - component: "vpc-mixin-2"
+      # Copy a local file into a local folder (keeping the same file name)
+      # This `source` is relative to the current folder
+      source: "components/terraform/mixins/context.tf"
+      targets:
+        - "components/terraform/infra/vpc3"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+    - component: "vpc-mixin-3"
+      # Copy a local folder into a local folder
+      # This `source` is relative to the current folder
+      source: "components/terraform/mixins"
+      targets:
+        - "components/terraform/infra/vpc3"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+    - component: "vpc-mixin-4"
+      # Copy a local file into a local file with a different file name
+      # This `source` is relative to the current folder
+      source: "components/terraform/mixins/context.tf"
+      targets:
+        - "components/terraform/infra/vpc3/context-copy.tf"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
 ```
 
 <br/>
@@ -98,7 +175,7 @@ spec:
   source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
   ```
 
-- The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
+- The `targets` in each source supports absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
   are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
   will be considered relative to the `base_path`. Multiple targets can be specified.
 
@@ -120,6 +197,9 @@ spec:
     # Vendor a component into a major-minor versioned folder like 1.2
     - "components/terraform/infra/vpc-flow-logs-bucket/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
   ```
+
+- The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the
+  specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
 
 - The `imports` section defines the additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported
   at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all
@@ -229,7 +309,6 @@ Pulling sources for the component 'my-vpc1' from 'public.ecr.aws/cloudposse/comp
 Pulling sources for the component 'my-vpc2' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.320.0' into 'components/terraform/infra/my-vpc2'
 Pulling sources for the component 'vpc' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest' into 'components/terraform/infra/vpc3'
 Pulling sources for the component 'vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.323.0' into 'components/terraform/infra/vpc-flow-logs-bucket/1.323.0'
-
 ```
 
 ## Vendoring from OCI Registries
@@ -269,7 +348,7 @@ spec:
         - "**/*.tf"
         - "**/*.tfvars"
         - "**/*.md"
-      excluded_paths: [ ]
+      excluded_paths: []
 ```
 
 To vendor the `vpc` component, execute the following command:
