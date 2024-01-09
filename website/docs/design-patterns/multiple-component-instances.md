@@ -36,19 +36,19 @@ and `vpc/2`.
    │   │   └── vpc
    │   │       └── defaults.yaml
    │   ├── mixins
-   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   ├── tenant  # tenant-specific defaults
    │   │   │   └── plat.yaml
-   │   │   ├── region  (region-specific defaults)
+   │   │   ├── region  # region-specific defaults
    │   │   │   ├── us-east-2.yaml
    │   │   │   └── us-west-2.yaml
-   │   │   └── stage  (stage-specific defaults)
+   │   │   └── stage  # stage-specific defaults
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
    │   └── orgs  (organizations)
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat ('plat' OU/tenant)
+   │           └── plat # Platform OU (a.k.a. tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml
