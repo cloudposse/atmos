@@ -50,7 +50,7 @@ Sleep 1
 
 Type "# Let's validate the stacks" Sleep 500ms Enter
 Type "atmos validate stacks" Sleep 500ms Enter
-Sleep 2
+Sleep 1
 
 Type "# Let's review the production VPC configuration in the us-east-2 region..." Sleep 500ms Enter
 Type "atmos describe stacks --components=vpc --stack=plat-ue2-prod --sections=vars" Sleep 500ms Enter
