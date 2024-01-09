@@ -78,7 +78,7 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
    │       │   │       ├── global-region.yaml
    │       │   │       ├── us-east-2.yaml
    │       │   │       └── us-west-2.yaml
-   │       │   └── plat ('plat' OU/tenant)
+   │       │   └── plat # Platform OU (a.k.a. tenant)
    │       │       ├── _defaults.yaml
    │       │       ├── dev
    │       │       │   ├── _defaults.yaml
