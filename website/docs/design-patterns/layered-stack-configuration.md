@@ -16,9 +16,10 @@ Each layer can be managed separately, possibly by different teams.
 <br/>
 
 :::note
-The **Layered Stack Configuration** Design Pattern is similar to the [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
-pattern, but instead of splitting top-level Atmos stacks into smaller parts by category or function, the **Layered Stack Configuration** design
-pattern prescribes adding separate layers to group the related Atmos components, and then importing the layers into top-level Atmos stacks.
+The **Layered Stack Configuration** Design Pattern works around the limitations of
+the [Partial Stack Configuration](/design-patterns/partial-stack-configuration) pattern. Instead of splitting the top-level Atmos stacks into parts,
+the **Layered Stack Configuration** pattern adds separate layers to group the related Atmos components by category, and then import the layer
+manifests into the top-level Atmos stacks.
 :::
 
 ## Applicability
@@ -309,7 +310,9 @@ The **Layered Stack Configuration** pattern provides the following benefits:
 
 - Allows to group Atmos components by category or function
 
-  people or teams. Furthermore, controls like GitHub's [`CODEOWNERS`](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners) can be leveraged so that specific teams or individuals must review changes to these files.
+  people or teams. Furthermore, controls like
+  GitHub's [`CODEOWNERS`](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)
+  can be leveraged so that specific teams or individuals must review changes to these files.
 
 - Allows importing only the required layers into the top-level stacks (only the groups of components that need to be provisioned in the stacks)
 
