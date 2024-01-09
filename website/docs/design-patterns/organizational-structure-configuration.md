@@ -53,7 +53,7 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
-   │   └── orgs  (organizations)
+   │   └── orgs  # Organizations
    │       ├── org1
    │       │   ├── _defaults.yaml
    │       │   ├── core  ('core' OU/tenant)
