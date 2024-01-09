@@ -14,7 +14,7 @@ An Atmos component can have any name that can be different from the Terraform co
 (with the same or different settings) can be provisioned into the same environment by defining multiple Atmos components that provide configuration
 for the Terraform component.
 
-For example, two different Atmos components `vpc-1` and `vpc-2` can provide configuration for the same Terraform component `vpc`.
+For example, two different Atmos components `vpc/1` and `vpc/2` can provide configuration for the same Terraform component `vpc`.
 
 ## Applicability
 
@@ -24,10 +24,10 @@ Use the **Multiple Component Instances** pattern when:
 
 ## Example
 
-The following example shows the Atmos stack and component configurations to provision two Atmos components (`vpc-1` and `vpc-2`) that use the
-same Terraform component `vpc`. The `vpc-1` and `vpc-2` components are provisioned in the same stack. In the `catalog/vpc` folder, we have
-the `defaults.yaml` manifest that configures the base abstract component `vpc/defaults` to be inherited by the derived VPC components `vpc-1`
-and `vpc-2`.
+The following example shows the Atmos stack and component configurations to provision two Atmos components (`vpc/1` and `vpc/2`) that use the
+same Terraform component `vpc`. The `vpc/1` and `vpc/2` components are provisioned in the same stack. In the `catalog/vpc` folder, we have
+the `defaults.yaml` manifest that configures the base abstract component `vpc/defaults` to be inherited by the derived VPC components `vpc/1`
+and `vpc/2`.
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -145,28 +145,28 @@ import:
 
 components:
   terraform:
-    # Atmos component `vpc-1`
-    vpc-1:
+    # Atmos component `vpc/1`
+    vpc/1:
       metadata:
         # Point to the Terraform component in `components/terraform/vpc`
         component: vpc
         # Inherit the defaults for all VPC components
         inherits:
           - vpc/defaults
-      # Define/override variables specific to this `vpc-1` component
+      # Define/override variables specific to this `vpc/1` component
       vars:
         name: vpc-1
         ipv4_primary_cidr_block: 10.9.0.0/18
 
-    # Atmos component `vpc-2`
-    vpc-2:
+    # Atmos component `vpc/2`
+    vpc/2:
       metadata:
         # Point to the Terraform component in `components/terraform/vpc`
         component: vpc
         # Inherit the defaults for all VPC components
         inherits:
           - vpc/defaults
-      # Define/override variables specific to this `vpc-2` component
+      # Define/override variables specific to this `vpc/2` component
       vars:
         name: vpc-2
         ipv4_primary_cidr_block: 10.10.0.0/18
@@ -178,8 +178,8 @@ components:
 To provision the components in the stack, execute the following commands:
 
 ```shell
-atmos terraform apply vpc-1 -s plat-ue2-prod
-atmos terraform apply vpc-2 -s plat-ue2-prod
+atmos terraform apply vpc/1 -s plat-ue2-prod
+atmos terraform apply vpc/2 -s plat-ue2-prod
 ```
 
 The provisioned VPCs will have the following names:

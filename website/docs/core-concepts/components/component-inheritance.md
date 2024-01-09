@@ -126,7 +126,7 @@ import:
 components:
   terraform:
 
-    vpc-1:
+    vpc/1:
       metadata:
         component: infra/vpc # Point to the Terraform component in `components/terraform` folder
         inherits:
@@ -140,7 +140,7 @@ components:
         nat_gateway_enabled: true
         vpc_flow_logs_enabled: false
 
-    vpc-2:
+    vpc/2:
       metadata:
         component: infra/vpc # Point to the same Terraform component in `components/terraform` folder
         inherits:
@@ -158,21 +158,21 @@ components:
 
 In the configuration above, the following **Component-Oriented Programming** concepts are implemented:
 
-- **Component Inheritance**: In the `ue2-dev` stack (`stacks/ue2-dev.yaml` stack config file), the Atmos components `vpc-1` and `vpc-2` inherit from
-  the base component `vpc-defaults`. This makes `vpc-1` and `vpc-2` derived components
+- **Component Inheritance**: In the `ue2-dev` stack (`stacks/ue2-dev.yaml` stack config file), the Atmos components `vpc/1` and `vpc/2` inherit from
+  the base component `vpc-defaults`. This makes `vpc/1` and `vpc/2` derived components
 - **Principle of Abstraction**: In the `ue2-dev` stack, only the relevant information about the derived components in the stack is shown. All the base
   component settings are "hidden" (in the imported `catalog`), which reduces the configuration size and complexity
-- **Dynamic Polymorphism**: The derived `vpc-1` and `vpc-2` components override and use the base component properties to be able to provision the same
+- **Dynamic Polymorphism**: The derived `vpc/1` and `vpc/2` components override and use the base component properties to be able to provision the same
   Terraform configuration many times but with different settings
 
 <br/>
 
-Having the components in the stack configured as shown above, we can now provision the `vpc-1` and `vpc-2` components into the `ue2-dev` stack by
+Having the components in the stack configured as shown above, we can now provision the `vpc/1` and `vpc/2` components into the `ue2-dev` stack by
 executing the following `atmos` commands:
 
 ```shell
-atmos terraform apply vpc-1 -s ue2-dev
-atmos terraform apply vpc-2 -s ue2-dev
+atmos terraform apply vpc/1 -s ue2-dev
+atmos terraform apply vpc/2 -s ue2-dev
 ```
 
 <br/>

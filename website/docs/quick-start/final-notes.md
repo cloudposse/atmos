@@ -13,12 +13,12 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
   people to better organize the stacks and make the configurations DRY. Atmos (the CLI) does not care about the filesystem layout, all it cares about
   is how to find the stacks and the components in the stacks by using the context variables `namespace`, `tenant`, `environment` and `stage`
 
-- An Atmos component can have any name that can be different from the Terraform component name. For example, two different Atmos components `vpc-1`
-  and `vpc-2` can provide configuration for the same Terraform component `vpc`
+- An Atmos component can have any name that can be different from the Terraform component name. For example, two different Atmos components `vpc/1`
+  and `vpc/2` can provide configuration for the same Terraform component `vpc`
 
 - We can provision more than one instance of the same Terraform component (with the same or different settings) into the same environment by defining
   many Atmos components that provide configuration for the Terraform component. For example, the following config shows how to define two Atmos
-  components, `vpc-1` and `vpc-2`, which both point to the same Terraform component `vpc`:
+  components, `vpc/1` and `vpc/2`, which both point to the same Terraform component `vpc`:
 
   ```yaml
   import:
@@ -29,28 +29,28 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
 
   components:
     terraform:
-      # Atmos component `vpc-1`
-      vpc-1:
+      # Atmos component `vpc/1`
+      vpc/1:
         metadata:
           # Point to the Terraform component in `components/terraform/vpc`
           component: vpc
           # Inherit the defaults for all VPC components
           inherits:
             - vpc/defaults
-        # Define/override variables specific to this `vpc-1` component
+        # Define/override variables specific to this `vpc/1` component
         vars:
           name: vpc-1
           ipv4_primary_cidr_block: 10.9.0.0/18
 
-      # Atmos component `vpc-2`
-      vpc-2:
+      # Atmos component `vpc/2`
+      vpc/2:
         metadata:
           # Point to the Terraform component in `components/terraform/vpc`
           component: vpc
           # Inherit the defaults for all VPC components
           inherits:
             - vpc/defaults
-        # Define/override variables specific to this `vpc-2` component
+        # Define/override variables specific to this `vpc/2` component
         vars:
           name: vpc-2
           ipv4_primary_cidr_block: 10.10.0.0/18
@@ -61,8 +61,8 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
   Then we can execute the following `atmos` commands to provision the two VPCs into the `dev` account in the `us-east-2` region:
 
   ```shell
-  atmos terraform apply vpc-1 -s plat-ue2-dev
-  atmos terraform apply vpc-2 --stack plat-ue2-dev
+  atmos terraform apply vpc/1 -s plat-ue2-dev
+  atmos terraform apply vpc/2 --stack plat-ue2-dev
   ```
 
 <br/>
