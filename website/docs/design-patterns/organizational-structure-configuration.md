@@ -56,7 +56,7 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
    │   └── orgs  # Organizations
    │       ├── org1
    │       │   ├── _defaults.yaml
-   │       │   ├── core  ('core' OU/tenant)
+   │       │   ├── core  # Core OU (a.k.a. tenant)
    │       │   │   ├── _defaults.yaml
    │       │   │   ├── audit
    │       │   │   │   ├── _defaults.yaml
