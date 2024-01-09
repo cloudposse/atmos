@@ -149,8 +149,8 @@ To provision the Atmos components in the stack, execute the following commands:
 
 ```shell
 atmos terraform apply eks/iam-role/admin-ui --stack plat-ue2-prod
-atmos terraform apply eks/iam-role/auth -s plat-ue2-prod
-atmos terraform apply eks/iam-role/payment-processing -s plat-ue2-prod
+atmos terraform apply eks/iam-role/auth --stack plat-ue2-prod
+atmos terraform apply eks/iam-role/payment-processing --stack plat-ue2-prod
 ```
 
 ## Benefits
