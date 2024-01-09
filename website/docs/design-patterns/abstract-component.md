@@ -63,7 +63,7 @@ is prohibited from being provisioned.
    │   └── orgs  (organizations)
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat ('plat' OU/tenant)
+   │           └── plat # 'plat' represents the "Platform" OU (aka tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml
