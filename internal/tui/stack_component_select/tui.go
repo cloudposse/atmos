@@ -4,15 +4,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Execute starts the TUI app
-func Execute(components []string, stacks []string) (string, string, error) {
-	app := NewApp(components, stacks)
+// Execute starts the TUI app and retursn the selected items from the views
+func Execute(commands []string, components []string, stacks []string) (string, string, string, error) {
+	app := NewApp(commands, components, stacks)
 	p := tea.NewProgram(app)
 
 	_, err := p.Run()
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
-	return app.selectedComponent, app.selectedStack, nil
+	return app.selectedCommand, app.selectedComponent, app.selectedStack, nil
 }

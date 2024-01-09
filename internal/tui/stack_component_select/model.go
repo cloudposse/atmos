@@ -14,8 +14,10 @@ type App struct {
 	columnPointer     columnPointer
 	colViews          []columnView
 	quitting          bool
+	commands          []string
 	components        []string
 	stacks            []string
+	selectedCommand   string
 	selectedComponent string
 	selectedStack     string
 }
@@ -42,20 +44,22 @@ func (pointer columnPointer) getPrevViewPointer() columnPointer {
 	return pointer - 1
 }
 
-func NewApp(components []string, stacks []string) *App {
+func NewApp(commands []string, components []string, stacks []string) *App {
 	h := help.New()
 	h.ShowAll = true
 
 	app := &App{
 		help:              h,
 		columnPointer:     commandsPointer,
+		commands:          commands,
 		components:        components,
 		stacks:            stacks,
 		selectedComponent: "vpc",
 		selectedStack:     "plat-ue2-dev",
+		selectedCommand:   "",
 	}
 
-	app.InitViews(components, stacks)
+	app.InitViews(commands, components, stacks)
 
 	return app
 }
@@ -124,7 +128,7 @@ func (app *App) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys))
 }
 
-func (app *App) InitViews(components []string, stacks []string) {
+func (app *App) InitViews(commands []string, components []string, stacks []string) {
 	app.colViews = []columnView{
 		newColumn(commandsPointer),
 		newColumn(stacksPointer),
