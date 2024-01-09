@@ -170,7 +170,7 @@ The **Component Catalog Template** pattern has the following limitations and dra
 
 - Since new Atmos components are generated dynamically, sometimes it's not easy to know the names of the Atmos components that need to be provisioned
   without looking at the `Go` template and figuring out all the Atmos component names
-
+- With great power comes great responsibility. The Go templating engine leads to infinite possibilities, which makes the stack configs more challenging to maintain and reduces consistency. Try to leverage the inheritance model as much as possible, over templated stack configs.
 :::note
 
 To address the limitations of the **Component Catalog Template** Design Pattern, consider using the following patterns:
