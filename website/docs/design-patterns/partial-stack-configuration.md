@@ -32,16 +32,16 @@ In the following structure, we have many Terraform components (Terraform root mo
 In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
 Design Pattern.
 
-In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` stack manifest into the following parts by category:
+In the `stacks/orgs/acme/plat/dev/us-east-2` folder, we split the top-level stack manifest into the following parts by category:
 
-- `us-east-2-load-balancers.yaml`
-- `us-east-2-data.yaml`
-- `us-east-2-dns.yaml`
-- `us-east-2-logs.yaml`
-- `us-east-2-notifications.yaml`
-- `us-east-2-firewalls.yaml`
-- `us-east-2-networking.yaml`
-- `us-east-2-eks.yaml`
+- `load-balancers.yaml`
+- `data.yaml`
+- `dns.yaml`
+- `logs.yaml`
+- `notifications.yaml`
+- `firewalls.yaml`
+- `networking.yaml`
+- `eks.yaml`
 
 <br/>
 
@@ -79,9 +79,12 @@ In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` stack manife
    │   │   ├── tenant  # tenant-specific defaults
    │   │   │   └── plat.yaml
    │   │   ├── region  # region-specific defaults
-   │   │   │   └── us-east-2.yaml
+   │   │   │   ├── us-east-2.yaml
+   │   │   │   └── us-west-2.yaml
    │   │   └── stage  # stage-specific defaults
-   │   │       └── dev.yaml
+   │   │       ├── dev.yaml
+   │   │       ├── prod.yaml
+   │   │       └── staging.yaml
    │   └── orgs  # Organizations
    │       └── acme
    │           ├── _defaults.yaml
@@ -89,15 +92,16 @@ In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` stack manife
    │               ├── _defaults.yaml
    │               └── dev  # 'dev' account
    │                  ├── _defaults.yaml
-   │                  ├── # Split the top-level stack 'plat-ue2-dev' into parts by component category
-   │                  ├── us-east-2-load-balancers.yaml
-   │                  ├── us-east-2-data.yaml
-   │                  ├── us-east-2-dns.yaml
-   │                  ├── us-east-2-logs.yaml
-   │                  ├── us-east-2-notifications.yaml
-   │                  ├── us-east-2-firewalls.yaml
-   │                  ├── us-east-2-networking.yaml
-   │                  └── us-east-2-eks.yaml
+   │                  ├── # Split the top-level stack 'plat-ue2-dev' by category of components
+   │                  └── us-east-2
+   │                      ├── load-balancers.yaml
+   │                      ├── data.yaml
+   │                      ├── dns.yaml
+   │                      ├── logs.yaml
+   │                      ├── notifications.yaml
+   │                      ├── firewalls.yaml
+   │                      ├── networking.yaml
+   │                      └── eks.yaml
    │   # Centralized components configuration
    └── components
        └── terraform  # Terraform components (a.k.a Terraform "root" modules)
@@ -146,9 +150,9 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-load-balancers.yaml` partial stack manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/load-balancers.yaml` partial stack manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-load-balancers.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2/load-balancers.yaml"
 import:
   # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
   # define the top-level Atmos stack `plat-ue2-dev`
@@ -159,9 +163,9 @@ import:
   # Import other Load Balancer components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-data.yaml` partial stack manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/data.yaml` partial stack manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-data.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2/data.yaml"
 import:
   # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
   # define the top-level Atmos stack `plat-ue2-dev`
@@ -174,9 +178,9 @@ import:
   # Import other Data components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-dns.yaml` partial stack manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/dns.yaml` partial stack manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-dns.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2/dns.yaml"
 import:
   # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
   # define the top-level Atmos stack `plat-ue2-dev`
@@ -187,9 +191,9 @@ import:
   # Import other DNS components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-logs.yaml` partial stack manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/logs.yaml` partial stack manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-logs.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2/logs.yaml"
 import:
   # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
   # define the top-level Atmos stack `plat-ue2-dev`
@@ -201,9 +205,9 @@ import:
   # Import other Logs components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-notifications.yaml` partial stack manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/notifications.yaml` partial stack manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-notifications.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2/notifications.yaml"
 import:
   # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
   # define the top-level Atmos stack `plat-ue2-dev`
@@ -215,9 +219,9 @@ import:
   # Import other Notification components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-firewalls.yaml` partial stack manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/firewalls.yaml` partial stack manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-firewalls.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2/firewalls.yaml"
 import:
   # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
   # define the top-level Atmos stack `plat-ue2-dev`
@@ -229,9 +233,9 @@ import:
   # Import other Firewall components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-networking.yaml` partial stack manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/networking.yaml` partial stack manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-networking.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2/networking.yaml"
 import:
   # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
   # define the top-level Atmos stack `plat-ue2-dev`
@@ -242,9 +246,9 @@ import:
   # Import other Networking components
 ```
 
-Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2-eks.yaml` partial stack manifest:
+Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/eks.yaml` partial stack manifest:
 
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2-eks.yaml"
+```yaml title="stacks/orgs/acme/plat/dev/us-east-2/eks.yaml"
 import:
   # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
   # define the top-level Atmos stack `plat-ue2-dev`
