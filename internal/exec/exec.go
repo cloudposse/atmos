@@ -11,17 +11,22 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 	commans := []string{
 		"terraform plan",
 		"terraform apply",
+		"terraform destroy",
 		"terraform init",
+		"terraform output",
 		"terraform clean",
 		"terraform workspace",
+		"terraform refresh",
+		"terraform show",
+		"terraform validate",
 		"terraform generate varfile",
 		"terraform generate backend",
-		"helmfile diff",
-		"helmfile apply",
-		"helmfile generate varfile",
 		"describe component",
 		"describe dependents",
 		"validate component",
+		"helmfile diff",
+		"helmfile apply",
+		"helmfile generate varfile",
 	}
 
 	stacks := []string{
