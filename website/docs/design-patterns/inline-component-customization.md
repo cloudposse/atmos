@@ -39,7 +39,7 @@ component configurations for the `vpc` and `vpc-flow-logs-bucket` components, an
    │  
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            ├── vpc
            ├── vpc-flow-logs-bucket
            ├── < other components >

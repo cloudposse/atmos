@@ -95,7 +95,7 @@ Finally, we import all the layer manifests into the top-level stacks.
    │   │   │   └── defaults.yaml
    │   │   └── vpc-flow-logs-bucket
    │   │       └── defaults.yaml
-   │   ├── layers (grouping of components by category/function)
+   │   ├── layers # grouping of components by category/function
    │   │   ├── load-balancers.yaml
    │   │   ├── data.yaml
    │   │   ├── dns.yaml
@@ -105,19 +105,19 @@ Finally, we import all the layer manifests into the top-level stacks.
    │   │   ├── networking.yaml
    │   │   └── eks.yaml
    │   ├── mixins
-   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   ├── tenant  # tenant-specific defaults
    │   │   │   └── plat.yaml
-   │   │   ├── region  (region-specific defaults)
+   │   │   ├── region  # region-specific defaults
    │   │   │   ├── us-east-2.yaml
    │   │   │   └── us-west-2.yaml
-   │   │   └── stage  (stage-specific defaults)
+   │   │   └── stage  # stage-specific defaults
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
    │   └── orgs  (organizations)
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat ('plat' OU/tenant)
+   │           └── plat # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml
@@ -136,7 +136,7 @@ Finally, we import all the layer manifests into the top-level stacks.
    │                   └── us-west-2.yaml
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            ├── alb
            ├── aurora-postgres
            ├── dns

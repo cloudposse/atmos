@@ -61,7 +61,7 @@ configuration for the `eks/cluster` component in the stack.
    │                   └── k8s-1-29.yaml
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            └── eks
                └── cluster
 ```

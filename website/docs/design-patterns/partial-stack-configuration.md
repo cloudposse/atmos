@@ -48,7 +48,7 @@ In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` stack manife
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   ├── catalog
+   │   ├── catalog  # component-specific defaults
    │   │   ├── alb
    │   │   │   └── defaults.yaml
    │   │   ├── aurora-postgres
@@ -76,18 +76,18 @@ In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` stack manife
    │   │   └── vpc-flow-logs-bucket
    │   │       └── defaults.yaml
    │   ├── mixins
-   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   ├── tenant  tenant-specific defaults
    │   │   │   └── plat.yaml
-   │   │   ├── region  (region-specific defaults)
+   │   │   ├── region  # region-specific defaults
    │   │   │   └── us-east-2.yaml
-   │   │   └── stage  (stage-specific defaults)
+   │   │   └── stage  # stage-specific defaults
    │   │       └── dev.yaml
-   │   └── orgs  (organizations)
+   │   └── orgs  # Organizations
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat ('plat' OU/tenant)
+   │           └── plat  # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
-   │               └── dev ('dev' account)
+   │               └── dev  # 'dev' account
    │                  ├── _defaults.yaml
    │                  ├── # Split the top-level stack 'plat-ue2-dev' into parts by component category
    │                  ├── us-east-2-load-balancers.yaml
@@ -100,7 +100,7 @@ In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` stack manife
    │                  └── us-east-2-eks.yaml
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            ├── alb
            ├── aurora-postgres
            ├── dns

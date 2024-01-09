@@ -110,7 +110,7 @@ into the top-level Atmos stacks.
    │           └── org2-plat-uw2-staging.yaml
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            └── vpc
 ```
 

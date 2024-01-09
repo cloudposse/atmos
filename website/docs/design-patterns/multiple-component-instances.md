@@ -48,7 +48,7 @@ and `vpc/2`.
    │   └── orgs  (organizations)
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat # Platform OU (a.k.a. tenant)
+   │           └── plat # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml
@@ -64,7 +64,7 @@ and `vpc/2`.
    │                   └── us-west-2.yaml
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            └── vpc
 ```
 

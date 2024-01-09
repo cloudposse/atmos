@@ -56,7 +56,7 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
    │   └── orgs  # Organizations
    │       ├── org1
    │       │   ├── _defaults.yaml
-   │       │   ├── core  # Core OU (a.k.a. tenant)
+   │       │   ├── core  # 'core' represents the "Core" OU (a.k.a tenant)
    │       │   │   ├── _defaults.yaml
    │       │   │   ├── audit
    │       │   │   │   ├── _defaults.yaml
@@ -78,7 +78,7 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
    │       │   │       ├── global-region.yaml
    │       │   │       ├── us-east-2.yaml
    │       │   │       └── us-west-2.yaml
-   │       │   └── plat # Platform OU (a.k.a. tenant)
+   │       │   └── plat # 'plat' represents the "Platform" OU (a.k.a tenant)
    │       │       ├── _defaults.yaml
    │       │       ├── dev
    │       │       │   ├── _defaults.yaml
@@ -97,13 +97,13 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
    │       │           └── us-west-2.yaml
    │       └── org2
    │           ├── _defaults.yaml
-   │           ├── core  # Core OU (a.k.a tenant)
+   │           ├── core  # 'core' represents the "Core" OU (a.k.a tenant)
    │           │   ├── _defaults.yaml
    │           │   ├── audit
    │           │   ├── automation
    │           │   ├── identity
    │           │   └── root
-   │           └── plat  # Platform OU (a.k.a. tenant)
+   │           └── plat  # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               ├── staging
@@ -111,7 +111,7 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
    │  
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            ├── vpc
            ├── vpc-flow-logs-bucket
            ├── < other components >
