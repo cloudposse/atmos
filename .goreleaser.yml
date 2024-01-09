@@ -1,9 +1,8 @@
 # Visit https://goreleaser.com for documentation on how to customize this behavior.
 
 #before:
-  #hooks:
-    # - 'go mod tidy'
-
+#  hooks:
+#  - 'go mod tidy'
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate
