@@ -97,13 +97,13 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
    │       │           └── us-west-2.yaml
    │       └── org2
    │           ├── _defaults.yaml
-   │           ├── core  ('core' OU/tenant)
+   │           ├── core  # Core OU (a.k.a tenant)
    │           │   ├── _defaults.yaml
    │           │   ├── audit
    │           │   ├── automation
    │           │   ├── identity
    │           │   └── root
-   │           └── plat  ('plat' OU/tenant)
+   │           └── plat  # Platform OU (a.k.a. tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               ├── staging
