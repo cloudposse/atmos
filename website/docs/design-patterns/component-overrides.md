@@ -22,7 +22,7 @@ Refer to [Component Overrides](/core-concepts/components/overrides) for more inf
 
 Use the **Component Overrides** pattern when:
 
-- You need to modify or override the configuration and behavior of groups of Atmos components
+- You need to modify or override the configuration and behavior of groups of Atmos components. It is especially useful to "override" settings when dealing with multiple levels of inheritance.
 
 - The groups of Atmos components can be managed by different people or teams
 
