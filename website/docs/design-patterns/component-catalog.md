@@ -16,8 +16,8 @@ The **Component Catalog** pattern prescribes the following:
   across multiple environments). Define all the required Atmos sections, e.g. `metadata`, `settings`, `vars`, `env`.
 
 - In the component's catalog folder, add other manifests for different combinations of component configurations.
-  We refer to them as feature manifests. Each feature manifest can import the `defaults.yaml` file to reuse the default values and make the entire
-  config DRY. For example:
+  We refer to them as archetype manifests. Each archetype can import the `defaults.yaml` file to reuse the default values and make the entire config
+  DRY. For example:
 
   - `stacks/catalog/vpc/disabled.yaml` - component manifest with the component disabled (`vars.enabled: false`)
   - `stacks/catalog/vpc/dev.yaml` - component manifest with the settings related to the `dev` account
