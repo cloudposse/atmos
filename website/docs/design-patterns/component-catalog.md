@@ -85,7 +85,7 @@ a multi-account, multi-region environment. The components' configurations for ea
    │           └── disabled.yaml
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            ├── vpc
            └── vpc-flow-logs-bucket
 ```

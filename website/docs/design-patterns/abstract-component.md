@@ -60,10 +60,10 @@ is prohibited from being provisioned.
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
-   │   └── orgs  (organizations)
+   │   └── orgs  # Organizations
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat # 'plat' represents the "Platform" OU (aka tenant)
+   │           └── plat # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml
@@ -79,7 +79,7 @@ is prohibited from being provisioned.
    │                   └── us-west-2.yaml
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            └── vpc
 ```
 

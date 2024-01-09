@@ -40,19 +40,19 @@ component `vpc/defaults` to be inherited by all the derived VPC components in al
    │   │   └── vpc
    │   │       └── defaults.yaml
    │   ├── mixins
-   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   ├── tenant  # tenant-specific defaults
    │   │   │   └── plat.yaml
-   │   │   ├── region  (region-specific defaults)
+   │   │   ├── region  # region-specific defaults
    │   │   │   ├── us-east-2.yaml
    │   │   │   └── us-west-2.yaml
-   │   │   └── stage  (stage-specific defaults)
+   │   │   └── stage  # stage-specific defaults
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
-   │   └── orgs  (organizations)
+   │   └── orgs  # Organizations
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat ('plat' OU/tenant)
+   │           └── plat # 'Platform' OU, a.k.a tenant
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml

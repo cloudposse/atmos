@@ -54,7 +54,7 @@ We'll use the **Component Catalog Template** Design Pattern to configure the IAM
    │               └── defaults.tmpl
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            └── eks
                └── iam-role
 ```
