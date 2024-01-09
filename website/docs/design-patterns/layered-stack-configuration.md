@@ -309,8 +309,7 @@ The **Layered Stack Configuration** pattern provides the following benefits:
 
 - Allows to group Atmos components by category or function
 
-- Allows splitting the components into layers. Each layer can be managed and modified independent of the other layers, possibly by different
-  people or teams
+  people or teams. Furthermore, controls like GitHub's [`CODEOWNERS`](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners) can be leveraged so that specific teams or individuals must review changes to these files.
 
 - Allows importing only the required layers into the top-level stacks (only the groups of components that need to be provisioned in the stacks)
 
