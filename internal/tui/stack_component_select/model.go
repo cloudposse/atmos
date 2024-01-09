@@ -23,21 +23,21 @@ type App struct {
 type columnPointer int
 
 const (
-	stacksPointer columnPointer = iota
+	commandsPointer columnPointer = iota
+	stacksPointer
 	componentsPointer
-	executePointer
 )
 
-func (pointer columnPointer) getNextView() columnPointer {
-	if pointer == executePointer {
-		return stacksPointer
+func (pointer columnPointer) getNextViewPointer() columnPointer {
+	if pointer == componentsPointer {
+		return commandsPointer
 	}
 	return pointer + 1
 }
 
-func (pointer columnPointer) getPrevView() columnPointer {
-	if pointer == stacksPointer {
-		return executePointer
+func (pointer columnPointer) getPrevViewPointer() columnPointer {
+	if pointer == commandsPointer {
+		return componentsPointer
 	}
 	return pointer - 1
 }
@@ -46,14 +46,18 @@ func NewApp(components []string, stacks []string) *App {
 	h := help.New()
 	h.ShowAll = true
 
-	return &App{
+	app := &App{
 		help:              h,
-		columnPointer:     stacksPointer,
+		columnPointer:     commandsPointer,
 		components:        components,
 		stacks:            stacks,
 		selectedComponent: "vpc",
 		selectedStack:     "plat-ue2-dev",
 	}
+
+	app.InitViews(components, stacks)
+
+	return app
 }
 
 func (app *App) Init() tea.Cmd {
@@ -63,6 +67,7 @@ func (app *App) Init() tea.Cmd {
 func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		app.loaded = false
 		var cmd tea.Cmd
 		var cmds []tea.Cmd
 		app.help.Width = msg.Width
@@ -81,11 +86,11 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, tea.Quit
 		case key.Matches(msg, keys.Left):
 			app.colViews[app.columnPointer].Blur()
-			app.columnPointer = app.columnPointer.getPrevView()
+			app.columnPointer = app.columnPointer.getPrevViewPointer()
 			app.colViews[app.columnPointer].Focus()
 		case key.Matches(msg, keys.Right):
 			app.colViews[app.columnPointer].Blur()
-			app.columnPointer = app.columnPointer.getNextView()
+			app.columnPointer = app.columnPointer.getNextViewPointer()
 			app.colViews[app.columnPointer].Focus()
 		}
 	}
@@ -104,26 +109,39 @@ func (app *App) View() string {
 	if app.quitting {
 		return ""
 	}
+
 	if !app.loaded {
 		return "loading..."
 	}
-	board := lipgloss.JoinHorizontal(
+
+	layout := lipgloss.JoinHorizontal(
 		lipgloss.Left,
+		app.colViews[commandsPointer].View(),
 		app.colViews[stacksPointer].View(),
 		app.colViews[componentsPointer].View(),
-		app.colViews[executePointer].View(),
 	)
-	return lipgloss.JoinVertical(lipgloss.Left, board, app.help.View(keys))
+
+	return lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys))
 }
 
 func (app *App) InitViews(components []string, stacks []string) {
 	app.colViews = []columnView{
+		newColumn(commandsPointer),
 		newColumn(stacksPointer),
 		newColumn(componentsPointer),
-		newColumn(executePointer),
 	}
 
-	items := []list.Item{
+	commandItems := []list.Item{
+		listItem("Ramen"),
+		listItem("Tomato Soup"),
+		listItem("Hamburgers"),
+		listItem("Cheeseburgers"),
+		listItem("Currywurst"),
+		listItem("Okonomiyaki"),
+		listItem("Pasta"),
+		listItem("Fillet Mignon"),
+		listItem("Caviar"),
+		listItem("Just Wine"),
 		listItem("Ramen"),
 		listItem("Tomato Soup"),
 		listItem("Hamburgers"),
@@ -136,17 +154,50 @@ func (app *App) InitViews(components []string, stacks []string) {
 		listItem("Just Wine"),
 	}
 
+	stackItems := []list.Item{
+		listItem("Ramen"),
+		listItem("Tomato Soup"),
+		listItem("Hamburgers"),
+		listItem("Cheeseburgers"),
+		listItem("Currywurst"),
+		listItem("Okonomiyaki"),
+		listItem("Pasta"),
+		listItem("Fillet Mignon"),
+		listItem("Caviar"),
+		listItem("Just Wine"),
+	}
+
+	componentItems := []list.Item{
+		listItem("Ramen"),
+		listItem("Tomato Soup"),
+		listItem("Hamburgers"),
+		listItem("Cheeseburgers"),
+		listItem("Currywurst"),
+		listItem("Okonomiyaki"),
+		listItem("Pasta"),
+		listItem("Fillet Mignon"),
+		listItem("Caviar"),
+		listItem("Just Wine"),
+	}
+
+	app.colViews[commandsPointer].list.Title = "Commands"
+	app.colViews[commandsPointer].list.SetDelegate(listItemDelegate{})
+	app.colViews[commandsPointer].list.SetItems(commandItems)
+	app.colViews[commandsPointer].list.SetFilteringEnabled(true)
+	app.colViews[commandsPointer].list.SetShowFilter(true)
+	app.colViews[commandsPointer].list.InfiniteScrolling = true
+
 	app.colViews[stacksPointer].list.Title = "Stacks"
 	app.colViews[stacksPointer].list.SetDelegate(listItemDelegate{})
-	app.colViews[stacksPointer].list.SetItems(items)
+	app.colViews[stacksPointer].list.SetItems(stackItems)
 	app.colViews[stacksPointer].list.SetFilteringEnabled(true)
 	app.colViews[stacksPointer].list.SetShowFilter(true)
+	app.colViews[stacksPointer].list.InfiniteScrolling = true
 
 	app.colViews[componentsPointer].list.Title = "Components"
 	app.colViews[componentsPointer].list.SetDelegate(listItemDelegate{})
-	app.colViews[componentsPointer].list.SetItems(items)
+	app.colViews[componentsPointer].list.SetItems(componentItems)
 	app.colViews[componentsPointer].list.SetFilteringEnabled(true)
 	app.colViews[componentsPointer].list.SetShowFilter(true)
-
-	app.colViews[executePointer].list.Title = "Execute"
+	app.colViews[componentsPointer].list.InfiniteScrolling = true
 }

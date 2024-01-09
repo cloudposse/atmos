@@ -7,7 +7,7 @@ import (
 )
 
 type columnView struct {
-	focus         bool
+	focused       bool
 	columnPointer columnPointer
 	list          list.Model
 	height        int
@@ -15,26 +15,26 @@ type columnView struct {
 }
 
 func (c *columnView) Focus() {
-	c.focus = true
+	c.focused = true
 }
 
 func (c *columnView) Blur() {
-	c.focus = false
+	c.focused = false
 }
 
 func (c *columnView) Focused() bool {
-	return c.focus
+	return c.focused
 }
 
 func newColumn(columnPointer columnPointer) columnView {
 	var focus bool
-	if columnPointer == stacksPointer {
+	if columnPointer == commandsPointer {
 		focus = true
 	}
 
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	defaultList.SetShowHelp(false)
-	return columnView{focus: focus, columnPointer: columnPointer, list: defaultList}
+	return columnView{focused: focus, columnPointer: columnPointer, list: defaultList}
 }
 
 // Init does initial setup for the columnView.
@@ -63,18 +63,13 @@ func (c *columnView) setSize(width, height int) {
 }
 
 func (c *columnView) getStyle() lipgloss.Style {
+	s := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
+
 	if c.Focused() {
-		return lipgloss.NewStyle().
-			Padding(1, 2).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Height(c.height).
-			Width(c.width)
+		s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))
+	} else {
+		s.Border(lipgloss.HiddenBorder())
 	}
 
-	return lipgloss.NewStyle().
-		Padding(1, 2).
-		Border(lipgloss.HiddenBorder()).
-		Height(c.height).
-		Width(c.width)
+	return s
 }

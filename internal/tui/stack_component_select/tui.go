@@ -7,8 +7,6 @@ import (
 // Execute starts the TUI app
 func Execute(components []string, stacks []string) (string, string, error) {
 	app := NewApp(components, stacks)
-	app.InitViews(components, stacks)
-
 	p := tea.NewProgram(app)
 
 	_, err := p.Run()
