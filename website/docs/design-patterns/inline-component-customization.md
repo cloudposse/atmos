@@ -30,7 +30,7 @@ component configurations for the `vpc` and `vpc-flow-logs-bucket` components, an
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   ├── defaults
+   │   ├── defaults  # component-specific defaults
    │   │   ├── vpc-flow-logs-bucket.yaml
    │   │   └── vpc.yaml
    │   ├── dev.yaml

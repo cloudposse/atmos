@@ -36,7 +36,7 @@ component `vpc/defaults` to be inherited by all the derived VPC components in al
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   ├── catalog
+   │   ├── catalog  # component-specific defaults
    │   │   └── vpc
    │   │       └── defaults.yaml
    │   ├── mixins
@@ -52,7 +52,7 @@ component `vpc/defaults` to be inherited by all the derived VPC components in al
    │   └── orgs  # Organizations
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat # 'plat' represents the "Platform" OU (a.k.a tenant)
+   │           └── plat  # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml

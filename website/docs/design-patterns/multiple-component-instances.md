@@ -32,7 +32,7 @@ and `vpc/2`.
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   ├── catalog
+   │   ├── catalog  # component-specific defaults
    │   │   └── vpc
    │   │       └── defaults.yaml
    │   ├── mixins
@@ -45,10 +45,10 @@ and `vpc/2`.
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
-   │   └── orgs  (organizations)
+   │   └── orgs  # Organizations
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat # 'plat' represents the "Platform" OU (a.k.a tenant)
+   │           └── plat  # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml

@@ -71,7 +71,7 @@ a multi-account, multi-region environment. The components' configurations for ea
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── catalog
+   │   └── catalog  # component-specific defaults
    │       ├── vpc
    │       │   ├── defaults.yaml
    │       │   ├── disabled.yaml

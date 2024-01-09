@@ -76,7 +76,7 @@ In the `stacks/orgs/acme/plat/dev` folder, we split the `us-east-2` stack manife
    │   │   └── vpc-flow-logs-bucket
    │   │       └── defaults.yaml
    │   ├── mixins
-   │   │   ├── tenant  tenant-specific defaults
+   │   │   ├── tenant  # tenant-specific defaults
    │   │   │   └── plat.yaml
    │   │   ├── region  # region-specific defaults
    │   │   │   └── us-east-2.yaml

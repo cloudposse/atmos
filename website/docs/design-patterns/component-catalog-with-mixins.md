@@ -83,7 +83,7 @@ into the top-level Atmos stacks.
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── catalog
+   │   └── catalog  # component-specific defaults
    │       └── vpc
    │           ├── mixins
    │           │   ├── defaults.yaml

@@ -47,7 +47,7 @@ is prohibited from being provisioned.
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   ├── catalog
+   │   ├── catalog  # component-specific defaults
    │   │   └── vpc
    │   │       └── defaults.yaml
    │   ├── mixins
@@ -63,7 +63,7 @@ is prohibited from being provisioned.
    │   └── orgs  # Organizations
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat # 'plat' represents the "Platform" OU (a.k.a tenant)
+   │           └── plat  # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml

@@ -55,7 +55,7 @@ In the `stacks/layers` folder, we define layers (groups of components), and impo
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   ├── catalog
+   │   ├── catalog  # component-specific defaults
    │   │   ├── alb
    │   │   │   └── defaults.yaml
    │   │   ├── aurora-postgres
@@ -82,7 +82,7 @@ In the `stacks/layers` folder, we define layers (groups of components), and impo
    │   │   │   └── defaults.yaml
    │   │   └── vpc-flow-logs-bucket
    │   │       └── defaults.yaml
-   │   ├── layers # grouping of components by category/function
+   │   ├── layers  # grouping of components by category/function
    │   │   ├── load-balancers.yaml
    │   │   ├── data.yaml
    │   │   ├── dns.yaml
@@ -101,10 +101,10 @@ In the `stacks/layers` folder, we define layers (groups of components), and impo
    │   │       ├── dev.yaml
    │   │       ├── staging.yaml
    │   │       └── prod.yaml
-   │   └── orgs  (organizations)
+   │   └── orgs  # Organizations
    │       └── acme
    │           ├── _defaults.yaml
-   │           └── plat # 'plat' represents the "Platform" OU (a.k.a tenant)
+   │           └── plat  # 'plat' represents the "Platform" OU (a.k.a tenant)
    │               ├── _defaults.yaml
    │               ├── dev
    │               │   ├── _defaults.yaml
@@ -123,7 +123,7 @@ In the `stacks/layers` folder, we define layers (groups of components), and impo
    │                   └── us-west-2.yaml
    │   # Centralized components configuration
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
            ├── alb
            ├── aurora-postgres
            ├── dns

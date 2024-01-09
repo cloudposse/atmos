@@ -48,7 +48,7 @@ We'll use the **Component Catalog Template** Design Pattern to configure the IAM
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── catalog
+   │   └── catalog  # component-specific defaults
    │       └── eks
    │           └── iam-role
    │               └── defaults.tmpl

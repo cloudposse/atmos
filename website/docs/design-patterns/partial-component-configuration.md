@@ -51,7 +51,7 @@ configuration for the `eks/cluster` component in the stack.
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   └── catalog
+   │   └── catalog  # component-specific defaults
    │       └── eks
    │           └── cluster
    │               ├── defaults.yaml
