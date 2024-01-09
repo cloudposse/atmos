@@ -32,20 +32,20 @@ OUs/tenants (`core` and `plat`), multiple accounts in each OU/tenant, and two re
 ```console
    │   # Centralized stacks configuration (stack manifests)
    ├── stacks
-   │   ├── catalog (component-specific defaults)
+   │   ├── catalog # component-specific defaults
    │   │   ├── vpc-flow-logs-bucket
    │   │   │   └── defaults.yaml
    │   │   └── vpc
    │   │       └── defaults.yaml
    │   ├── mixins
-   │   │   ├── tenant  (tenant-specific defaults)
+   │   │   ├── tenant  # tenant-specific defaults
    │   │   │   ├── core.yaml
    │   │   │   └── plat.yaml
-   │   │   ├── region  (region-specific defaults)
+   │   │   ├── region  # region-specific defaults
    │   │   │   ├── global-region.yaml
    │   │   │   ├── us-east-2.yaml
    │   │   │   └── us-west-2.yaml
-   │   │   └── stage  (stage-specific defaults)
+   │   │   └── stage  # stage-specific defaults
    │   │       ├── audit.yaml
    │   │       ├── automation.yaml
    │   │       ├── identity.yaml
