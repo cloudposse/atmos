@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/samber/lo"
 )
 
 type App struct {
@@ -135,54 +136,17 @@ func (app *App) InitViews(commands []string, components []string, stacks []strin
 		newColumn(componentsPointer),
 	}
 
-	commandItems := []list.Item{
-		listItem("Ramen"),
-		listItem("Tomato Soup"),
-		listItem("Hamburgers"),
-		listItem("Cheeseburgers"),
-		listItem("Currywurst"),
-		listItem("Okonomiyaki"),
-		listItem("Pasta"),
-		listItem("Fillet Mignon"),
-		listItem("Caviar"),
-		listItem("Just Wine"),
-		listItem("Ramen"),
-		listItem("Tomato Soup"),
-		listItem("Hamburgers"),
-		listItem("Cheeseburgers"),
-		listItem("Currywurst"),
-		listItem("Okonomiyaki"),
-		listItem("Pasta"),
-		listItem("Fillet Mignon"),
-		listItem("Caviar"),
-		listItem("Just Wine"),
-	}
+	commandItems := lo.Map(commands, func(s string, index int) list.Item {
+		return listItem(s)
+	})
 
-	stackItems := []list.Item{
-		listItem("Ramen"),
-		listItem("Tomato Soup"),
-		listItem("Hamburgers"),
-		listItem("Cheeseburgers"),
-		listItem("Currywurst"),
-		listItem("Okonomiyaki"),
-		listItem("Pasta"),
-		listItem("Fillet Mignon"),
-		listItem("Caviar"),
-		listItem("Just Wine"),
-	}
+	stackItems := lo.Map(stacks, func(s string, index int) list.Item {
+		return listItem(s)
+	})
 
-	componentItems := []list.Item{
-		listItem("Ramen"),
-		listItem("Tomato Soup"),
-		listItem("Hamburgers"),
-		listItem("Cheeseburgers"),
-		listItem("Currywurst"),
-		listItem("Okonomiyaki"),
-		listItem("Pasta"),
-		listItem("Fillet Mignon"),
-		listItem("Caviar"),
-		listItem("Just Wine"),
-	}
+	componentItems := lo.Map(components, func(s string, index int) list.Item {
+		return listItem(s)
+	})
 
 	app.colViews[commandsPointer].list.Title = "Commands"
 	app.colViews[commandsPointer].list.SetDelegate(listItemDelegate{})

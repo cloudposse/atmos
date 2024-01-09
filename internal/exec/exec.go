@@ -8,7 +8,56 @@ import (
 )
 
 func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
-	_, component, stack, err := tui.Execute(nil, nil, nil)
+	commans := []string{
+		"Ramen",
+		"Tomato Soup",
+		"Hamburgers",
+		"Cheeseburgers",
+		"Currywurst",
+		"Okonomiyaki",
+		"Pasta",
+		"Fillet Mignon",
+		"Caviar",
+		"Just Wine",
+		"Ramen",
+		"Tomato Soup",
+		"Hamburgers",
+		"Cheeseburgers",
+		"Currywurst",
+		"Okonomiyaki",
+		"Pasta",
+		"Fillet Mignon",
+		"Caviar",
+		"Just Wine",
+	}
+
+	stacks := []string{
+		"Ramen",
+		"Tomato Soup",
+		"Hamburgers",
+		"Cheeseburgers",
+		"Currywurst",
+		"Okonomiyaki",
+		"Pasta",
+		"Fillet Mignon",
+		"Caviar",
+		"Just Wine",
+	}
+
+	componens := []string{
+		"Ramen",
+		"Tomato Soup",
+		"Hamburgers",
+		"Cheeseburgers",
+		"Currywurst",
+		"Okonomiyaki",
+		"Pasta",
+		"Fillet Mignon",
+		"Caviar",
+		"Just Wine",
+	}
+
+	_, component, stack, err := tui.Execute(commans, componens, stacks)
 	if err != nil {
 		return err
 	}
