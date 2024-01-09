@@ -68,7 +68,7 @@ component `vpc/defaults` to be inherited by all the derived VPC components in al
    │                   └── us-west-2.yaml
    │   # Centralized library of reusable components
    └── components
-       └── terraform  # Terraform components (Terraform root modules)
+       └── terraform  # Terraform components (a.k.a. Terraform "root" modules)
            └── vpc
 ```
 
