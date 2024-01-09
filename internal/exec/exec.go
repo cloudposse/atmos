@@ -30,29 +30,20 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	stacks := []string{
-		"Ramen",
-		"Tomato Soup",
-		"Hamburgers",
-		"Cheeseburgers",
-		"Currywurst",
-		"Okonomiyaki",
-		"Pasta",
-		"Fillet Mignon",
-		"Caviar",
-		"Just Wine",
+		"plat-ue2-dev",
+		"plat-ue2-prod",
+		"plat-ue2-staging",
+		"plat-uw2-dev",
+		"plat-uw2-prod",
+		"plat-uw2-staging",
+		"plat-gbl-dev",
+		"plat-gbl-prod",
+		"plat-gbl-staging",
 	}
 
 	componens := []string{
-		"Ramen",
-		"Tomato Soup",
-		"Hamburgers",
-		"Cheeseburgers",
-		"Currywurst",
-		"Okonomiyaki",
-		"Pasta",
-		"Fillet Mignon",
-		"Caviar",
-		"Just Wine",
+		"vpc",
+		"vpc-flow-logs-bucket",
 	}
 
 	_, component, stack, err := tui.Execute(commans, componens, stacks)
