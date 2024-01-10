@@ -81,7 +81,11 @@ li > ul.menu__list {
 .button--lg {
     margin: 1em;
     padding-top: 0.8em;
-    padding-bottom: 0.2em;
+    padding-bottom: 0;
+}
+
+.button--lg p {
+    margin-bottom: 0.85em;
 }
 
 .header-github-link:hover {
