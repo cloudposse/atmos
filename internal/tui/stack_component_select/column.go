@@ -27,14 +27,14 @@ func (c *columnView) Focused() bool {
 }
 
 func newColumn(columnPointer columnPointer) columnView {
-	var focus bool
+	var focused bool
 	if columnPointer == commandsPointer {
-		focus = true
+		focused = true
 	}
 
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	defaultList.SetShowHelp(false)
-	return columnView{focused: focus, columnPointer: columnPointer, list: defaultList}
+	return columnView{focused: focused, columnPointer: columnPointer, list: defaultList}
 }
 
 // Init does initial setup

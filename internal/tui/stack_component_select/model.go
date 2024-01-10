@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	mouseZone "github.com/lrstanley/bubblezone"
 	"github.com/samber/lo"
 )
 
@@ -85,13 +86,24 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		app.loaded = true
 		return app, tea.Batch(cmds...)
 	case tea.MouseMsg:
-		if message.Type == tea.MouseWheelUp {
+		if message.Button == tea.MouseButtonWheelUp {
 			app.columnViews[app.columnPointer].list.CursorUp()
 			return app, nil
 		}
-		if message.Type == tea.MouseWheelDown {
+		if message.Button == tea.MouseButtonWheelDown {
 			app.columnViews[app.columnPointer].list.CursorDown()
 			return app, nil
+		}
+		if message.Button == tea.MouseButtonLeft {
+			for i := 0; i < len(app.columnViews); i++ {
+				l := app.columnViews[i].list
+				if mouseZone.Get(l.Title).InBounds(message) {
+					app.columnViews[app.columnPointer].Blur()
+					app.columnPointer = columnPointer(i)
+					app.columnViews[app.columnPointer].Focus()
+					break
+				}
+			}
 		}
 	case tea.KeyMsg:
 		switch {
@@ -129,12 +141,12 @@ func (app *App) View() string {
 		return "loading..."
 	}
 
-	layout := lipgloss.JoinHorizontal(
+	layout := mouseZone.Scan(lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		app.columnViews[commandsPointer].View(),
 		app.columnViews[stacksPointer].View(),
 		app.columnViews[componentsPointer].View(),
-	)
+	))
 
 	return lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys))
 }

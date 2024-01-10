@@ -19,6 +19,7 @@ require (
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20231204233900-a34142ec2a72
 	github.com/imdario/mergo v0.3.13
 	github.com/json-iterator/go v1.1.12
+	github.com/lrstanley/bubblezone v0.0.0-20230911164824-e3824f1adde9
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/open-policy-agent/opa v0.60.0
