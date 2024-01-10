@@ -37,12 +37,12 @@ func newColumn(columnPointer columnPointer) columnView {
 	return columnView{focused: focus, columnPointer: columnPointer, list: defaultList}
 }
 
-// Init does initial setup for the columnView.
+// Init does initial setup
 func (c *columnView) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles all the I/O for columns
+// Update handles all the I/O
 func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {

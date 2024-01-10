@@ -13,6 +13,7 @@ var execCmd = &cobra.Command{
 	Short:              "Execute 'exec' command",
 	Long:               `This command launches TUI that allows to interactively select an Atmos component and stack, and a command to execute`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Example:            "atmos exec",
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteExecCmd(cmd, args)
 		if err != nil {

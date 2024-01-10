@@ -18,9 +18,6 @@ func (k keyMap) FullHelp() [][]key.Binding {
 }
 
 type keyMap struct {
-	New         key.Binding
-	Edit        key.Binding
-	Delete      key.Binding
 	Up          key.Binding
 	Down        key.Binding
 	Right       key.Binding
@@ -34,18 +31,6 @@ type keyMap struct {
 }
 
 var keys = keyMap{
-	New: key.NewBinding(
-		key.WithKeys("n"),
-		key.WithHelp("n", "new"),
-	),
-	Edit: key.NewBinding(
-		key.WithKeys("e"),
-		key.WithHelp("e", "edit"),
-	),
-	Delete: key.NewBinding(
-		key.WithKeys("d"),
-		key.WithHelp("d", "delete"),
-	),
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),
 		key.WithHelp("↑/k", "move up"),
