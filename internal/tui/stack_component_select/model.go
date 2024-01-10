@@ -124,6 +124,16 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getNextViewPointer()
 			app.columnViews[app.columnPointer].Focus()
+		case key.Matches(message, keys.FlipStacksComponents):
+			if app.componentsInStacks {
+				app.componentsInStacks = false
+				app.stacksPointer = 2
+				app.componentsPointer = 1
+			} else {
+				app.componentsInStacks = true
+				app.stacksPointer = 1
+				app.componentsPointer = 2
+			}
 		}
 	}
 
