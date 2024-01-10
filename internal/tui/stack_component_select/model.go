@@ -96,8 +96,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if message.Button == tea.MouseButtonLeft {
 			for i := 0; i < len(app.columnViews); i++ {
-				l := app.columnViews[i].list
-				if mouseZone.Get(l.Title).InBounds(message) {
+				if mouseZone.Get(app.columnViews[i].list.Title).InBounds(message) {
 					app.columnViews[app.columnPointer].Blur()
 					app.columnPointer = columnPointer(i)
 					app.columnViews[app.columnPointer].Focus()
@@ -141,14 +140,14 @@ func (app *App) View() string {
 		return "loading..."
 	}
 
-	layout := mouseZone.Scan(lipgloss.JoinHorizontal(
+	layout := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		app.columnViews[commandsPointer].View(),
 		app.columnViews[stacksPointer].View(),
 		app.columnViews[componentsPointer].View(),
-	))
+	)
 
-	return lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys))
+	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
 }
 
 func (app *App) InitViews(commands []string, components []string, stacks []string) {

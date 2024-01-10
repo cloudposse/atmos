@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	mouseZone "github.com/lrstanley/bubblezone"
 )
 
 type columnView struct {
@@ -55,7 +56,7 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (c *columnView) View() string {
-	return c.getStyle().Render(c.list.View())
+	return mouseZone.Mark(c.list.Title, c.getStyle().Render(c.list.View()))
 }
 
 func (c *columnView) setSize(width, height int) {
