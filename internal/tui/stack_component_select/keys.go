@@ -26,7 +26,7 @@ type keyMap struct {
 	Filter      key.Binding
 	ClearFilter key.Binding
 	Quit        key.Binding
-	Back        key.Binding
+	Escape      key.Binding
 	Execute     key.Binding
 }
 
@@ -61,11 +61,11 @@ var keys = keyMap{
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("esc/q/ctrl+c", "quit"),
+		key.WithHelp("q/ctrl+c", "quit"),
 	),
-	Back: key.NewBinding(
+	Escape: key.NewBinding(
 		key.WithKeys("esc"),
-		key.WithHelp("esc", "back"),
+		key.WithHelp("esc", "esc"),
 	),
 	Execute: key.NewBinding(
 		key.WithKeys("enter"),

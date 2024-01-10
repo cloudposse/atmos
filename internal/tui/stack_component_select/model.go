@@ -15,7 +15,7 @@ type App struct {
 	loaded            bool
 	columnPointer     columnPointer
 	columnViews       []columnView
-	quitting          bool
+	quit              bool
 	commands          []string
 	components        []string
 	stacks            []string
@@ -107,7 +107,14 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(message, keys.Quit):
-			app.quitting = true
+			app.quit = true
+			return app, tea.Quit
+		case key.Matches(message, keys.Escape):
+			res, _ := app.columnViews[app.columnPointer].Update(msg)
+			app.columnViews[app.columnPointer] = *res.(*columnView)
+			return app, nil
+		case key.Matches(message, keys.Execute):
+			app.quit = false
 			return app, tea.Quit
 		case key.Matches(message, keys.Left):
 			app.columnViews[app.columnPointer].Blur()
@@ -132,7 +139,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (app *App) View() string {
-	if app.quitting {
+	if app.quit {
 		return ""
 	}
 
@@ -189,4 +196,20 @@ func (app *App) InitViews(commands []string, components []string, stacks []strin
 	app.columnViews[componentsPointer].list.SetFilteringEnabled(true)
 	app.columnViews[componentsPointer].list.SetShowFilter(true)
 	app.columnViews[componentsPointer].list.InfiniteScrolling = true
+}
+
+func (app *App) GetSelectedCommand() string {
+	return app.selectedCommand
+}
+
+func (app *App) GetSelectedStack() string {
+	return app.selectedStack
+}
+
+func (app *App) GetSelectedComponent() string {
+	return app.selectedComponent
+}
+
+func (app *App) ExitStatusQuit() bool {
+	return app.quit
 }

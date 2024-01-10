@@ -8,7 +8,7 @@ import (
 )
 
 func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
-	commans := []string{
+	commands := []string{
 		"terraform plan",
 		"terraform apply",
 		"terraform destroy",
@@ -41,24 +41,26 @@ func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
 		"plat-gbl-staging",
 	}
 
-	componens := []string{
+	components := []string{
 		"vpc",
 		"vpc-flow-logs-bucket",
 	}
 
-	_, component, stack, err := tui.Execute(commans, componens, stacks)
+	app, err := tui.Execute(commands, components, stacks)
 	if err != nil {
 		return err
 	}
 
-	c, err := ExecuteDescribeComponent(component, stack)
-	if err != nil {
-		return err
-	}
+	if !app.ExitStatusQuit() {
+		data, err := ExecuteDescribeComponent(app.GetSelectedComponent(), app.GetSelectedStack())
+		if err != nil {
+			return err
+		}
 
-	err = u.PrintAsYAML(c)
-	if err != nil {
-		return err
+		err = u.PrintAsYAML(data)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
