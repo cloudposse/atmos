@@ -11,39 +11,35 @@ import (
 )
 
 type App struct {
-	help              help.Model
-	loaded            bool
-	columnPointer     columnPointer
-	columnViews       []columnView
-	quit              bool
-	commands          []string
-	components        []string
-	stacks            []string
-	selectedCommand   string
-	selectedComponent string
-	selectedStack     string
+	help               help.Model
+	loaded             bool
+	columnViews        []columnView
+	quit               bool
+	commands           []string
+	components         []string
+	stacks             []string
+	selectedCommand    string
+	selectedComponent  string
+	selectedStack      string
+	componentsInStacks bool
+	columnPointer      int
+	commandsPointer    int
+	stacksPointer      int
+	componentsPointer  int
 }
 
-type columnPointer int
-
-const (
-	commandsPointer columnPointer = iota
-	stacksPointer
-	componentsPointer
-)
-
-func (pointer columnPointer) getNextViewPointer() columnPointer {
-	if pointer == componentsPointer {
-		return commandsPointer
+func (app *App) getNextViewPointer() int {
+	if app.columnPointer == app.componentsPointer {
+		return app.commandsPointer
 	}
-	return pointer + 1
+	return app.columnPointer + 1
 }
 
-func (pointer columnPointer) getPrevViewPointer() columnPointer {
-	if pointer == commandsPointer {
-		return componentsPointer
+func (app *App) getPrevViewPointer() int {
+	if app.columnPointer == app.commandsPointer {
+		return app.componentsPointer
 	}
-	return pointer - 1
+	return app.columnPointer - 1
 }
 
 func NewApp(commands []string, components []string, stacks []string) *App {
@@ -51,14 +47,18 @@ func NewApp(commands []string, components []string, stacks []string) *App {
 	h.ShowAll = true
 
 	app := &App{
-		help:              h,
-		columnPointer:     commandsPointer,
-		commands:          commands,
-		components:        components,
-		stacks:            stacks,
-		selectedComponent: "",
-		selectedStack:     "",
-		selectedCommand:   "",
+		help:               h,
+		columnPointer:      0,
+		commands:           commands,
+		components:         components,
+		stacks:             stacks,
+		selectedComponent:  "",
+		selectedStack:      "",
+		selectedCommand:    "",
+		componentsInStacks: true,
+		commandsPointer:    0,
+		stacksPointer:      1,
+		componentsPointer:  2,
 	}
 
 	app.InitViews(commands, components, stacks)
@@ -98,7 +98,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i := 0; i < len(app.columnViews); i++ {
 				if mouseZone.Get(app.columnViews[i].list.Title).InBounds(message) {
 					app.columnViews[app.columnPointer].Blur()
-					app.columnPointer = columnPointer(i)
+					app.columnPointer = i
 					app.columnViews[app.columnPointer].Focus()
 					break
 				}
@@ -118,11 +118,11 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, tea.Quit
 		case key.Matches(message, keys.Left):
 			app.columnViews[app.columnPointer].Blur()
-			app.columnPointer = app.columnPointer.getPrevViewPointer()
+			app.columnPointer = app.getPrevViewPointer()
 			app.columnViews[app.columnPointer].Focus()
 		case key.Matches(message, keys.Right):
 			app.columnViews[app.columnPointer].Blur()
-			app.columnPointer = app.columnPointer.getNextViewPointer()
+			app.columnPointer = app.getNextViewPointer()
 			app.columnViews[app.columnPointer].Focus()
 		}
 	}
@@ -149,9 +149,9 @@ func (app *App) View() string {
 
 	layout := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		app.columnViews[commandsPointer].View(),
-		app.columnViews[stacksPointer].View(),
-		app.columnViews[componentsPointer].View(),
+		app.columnViews[app.commandsPointer].View(),
+		app.columnViews[app.stacksPointer].View(),
+		app.columnViews[app.componentsPointer].View(),
 	)
 
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
@@ -159,9 +159,9 @@ func (app *App) View() string {
 
 func (app *App) InitViews(commands []string, components []string, stacks []string) {
 	app.columnViews = []columnView{
-		newColumn(commandsPointer),
-		newColumn(stacksPointer),
-		newColumn(componentsPointer),
+		newColumn(app.commandsPointer),
+		newColumn(app.stacksPointer),
+		newColumn(app.componentsPointer),
 	}
 
 	commandItems := lo.Map(commands, func(s string, index int) list.Item {
@@ -176,26 +176,26 @@ func (app *App) InitViews(commands []string, components []string, stacks []strin
 		return listItem(s)
 	})
 
-	app.columnViews[commandsPointer].list.Title = "Commands"
-	app.columnViews[commandsPointer].list.SetDelegate(listItemDelegate{})
-	app.columnViews[commandsPointer].list.SetItems(commandItems)
-	app.columnViews[commandsPointer].list.SetFilteringEnabled(true)
-	app.columnViews[commandsPointer].list.SetShowFilter(true)
-	app.columnViews[commandsPointer].list.InfiniteScrolling = true
+	app.columnViews[app.commandsPointer].list.Title = "Commands"
+	app.columnViews[app.commandsPointer].list.SetDelegate(listItemDelegate{})
+	app.columnViews[app.commandsPointer].list.SetItems(commandItems)
+	app.columnViews[app.commandsPointer].list.SetFilteringEnabled(true)
+	app.columnViews[app.commandsPointer].list.SetShowFilter(true)
+	app.columnViews[app.commandsPointer].list.InfiniteScrolling = true
 
-	app.columnViews[stacksPointer].list.Title = "Stacks"
-	app.columnViews[stacksPointer].list.SetDelegate(listItemDelegate{})
-	app.columnViews[stacksPointer].list.SetItems(stackItems)
-	app.columnViews[stacksPointer].list.SetFilteringEnabled(true)
-	app.columnViews[stacksPointer].list.SetShowFilter(true)
-	app.columnViews[stacksPointer].list.InfiniteScrolling = true
+	app.columnViews[app.stacksPointer].list.Title = "Stacks"
+	app.columnViews[app.stacksPointer].list.SetDelegate(listItemDelegate{})
+	app.columnViews[app.stacksPointer].list.SetItems(stackItems)
+	app.columnViews[app.stacksPointer].list.SetFilteringEnabled(true)
+	app.columnViews[app.stacksPointer].list.SetShowFilter(true)
+	app.columnViews[app.stacksPointer].list.InfiniteScrolling = true
 
-	app.columnViews[componentsPointer].list.Title = "Components"
-	app.columnViews[componentsPointer].list.SetDelegate(listItemDelegate{})
-	app.columnViews[componentsPointer].list.SetItems(componentItems)
-	app.columnViews[componentsPointer].list.SetFilteringEnabled(true)
-	app.columnViews[componentsPointer].list.SetShowFilter(true)
-	app.columnViews[componentsPointer].list.InfiniteScrolling = true
+	app.columnViews[app.componentsPointer].list.Title = "Components"
+	app.columnViews[app.componentsPointer].list.SetDelegate(listItemDelegate{})
+	app.columnViews[app.componentsPointer].list.SetItems(componentItems)
+	app.columnViews[app.componentsPointer].list.SetFilteringEnabled(true)
+	app.columnViews[app.componentsPointer].list.SetShowFilter(true)
+	app.columnViews[app.componentsPointer].list.InfiniteScrolling = true
 }
 
 func (app *App) GetSelectedCommand() string {

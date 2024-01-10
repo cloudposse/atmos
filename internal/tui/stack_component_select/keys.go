@@ -14,20 +14,22 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Down, k.ClearFilter},
 		{k.Left, k.Execute},
 		{k.Right, k.Quit},
+		{k.FlipStacksComponents},
 	}
 }
 
 type keyMap struct {
-	Up          key.Binding
-	Down        key.Binding
-	Right       key.Binding
-	Left        key.Binding
-	Enter       key.Binding
-	Filter      key.Binding
-	ClearFilter key.Binding
-	Quit        key.Binding
-	Escape      key.Binding
-	Execute     key.Binding
+	Up                   key.Binding
+	Down                 key.Binding
+	Right                key.Binding
+	Left                 key.Binding
+	Enter                key.Binding
+	Filter               key.Binding
+	ClearFilter          key.Binding
+	Quit                 key.Binding
+	Escape               key.Binding
+	Execute              key.Binding
+	FlipStacksComponents key.Binding
 }
 
 var keys = keyMap{
@@ -70,5 +72,9 @@ var keys = keyMap{
 	Execute: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "execute"),
+	),
+	FlipStacksComponents: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "flip stacks/components"),
 	),
 }

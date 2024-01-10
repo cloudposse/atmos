@@ -9,7 +9,7 @@ import (
 
 type columnView struct {
 	focused       bool
-	columnPointer columnPointer
+	columnPointer int
 	list          list.Model
 	height        int
 	width         int
@@ -27,9 +27,9 @@ func (c *columnView) Focused() bool {
 	return c.focused
 }
 
-func newColumn(columnPointer columnPointer) columnView {
+func newColumn(columnPointer int) columnView {
 	var focused bool
-	if columnPointer == commandsPointer {
+	if columnPointer == 0 {
 		focused = true
 	}
 
