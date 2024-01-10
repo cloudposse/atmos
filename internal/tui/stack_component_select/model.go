@@ -84,6 +84,15 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		app.loaded = true
 		return app, tea.Batch(cmds...)
+	case tea.MouseMsg:
+		if message.Type == tea.MouseWheelUp {
+			app.columnViews[app.columnPointer].list.CursorUp()
+			return app, nil
+		}
+		if message.Type == tea.MouseWheelDown {
+			app.columnViews[app.columnPointer].list.CursorDown()
+			return app, nil
+		}
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(message, keys.Quit):

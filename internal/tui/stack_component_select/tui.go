@@ -7,7 +7,7 @@ import (
 // Execute starts the TUI app and retursn the selected items from the views
 func Execute(commands []string, components []string, stacks []string) (string, string, string, error) {
 	app := NewApp(commands, components, stacks)
-	p := tea.NewProgram(app, tea.WithMouseAllMotion())
+	p := tea.NewProgram(app, tea.WithMouseCellMotion())
 
 	_, err := p.Run()
 	if err != nil {
