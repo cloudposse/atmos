@@ -108,6 +108,18 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, nil
 		case key.Matches(message, keys.FlipStacksComponents):
 			app.componentsInStacks = !app.componentsInStacks
+			app.columnViews[1].list.ResetFilter()
+			app.columnViews[2].list.ResetFilter()
+			// keep the focused view at the same position
+			if app.columnViews[1].Focused() {
+				app.columnViews[1].Blur()
+				app.columnViews[2].Focus()
+			} else if app.columnViews[2].Focused() {
+				app.columnViews[2].Blur()
+				app.columnViews[1].Focus()
+			}
+			// swap the stacks/components views in the list (model)
+			// the view will be updated by the framework
 			i := app.columnViews[1]
 			app.columnViews[1] = app.columnViews[2]
 			app.columnViews[2] = i
