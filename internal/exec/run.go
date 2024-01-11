@@ -7,7 +7,8 @@ import (
 	tui "github.com/cloudposse/atmos/internal/tui/stack_component_select"
 )
 
-func ExecuteExecCmd(cmd *cobra.Command, args []string) error {
+// ExecuteRunCmd executes `atmos run` command
+func ExecuteRunCmd(cmd *cobra.Command, args []string) error {
 	commands := []string{
 		"terraform plan",
 		"terraform apply",

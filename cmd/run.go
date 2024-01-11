@@ -7,15 +7,15 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// execCmd produces a list of the affected Atmos components and stacks given two Git commits
-var execCmd = &cobra.Command{
-	Use:                "exec",
-	Short:              "Execute 'exec' command",
+// runCmd launches TUI that allows to interactively select an Atmos component and stack, and a command to execute
+var runCmd = &cobra.Command{
+	Use:                "run",
+	Short:              "Execute 'run' command",
 	Long:               `This command launches TUI that allows to interactively select an Atmos component and stack, and a command to execute`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Example:            "atmos exec",
+	Example:            "atmos run",
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteExecCmd(cmd, args)
+		err := e.ExecuteRunCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
@@ -23,5 +23,5 @@ var execCmd = &cobra.Command{
 }
 
 func init() {
-	RootCmd.AddCommand(execCmd)
+	RootCmd.AddCommand(runCmd)
 }
