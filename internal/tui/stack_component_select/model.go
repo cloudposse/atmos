@@ -29,15 +29,15 @@ type App struct {
 }
 
 func (app *App) getNextViewPointer() int {
-	if app.columnPointer == app.componentsPointer {
-		return app.commandsPointer
+	if app.columnPointer == 2 {
+		return 0
 	}
 	return app.columnPointer + 1
 }
 
 func (app *App) getPrevViewPointer() int {
-	if app.columnPointer == app.commandsPointer {
-		return app.componentsPointer
+	if app.columnPointer == 0 {
+		return 2
 	}
 	return app.columnPointer - 1
 }
@@ -120,10 +120,12 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getPrevViewPointer()
 			app.columnViews[app.columnPointer].Focus()
+			return app, nil
 		case key.Matches(message, keys.Right):
 			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getNextViewPointer()
 			app.columnViews[app.columnPointer].Focus()
+			return app, nil
 		case key.Matches(message, keys.FlipStacksComponents):
 			if app.componentsInStacks {
 				app.componentsInStacks = false
@@ -134,6 +136,15 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				app.stacksPointer = 1
 				app.componentsPointer = 2
 			}
+			return app, nil
+
+			//if app.columnPointer == 1 {
+			//	app.columnViews[1].Focus()
+			//	app.columnViews[2].Blur()
+			//} else if app.columnPointer == 2 {
+			//	app.columnViews[1].Blur()
+			//	app.columnViews[2].Focus()
+			//}
 		}
 	}
 
