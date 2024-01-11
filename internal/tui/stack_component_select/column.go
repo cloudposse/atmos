@@ -8,11 +8,10 @@ import (
 )
 
 type columnView struct {
-	focused       bool
-	columnPointer int
-	list          list.Model
-	height        int
-	width         int
+	focused bool
+	list    list.Model
+	height  int
+	width   int
 }
 
 func (c *columnView) Focus() {
@@ -35,7 +34,7 @@ func newColumn(columnPointer int) columnView {
 
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	defaultList.SetShowHelp(false)
-	return columnView{focused: focused, columnPointer: columnPointer, list: defaultList}
+	return columnView{focused: focused, list: defaultList}
 }
 
 // Init does initial setup
