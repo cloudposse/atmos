@@ -76,7 +76,8 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if message.Button == tea.MouseButtonLeft {
 			for i := 0; i < len(app.columnViews); i++ {
-				if mouseZone.Get(app.columnViews[i].list.Title).InBounds(message) {
+				zoneInfo := mouseZone.Get(app.columnViews[i].id)
+				if zoneInfo.InBounds(message) {
 					app.columnViews[app.columnPointer].Blur()
 					app.columnPointer = i
 					app.columnViews[app.columnPointer].Focus()

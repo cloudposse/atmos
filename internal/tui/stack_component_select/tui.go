@@ -8,6 +8,7 @@ import (
 // Execute starts the TUI app and returns the selected items from the views
 func Execute(commands []string, components []string, stacks []string) (*App, error) {
 	mouseZone.NewGlobal()
+	mouseZone.SetEnabled(true)
 	app := NewApp(commands, components, stacks)
 	p := tea.NewProgram(app, tea.WithMouseCellMotion())
 
