@@ -8,6 +8,7 @@ import (
 )
 
 type columnView struct {
+	id      string
 	focused bool
 	list    list.Model
 	height  int
@@ -34,7 +35,12 @@ func newColumn(columnPointer int) columnView {
 
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	defaultList.SetShowHelp(false)
-	return columnView{focused: focused, list: defaultList}
+
+	return columnView{
+		id:      mouseZone.NewPrefix(),
+		focused: focused,
+		list:    defaultList,
+	}
 }
 
 // Init does initial setup
@@ -55,7 +61,7 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (c *columnView) View() string {
-	return mouseZone.Mark(c.list.Title, c.getStyle().Render(c.list.View()))
+	return mouseZone.Mark(c.id, c.getStyle().Render(c.list.View()))
 }
 
 func (c *columnView) setSize(width, height int) {
