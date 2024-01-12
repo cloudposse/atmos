@@ -1,6 +1,7 @@
 package stack_component_select
 
 import (
+	"fmt"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -96,6 +97,19 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, nil
 		case key.Matches(message, keys.Execute):
 			app.quit = false
+			commandsViewIndex := 0
+			var componentsViewIndex int
+			var stacksViewIndex int
+			app.selectedCommand = fmt.Sprintf("%s", app.columnViews[commandsViewIndex].list.SelectedItem())
+			if app.componentsInStacks {
+				componentsViewIndex = 1
+				stacksViewIndex = 2
+			} else {
+				componentsViewIndex = 2
+				stacksViewIndex = 1
+			}
+			app.selectedComponent = fmt.Sprintf("%s", app.columnViews[componentsViewIndex].list.SelectedItem())
+			app.selectedStack = fmt.Sprintf("%s", app.columnViews[stacksViewIndex].list.SelectedItem())
 			return app, tea.Quit
 		case key.Matches(message, keys.Left):
 			app.columnViews[app.columnPointer].Blur()
