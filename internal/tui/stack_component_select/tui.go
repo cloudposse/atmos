@@ -6,7 +6,7 @@ import (
 )
 
 // Execute starts the TUI app and returns the selected items from the views
-func Execute(commands []string, stacksComponentsMap map[string]any, componentsStacksMap map[string]any) (*App, error) {
+func Execute(commands []string, stacksComponentsMap map[string][]string, componentsStacksMap map[string][]string) (*App, error) {
 	mouseZone.NewGlobal()
 	mouseZone.SetEnabled(true)
 	app := NewApp(commands, stacksComponentsMap, componentsStacksMap)

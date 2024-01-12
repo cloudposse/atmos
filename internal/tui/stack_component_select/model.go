@@ -17,8 +17,8 @@ type App struct {
 	columnViews         []columnView
 	quit                bool
 	commands            []string
-	stacksComponentsMap map[string]any
-	componentsStacksMap map[string]any
+	stacksComponentsMap map[string][]string
+	componentsStacksMap map[string][]string
 	selectedCommand     string
 	selectedComponent   string
 	selectedStack       string
@@ -26,7 +26,7 @@ type App struct {
 	columnPointer       int
 }
 
-func NewApp(commands []string, stacksComponentsMap map[string]any, componentsStacksMap map[string]any) *App {
+func NewApp(commands []string, stacksComponentsMap map[string][]string, componentsStacksMap map[string][]string) *App {
 	h := help.New()
 	h.ShowAll = true
 
@@ -172,7 +172,7 @@ func (app *App) View() string {
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
 }
 
-func (app *App) InitViews(commands []string, stacksComponentsMap map[string]any, componentsStacksMap map[string]any) {
+func (app *App) InitViews(commands []string, stacksComponentsMap map[string][]string, componentsStacksMap map[string][]string) {
 	app.columnViews = []columnView{
 		newColumn(0),
 		newColumn(1),
@@ -183,13 +183,20 @@ func (app *App) InitViews(commands []string, stacksComponentsMap map[string]any,
 		return listItem(s)
 	})
 
-	stackItems := lo.Map(lo.Keys(stacksComponentsMap), func(s string, index int) list.Item {
-		return listItem(s)
-	})
+	stackItems := []list.Item{}
+	componentItems := []list.Item{}
+	stacksComponentsMapKeys := lo.Keys(stacksComponentsMap)
 
-	componentItems := lo.Map(lo.Keys(componentsStacksMap), func(s string, index int) list.Item {
-		return listItem(s)
-	})
+	if len(stacksComponentsMapKeys) > 0 {
+		stackItems = lo.Map(stacksComponentsMapKeys, func(s string, index int) list.Item {
+			return listItem(s)
+		})
+
+		firstStack := stacksComponentsMapKeys[0]
+		componentItems = lo.Map(stacksComponentsMap[firstStack], func(s string, index int) list.Item {
+			return listItem(s)
+		})
+	}
 
 	app.columnViews[0].list.Title = "Commands"
 	app.columnViews[0].list.SetDelegate(listItemDelegate{})

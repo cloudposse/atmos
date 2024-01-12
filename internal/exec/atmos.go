@@ -1,13 +1,12 @@
 package exec
 
 import (
+	tui "github.com/cloudposse/atmos/internal/tui/stack_component_select"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
-
-	tui "github.com/cloudposse/atmos/internal/tui/stack_component_select"
 )
 
 // ExecuteAtmosCmd executes `atmos` command
@@ -25,12 +24,9 @@ func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
 		"terraform validate",
 		"terraform generate varfile",
 		"terraform generate backend",
+		"validate component",
 		"describe component",
 		"describe dependents",
-		"validate component",
-		"helmfile diff",
-		"helmfile apply",
-		"helmfile generate varfile",
 	}
 
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
@@ -38,13 +34,24 @@ func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	stacksComponentsMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
+	stacksMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
 		return err
 	}
 
-	componentsStacksMap := lo.MapEntries(stacksComponentsMap, func(k string, v any) (string, any) {
-		return k, v
+	stacksComponentsMap := lo.MapEntries(stacksMap, func(k string, v any) (string, []string) {
+		if v2, ok := v.(map[string]any); ok {
+			if v3, ok := v2["components"].(map[string]any); ok {
+				if v4, ok := v3["terraform"].(map[string]any); ok {
+					return k, lo.Keys(v4)
+				}
+			}
+		}
+		return k, nil
+	})
+
+	componentsStacksMap := lo.MapEntries(stacksMap, func(k string, v any) (string, []string) {
+		return k, nil
 	})
 
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
@@ -52,19 +59,21 @@ func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if !app.ExitStatusQuit() {
-		selectedComponent := app.GetSelectedComponent()
-		selectedStack := app.GetSelectedStack()
+	if app.ExitStatusQuit() {
+		return nil
+	}
 
-		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack)
-		if err != nil {
-			return err
-		}
+	selectedComponent := app.GetSelectedComponent()
+	selectedStack := app.GetSelectedStack()
 
-		err = u.PrintAsYAML(data)
-		if err != nil {
-			return err
-		}
+	data, err := ExecuteDescribeComponent(selectedComponent, selectedStack)
+	if err != nil {
+		return err
+	}
+
+	err = u.PrintAsYAML(data)
+	if err != nil {
+		return err
 	}
 
 	return nil
