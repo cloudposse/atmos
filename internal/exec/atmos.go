@@ -22,6 +22,7 @@ func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
 		"terraform refresh",
 		"terraform show",
 		"terraform validate",
+		"terraform shell",
 		"terraform generate varfile",
 		"terraform generate backend",
 		"validate component",
@@ -50,8 +51,8 @@ func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
 		return k, nil
 	})
 
-	componentsStacksMap := lo.MapEntries(stacksMap, func(k string, v any) (string, []string) {
-		return k, nil
+	componentsStacksMap := lo.MapEntries(stacksComponentsMap, func(k string, v []string) (string, []string) {
+		return k, v
 	})
 
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
