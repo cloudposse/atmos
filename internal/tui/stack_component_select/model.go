@@ -42,7 +42,7 @@ func NewApp(commands []string, stacksComponentsMap map[string][]string, componen
 		componentsInStacks:  true,
 	}
 
-	app.InitViews(commands, stacksComponentsMap, componentsStacksMap)
+	app.InitViews(commands, stacksComponentsMap)
 
 	return app
 }
@@ -172,7 +172,7 @@ func (app *App) View() string {
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
 }
 
-func (app *App) InitViews(commands []string, stacksComponentsMap map[string][]string, componentsStacksMap map[string][]string) {
+func (app *App) InitViews(commands []string, stacksComponentsMap map[string][]string) {
 	app.columnViews = []columnView{
 		newColumn(0),
 		newColumn(1),

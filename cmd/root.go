@@ -19,7 +19,7 @@ var RootCmd = &cobra.Command{
 	Long:    `'atmos' is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	Example: "atmos",
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteAtmosCmd(cmd, args)
+		err := e.ExecuteAtmosCmd()
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}

@@ -6,11 +6,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/samber/lo"
-	"github.com/spf13/cobra"
 )
 
 // ExecuteAtmosCmd executes `atmos` command
-func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
+func ExecuteAtmosCmd() error {
 	commands := []string{
 		"terraform plan",
 		"terraform apply",
@@ -23,14 +22,13 @@ func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
 		"terraform show",
 		"terraform validate",
 		"terraform shell",
-		"terraform generate varfile",
-		"terraform generate backend",
 		"validate component",
 		"describe component",
 		"describe dependents",
 	}
 
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return err
 	}
