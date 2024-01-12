@@ -33,14 +33,18 @@ func ExecuteAtmosCmd() error {
 		return err
 	}
 
+	// Get a map of stacks and components in the stacks
 	stacksMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
 		return err
 	}
 
+	// Create a map of stacks to lists of components in each stack
 	stacksComponentsMap := lo.MapEntries(stacksMap, func(k string, v any) (string, []string) {
 		if v2, ok := v.(map[string]any); ok {
 			if v3, ok := v2["components"].(map[string]any); ok {
+				// TODO: process 'helmfile' components and stacks.
+				// This will require checking the list of commands and filtering the stacks and components depending on the selected command.
 				if v4, ok := v3["terraform"].(map[string]any); ok {
 					return k, lo.Keys(v4)
 				}
@@ -49,19 +53,27 @@ func ExecuteAtmosCmd() error {
 		return k, nil
 	})
 
+	// Create a map of components to lists of stacks for each component
+
+	// Get a set of all components
+	stacksComponentsMapValues := lo.Uniq(lo.Flatten(lo.Values(stacksComponentsMap)))
+
 	componentsStacksMap := lo.MapEntries(stacksComponentsMap, func(k string, v []string) (string, []string) {
 		return k, v
 	})
 
+	// Start the UI
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
 	if err != nil {
 		return err
 	}
 
+	// If the user quit the UI, exit
 	if app.ExitStatusQuit() {
 		return nil
 	}
 
+	// Process the selected command, stack and component
 	selectedComponent := app.GetSelectedComponent()
 	selectedStack := app.GetSelectedStack()
 
