@@ -53,11 +53,10 @@ func ExecuteAtmosCmd() error {
 		return k, nil
 	})
 
-	// Create a map of components to lists of stacks for each component
-
 	// Get a set of all components
 	componentsSet := lo.Uniq(lo.Flatten(lo.Values(stacksComponentsMap)))
 
+	// Create a map of components to lists of stacks for each component
 	componentsStacksMap := make(map[string][]string)
 	lo.ForEach(componentsSet, func(c string, _ int) {
 		var stacksForComponent []string
