@@ -4,7 +4,17 @@ import "github.com/charmbracelet/bubbles/key"
 
 // ShortHelp returns keybindings to be shown in the mini help view. It's part of the key.Map interface
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Filter, k.Quit}
+	return []key.Binding{
+		k.Up,
+		k.Down,
+		k.Left,
+		k.Right,
+		k.Filter,
+		k.ClearFilter,
+		k.FlipStacksComponents,
+		k.Execute,
+		k.Quit,
+	}
 }
 
 // FullHelp returns keybindings for the expanded help view. It's part of the key.Map interface
@@ -28,6 +38,7 @@ type keyMap struct {
 	Escape               key.Binding
 	Execute              key.Binding
 	FlipStacksComponents key.Binding
+	CtrlC                key.Binding
 }
 
 var keys = keyMap{
@@ -60,8 +71,12 @@ var keys = keyMap{
 		key.WithHelp("esc", "clear filter"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("q/ctrl+c", "quit"),
+		key.WithKeys("esc", "ctrl+c"),
+		key.WithHelp("esc/ctrl+c", "quit"),
+	),
+	CtrlC: key.NewBinding(
+		key.WithKeys("ctrl+c"),
+		key.WithHelp("ctrl+c", "quit"),
 	),
 	Escape: key.NewBinding(
 		key.WithKeys("esc"),
@@ -72,7 +87,7 @@ var keys = keyMap{
 		key.WithHelp("enter", "execute"),
 	),
 	FlipStacksComponents: key.NewBinding(
-		key.WithKeys("f"),
-		key.WithHelp("f", "flip stacks/components"),
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "flip stacks/components"),
 	),
 }

@@ -51,10 +51,10 @@ func (c *columnView) Init() tea.Cmd {
 // Update handles all the I/O
 func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	switch msg := msg.(type) {
+	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
-		c.setSize(msg.Width, msg.Height)
-		c.list.SetSize(msg.Width/4, msg.Height/3)
+		c.setSize(message.Width, message.Height)
+		c.list.SetSize(message.Width/4, message.Height/3)
 	}
 	c.list, cmd = c.list.Update(msg)
 	return c, cmd

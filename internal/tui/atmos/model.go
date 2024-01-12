@@ -68,6 +68,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		app.loaded = true
 		return app, tea.Batch(cmds...)
+
 	case tea.MouseMsg:
 		if message.Button == tea.MouseButtonWheelUp {
 			app.columnViews[app.columnPointer].list.CursorUp()
@@ -88,15 +89,21 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(message, keys.Quit):
+		case key.Matches(message, keys.CtrlC):
 			app.quit = true
 			return app, tea.Quit
 		case key.Matches(message, keys.Escape):
-			res, _ := app.columnViews[app.columnPointer].Update(msg)
+			res, cmd := app.columnViews[app.columnPointer].Update(msg)
 			app.columnViews[app.columnPointer] = *res.(*columnView)
-			return app, nil
+			if cmd == nil {
+				return app, nil
+			} else {
+				app.quit = true
+				return app, tea.Quit
+			}
 		case key.Matches(message, keys.Execute):
 			app.quit = false
 			commandsViewIndex := 0
@@ -146,13 +153,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Send all other messages to the selected child view
 	res, cmd := app.columnViews[app.columnPointer].Update(msg)
-
-	if _, ok := res.(*columnView); ok {
-		app.columnViews[app.columnPointer] = *res.(*columnView)
-	} else {
-		return res, cmd
-	}
-
+	app.columnViews[app.columnPointer] = *res.(*columnView)
 	return app, cmd
 }
 
