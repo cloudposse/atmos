@@ -60,12 +60,17 @@ func ExecuteAtmosCmd() error {
 	componentsStacksMap := make(map[string][]string)
 	lo.ForEach(componentsSet, func(c string, _ int) {
 		var stacksForComponent []string
+		for k, v := range stacksComponentsMap {
+			if u.SliceContainsString(v, c) {
+				stacksForComponent = append(stacksForComponent, k)
+			}
+		}
 		componentsStacksMap[c] = stacksForComponent
 	})
 
 	// Sort the maps by the keys, and sort the lists of values
-	stacksComponentsMap = u.SortMapByKeysAndValues(stacksComponentsMap)
-	componentsStacksMap = u.SortMapByKeysAndValues(componentsStacksMap)
+	stacksComponentsMap = u.SortMapByKeysAndValuesUniq(stacksComponentsMap)
+	componentsStacksMap = u.SortMapByKeysAndValuesUniq(componentsStacksMap)
 
 	// Start the UI
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
