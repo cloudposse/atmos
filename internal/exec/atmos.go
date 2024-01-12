@@ -53,7 +53,10 @@ func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !app.ExitStatusQuit() {
-		data, err := ExecuteDescribeComponent(app.GetSelectedComponent(), app.GetSelectedStack())
+		selectedComponent := app.GetSelectedComponent()
+		selectedStack := app.GetSelectedStack()
+
+		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack)
 		if err != nil {
 			return err
 		}

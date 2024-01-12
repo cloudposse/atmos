@@ -102,11 +102,11 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var stacksViewIndex int
 			app.selectedCommand = fmt.Sprintf("%s", app.columnViews[commandsViewIndex].list.SelectedItem())
 			if app.componentsInStacks {
-				componentsViewIndex = 1
-				stacksViewIndex = 2
-			} else {
-				componentsViewIndex = 2
 				stacksViewIndex = 1
+				componentsViewIndex = 2
+			} else {
+				stacksViewIndex = 2
+				componentsViewIndex = 1
 			}
 			app.selectedComponent = fmt.Sprintf("%s", app.columnViews[componentsViewIndex].list.SelectedItem())
 			app.selectedStack = fmt.Sprintf("%s", app.columnViews[stacksViewIndex].list.SelectedItem())
