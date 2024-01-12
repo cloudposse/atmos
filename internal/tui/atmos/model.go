@@ -53,6 +53,7 @@ func (app *App) Init() tea.Cmd {
 }
 
 func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Process messages relevant to the parent view
 	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
 		app.loaded = false
@@ -126,7 +127,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.componentsInStacks = !app.componentsInStacks
 			app.columnViews[1].list.ResetFilter()
 			app.columnViews[2].list.ResetFilter()
-			// keep the focused view at the same position
+			// Keep the focused view at the same position
 			if app.columnViews[1].Focused() {
 				app.columnViews[1].Blur()
 				app.columnViews[2].Focus()
@@ -134,8 +135,8 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				app.columnViews[2].Blur()
 				app.columnViews[1].Focus()
 			}
-			// swap the componentsStacksMap/stacksComponentsMap views in the list (model)
-			// the view will be updated by the framework
+			// Swap the componentsStacksMap/stacksComponentsMap views in the list (model)
+			// The view will be updated by the framework
 			i := app.columnViews[1]
 			app.columnViews[1] = app.columnViews[2]
 			app.columnViews[2] = i
@@ -143,6 +144,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Send all other messages to the selected child view
 	res, cmd := app.columnViews[app.columnPointer].Update(msg)
 
 	if _, ok := res.(*columnView); ok {

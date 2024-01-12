@@ -10,11 +10,9 @@ func (k keyMap) ShortHelp() []key.Binding {
 // FullHelp returns keybindings for the expanded help view. It's part of the key.Map interface
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Filter},
-		{k.Down, k.ClearFilter},
-		{k.Left, k.Execute},
-		{k.Right, k.Quit},
-		{k.FlipStacksComponents},
+		{k.Up, k.Down, k.Left, k.Right},
+		{k.Filter, k.ClearFilter, k.FlipStacksComponents},
+		{k.Execute, k.Quit},
 	}
 }
 
@@ -34,20 +32,20 @@ type keyMap struct {
 
 var keys = keyMap{
 	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "move up"),
+		key.WithKeys("up"),
+		key.WithHelp("↑", "move up"),
 	),
 	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "move down"),
+		key.WithKeys("down"),
+		key.WithHelp("↓", "move down"),
 	),
 	Right: key.NewBinding(
-		key.WithKeys("right", "r"),
-		key.WithHelp("→/r", "move right"),
+		key.WithKeys("right"),
+		key.WithHelp("→", "move right"),
 	),
 	Left: key.NewBinding(
-		key.WithKeys("left", "h"),
-		key.WithHelp("←/l", "move left"),
+		key.WithKeys("left"),
+		key.WithHelp("←", "move left"),
 	),
 	Enter: key.NewBinding(
 		key.WithKeys("enter"),
@@ -75,6 +73,6 @@ var keys = keyMap{
 	),
 	FlipStacksComponents: key.NewBinding(
 		key.WithKeys("f"),
-		key.WithHelp("f", "flip componentsStacksMap/stacksComponentsMap"),
+		key.WithHelp("f", "flip stacks/components"),
 	),
 }
