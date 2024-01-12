@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"sort"
+
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -56,10 +58,13 @@ func ExecuteAtmosCmd() error {
 	// Create a map of components to lists of stacks for each component
 
 	// Get a set of all components
-	stacksComponentsMapValues := lo.Uniq(lo.Flatten(lo.Values(stacksComponentsMap)))
+	componentsSet := lo.Uniq(lo.Flatten(lo.Values(stacksComponentsMap)))
+	sort.Strings(componentsSet)
 
-	componentsStacksMap := lo.MapEntries(stacksComponentsMap, func(k string, v []string) (string, []string) {
-		return k, v
+	componentsStacksMap := make(map[string][]string)
+	lo.ForEach(componentsSet, func(c string, _ int) {
+		var stacksForComponent []string
+		componentsStacksMap[c] = stacksForComponent
 	})
 
 	// Start the UI
