@@ -1,4 +1,4 @@
-package stack_component_select
+package atmos
 
 import (
 	"github.com/charmbracelet/bubbles/list"

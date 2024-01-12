@@ -1,7 +1,7 @@
 package exec
 
 import (
-	tui "github.com/cloudposse/atmos/internal/tui/stack_component_select"
+	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"

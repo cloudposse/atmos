@@ -1,7 +1,8 @@
-package stack_component_select
+package atmos
 
 import (
 	"fmt"
+
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
