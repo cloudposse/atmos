@@ -12,37 +12,37 @@ import (
 )
 
 type App struct {
-	help               help.Model
-	loaded             bool
-	columnViews        []columnView
-	quit               bool
-	commands           []string
-	components         []string
-	stacks             []string
-	selectedCommand    string
-	selectedComponent  string
-	selectedStack      string
-	componentsInStacks bool
-	columnPointer      int
+	help                help.Model
+	loaded              bool
+	columnViews         []columnView
+	quit                bool
+	commands            []string
+	stacksComponentsMap map[string]any
+	componentsStacksMap map[string]any
+	selectedCommand     string
+	selectedComponent   string
+	selectedStack       string
+	componentsInStacks  bool
+	columnPointer       int
 }
 
-func NewApp(commands []string, components []string, stacks []string) *App {
+func NewApp(commands []string, stacksComponentsMap map[string]any, componentsStacksMap map[string]any) *App {
 	h := help.New()
 	h.ShowAll = true
 
 	app := &App{
-		help:               h,
-		columnPointer:      0,
-		commands:           commands,
-		components:         components,
-		stacks:             stacks,
-		selectedComponent:  "",
-		selectedStack:      "",
-		selectedCommand:    "",
-		componentsInStacks: true,
+		help:                h,
+		columnPointer:       0,
+		commands:            commands,
+		stacksComponentsMap: stacksComponentsMap,
+		componentsStacksMap: componentsStacksMap,
+		selectedComponent:   "",
+		selectedStack:       "",
+		selectedCommand:     "",
+		componentsInStacks:  true,
 	}
 
-	app.InitViews(commands, components, stacks)
+	app.InitViews(commands, stacksComponentsMap, componentsStacksMap)
 
 	return app
 }
@@ -133,7 +133,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				app.columnViews[2].Blur()
 				app.columnViews[1].Focus()
 			}
-			// swap the stacks/components views in the list (model)
+			// swap the componentsStacksMap/stacksComponentsMap views in the list (model)
 			// the view will be updated by the framework
 			i := app.columnViews[1]
 			app.columnViews[1] = app.columnViews[2]
@@ -172,7 +172,7 @@ func (app *App) View() string {
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
 }
 
-func (app *App) InitViews(commands []string, components []string, stacks []string) {
+func (app *App) InitViews(commands []string, stacksComponentsMap map[string]any, componentsStacksMap map[string]any) {
 	app.columnViews = []columnView{
 		newColumn(0),
 		newColumn(1),
@@ -183,11 +183,11 @@ func (app *App) InitViews(commands []string, components []string, stacks []strin
 		return listItem(s)
 	})
 
-	stackItems := lo.Map(stacks, func(s string, index int) list.Item {
+	stackItems := lo.Map(lo.Keys(stacksComponentsMap), func(s string, index int) list.Item {
 		return listItem(s)
 	})
 
-	componentItems := lo.Map(components, func(s string, index int) list.Item {
+	componentItems := lo.Map(lo.Keys(componentsStacksMap), func(s string, index int) list.Item {
 		return listItem(s)
 	})
 

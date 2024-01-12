@@ -75,6 +75,6 @@ var keys = keyMap{
 	),
 	FlipStacksComponents: key.NewBinding(
 		key.WithKeys("f"),
-		key.WithHelp("f", "flip stacks/components"),
+		key.WithHelp("f", "flip componentsStacksMap/stacksComponentsMap"),
 	),
 }

@@ -1,7 +1,10 @@
 package exec
 
 import (
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	tui "github.com/cloudposse/atmos/internal/tui/stack_component_select"
@@ -30,24 +33,21 @@ func ExecuteAtmosCmd(cmd *cobra.Command, args []string) error {
 		"helmfile generate varfile",
 	}
 
-	stacks := []string{
-		"plat-ue2-dev",
-		"plat-ue2-prod",
-		"plat-ue2-staging",
-		"plat-uw2-dev",
-		"plat-uw2-prod",
-		"plat-uw2-staging",
-		"plat-gbl-dev",
-		"plat-gbl-prod",
-		"plat-gbl-staging",
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	if err != nil {
+		return err
 	}
 
-	components := []string{
-		"vpc",
-		"vpc-flow-logs-bucket",
+	stacksComponentsMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
+	if err != nil {
+		return err
 	}
 
-	app, err := tui.Execute(commands, components, stacks)
+	componentsStacksMap := lo.MapEntries(stacksComponentsMap, func(k string, v any) (string, any) {
+		return k, v
+	})
+
+	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
 	if err != nil {
 		return err
 	}
