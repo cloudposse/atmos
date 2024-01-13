@@ -43,7 +43,7 @@ func NewApp(commands []string, stacksComponentsMap map[string][]string, componen
 		componentsInStacks:  true,
 	}
 
-	app.InitViews(commands, stacksComponentsMap)
+	app.initViews(commands, stacksComponentsMap)
 
 	return app
 }
@@ -107,30 +107,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return app, tea.Quit
 			}
 		case key.Matches(message, keys.Execute):
-			app.quit = false
-			commandsViewIndex := 0
-			var componentsViewIndex int
-			var stacksViewIndex int
-			app.selectedCommand = fmt.Sprintf("%s", app.columnViews[commandsViewIndex].list.SelectedItem())
-			if app.componentsInStacks {
-				stacksViewIndex = 1
-				componentsViewIndex = 2
-			} else {
-				stacksViewIndex = 2
-				componentsViewIndex = 1
-			}
-			selectedComponent := app.columnViews[componentsViewIndex].list.SelectedItem()
-			if selectedComponent != nil {
-				app.selectedComponent = fmt.Sprintf("%s", selectedComponent)
-			} else {
-				app.selectedComponent = ""
-			}
-			selectedStack := app.columnViews[stacksViewIndex].list.SelectedItem()
-			if selectedStack != nil {
-				app.selectedStack = fmt.Sprintf("%s", selectedStack)
-			} else {
-				app.selectedStack = ""
-			}
+			app.execute()
 			return app, tea.Quit
 		case key.Matches(message, keys.Up):
 			app.columnViews[app.columnPointer].list.CursorUp()
@@ -151,22 +128,8 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.columnViews[app.columnPointer].Focus()
 			return app, nil
 		case key.Matches(message, keys.FlipStacksComponents):
-			app.componentsInStacks = !app.componentsInStacks
-			app.columnViews[1].list.ResetFilter()
-			app.columnViews[2].list.ResetFilter()
-			// Keep the focused view at the same position
-			if app.columnViews[1].Focused() {
-				app.columnViews[1].Blur()
-				app.columnViews[2].Focus()
-			} else if app.columnViews[2].Focused() {
-				app.columnViews[2].Blur()
-				app.columnViews[1].Focus()
-			}
-			// Swap the componentsStacksMap/stacksComponentsMap views in the list (model)
-			// The view will be updated by the framework
-			i := app.columnViews[1]
-			app.columnViews[1] = app.columnViews[2]
-			app.columnViews[2] = i
+			// Flip the stacks and components views
+			app.flipStackAndComponentViews()
 			return app, nil
 		}
 	}
@@ -196,7 +159,7 @@ func (app *App) View() string {
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
 }
 
-func (app *App) InitViews(commands []string, stacksComponentsMap map[string][]string) {
+func (app *App) initViews(commands []string, stacksComponentsMap map[string][]string) {
 	app.columnViews = []columnView{
 		newColumn(0),
 		newColumn(1),
@@ -276,7 +239,11 @@ func (app *App) ExitStatusQuit() bool {
 
 func (app *App) updateStackAndComponentViews() {
 	if app.columnPointer == 1 {
-		selectedItem := fmt.Sprintf("%s", app.columnViews[1].list.SelectedItem())
+		selected := app.columnViews[1].list.SelectedItem()
+		if selected == nil {
+			return
+		}
+		selectedItem := fmt.Sprintf("%s", selected)
 		var itemStrings []string
 		if app.componentsInStacks {
 			itemStrings = app.stacksComponentsMap[selectedItem]
@@ -287,6 +254,93 @@ func (app *App) updateStackAndComponentViews() {
 			return listItem(s)
 		})
 		app.columnViews[2].list.ResetFilter()
+		app.columnViews[2].list.ResetSelected()
 		app.columnViews[2].list.SetItems(items)
+	}
+}
+
+func (app *App) execute() {
+	app.quit = false
+	commandsViewIndex := 0
+	var componentsViewIndex int
+	var stacksViewIndex int
+
+	selectedCommand := app.columnViews[commandsViewIndex].list.SelectedItem()
+	app.selectedCommand = fmt.Sprintf("%s", selectedCommand)
+
+	if app.componentsInStacks {
+		stacksViewIndex = 1
+		componentsViewIndex = 2
+	} else {
+		stacksViewIndex = 2
+		componentsViewIndex = 1
+	}
+
+	selectedComponent := app.columnViews[componentsViewIndex].list.SelectedItem()
+	if selectedComponent != nil {
+		app.selectedComponent = fmt.Sprintf("%s", selectedComponent)
+	} else {
+		app.selectedComponent = ""
+	}
+
+	selectedStack := app.columnViews[stacksViewIndex].list.SelectedItem()
+	if selectedStack != nil {
+		app.selectedStack = fmt.Sprintf("%s", selectedStack)
+	} else {
+		app.selectedStack = ""
+	}
+}
+
+func (app *App) flipStackAndComponentViews() {
+	app.componentsInStacks = !app.componentsInStacks
+	app.columnViews[1].list.ResetFilter()
+	app.columnViews[1].list.ResetSelected()
+	app.columnViews[2].list.ResetFilter()
+	app.columnViews[2].list.ResetSelected()
+
+	// Keep the focused view at the same position
+	if app.columnViews[1].Focused() {
+		app.columnViews[1].Blur()
+		app.columnViews[2].Focus()
+	} else if app.columnViews[2].Focused() {
+		app.columnViews[2].Blur()
+		app.columnViews[1].Focus()
+	}
+
+	// Swap stacks/components
+	// The view will be updated by the framework
+	i := app.columnViews[1]
+	app.columnViews[1] = app.columnViews[2]
+	app.columnViews[2] = i
+
+	// Reset the lists
+	if app.componentsInStacks {
+		stacksComponentsMapKeys := lo.Keys(app.stacksComponentsMap)
+
+		if len(stacksComponentsMapKeys) > 0 {
+			stackItems := lo.Map(stacksComponentsMapKeys, func(s string, _ int) list.Item {
+				return listItem(s)
+			})
+			firstStack := stacksComponentsMapKeys[0]
+			componentItems := lo.Map(app.stacksComponentsMap[firstStack], func(s string, _ int) list.Item {
+				return listItem(s)
+			})
+			app.columnViews[1].list.SetItems(stackItems)
+			app.columnViews[2].list.SetItems(componentItems)
+		}
+	} else {
+		componentsStacksMapKeys := lo.Keys(app.componentsStacksMap)
+
+		if len(componentsStacksMapKeys) > 0 {
+			componentItems := lo.Map(componentsStacksMapKeys, func(s string, _ int) list.Item {
+				return listItem(s)
+			})
+			firstComponent := componentsStacksMapKeys[0]
+			stackItems := lo.Map(app.componentsStacksMap[firstComponent], func(s string, _ int) list.Item {
+				return listItem(s)
+			})
+			app.columnViews[1].list.SetItems(componentItems)
+			app.columnViews[2].list.SetItems(stackItems)
+		}
 	}
 }
