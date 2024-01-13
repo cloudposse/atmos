@@ -29,6 +29,12 @@
 
 `atmos` - Universal Tool for DevOps and Cloud Automation.
 
+## Screenshots
+
+
+![Demo](docs/demo.gif)
+*<br/>Example of running atmos to describe infrastructure.*
+
 ---
 > [!NOTE]
 > This project is part of Cloud Posse's comprehensive ["SweetOps"](https://cpco.io/sweetops) approach towards DevOps.
@@ -37,14 +43,6 @@
 >
 
 [![README Header][readme_header_img]][readme_header_link]
-
-
-
-## Screenshots
-
-
-![Demo](docs/demo.gif)
-*<br/>Example of running atmos to describe infrastructure.*
 
 
 ## Introduction
