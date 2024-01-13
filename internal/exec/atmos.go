@@ -8,6 +8,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/fatih/color"
 	"github.com/samber/lo"
 )
 
@@ -92,6 +93,13 @@ func ExecuteAtmosCmd() error {
 	}
 
 	// Process the selected command, stack and component
+	fmt.Println()
+	u.PrintMessageInColor(fmt.Sprintf(
+		"Executing command: atmos %s %s --stack %s", selectedCommand, selectedComponent, selectedStack),
+		color.New(color.FgCyan),
+	)
+	fmt.Println()
+
 	if selectedCommand == "describe component" {
 		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack)
 		if err != nil {
