@@ -2,7 +2,6 @@ package atmos
 
 import (
 	"fmt"
-
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -10,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	mouseZone "github.com/lrstanley/bubblezone"
 	"github.com/samber/lo"
+	"sort"
 )
 
 type App struct {
@@ -189,6 +189,7 @@ func (app *App) initViews(commands []string, stacksComponentsMap map[string][]st
 	stackItems := []list.Item{}
 	componentItems := []list.Item{}
 	stacksComponentsMapKeys := lo.Keys(stacksComponentsMap)
+	sort.Strings(stacksComponentsMapKeys)
 
 	if len(stacksComponentsMapKeys) > 0 {
 		stackItems = lo.Map(stacksComponentsMapKeys, func(s string, _ int) list.Item {
@@ -316,6 +317,7 @@ func (app *App) flipStackAndComponentViews() {
 	// Reset the lists
 	if app.componentsInStacks {
 		stacksComponentsMapKeys := lo.Keys(app.stacksComponentsMap)
+		sort.Strings(stacksComponentsMapKeys)
 
 		if len(stacksComponentsMapKeys) > 0 {
 			stackItems := lo.Map(stacksComponentsMapKeys, func(s string, _ int) list.Item {
@@ -330,6 +332,7 @@ func (app *App) flipStackAndComponentViews() {
 		}
 	} else {
 		componentsStacksMapKeys := lo.Keys(app.componentsStacksMap)
+		sort.Strings(componentsStacksMapKeys)
 
 		if len(componentsStacksMapKeys) > 0 {
 			componentItems := lo.Map(componentsStacksMapKeys, func(s string, _ int) list.Item {
