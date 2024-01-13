@@ -7,8 +7,8 @@ func (k keyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up,
 		k.Down,
-		k.Left,
 		k.Right,
+		k.Left,
 		k.Filter,
 		k.ClearFilter,
 		k.FlipStacksComponents,
@@ -20,7 +20,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 // FullHelp returns keybindings for the expanded help view. It's part of the key.Map interface
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.Left, k.Right},
+		{k.Up, k.Down, k.Right, k.Left},
 		{k.Filter, k.ClearFilter, k.FlipStacksComponents},
 		{k.Execute, k.Quit},
 	}
@@ -44,19 +44,19 @@ type keyMap struct {
 var keys = keyMap{
 	Up: key.NewBinding(
 		key.WithKeys("up"),
-		key.WithHelp("↑", "move up"),
+		key.WithHelp("↑", "up"),
 	),
 	Down: key.NewBinding(
 		key.WithKeys("down"),
-		key.WithHelp("↓", "move down"),
+		key.WithHelp("↓", "down"),
 	),
 	Right: key.NewBinding(
 		key.WithKeys("right"),
-		key.WithHelp("→", "move right"),
+		key.WithHelp("→", "right"),
 	),
 	Left: key.NewBinding(
 		key.WithKeys("left"),
-		key.WithHelp("←", "move left"),
+		key.WithHelp("←", "left"),
 	),
 	Enter: key.NewBinding(
 		key.WithKeys("enter"),

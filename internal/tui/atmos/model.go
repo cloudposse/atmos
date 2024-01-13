@@ -72,10 +72,12 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		if message.Button == tea.MouseButtonWheelUp {
 			app.columnViews[app.columnPointer].list.CursorUp()
+			app.updateStackAndComponentViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonWheelDown {
 			app.columnViews[app.columnPointer].list.CursorDown()
+			app.updateStackAndComponentViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonLeft {
@@ -120,6 +122,14 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.selectedComponent = fmt.Sprintf("%s", app.columnViews[componentsViewIndex].list.SelectedItem())
 			app.selectedStack = fmt.Sprintf("%s", app.columnViews[stacksViewIndex].list.SelectedItem())
 			return app, tea.Quit
+		case key.Matches(message, keys.Up):
+			app.columnViews[app.columnPointer].list.CursorUp()
+			app.updateStackAndComponentViews()
+			return app, nil
+		case key.Matches(message, keys.Down):
+			app.columnViews[app.columnPointer].list.CursorDown()
+			app.updateStackAndComponentViews()
+			return app, nil
 		case key.Matches(message, keys.Left):
 			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getPrevViewPointer()
@@ -252,4 +262,7 @@ func (app *App) GetSelectedComponent() string {
 
 func (app *App) ExitStatusQuit() bool {
 	return app.quit
+}
+
+func (app *App) updateStackAndComponentViews() {
 }
