@@ -267,7 +267,11 @@ func (app *App) execute() {
 	var stacksViewIndex int
 
 	selectedCommand := app.columnViews[commandsViewIndex].list.SelectedItem()
-	app.selectedCommand = fmt.Sprintf("%s", selectedCommand)
+	if selectedCommand != nil {
+		app.selectedCommand = fmt.Sprintf("%s", selectedCommand)
+	} else {
+		app.selectedCommand = ""
+	}
 
 	if app.componentsInStacks {
 		stacksViewIndex = 1
