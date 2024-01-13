@@ -1,6 +1,9 @@
 package exec
 
 import (
+	"fmt"
+	"strings"
+
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -74,28 +77,63 @@ func ExecuteAtmosCmd() error {
 
 	// Start the UI
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
+	fmt.Println()
 	if err != nil {
 		return err
 	}
 
+	selectedCommand := app.GetSelectedCommand()
 	selectedComponent := app.GetSelectedComponent()
 	selectedStack := app.GetSelectedStack()
 
 	// If the user quit the UI, exit
-	if app.ExitStatusQuit() || selectedComponent == "" || selectedStack == "" {
+	if app.ExitStatusQuit() || selectedCommand == "" || selectedComponent == "" || selectedStack == "" {
 		return nil
 	}
 
 	// Process the selected command, stack and component
-
-	data, err := ExecuteDescribeComponent(selectedComponent, selectedStack)
-	if err != nil {
-		return err
+	if selectedCommand == "describe component" {
+		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack)
+		if err != nil {
+			return err
+		}
+		err = u.PrintAsYAML(data)
+		if err != nil {
+			return err
+		}
 	}
 
-	err = u.PrintAsYAML(data)
-	if err != nil {
-		return err
+	if selectedCommand == "describe dependents" {
+		data, err := ExecuteDescribeDependents(cliConfig, selectedComponent, selectedStack)
+		if err != nil {
+			return err
+		}
+		err = u.PrintAsYAML(data)
+		if err != nil {
+			return err
+		}
+	}
+
+	if selectedCommand == "validate component" {
+		_, err := ExecuteValidateComponent(cliConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
+		if err != nil {
+			return err
+		}
+	}
+
+	// All Terraform commands
+	if strings.HasPrefix(selectedCommand, "terraform") {
+		parts := strings.Split(selectedCommand, " ")
+		subcommand := parts[1]
+		configAndStacksInfo.ComponentType = "terraform"
+		configAndStacksInfo.Component = selectedComponent
+		configAndStacksInfo.ComponentFromArg = selectedComponent
+		configAndStacksInfo.Stack = selectedStack
+		configAndStacksInfo.SubCommand = subcommand
+		err := ExecuteTerraform(configAndStacksInfo)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
