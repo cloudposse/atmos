@@ -29,9 +29,9 @@ atmos
 
 - Use the `Tab` key to flip the "Stacks" and "Components" views. This is useful to be able to use the UI in two different modes:
 
-  * Mode 1: Components in Stacks. Display all available stacks, select a stack, then show all the components that are defined in the selected stack
+  * `Mode 1: Components in Stacks`. Display all available stacks, select a stack, then show all the components that are defined in the selected stack
 
-  * Mode 2: Stacks for Components. Display all available components, select a component, then show all the stacks where the selected component is
+  * `Mode 2: Stacks for Components`. Display all available components, select a component, then show all the stacks where the selected component is
     configured
 
 - Press `Enter` to execute the selected command for the selected stack and component
