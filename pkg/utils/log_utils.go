@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/fatih/color"
 
@@ -25,6 +27,14 @@ func PrintMessage(message string) {
 func LogErrorAndExit(err error) {
 	if err != nil {
 		LogError(err)
+
+		// Find the executed command's exit code from the error
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			exitCode := exitError.ExitCode()
+			os.Exit(exitCode)
+		}
+
 		os.Exit(1)
 	}
 }
