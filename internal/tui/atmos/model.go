@@ -159,6 +159,22 @@ func (app *App) View() string {
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
 }
 
+func (app *App) GetSelectedCommand() string {
+	return app.selectedCommand
+}
+
+func (app *App) GetSelectedStack() string {
+	return app.selectedStack
+}
+
+func (app *App) GetSelectedComponent() string {
+	return app.selectedComponent
+}
+
+func (app *App) ExitStatusQuit() bool {
+	return app.quit
+}
+
 func (app *App) initViews(commands []string, stacksComponentsMap map[string][]string) {
 	app.columnViews = []columnView{
 		newColumn(0),
@@ -219,22 +235,6 @@ func (app *App) getPrevViewPointer() int {
 		return 2
 	}
 	return app.columnPointer - 1
-}
-
-func (app *App) GetSelectedCommand() string {
-	return app.selectedCommand
-}
-
-func (app *App) GetSelectedStack() string {
-	return app.selectedStack
-}
-
-func (app *App) GetSelectedComponent() string {
-	return app.selectedComponent
-}
-
-func (app *App) ExitStatusQuit() bool {
-	return app.quit
 }
 
 func (app *App) updateStackAndComponentViews() {
