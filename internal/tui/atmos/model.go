@@ -119,8 +119,18 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				stacksViewIndex = 2
 				componentsViewIndex = 1
 			}
-			app.selectedComponent = fmt.Sprintf("%s", app.columnViews[componentsViewIndex].list.SelectedItem())
-			app.selectedStack = fmt.Sprintf("%s", app.columnViews[stacksViewIndex].list.SelectedItem())
+			selectedComponent := app.columnViews[componentsViewIndex].list.SelectedItem()
+			if selectedComponent != nil {
+				app.selectedComponent = fmt.Sprintf("%s", selectedComponent)
+			} else {
+				app.selectedComponent = ""
+			}
+			selectedStack := app.columnViews[stacksViewIndex].list.SelectedItem()
+			if selectedStack != nil {
+				app.selectedStack = fmt.Sprintf("%s", selectedStack)
+			} else {
+				app.selectedStack = ""
+			}
 			return app, tea.Quit
 		case key.Matches(message, keys.Up):
 			app.columnViews[app.columnPointer].list.CursorUp()
@@ -193,7 +203,7 @@ func (app *App) InitViews(commands []string, stacksComponentsMap map[string][]st
 		newColumn(2),
 	}
 
-	commandItems := lo.Map(commands, func(s string, index int) list.Item {
+	commandItems := lo.Map(commands, func(s string, _ int) list.Item {
 		return listItem(s)
 	})
 
@@ -202,12 +212,12 @@ func (app *App) InitViews(commands []string, stacksComponentsMap map[string][]st
 	stacksComponentsMapKeys := lo.Keys(stacksComponentsMap)
 
 	if len(stacksComponentsMapKeys) > 0 {
-		stackItems = lo.Map(stacksComponentsMapKeys, func(s string, index int) list.Item {
+		stackItems = lo.Map(stacksComponentsMapKeys, func(s string, _ int) list.Item {
 			return listItem(s)
 		})
 
 		firstStack := stacksComponentsMapKeys[0]
-		componentItems = lo.Map(stacksComponentsMap[firstStack], func(s string, index int) list.Item {
+		componentItems = lo.Map(stacksComponentsMap[firstStack], func(s string, _ int) list.Item {
 			return listItem(s)
 		})
 	}
@@ -265,4 +275,18 @@ func (app *App) ExitStatusQuit() bool {
 }
 
 func (app *App) updateStackAndComponentViews() {
+	if app.columnPointer == 1 {
+		selectedItem := fmt.Sprintf("%s", app.columnViews[1].list.SelectedItem())
+		var itemStrings []string
+		if app.componentsInStacks {
+			itemStrings = app.stacksComponentsMap[selectedItem]
+		} else {
+			itemStrings = app.componentsStacksMap[selectedItem]
+		}
+		items := lo.Map(itemStrings, func(s string, _ int) list.Item {
+			return listItem(s)
+		})
+		app.columnViews[2].list.ResetFilter()
+		app.columnViews[2].list.SetItems(items)
+	}
 }

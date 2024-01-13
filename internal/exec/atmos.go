@@ -78,14 +78,15 @@ func ExecuteAtmosCmd() error {
 		return err
 	}
 
+	selectedComponent := app.GetSelectedComponent()
+	selectedStack := app.GetSelectedStack()
+
 	// If the user quit the UI, exit
-	if app.ExitStatusQuit() {
+	if app.ExitStatusQuit() || selectedComponent == "" || selectedStack == "" {
 		return nil
 	}
 
 	// Process the selected command, stack and component
-	selectedComponent := app.GetSelectedComponent()
-	selectedStack := app.GetSelectedStack()
 
 	data, err := ExecuteDescribeComponent(selectedComponent, selectedStack)
 	if err != nil {
