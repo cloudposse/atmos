@@ -34,6 +34,27 @@ Type "# First check you have Atmos installed" Sleep 500ms Enter
 Type "atmos version" Sleep 500ms Enter
 Sleep 1s
 
+Type "# Start an interactive UI to review the Atmos commands, components and stacks, and execute the selected command..." Sleep 500ms Enter
+Type "atmos" Sleep 500ms Enter
+Sleep 2s
+
+Down Sleep 500ms
+Down Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
+Up Sleep 1s
+Right Sleep 1s
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Right Sleep 1s
+Down Sleep 500ms
+Up Sleep 1s
+Enter
+Sleep 2s
+
 Type "# Now let's explore the quick start example" Sleep 500ms Enter
 Type "cd examples/quick-start" Sleep 500ms Enter
 
@@ -74,31 +95,7 @@ Sleep 1s
 
 Type "# Atmos has native workflows for Terraform" Sleep 500ms Enter
 Type "atmos terraform --help" Sleep 500ms Enter
-Sleep 2s
-
-Type "clear" Sleep 500ms Enter
 Sleep 1s
-
-Type "# Start an interactive UI to review the Atmos commands, components and stacks, and execute the selected command..." Sleep 500ms Enter
-Type "atmos" Sleep 500ms Enter
-Sleep 2s
-
-Down Sleep 500ms
-Down Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Up Sleep 1s
-Right Sleep 1s
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Right Sleep 1s
-Down Sleep 500ms
-Up Sleep 1s
-Enter
-Sleep 2s
 
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
 Sleep 1s
