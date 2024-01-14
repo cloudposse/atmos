@@ -3,3 +3,4 @@ components:
     vpc:
       vars:
         ipv4_primary_cidr_block: 10.7.0.0/18
+        vpc_flow_logs_enabled: false

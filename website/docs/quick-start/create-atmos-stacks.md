@@ -125,6 +125,7 @@ components:
     vpc:
       vars:
         ipv4_primary_cidr_block: 10.7.0.0/18
+        vpc_flow_logs_enabled: false
 ```
 
 In the `stacks/catalog/vpc/staging.yaml` file, add the following manifest for the `vpc` Atmos component:
@@ -135,6 +136,7 @@ components:
     vpc:
       vars:
         ipv4_primary_cidr_block: 10.9.0.0/18
+        vpc_flow_logs_enabled: false
 ```
 
 In the `stacks/catalog/vpc/prod.yaml` file, add the following manifest for the `vpc` Atmos component:

@@ -1,6 +1,6 @@
 {
   "label": "helmfile",
-  "position": 4,
+  "position": 5,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

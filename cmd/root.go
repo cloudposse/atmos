@@ -3,8 +3,10 @@ package cmd
 import (
 	"errors"
 
+	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
+	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -12,9 +14,16 @@ import (
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "atmos",
-	Short: "Universal Tool for DevOps and Cloud Automation",
-	Long:  `'atmos' is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Use:     "atmos",
+	Short:   "Universal Tool for DevOps and Cloud Automation",
+	Long:    `'atmos' is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Example: "atmos",
+	Run: func(cmd *cobra.Command, args []string) {
+		err := e.ExecuteAtmosCmd()
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -46,6 +55,12 @@ func init() {
 func initConfig() {
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
+
+	styles := boa.DefaultStyles()
+	b := boa.New(boa.WithStyles(styles))
+
+	RootCmd.SetUsageFunc(b.UsageFunc)
+	RootCmd.SetHelpFunc(b.HelpFunc)
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/

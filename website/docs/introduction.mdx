@@ -116,7 +116,7 @@ Atmos solves this by introducing powerful capabilities most tools lack:
 - Team collaboration with reusable service catalogs
 - Reusable workflows that run anywhere
 - Consistent command line interface that can combine multiple tools into one command (`atmos`)
-- A [single binary, cross-compiled for every architecture](https://github.com/cloudposse/atmos/releases) (golang) and [easily installed](/quick-start/install-atmos).
+- A [single binary, cross-compiled for every architecture](https://github.com/cloudposse/atmos/releases) (golang) and [easily installed](/quick-start/install-atmos)
 
 ### YAML Configuration
 
@@ -124,22 +124,25 @@ So, why did we choose YAML? That's simple: **everyone knows YAML.**
 
 YAML is an extensible markup language. It's ideal for defining a declarative DSL.
 
-Using YAML, `atmos` is easily able to support features like [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/components/inheritance), deep merging, and [policies](/core-concepts/components/validation).
+Using YAML, Atmos is easily able to support features like [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/components/inheritance), deep merging, and [policies](/core-concepts/components/validation).
 
 YAML is also "tool agnostic" (unlike HCL); it's not tied to Terraform or explicitly associated with HashiCorp products.
 - **Every language can read it** (e.g. from python or node. Even read it remotely, e.g. via http)
 - **Every language can write it** (e.g. generate it from a web UI)
 
-There are other cool things we get "for free" by adopting YAML.
-- [YAML anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases) can help DRY up configurations
-- Easy [OPA validation](/core-concepts/components/validation#open-policy-agent-opa)
-- [JSON Schema validation](/core-concepts/components/validation#json-schema)
+There are other cool things we get "for free" by adopting YAML:
+
+- [Atmos Manifests Validation](/reference/schemas) to validate Atmos stack manifests and provide auto-completion
+- [YAML Anchors and Aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases) can help DRY up configurations
+- Easy [OPA Validation for Atmos Components](/core-concepts/components/validation#open-policy-agent-opa)
+- [JSON Schema Validation for Atmos Components](/core-concepts/components/validation#json-schema)
 
 The possibilities are endless.
 
 ### Supports Guardrails Out-of-the-box
 
-Configuration "at scale" requires policies and validation. To err is human. No one reads all the docs. We must clarify expectations using "policies as code" and "shift left" to raise errors early.
+Configuration "at scale" requires policies and validation. To err is human. No one reads all the docs. We must clarify expectations using
+"policies as code" and "shift left" to raise errors early.
 
 Atmos supports OPA to lay down the law and enforce it.
 
@@ -153,11 +156,12 @@ The possibilities are endless.
 
 ### Supports Multiple Inheritance
 
-- Make configuration hierarchical with imports and deep merging.
-- Organize it anyway that make sense for your organization.
+- [Atmos Component Inheritance](/core-concepts/components/inheritance) to combine multiple configurations through ordered deep-merging of configurations
+- Make configuration hierarchical with imports and deep merging
+- Organize it anyway that make sense for your organization
 - Define logical groups of configuration
-- Define something once and reuse it.
-- Know exactly where configuration differs.
+- Define something once and reuse it
+- Know exactly where configuration differs
 
 ## The Problems with Tools
 
@@ -221,6 +225,13 @@ It might help to also understand what Atmos is not attempting to replace:
 
 - Atmos is not an alternative to tools like `terraform`, `kubectl`, `chef`, `puppet`, or `ansible`. Instead, atmos is the type of tool that would orchestrate these tools.
 - Atmos is not an alternative to CI/CD systems. If anything, those systems will still call Atmos.
+
+### Atmos Configuration and UI Example
+
+Just run [`atmos`](/cli/commands/atmos) command to start an interactive UI in the terminal to select an Atmos component and stack and a command to
+execute. Press `Enter` to execute the selected command for the selected component and stack:
+
+![`atmos` CLI command](/img/cli/atmos-cli-command-1.png)
 
 ### Live Demo of Atmos
 
