@@ -34,7 +34,13 @@ Type "# First check you have Atmos installed" Sleep 500ms Enter
 Type "atmos version" Sleep 500ms Enter
 Sleep 1s
 
-Type "# In atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
+Type "# Now let's explore the quick start example" Sleep 500ms Enter
+Type "cd examples/quick-start" Sleep 500ms Enter
+
+Type "ls -al" Sleep 500ms Enter
+Sleep 1s
+
+Type "# In Atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
 Type "atmos" Sleep 500ms Enter
 Sleep 2s
 
@@ -54,12 +60,6 @@ Down Sleep 500ms
 Up Sleep 1s
 Enter
 Sleep 2s
-
-Type "# Now let's explore the quick start example" Sleep 500ms Enter
-Type "cd examples/quick-start" Sleep 500ms Enter
-
-Type "ls -al" Sleep 500ms Enter
-Sleep 1s
 
 Type "# Let's see what components we have available!" Sleep 500ms Enter
 Type "atmos list components" Sleep 500ms Enter
