@@ -74,14 +74,32 @@ Sleep 1s
 
 Type "# Atmos has native workflows for terraform" Sleep 500ms Enter
 Type "atmos terraform --help" Sleep 500ms Enter
+Enter
 Sleep 2s
 
-Type "# Start an interactive UI to review the available Atmos commands, components and stacks..." Sleep 500ms Enter
+Type "# Start an interactive UI to review the Atmos commands, components and stacks, and execute the selected command..." Sleep 500ms Enter
 Type "atmos" Sleep 500ms Enter
+Sleep 1s
+
+Down 1 Sleep 500ms
+Down 1 Sleep 500ms
+Up 1 Sleep 500ms
+Up 1 Sleep 500ms
+Up 1 Sleep 500ms
+Up 1 Sleep 500ms
+Up 1 Sleep 500ms
+Right 1 Sleep 500ms
+Down 1 Sleep 500ms
+Down 1 Sleep 500ms
+Down 1 Sleep 500ms
+Right 1 Sleep 500ms
+Down 1 Sleep 500ms
+Up 1 Sleep 500ms
+Enter Sleep 500ms
 Sleep 2s
 
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
-Sleep 500ms
+Sleep 1s
 
 Type "# or join us in #atmos at https://slack.cloudposse.com!" Sleep 500ms Enter
 Sleep 2s
