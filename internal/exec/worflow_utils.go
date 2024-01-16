@@ -117,3 +117,10 @@ func ExecuteWorkflow(
 
 	return nil
 }
+
+// ExecuteWorkflowList executes `atmos workflow list` command
+func ExecuteWorkflowList(
+	cliConfig schema.CliConfiguration,
+) error {
+	return nil
+}

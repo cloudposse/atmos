@@ -18,7 +18,7 @@ import (
 // ExecuteWorkflowCmd executes an Atmos workflow
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `workflow name`")
+		return errors.New("invalid arguments. The command requires one argument <workflow name>")
 	}
 
 	info, err := processCommandLineArgs("terraform", cmd, args, nil)
@@ -62,7 +62,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowPath = path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, workflowFile)
 	}
 
-	// If the file is specified without an extension, use the default extension
+	// If the workflow file is specified without an extension, use the default extension
 	ext := filepath.Ext(workflowPath)
 	if ext == "" {
 		ext = cfg.DefaultStackConfigFileExtension
@@ -70,7 +70,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		return fmt.Errorf("file '%s' does not exist", workflowPath)
+		return fmt.Errorf("workflow manifest '%s' does not exist", workflowPath)
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
@@ -87,7 +87,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if i, ok := yamlContent["workflows"]; !ok {
-		return errors.New("a workflow file must be a map with top-level 'workflows:' key")
+		return fmt.Errorf("the workflow manifest '%s' must be a map with top-level 'workflows:' key", workflowPath)
 	} else {
 		workflowConfig = i
 	}
@@ -95,12 +95,34 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	workflow := args[0]
 
 	if i, ok := workflowConfig[workflow]; !ok {
-		return fmt.Errorf("the file '%s' does not have the '%s' workflow defined", workflowPath, workflow)
+		return fmt.Errorf("the workflow manifest '%s' does not have the '%s' workflow defined", workflowPath, workflow)
 	} else {
 		workflowDefinition = i
 	}
 
 	err = ExecuteWorkflow(cliConfig, workflow, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ExecuteWorkflowListCmd executes `workflow list` CLI command
+func ExecuteWorkflowListCmd(cmd *cobra.Command, args []string) error {
+	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	if err != nil {
+		return err
+	}
+
+	// InitCliConfig finds and merges CLI configurations in the following order:
+	// system dir, home dir, current dir, ENV vars, command-line arguments
+	cliConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+
+	err = ExecuteWorkflowList(cliConfig)
 	if err != nil {
 		return err
 	}
