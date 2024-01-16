@@ -118,9 +118,9 @@ func ExecuteWorkflow(
 	return nil
 }
 
-// ExecuteWorkflowList executes `atmos workflow list` command
-func ExecuteWorkflowList(
+// ExecuteDescribeWorkflows executes `atmos describe workflows` command
+func ExecuteDescribeWorkflows(
 	cliConfig schema.CliConfiguration,
-) error {
-	return nil
+) (schema.DescribeWorkflowsInfo, error) {
+	return nil, nil
 }

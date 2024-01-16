@@ -107,25 +107,3 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-
-// ExecuteWorkflowListCmd executes `workflow list` CLI command
-func ExecuteWorkflowListCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	// InitCliConfig finds and merges CLI configurations in the following order:
-	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	err = ExecuteWorkflowList(cliConfig)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
