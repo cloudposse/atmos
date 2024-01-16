@@ -26,6 +26,11 @@ func ExecuteWorkflow(
 		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
 	}
 
+	logFunc := u.LogDebug
+	if dryRun {
+		logFunc = u.LogInfo
+	}
+
 	// Check if the steps have the `name` attribute.
 	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
 	// step (the index starts with 1, so the first generated step name would be `step1`)
@@ -41,7 +46,7 @@ func ExecuteWorkflow(
 		}
 	}
 
-	u.LogDebug(cliConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
+	logFunc(cliConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
 	if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAML(workflowDefinition)
@@ -65,7 +70,7 @@ func ExecuteWorkflow(
 		var command = strings.TrimSpace(step.Command)
 		var commandType = strings.TrimSpace(step.Type)
 
-		u.LogDebug(cliConfig, fmt.Sprintf("Executing workflow step: %s", command))
+		logFunc(cliConfig, fmt.Sprintf("Executing workflow step: %s", command))
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -99,7 +104,7 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				u.LogDebug(cliConfig, fmt.Sprintf("Stack: %s", finalStack))
+				logFunc(cliConfig, fmt.Sprintf("Stack: %s", finalStack))
 			}
 
 			if err := ExecuteShellCommand(cliConfig, "atmos", args, ".", []string{}, dryRun, ""); err != nil {

@@ -6,9 +6,21 @@ sidebar_label: Create Workflows
 
 Atmos workflows are a way of combining multiple commands into executable units of work.
 
+<br/>
+
 :::tip
 Refer to [Atmos Workflows](/core-concepts/workflows) for more information about configuring workflows
 :::
+
+<br/>
+
+:::note
+You can use [Atmos Custom Commands](/core-concepts/custom-commands) in [Atmos Workflows](/core-concepts/workflows),
+and [Atmos Workflows](/core-concepts/workflows)
+in [Atmos Custom Commands](/core-concepts/custom-commands)
+:::
+
+<br/>
 
 To define workflows, add the following configurations:
 
@@ -87,4 +99,32 @@ atmos workflow plan-all-vpc-components -f networking
 
 # Execute the workflow `apply-all-components` from the workflow manifest `networking`
 atmos workflow apply-all-components -f networking
+```
+
+<br/>
+
+:::tip
+Refer to [atmos workflow](/cli/commands/workflow) for more information on the `atmos workflow` CLI command
+:::
+
+<br/>
+
+The `atmos workflow` CLI command supports the `--dry-run` flag. If passed, the command will just print information about the executed workflow steps
+without executing them. For example:
+
+<br/>
+
+```shell
+atmos workflow plan-all-vpc-components -f networking --dry-run
+```
+
+```console
+Executing the workflow 'plan-all-vpc-components' from 'stacks/workflows/networking.yaml'
+
+Executing workflow step: terraform plan vpc -s plat-ue2-dev
+Executing workflow step: terraform plan vpc -s plat-uw2-dev
+Executing workflow step: terraform plan vpc -s plat-ue2-staging
+Executing workflow step: terraform plan vpc -s plat-uw2-staging
+Executing workflow step: terraform plan vpc -s plat-ue2-prod
+Executing workflow step: terraform plan vpc -s plat-uw2-prod
 ```

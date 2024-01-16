@@ -15,7 +15,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteWorkflowCmd executes a workflow
+// ExecuteWorkflowCmd executes an Atmos workflow
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `workflow name`")
