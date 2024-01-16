@@ -34,7 +34,15 @@ func ExecuteShellCommand(
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 
-	if redirectStdError == "" {
+	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
+		redirectStdError = "NUL"
+	}
+
+	if redirectStdError == "/dev/stderr" {
+		cmd.Stderr = os.Stderr
+	} else if redirectStdError == "/dev/stdout" {
+		cmd.Stderr = os.Stdout
+	} else if redirectStdError == "" {
 		cmd.Stderr = os.Stderr
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_RDWR|os.O_CREATE, 0644)
