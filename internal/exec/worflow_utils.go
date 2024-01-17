@@ -139,7 +139,7 @@ func ExecuteDescribeWorkflows(
 	}
 
 	for _, file := range files {
-		fmt.Println(file.Name()) //print the files from the directory
+		fmt.Println(file.Name())
 	}
 
 	return nil, nil
