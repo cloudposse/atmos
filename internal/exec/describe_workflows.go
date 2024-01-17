@@ -33,12 +33,29 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		format = "yaml"
 	}
 
-	_, describeWorkflowsList, err := ExecuteDescribeWorkflows(cliConfig)
+	outputType, err := flags.GetString("output")
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, "", describeWorkflowsList)
+	if outputType != "" && outputType != "list" && outputType != "map" {
+		return fmt.Errorf("invalid '--output' flag '%s'. Valid values are 'list' (default) and 'map'", outputType)
+	}
+
+	if outputType == "" {
+		outputType = "list"
+	}
+
+	describeWorkflowsMap, describeWorkflowsList, err := ExecuteDescribeWorkflows(cliConfig)
+	if err != nil {
+		return err
+	}
+
+	if outputType == "list" {
+		err = printOrWriteToFile(format, "", describeWorkflowsList)
+	} else {
+		err = printOrWriteToFile(format, "", describeWorkflowsMap)
+	}
 	if err != nil {
 		return err
 	}

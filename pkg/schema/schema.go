@@ -175,8 +175,8 @@ type WorkflowConfig map[string]WorkflowDefinition
 type WorkflowFile map[string]WorkflowConfig
 
 type DescribeWorkflowsItem struct {
-	Workflow string `yaml:"workflow" json:"workflow" mapstructure:"workflow"`
 	File     string `yaml:"file" json:"file" mapstructure:"file"`
+	Workflow string `yaml:"workflow" json:"workflow" mapstructure:"workflow"`
 }
 
 // EKS update-kubeconfig

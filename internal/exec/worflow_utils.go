@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -143,7 +144,7 @@ func ExecuteDescribeWorkflows(
 	}
 
 	for _, f := range files {
-		fileContent, err := os.ReadFile(f)
+		fileContent, err := os.ReadFile(path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, f))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -162,6 +163,7 @@ func ExecuteDescribeWorkflows(
 		}
 
 		allWorkflowsInFile := lo.Keys(workflowConfig)
+		sort.Strings(allWorkflowsInFile)
 		mapResult[f] = allWorkflowsInFile
 	}
 
