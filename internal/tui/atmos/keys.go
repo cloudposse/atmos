@@ -44,19 +44,19 @@ type keyMap struct {
 var keys = keyMap{
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),
-		key.WithHelp("↑", "k up"),
+		key.WithHelp("↑", "k - up"),
 	),
 	Down: key.NewBinding(
 		key.WithKeys("down", "j"),
-		key.WithHelp("↓", "j down"),
+		key.WithHelp("↓", "j - down"),
 	),
 	Left: key.NewBinding(
 		key.WithKeys("left", "h"),
-		key.WithHelp("←", "h left"),
+		key.WithHelp("←", "h - left"),
 	),
 	Right: key.NewBinding(
 		key.WithKeys("right", "l"),
-		key.WithHelp("→", "l right"),
+		key.WithHelp("→", "l - right"),
 	),
 	Enter: key.NewBinding(
 		key.WithKeys("enter"),
