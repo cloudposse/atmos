@@ -87,7 +87,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if i, ok := yamlContent["workflows"]; !ok {
-		return fmt.Errorf("the workflow manifest '%s' must be a map with top-level 'workflows:' key", workflowPath)
+		return fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
 	} else {
 		workflowConfig = i
 	}

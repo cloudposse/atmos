@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -134,24 +133,29 @@ func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	return false
 }
 
-// GetAllYamlFiles returns all YAML files from the provided path
-func GetAllYamlFiles(path string) ([]string, error) {
-	res := []string{}
+// GetAllFilesInDir returns all files in the provided directory and all subdirectories
+func GetAllFilesInDir(dir string) ([]string, error) {
+	var files []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if !info.IsDir() {
+			files = append(files, strings.TrimPrefix(TrimBasePathFromPath(dir, path), "/"))
+		}
+		return nil
+	})
+	return files, err
+}
 
-	files, err := filepath.Glob(path)
+// GetAllYamlFilesInDir returns all YAML files in the provided directory and all subdirectories
+func GetAllYamlFilesInDir(dir string) ([]string, error) {
+	var res []string
+
+	allFiles, err := GetAllFilesInDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	if files == nil {
-		return nil, fmt.Errorf("there are no files in the provided path '%s'", path)
-	}
 
-	for _, f := range files {
-		isDir, err := IsDirectory(f)
-		if err != nil {
-			return nil, err
-		}
-		if !isDir && IsYaml(f) {
+	for _, f := range allFiles {
+		if IsYaml(f) {
 			res = append(res, f)
 		}
 	}

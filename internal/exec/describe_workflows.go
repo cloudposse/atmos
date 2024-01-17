@@ -33,12 +33,12 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		format = "yaml"
 	}
 
-	describeWorkflowsInfo, err := ExecuteDescribeWorkflows(cliConfig)
+	_, describeWorkflowsList, err := ExecuteDescribeWorkflows(cliConfig)
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, "", describeWorkflowsInfo)
+	err = printOrWriteToFile(format, "", describeWorkflowsList)
 	if err != nil {
 		return err
 	}

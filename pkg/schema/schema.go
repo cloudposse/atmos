@@ -179,8 +179,6 @@ type DescribeWorkflowsItem struct {
 	File     string `yaml:"file" json:"file" mapstructure:"file"`
 }
 
-type DescribeWorkflowsInfo []DescribeWorkflowsItem
-
 // EKS update-kubeconfig
 
 type AwsEksUpdateKubeconfigContext struct {

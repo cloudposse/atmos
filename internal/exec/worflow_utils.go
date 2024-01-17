@@ -2,11 +2,13 @@ package exec
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -123,23 +125,54 @@ func ExecuteWorkflow(
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command
 func ExecuteDescribeWorkflows(
 	cliConfig schema.CliConfiguration,
-) (schema.DescribeWorkflowsInfo, error) {
+) (map[string][]string, []schema.DescribeWorkflowsItem, error) {
+
+	mapResult := make(map[string][]string)
+	listResult := []schema.DescribeWorkflowsItem{}
 
 	if cliConfig.Workflows.BasePath == "" {
-		return nil, errors.New("'workflows.base_path' section must be configured in `atmos.yaml`")
+		return nil, nil, errors.New("'workflows.base_path' must be configured in `atmos.yaml`")
 	}
 
 	workflowsDir := path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath)
 
-	files, err := u.GetAllYamlFiles(workflowsDir)
+	files, err := u.GetAllYamlFilesInDir(workflowsDir)
 	if err != nil {
-		return nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in `atmos.yaml`: %v",
+		return nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in `atmos.yaml`: %v",
 			cliConfig.Workflows.BasePath, err)
 	}
 
-	for _, file := range files {
-		fmt.Println(file)
+	for _, f := range files {
+		fileContent, err := os.ReadFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		var yamlContent schema.WorkflowFile
+		var workflowConfig schema.WorkflowConfig
+
+		if err = yaml.Unmarshal(fileContent, &yamlContent); err != nil {
+			return nil, nil, err
+		}
+
+		if i, ok := yamlContent["workflows"]; !ok {
+			return nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", f)
+		} else {
+			workflowConfig = i
+		}
+
+		allWorkflowsInFile := lo.Keys(workflowConfig)
+		mapResult[f] = allWorkflowsInFile
 	}
 
-	return nil, nil
+	for k, v := range mapResult {
+		for _, w := range v {
+			listResult = append(listResult, schema.DescribeWorkflowsItem{
+				File:     k,
+				Workflow: w,
+			})
+		}
+	}
+
+	return mapResult, listResult, nil
 }
