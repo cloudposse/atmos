@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -122,5 +123,10 @@ func ExecuteWorkflow(
 func ExecuteDescribeWorkflows(
 	cliConfig schema.CliConfiguration,
 ) (schema.DescribeWorkflowsInfo, error) {
+
+	if cliConfig.Workflows.BasePath == "" {
+		return nil, errors.New("'workflows.base_path' section must be configured in the `atmos.yaml` CLI config file")
+	}
+
 	return nil, nil
 }
