@@ -153,7 +153,7 @@ func ExecuteDescribeWorkflows(
 		var workflowConfig schema.WorkflowConfig
 
 		if err = yaml.Unmarshal(fileContent, &yamlContent); err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
 		}
 
 		if i, ok := yamlContent["workflows"]; !ok {
