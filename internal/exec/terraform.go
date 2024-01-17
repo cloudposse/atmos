@@ -212,6 +212,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		runTerraformInit = false
 	}
 
+	// Set `TF_IN_AUTOMATION` ENV var to `true` to suppress verbose instructions after terraform commands
+	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
+	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
+
 	if runTerraformInit {
 		initCommandWithArguments := []string{"init"}
 		if info.SubCommand == "workspace" || cliConfig.Components.Terraform.InitRunReconfigure {
