@@ -328,38 +328,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
-	// Run `terraform workspace` before executing other terraform commands
-	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		workspaceSelectRedirectStdErr := "/dev/stdout"
-
-		// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
-		if info.RedirectStdErr != "" {
-			workspaceSelectRedirectStdErr = info.RedirectStdErr
-		}
-
-		err = ExecuteShellCommand(
-			cliConfig,
-			info.Command,
-			[]string{"workspace", "select", info.TerraformWorkspace},
-			componentPath,
-			info.ComponentEnvList,
-			info.DryRun,
-			workspaceSelectRedirectStdErr,
-		)
-		if err != nil {
-			err = ExecuteShellCommand(
-				cliConfig,
-				info.Command,
-				[]string{"workspace", "new", info.TerraformWorkspace},
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-			)
-			if err != nil {
-				return err
-			}
-		}
+	// Set terraform workspace via ENV var
+	if !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_WORKSPACE=%s", info.TerraformWorkspace))
 	}
 
 	// Check if the terraform command requires a user interaction,
