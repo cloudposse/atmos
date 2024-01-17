@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"strings"
 
@@ -132,14 +131,14 @@ func ExecuteDescribeWorkflows(
 
 	workflowsDir := path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath)
 
-	files, err := os.ReadDir(workflowsDir)
+	files, err := u.GetAllYamlFiles(workflowsDir)
 	if err != nil {
 		return nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in `atmos.yaml`: %v",
 			cliConfig.Workflows.BasePath, err)
 	}
 
 	for _, file := range files {
-		fmt.Println(file.Name())
+		fmt.Println(file)
 	}
 
 	return nil, nil
