@@ -2,6 +2,8 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -125,7 +127,19 @@ func ExecuteDescribeWorkflows(
 ) (schema.DescribeWorkflowsInfo, error) {
 
 	if cliConfig.Workflows.BasePath == "" {
-		return nil, errors.New("'workflows.base_path' section must be configured in the `atmos.yaml` CLI config file")
+		return nil, errors.New("'workflows.base_path' section must be configured in `atmos.yaml`")
+	}
+
+	workflowsDir := path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath)
+
+	files, err := os.ReadDir(workflowsDir)
+	if err != nil {
+		return nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in `atmos.yaml`: %v",
+			cliConfig.Workflows.BasePath, err)
+	}
+
+	for _, file := range files {
+		fmt.Println(file.Name()) //print the files from the directory
 	}
 
 	return nil, nil
