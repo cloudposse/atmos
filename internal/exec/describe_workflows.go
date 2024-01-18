@@ -38,23 +38,25 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if outputType != "" && outputType != "list" && outputType != "map" {
-		return fmt.Errorf("invalid '--output' flag '%s'. Valid values are 'list' (default) and 'map'", outputType)
+	if outputType != "" && outputType != "list" && outputType != "map" && outputType != "all" {
+		return fmt.Errorf("invalid '--output' flag '%s'. Valid values are 'list' (default), 'map' and 'all'", outputType)
 	}
 
 	if outputType == "" {
 		outputType = "list"
 	}
 
-	describeWorkflowsMap, describeWorkflowsList, err := ExecuteDescribeWorkflows(cliConfig)
+	describeWorkflowsList, describeWorkflowsMap, describeWorkflowsAll, err := ExecuteDescribeWorkflows(cliConfig)
 	if err != nil {
 		return err
 	}
 
 	if outputType == "list" {
 		err = printOrWriteToFile(format, "", describeWorkflowsList)
-	} else {
+	} else if outputType == "map" {
 		err = printOrWriteToFile(format, "", describeWorkflowsMap)
+	} else {
+		err = printOrWriteToFile(format, "", describeWorkflowsAll)
 	}
 	if err != nil {
 		return err

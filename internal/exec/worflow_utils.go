@@ -126,38 +126,39 @@ func ExecuteWorkflow(
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command
 func ExecuteDescribeWorkflows(
 	cliConfig schema.CliConfiguration,
-) (map[string][]string, []schema.DescribeWorkflowsItem, error) {
+) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowConfig, error) {
 
-	mapResult := make(map[string][]string)
 	listResult := []schema.DescribeWorkflowsItem{}
+	mapResult := make(map[string][]string)
+	allResult := make(map[string]schema.WorkflowConfig)
 
 	if cliConfig.Workflows.BasePath == "" {
-		return nil, nil, errors.New("'workflows.base_path' must be configured in `atmos.yaml`")
+		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in `atmos.yaml`")
 	}
 
 	workflowsDir := path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath)
 
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in `atmos.yaml`: %v",
+		return nil, nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in `atmos.yaml`: %v",
 			cliConfig.Workflows.BasePath, err)
 	}
 
 	for _, f := range files {
 		fileContent, err := os.ReadFile(path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, f))
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		var yamlContent schema.WorkflowFile
 		var workflowConfig schema.WorkflowConfig
 
 		if err = yaml.Unmarshal(fileContent, &yamlContent); err != nil {
-			return nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
+			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
 		}
 
 		if i, ok := yamlContent["workflows"]; !ok {
-			return nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", f)
+			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", f)
 		} else {
 			workflowConfig = i
 		}
@@ -165,6 +166,7 @@ func ExecuteDescribeWorkflows(
 		allWorkflowsInFile := lo.Keys(workflowConfig)
 		sort.Strings(allWorkflowsInFile)
 		mapResult[f] = allWorkflowsInFile
+		allResult[f] = workflowConfig
 	}
 
 	for k, v := range mapResult {
@@ -176,5 +178,5 @@ func ExecuteDescribeWorkflows(
 		}
 	}
 
-	return mapResult, listResult, nil
+	return listResult, mapResult, allResult, nil
 }
