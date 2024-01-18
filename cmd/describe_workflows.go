@@ -16,6 +16,7 @@ var describeWorkflowsCmd = &cobra.Command{
 		"describe workflows --format json\n" +
 		"describe workflows -f yaml\n" +
 		"describe workflows --output list\n" +
+		"describe workflows -o map -f json\n" +
 		"describe workflows -o map",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
