@@ -145,7 +145,14 @@ func ExecuteDescribeWorkflows(
 	}
 
 	for _, f := range files {
-		fileContent, err := os.ReadFile(path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, f))
+		var workflowPath string
+		if u.IsPathAbsolute(cliConfig.Workflows.BasePath) {
+			workflowPath = path.Join(cliConfig.Workflows.BasePath, f)
+		} else {
+			workflowPath = path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, f)
+		}
+
+		fileContent, err := os.ReadFile(workflowPath)
 		if err != nil {
 			return nil, nil, nil, err
 		}
