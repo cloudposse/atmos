@@ -70,7 +70,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		return fmt.Errorf("workflow manifest file '%s' does not exist", workflowPath)
+		return fmt.Errorf("the workflow manifest file '%s' does not exist", workflowPath)
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
