@@ -26,7 +26,6 @@
 
 -->
 
-![atmos](docs/img/atmos-logo-128.svg)
 
 `atmos` - Universal Tool for DevOps and Cloud Automation.
 
