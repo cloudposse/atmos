@@ -34,17 +34,16 @@ screenshots:
 
 description: |-
   
-  `atmos` - Universal Tool for DevOps and Cloud Automation.
+  Atmos simplifies complex cloud architectures and DevOps workflows into [intuitive CLI commands](https://atmos.tools/category/cli). Its strength in managing [DRY configurations at scale](https://atmos.tools/category/core-concepts/) is supported by robust [design patterns](https://atmos.tools/design-patterns/), comprehensive [documentation](https://atmos.tools/), and a [passionate community](https://slack.cloudposse.com/), making it a versatile [tool for both startups and enterprises](https://cloudposse.com/). Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes [policy controls](https://atmos.tools/core-concepts/components/validation), [vendoring](https://atmos.tools/core-concepts/vendoring/), and [GitOps capabilities](https://atmos.tools/category/github-actions) out of the box. Everything is open source and free.
 
 introduction: |-
 
-  [Atmos](https://atmos.tools) is a workflow automation tool. Atmos is lets you take a complex workflow and turn it into a parameterized CLI. 
-  You can then run the CLI anywhere, such as locally or in CI/CD.
+  [Atmos](https://atmos.tools) centralizes DevOps and cloud automation into a robust command-line tool, streamlining intricate workflows into straightforward CLI commands. Leveraging advanced hierarchical configurations, it efficiently orchestrates both local and CI/CD pipeline tasks, optimizing infrastructure management for engineers and cloud architects alike. You can then run the CLI anywhere, such as locally or in CI/CD.
 
-  The Atmos project consists of a command-line tool, a `Go` library, and even terraform provider.  It provides numerous conventions to help you provision, manage, and orchestrate workflows across various toolchains. You can 
+  The Atmos project consists of a command-line tool, a `Go` library, and even terraform provider.  It provides numerous [conventions](https://atmos.tools/design-patterns/) to help you provision, manage, and orchestrate workflows across various toolchains. You can 
   even access the configurations natively from within terraform using our [`terraform-provider-utils`](https://github.com/cloudposse/terraform-provider-utils/).
 
-  Cloud Posse uses this tool extensively for automating cloud infrastructure with [Terraform](https://hashicorp.com/) and [Kubernetes](https://kubernetes.io/), but it can be used to automate any complex workflow.
+  [Cloud Posse](https://cloudposse.com/) uses this tool extensively for automating cloud infrastructure with [Terraform](https://hashicorp.com/) and [Kubernetes](https://kubernetes.io/), but it can be used to automate any complex workflow.
 
   ## Common Use-cases
 
@@ -64,7 +63,7 @@ introduction: |-
 
   In essence, it's a tool that orchestrates the other CLI tools in a consistent and self-explaining manner.
 
-  It's a superset of all other tools and task runners (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc.)
+  It's a superset of all other tools (e.g. `make`, `terragrunt`, `terraform`, `aws` cli, `gcloud`, etc.)
   and is intended to be used to tie everything together, so you can provide a simple CLI interface for your developers.
 
   Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns and best practices, such as:
