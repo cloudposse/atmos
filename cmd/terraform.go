@@ -12,7 +12,7 @@ import (
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
 	Short:              "Execute 'terraform' commands",
-	Long:               `This command runs terraform commands`,
+	Long:               `This command executes 'terraform'' commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		var argsAfterDoubleDash []string
