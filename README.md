@@ -1,7 +1,7 @@
 
 <!-- markdownlint-disable -->
 [![Project Banner](.github/banner.png?raw=true)](https://cpco.io/homepage)
- [![Latest Release](https://img.shields.io/github/release/cloudposse/atmos.svg)](https://github.com/cloudposse/atmos/releases/latest) [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
+ [![Latest Release](https://img.shields.io/github/release/cloudposse/atmos.svg)](https://github.com/cloudposse/atmos/releases/latest) [![Tests](https://github.com/cloudposse/atmos/actions/workflows/test.yml/badge.svg)](https://github.com/cloudposse/atmos/actions/workflows/test.yml) [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
 <!-- markdownlint-restore -->
 
 

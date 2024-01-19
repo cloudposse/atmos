@@ -10,6 +10,9 @@ badges:
   - name: Latest Release
     image: https://img.shields.io/github/release/cloudposse/atmos.svg
     url: https://github.com/cloudposse/atmos/releases/latest
+  - name: Tests
+    image: https://github.com/cloudposse/atmos/actions/workflows/test.yml/badge.svg
+    url: https://github.com/cloudposse/atmos/actions/workflows/test.yml
   - name: Slack Community
     image: https://slack.cloudposse.com/badge.svg
     url: https://slack.cloudposse.com
