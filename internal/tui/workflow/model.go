@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"fmt"
+	"github.com/cloudposse/atmos/pkg/schema"
+
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -9,41 +11,36 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	mouseZone "github.com/lrstanley/bubblezone"
 	"github.com/samber/lo"
-	"sort"
 )
 
 type App struct {
-	help                help.Model
-	loaded              bool
-	columnViews         []columnView
-	quit                bool
-	commands            []string
-	stacksComponentsMap map[string][]string
-	componentsStacksMap map[string][]string
-	selectedCommand     string
-	selectedComponent   string
-	selectedStack       string
-	componentsInStacks  bool
-	columnPointer       int
+	help               help.Model
+	loaded             bool
+	columnViews        []columnView
+	quit               bool
+	workflows          map[string]schema.WorkflowConfig
+	selectedCommand    string
+	selectedComponent  string
+	selectedStack      string
+	componentsInStacks bool
+	columnPointer      int
 }
 
-func NewApp(commands []string, stacksComponentsMap map[string][]string, componentsStacksMap map[string][]string) *App {
+func NewApp(workflows map[string]schema.WorkflowConfig) *App {
 	h := help.New()
 	h.ShowAll = true
 
 	app := &App{
-		help:                h,
-		columnPointer:       0,
-		commands:            commands,
-		stacksComponentsMap: stacksComponentsMap,
-		componentsStacksMap: componentsStacksMap,
-		selectedComponent:   "",
-		selectedStack:       "",
-		selectedCommand:     "",
-		componentsInStacks:  true,
+		help:               h,
+		columnPointer:      0,
+		selectedComponent:  "",
+		selectedStack:      "",
+		selectedCommand:    "",
+		componentsInStacks: true,
+		workflows:          workflows,
 	}
 
-	app.initViews(commands, stacksComponentsMap)
+	app.initViews(workflows)
 
 	return app
 }
@@ -163,11 +160,11 @@ func (app *App) GetSelectedCommand() string {
 	return app.selectedCommand
 }
 
-func (app *App) GetSelectedStack() string {
+func (app *App) GetSelectedWorkflow() string {
 	return app.selectedStack
 }
 
-func (app *App) GetSelectedComponent() string {
+func (app *App) GetSelectedWorkflowFile() string {
 	return app.selectedComponent
 }
 
@@ -175,50 +172,50 @@ func (app *App) ExitStatusQuit() bool {
 	return app.quit
 }
 
-func (app *App) initViews(commands []string, stacksComponentsMap map[string][]string) {
+func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	app.columnViews = []columnView{
 		newColumn(0),
 		newColumn(1),
 		newColumn(2),
 	}
 
-	commandItems := lo.Map(commands, func(s string, _ int) list.Item {
-		return listItem(s)
-	})
-
-	stackItems := []list.Item{}
-	componentItems := []list.Item{}
-	stacksComponentsMapKeys := lo.Keys(stacksComponentsMap)
-	sort.Strings(stacksComponentsMapKeys)
-
-	if len(stacksComponentsMapKeys) > 0 {
-		stackItems = lo.Map(stacksComponentsMapKeys, func(s string, _ int) list.Item {
-			return listItem(s)
-		})
-
-		firstStack := stacksComponentsMapKeys[0]
-		componentItems = lo.Map(stacksComponentsMap[firstStack], func(s string, _ int) list.Item {
-			return listItem(s)
-		})
-	}
+	//commandItems := lo.Map(commands, func(s string, _ int) list.Item {
+	//	return listItem(s)
+	//})
+	//
+	//stackItems := []list.Item{}
+	//componentItems := []list.Item{}
+	//stacksComponentsMapKeys := lo.Keys(stacksComponentsMap)
+	//sort.Strings(stacksComponentsMapKeys)
+	//
+	//if len(stacksComponentsMapKeys) > 0 {
+	//	stackItems = lo.Map(stacksComponentsMapKeys, func(s string, _ int) list.Item {
+	//		return listItem(s)
+	//	})
+	//
+	//	firstStack := stacksComponentsMapKeys[0]
+	//	componentItems = lo.Map(stacksComponentsMap[firstStack], func(s string, _ int) list.Item {
+	//		return listItem(s)
+	//	})
+	//}
 
 	app.columnViews[0].list.Title = "Commands"
 	app.columnViews[0].list.SetDelegate(listItemDelegate{})
-	app.columnViews[0].list.SetItems(commandItems)
+	//app.columnViews[0].list.SetItems(commandItems)
 	app.columnViews[0].list.SetFilteringEnabled(true)
 	app.columnViews[0].list.SetShowFilter(true)
 	app.columnViews[0].list.InfiniteScrolling = true
 
 	app.columnViews[1].list.Title = "Stacks"
 	app.columnViews[1].list.SetDelegate(listItemDelegate{})
-	app.columnViews[1].list.SetItems(stackItems)
+	//app.columnViews[1].list.SetItems(stackItems)
 	app.columnViews[1].list.SetFilteringEnabled(true)
 	app.columnViews[1].list.SetShowFilter(true)
 	app.columnViews[1].list.InfiniteScrolling = true
 
 	app.columnViews[2].list.Title = "Components"
 	app.columnViews[2].list.SetDelegate(listItemDelegate{})
-	app.columnViews[2].list.SetItems(componentItems)
+	//app.columnViews[2].list.SetItems(componentItems)
 	app.columnViews[2].list.SetFilteringEnabled(true)
 	app.columnViews[2].list.SetShowFilter(true)
 	app.columnViews[2].list.InfiniteScrolling = true
@@ -244,13 +241,13 @@ func (app *App) updateStackAndComponentViews() {
 		if selected == nil {
 			return
 		}
-		selectedItem := fmt.Sprintf("%s", selected)
+		//selectedItem := fmt.Sprintf("%s", selected)
 		var itemStrings []string
-		if app.componentsInStacks {
-			itemStrings = app.stacksComponentsMap[selectedItem]
-		} else {
-			itemStrings = app.componentsStacksMap[selectedItem]
-		}
+		//if app.componentsInStacks {
+		//	itemStrings = app.stacksComponentsMap[selectedItem]
+		//} else {
+		//	itemStrings = app.componentsStacksMap[selectedItem]
+		//}
 		items := lo.Map(itemStrings, func(s string, _ int) list.Item {
 			return listItem(s)
 		})
@@ -319,35 +316,4 @@ func (app *App) flipStackAndComponentViews() {
 	app.columnViews[2] = i
 
 	// Reset the lists
-	if app.componentsInStacks {
-		stacksComponentsMapKeys := lo.Keys(app.stacksComponentsMap)
-		sort.Strings(stacksComponentsMapKeys)
-
-		if len(stacksComponentsMapKeys) > 0 {
-			stackItems := lo.Map(stacksComponentsMapKeys, func(s string, _ int) list.Item {
-				return listItem(s)
-			})
-			firstStack := stacksComponentsMapKeys[0]
-			componentItems := lo.Map(app.stacksComponentsMap[firstStack], func(s string, _ int) list.Item {
-				return listItem(s)
-			})
-			app.columnViews[1].list.SetItems(stackItems)
-			app.columnViews[2].list.SetItems(componentItems)
-		}
-	} else {
-		componentsStacksMapKeys := lo.Keys(app.componentsStacksMap)
-		sort.Strings(componentsStacksMapKeys)
-
-		if len(componentsStacksMapKeys) > 0 {
-			componentItems := lo.Map(componentsStacksMapKeys, func(s string, _ int) list.Item {
-				return listItem(s)
-			})
-			firstComponent := componentsStacksMapKeys[0]
-			stackItems := lo.Map(app.componentsStacksMap[firstComponent], func(s string, _ int) list.Item {
-				return listItem(s)
-			})
-			app.columnViews[1].list.SetItems(componentItems)
-			app.columnViews[2].list.SetItems(stackItems)
-		}
-	}
 }

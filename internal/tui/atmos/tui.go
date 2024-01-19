@@ -9,6 +9,7 @@ import (
 func Execute(commands []string, stacksComponentsMap map[string][]string, componentsStacksMap map[string][]string) (*App, error) {
 	mouseZone.NewGlobal()
 	mouseZone.SetEnabled(true)
+
 	app := NewApp(commands, stacksComponentsMap, componentsStacksMap)
 	p := tea.NewProgram(app, tea.WithMouseCellMotion())
 
