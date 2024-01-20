@@ -11,6 +11,7 @@ import (
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
+	Aliases:            []string{"tf"},
 	Short:              "Execute 'terraform' commands",
 	Long:               `This command executes 'terraform'' commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
