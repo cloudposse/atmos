@@ -88,6 +88,6 @@ var keys = keyMap{
 	),
 	FlipStacksComponents: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "flip stacks/components"),
+		key.WithHelp("tab", "flip files/workflows"),
 	),
 }

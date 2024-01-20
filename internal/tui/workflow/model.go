@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -14,16 +15,15 @@ import (
 )
 
 type App struct {
-	help               help.Model
-	loaded             bool
-	columnViews        []columnView
-	quit               bool
-	workflows          map[string]schema.WorkflowConfig
-	selectedCommand    string
-	selectedComponent  string
-	selectedStack      string
-	componentsInStacks bool
-	columnPointer      int
+	help                     help.Model
+	loaded                   bool
+	columnViews              []columnView
+	quit                     bool
+	workflows                map[string]schema.WorkflowConfig
+	selectedWorkflowFile     string
+	selectedWorkflow         string
+	workflowsInWorkflowFiles bool
+	columnPointer            int
 }
 
 func NewApp(workflows map[string]schema.WorkflowConfig) *App {
@@ -31,13 +31,12 @@ func NewApp(workflows map[string]schema.WorkflowConfig) *App {
 	h.ShowAll = true
 
 	app := &App{
-		help:               h,
-		columnPointer:      0,
-		selectedComponent:  "",
-		selectedStack:      "",
-		selectedCommand:    "",
-		componentsInStacks: true,
-		workflows:          workflows,
+		help:                     h,
+		columnPointer:            0,
+		selectedWorkflowFile:     "",
+		selectedWorkflow:         "",
+		workflowsInWorkflowFiles: true,
+		workflows:                workflows,
 	}
 
 	app.initViews(workflows)
@@ -69,12 +68,12 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		if message.Button == tea.MouseButtonWheelUp {
 			app.columnViews[app.columnPointer].list.CursorUp()
-			app.updateStackAndComponentViews()
+			app.updateWorkflowsAndWorkflowFilesViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonWheelDown {
 			app.columnViews[app.columnPointer].list.CursorDown()
-			app.updateStackAndComponentViews()
+			app.updateWorkflowsAndWorkflowFilesViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonLeft {
@@ -108,11 +107,11 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, tea.Quit
 		case key.Matches(message, keys.Up):
 			app.columnViews[app.columnPointer].list.CursorUp()
-			app.updateStackAndComponentViews()
+			app.updateWorkflowsAndWorkflowFilesViews()
 			return app, nil
 		case key.Matches(message, keys.Down):
 			app.columnViews[app.columnPointer].list.CursorDown()
-			app.updateStackAndComponentViews()
+			app.updateWorkflowsAndWorkflowFilesViews()
 			return app, nil
 		case key.Matches(message, keys.Left):
 			app.columnViews[app.columnPointer].Blur()
@@ -126,7 +125,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, nil
 		case key.Matches(message, keys.FlipStacksComponents):
 			// Flip the stacks and components views
-			app.flipStackAndComponentViews()
+			app.flipWorkflowsAndWorkflowFilesViews()
 			return app, nil
 		}
 	}
@@ -156,16 +155,12 @@ func (app *App) View() string {
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
 }
 
-func (app *App) GetSelectedCommand() string {
-	return app.selectedCommand
-}
-
 func (app *App) GetSelectedWorkflow() string {
-	return app.selectedStack
+	return app.selectedWorkflow
 }
 
 func (app *App) GetSelectedWorkflowFile() string {
-	return app.selectedComponent
+	return app.selectedWorkflowFile
 }
 
 func (app *App) ExitStatusQuit() bool {
@@ -199,21 +194,21 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	//	})
 	//}
 
-	app.columnViews[0].list.Title = "Commands"
+	app.columnViews[0].list.Title = "Files"
 	app.columnViews[0].list.SetDelegate(listItemDelegate{})
 	//app.columnViews[0].list.SetItems(commandItems)
 	app.columnViews[0].list.SetFilteringEnabled(true)
 	app.columnViews[0].list.SetShowFilter(true)
 	app.columnViews[0].list.InfiniteScrolling = true
 
-	app.columnViews[1].list.Title = "Stacks"
+	app.columnViews[1].list.Title = "Workflows"
 	app.columnViews[1].list.SetDelegate(listItemDelegate{})
 	//app.columnViews[1].list.SetItems(stackItems)
 	app.columnViews[1].list.SetFilteringEnabled(true)
 	app.columnViews[1].list.SetShowFilter(true)
 	app.columnViews[1].list.InfiniteScrolling = true
 
-	app.columnViews[2].list.Title = "Components"
+	app.columnViews[2].list.Title = "Workflow"
 	app.columnViews[2].list.SetDelegate(listItemDelegate{})
 	//app.columnViews[2].list.SetItems(componentItems)
 	app.columnViews[2].list.SetFilteringEnabled(true)
@@ -222,7 +217,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 }
 
 func (app *App) getNextViewPointer() int {
-	if app.columnPointer == 2 {
+	if app.columnPointer == 1 {
 		return 0
 	}
 	return app.columnPointer + 1
@@ -230,12 +225,12 @@ func (app *App) getNextViewPointer() int {
 
 func (app *App) getPrevViewPointer() int {
 	if app.columnPointer == 0 {
-		return 2
+		return 1
 	}
 	return app.columnPointer - 1
 }
 
-func (app *App) updateStackAndComponentViews() {
+func (app *App) updateWorkflowsAndWorkflowFilesViews() {
 	if app.columnPointer == 1 {
 		selected := app.columnViews[1].list.SelectedItem()
 		if selected == nil {
@@ -243,7 +238,7 @@ func (app *App) updateStackAndComponentViews() {
 		}
 		//selectedItem := fmt.Sprintf("%s", selected)
 		var itemStrings []string
-		//if app.componentsInStacks {
+		//if app.workflowsInWorkflowFiles {
 		//	itemStrings = app.stacksComponentsMap[selectedItem]
 		//} else {
 		//	itemStrings = app.componentsStacksMap[selectedItem]
@@ -259,61 +254,51 @@ func (app *App) updateStackAndComponentViews() {
 
 func (app *App) execute() {
 	app.quit = false
-	commandsViewIndex := 0
-	var componentsViewIndex int
-	var stacksViewIndex int
+	var workflowsViewIndex int
+	var workflowFilesViewIndex int
 
-	selectedCommand := app.columnViews[commandsViewIndex].list.SelectedItem()
-	if selectedCommand != nil {
-		app.selectedCommand = fmt.Sprintf("%s", selectedCommand)
+	if app.workflowsInWorkflowFiles {
+		workflowFilesViewIndex = 0
+		workflowsViewIndex = 1
 	} else {
-		app.selectedCommand = ""
+		workflowFilesViewIndex = 1
+		workflowsViewIndex = 0
 	}
 
-	if app.componentsInStacks {
-		stacksViewIndex = 1
-		componentsViewIndex = 2
+	selectedWorkflowFile := app.columnViews[workflowFilesViewIndex].list.SelectedItem()
+	if selectedWorkflowFile != nil {
+		app.selectedWorkflowFile = fmt.Sprintf("%s", selectedWorkflowFile)
 	} else {
-		stacksViewIndex = 2
-		componentsViewIndex = 1
+		app.selectedWorkflowFile = ""
 	}
 
-	selectedComponent := app.columnViews[componentsViewIndex].list.SelectedItem()
-	if selectedComponent != nil {
-		app.selectedComponent = fmt.Sprintf("%s", selectedComponent)
+	selectedWorkflow := app.columnViews[workflowsViewIndex].list.SelectedItem()
+	if selectedWorkflow != nil {
+		app.selectedWorkflow = fmt.Sprintf("%s", selectedWorkflow)
 	} else {
-		app.selectedComponent = ""
-	}
-
-	selectedStack := app.columnViews[stacksViewIndex].list.SelectedItem()
-	if selectedStack != nil {
-		app.selectedStack = fmt.Sprintf("%s", selectedStack)
-	} else {
-		app.selectedStack = ""
+		app.selectedWorkflow = ""
 	}
 }
 
-func (app *App) flipStackAndComponentViews() {
-	app.componentsInStacks = !app.componentsInStacks
+func (app *App) flipWorkflowsAndWorkflowFilesViews() {
+	app.workflowsInWorkflowFiles = !app.workflowsInWorkflowFiles
+	app.columnViews[0].list.ResetFilter()
+	app.columnViews[0].list.ResetSelected()
 	app.columnViews[1].list.ResetFilter()
 	app.columnViews[1].list.ResetSelected()
-	app.columnViews[2].list.ResetFilter()
-	app.columnViews[2].list.ResetSelected()
 
 	// Keep the focused view at the same position
-	if app.columnViews[1].Focused() {
-		app.columnViews[1].Blur()
-		app.columnViews[2].Focus()
-	} else if app.columnViews[2].Focused() {
-		app.columnViews[2].Blur()
+	if app.columnViews[0].Focused() {
+		app.columnViews[0].Blur()
 		app.columnViews[1].Focus()
+	} else if app.columnViews[1].Focused() {
+		app.columnViews[1].Blur()
+		app.columnViews[0].Focus()
 	}
 
-	// Swap stacks/components
+	// Swap workflowsFiles/workflows
 	// The view will be updated by the framework
-	i := app.columnViews[1]
-	app.columnViews[1] = app.columnViews[2]
-	app.columnViews[2] = i
-
-	// Reset the lists
+	i := app.columnViews[0]
+	app.columnViews[0] = app.columnViews[1]
+	app.columnViews[1] = i
 }
