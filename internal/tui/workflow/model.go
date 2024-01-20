@@ -17,7 +17,7 @@ import (
 type App struct {
 	help                 help.Model
 	loaded               bool
-	columnViews          []columnView
+	columnViews          []listColumnView
 	quit                 bool
 	workflows            map[string]schema.WorkflowConfig
 	selectedWorkflowFile string
@@ -57,7 +57,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i := 0; i < len(app.columnViews); i++ {
 			var res tea.Model
 			res, cmd = app.columnViews[i].Update(message)
-			app.columnViews[i] = *res.(*columnView)
+			app.columnViews[i] = *res.(*listColumnView)
 			cmds = append(cmds, cmd)
 		}
 		app.loaded = true
@@ -93,7 +93,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, tea.Quit
 		case key.Matches(message, keys.Escape):
 			res, cmd := app.columnViews[app.columnPointer].Update(msg)
-			app.columnViews[app.columnPointer] = *res.(*columnView)
+			app.columnViews[app.columnPointer] = *res.(*listColumnView)
 			if cmd == nil {
 				return app, nil
 			} else {
@@ -126,7 +126,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Send all other messages to the selected child view
 	res, cmd := app.columnViews[app.columnPointer].Update(msg)
-	app.columnViews[app.columnPointer] = *res.(*columnView)
+	app.columnViews[app.columnPointer] = *res.(*listColumnView)
 	return app, cmd
 }
 
@@ -162,7 +162,7 @@ func (app *App) ExitStatusQuit() bool {
 }
 
 func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
-	app.columnViews = []columnView{
+	app.columnViews = []listColumnView{
 		newListColumn(0),
 		newListColumn(1),
 		newListColumn(2),

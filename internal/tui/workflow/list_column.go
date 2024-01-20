@@ -7,7 +7,7 @@ import (
 	mouseZone "github.com/lrstanley/bubblezone"
 )
 
-type columnView struct {
+type listColumnView struct {
 	id      string
 	focused bool
 	list    list.Model
@@ -15,19 +15,19 @@ type columnView struct {
 	width   int
 }
 
-func (c *columnView) Focus() {
+func (c *listColumnView) Focus() {
 	c.focused = true
 }
 
-func (c *columnView) Blur() {
+func (c *listColumnView) Blur() {
 	c.focused = false
 }
 
-func (c *columnView) Focused() bool {
+func (c *listColumnView) Focused() bool {
 	return c.focused
 }
 
-func newListColumn(columnPointer int) columnView {
+func newListColumn(columnPointer int) listColumnView {
 	var focused bool
 	if columnPointer == 0 {
 		focused = true
@@ -36,7 +36,7 @@ func newListColumn(columnPointer int) columnView {
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	defaultList.SetShowHelp(false)
 
-	return columnView{
+	return listColumnView{
 		id:      mouseZone.NewPrefix(),
 		focused: focused,
 		list:    defaultList,
@@ -44,12 +44,12 @@ func newListColumn(columnPointer int) columnView {
 }
 
 // Init does initial setup
-func (c *columnView) Init() tea.Cmd {
+func (c *listColumnView) Init() tea.Cmd {
 	return nil
 }
 
 // Update handles all the I/O
-func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (c *listColumnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -60,15 +60,15 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return c, cmd
 }
 
-func (c *columnView) View() string {
+func (c *listColumnView) View() string {
 	return mouseZone.Mark(c.id, c.getStyle().Render(c.list.View()))
 }
 
-func (c *columnView) setSize(width, height int) {
+func (c *listColumnView) setSize(width, height int) {
 	c.width = width / 4
 }
 
-func (c *columnView) getStyle() lipgloss.Style {
+func (c *listColumnView) getStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
 
 	if c.Focused() {
