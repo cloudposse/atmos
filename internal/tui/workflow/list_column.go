@@ -27,7 +27,7 @@ func (c *columnView) Focused() bool {
 	return c.focused
 }
 
-func newColumn(columnPointer int) columnView {
+func newListColumn(columnPointer int) columnView {
 	var focused bool
 	if columnPointer == 0 {
 		focused = true
