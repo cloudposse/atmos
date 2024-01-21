@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	codeviewport "github.com/cloudposse/atmos/internal/tui/components"
+	codeviewport "github.com/cloudposse/atmos/internal/tui/components/code_viewport"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -23,9 +23,12 @@ func New() Model {
 
 // Init initializes the UI
 func (m Model) Init() tea.Cmd {
-	cmd := m.code.SetFileName("code_viewport/code_viewport.go")
+	return nil
+}
 
-	return cmd
+// SetContent sets content
+func (m *Model) SetContent(content string, extension string) tea.Cmd {
+	return m.code.SetContent(content, extension)
 }
 
 // Update handles all UI interactions

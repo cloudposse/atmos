@@ -1,8 +1,6 @@
-package components
+package code_viewport
 
 import (
-	"path/filepath"
-
 	u "github.com/cloudposse/atmos/internal/tui/utils"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -17,9 +15,9 @@ const (
 	padding = 1
 )
 
-func highlightContent(fileName, syntaxTheme string) tea.Cmd {
+func highlightContent(content, extension, syntaxTheme string) tea.Cmd {
 	return func() tea.Msg {
-		highlightedContent, err := u.HighlightText(fileName, filepath.Ext(fileName), syntaxTheme)
+		highlightedContent, err := u.HighlightText(content, extension, syntaxTheme)
 		if err != nil {
 			return errorMsg(err)
 		}
@@ -68,11 +66,11 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// SetFileName sets current file to highlight.
-func (m *Model) SetFileName(filename string) tea.Cmd {
-	m.Filename = filename
+// SetContent sets content
+func (m *Model) SetContent(content string, extension string) tea.Cmd {
+	m.Filename = content
 
-	return highlightContent(filename, m.SyntaxTheme)
+	return highlightContent(content, extension, m.SyntaxTheme)
 }
 
 // SetIsActive sets if the bubble is currently active.
