@@ -57,7 +57,7 @@ func newColumn(columnPointer int, viewType string) columnView {
 	}
 
 	if viewType == "codeView" {
-		codeView = codeview.New(true, true, lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"}, "solarized-dark256")
+		codeView = codeview.New("solarized-dark256")
 	}
 
 	return columnView{
@@ -128,9 +128,8 @@ func (c *columnView) getStyle() lipgloss.Style {
 }
 
 // SetContent sets content
-func (c *columnView) SetContent(content string, language string) tea.Cmd {
+func (c *columnView) SetContent(content string, language string) {
 	if c.viewType == "codeView" {
-		return c.codeView.SetContent(content, language)
+		c.codeView.SetContent(content, language)
 	}
-	return nil
 }
