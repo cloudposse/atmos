@@ -66,12 +66,12 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		if message.Button == tea.MouseButtonWheelUp {
-			app.columnViews[app.columnPointer].list.CursorUp()
+			app.columnViews[app.columnPointer].CursorUp()
 			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonWheelDown {
-			app.columnViews[app.columnPointer].list.CursorDown()
+			app.columnViews[app.columnPointer].CursorDown()
 			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		}
@@ -105,11 +105,11 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.execute()
 			return app, tea.Quit
 		case key.Matches(message, keys.Up):
-			app.columnViews[app.columnPointer].list.CursorUp()
+			app.columnViews[app.columnPointer].CursorUp()
 			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		case key.Matches(message, keys.Down):
-			app.columnViews[app.columnPointer].list.CursorDown()
+			app.columnViews[app.columnPointer].CursorDown()
 			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		case key.Matches(message, keys.Left):
@@ -164,9 +164,9 @@ func (app *App) ExitStatusQuit() bool {
 
 func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	app.columnViews = []columnView{
-		newColumn(0),
-		newColumn(1),
-		newColumn(2),
+		newColumn(0, "list"),
+		newColumn(1, "list"),
+		newColumn(2, "codeView"),
 	}
 
 	workflowFileItems := []list.Item{}

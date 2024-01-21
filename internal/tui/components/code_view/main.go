@@ -97,7 +97,7 @@ func (m *Model) SetSize(width int, height int) {
 }
 
 // Update handles updating the UI
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
 		cmds []tea.Cmd
@@ -112,7 +112,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 		m.Viewport.SetContent(m.HighlightedContent)
 
-		return m, nil
+		return *m, nil
 	case errorMsg:
 		m.HighlightedContent = lipgloss.NewStyle().
 			Width(m.Viewport.Width).
@@ -121,7 +121,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 		m.Viewport.SetContent(m.HighlightedContent)
 
-		return m, nil
+		return *m, nil
 	}
 
 	if m.Active {
@@ -129,7 +129,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 
-	return m, tea.Batch(cmds...)
+	return *m, tea.Batch(cmds...)
 }
 
 // View returns a string representation of the model
