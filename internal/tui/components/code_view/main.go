@@ -15,14 +15,14 @@ const (
 	padding = 1
 )
 
-func highlightContent(content, extension, syntaxTheme string) tea.Cmd {
+func highlightCode(code string, language string, syntaxTheme string) tea.Cmd {
 	return func() tea.Msg {
-		highlightedContent, err := u.HighlightText(content, extension, syntaxTheme)
+		highlighted, err := u.HighlightCode(code, language, syntaxTheme)
 		if err != nil {
 			return errorMsg(err)
 		}
 
-		return syntaxMsg(highlightedContent)
+		return syntaxMsg(highlighted)
 	}
 }
 
@@ -66,11 +66,11 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// SetContent sets content
-func (m *Model) SetContent(content string, extension string) tea.Cmd {
-	m.Filename = content
+// SetCode sets content
+func (m *Model) SetCode(code string, language string) tea.Cmd {
+	m.Filename = code
 
-	return highlightContent(content, extension, m.SyntaxTheme)
+	return highlightCode(code, language, m.SyntaxTheme)
 }
 
 // SetIsActive sets if the bubble is currently active.
@@ -83,17 +83,17 @@ func (m *Model) SetBorderColor(color lipgloss.AdaptiveColor) {
 	m.BorderColor = color
 }
 
-// SetSyntaxTheme sets the syntax theme of the rendered code.
+// SetSyntaxTheme sets the syntax theme of the rendered code
 func (m *Model) SetSyntaxTheme(theme string) {
 	m.SyntaxTheme = theme
 }
 
-// SetBorderless sets weather or not to show the border.
+// SetBorderless sets weather or not to show the border
 func (m *Model) SetBorderless(borderless bool) {
 	m.Borderless = borderless
 }
 
-// SetSize sets the size of the bubble.
+// SetSize sets the size of the bubble
 func (m *Model) SetSize(w, h int) {
 	m.Viewport.Width = w
 	m.Viewport.Height = h
@@ -104,13 +104,13 @@ func (m *Model) SetSize(w, h int) {
 		Render(m.HighlightedContent))
 }
 
-// GotoTop jumps to the top of the viewport.
+// GotoTop jumps to the top of the viewport
 func (m *Model) GotoTop() {
 	m.Viewport.GotoTop()
 }
 
-// Update handles updating the UI of a code bubble.
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+// Update handles updating the UI
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
 		cmds []tea.Cmd
@@ -147,8 +147,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// View returns a string representation of the code bubble.
-func (m Model) View() string {
+// View returns a string representation of the model
+func (m *Model) View() string {
 	border := lipgloss.NormalBorder()
 
 	if m.Borderless {

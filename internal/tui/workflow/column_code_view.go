@@ -12,7 +12,7 @@ type Model struct {
 	code codeviewport.Model
 }
 
-// New creates a new instance of the UI
+// New creates a new instance of the model
 func New() Model {
 	codeModel := codeviewport.New(true, true, lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"})
 
@@ -22,17 +22,17 @@ func New() Model {
 }
 
 // Init initializes the UI
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return nil
 }
 
 // SetContent sets content
 func (m *Model) SetContent(content string, extension string) tea.Cmd {
-	return m.code.SetContent(content, extension)
+	return m.code.SetCode(content, extension)
 }
 
 // Update handles all UI interactions
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
 		cmds []tea.Cmd
@@ -50,13 +50,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	m.code, cmd = m.code.Update(msg)
+	mod, cmd := m.code.Update(msg)
+	m.code = *mod
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }
 
 // View returns a string representation of the UI
-func (m Model) View() string {
+func (m *Model) View() string {
 	return m.code.View()
 }

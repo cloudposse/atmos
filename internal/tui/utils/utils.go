@@ -6,10 +6,10 @@ import (
 	"github.com/alecthomas/chroma/quick"
 )
 
-// HighlightText returns a syntax highlighted string of text
-func HighlightText(content, extension, syntaxTheme string) (string, error) {
+// HighlightCode returns a syntax highlighted code for the specified language
+func HighlightCode(code string, language string, syntaxTheme string) (string, error) {
 	buf := new(bytes.Buffer)
-	if err := quick.Highlight(buf, content, extension, "terminal256", syntaxTheme); err != nil {
+	if err := quick.Highlight(buf, code, language, "terminal256", syntaxTheme); err != nil {
 		return "", err
 	}
 
