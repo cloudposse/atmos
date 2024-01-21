@@ -53,9 +53,9 @@ func (m *codeColumnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds []tea.Cmd
 	)
 
-	switch msg := msg.(type) {
+	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.code.SetSize(msg.Width, msg.Height)
+		m.code.SetSize(message.Width/4, message.Height/3)
 		return m, nil
 	}
 

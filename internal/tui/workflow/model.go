@@ -204,7 +204,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	app.listColumnViews[1].list.SetShowFilter(true)
 	app.listColumnViews[1].list.InfiniteScrolling = true
 
-	app.codeColumnView.SetContent("workflow:", "yaml")
+	app.codeColumnView.SetContent("workflows: {}", "yaml")
 }
 
 func (app *App) getNextViewPointer() int {
