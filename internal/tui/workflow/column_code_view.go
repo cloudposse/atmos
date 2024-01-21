@@ -1,38 +1,54 @@
 package workflow
 
 import (
-	codeviewport "github.com/cloudposse/atmos/internal/tui/components/code_view"
+	codeview "github.com/cloudposse/atmos/internal/tui/components/code_view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	mouseZone "github.com/lrstanley/bubblezone"
 )
 
-// Model represents the properties of the UI
-type Model struct {
-	code codeviewport.Model
+// codeColumnView represents the properties of the UI
+type codeColumnView struct {
+	id      string
+	code    codeview.Model
+	focused bool
 }
 
-// New creates a new instance of the model
-func New() Model {
-	codeModel := codeviewport.New(true, true, lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"})
+func (c *codeColumnView) Focus() {
+	c.focused = true
+}
 
-	return Model{
+func (c *codeColumnView) Blur() {
+	c.focused = false
+}
+
+func (c *codeColumnView) Focused() bool {
+	return c.focused
+}
+
+// newCodeViewColumn creates a new instance of the model
+func newCodeViewColumn(syntaxTheme string) codeColumnView {
+	codeModel := codeview.New(true, true, lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"}, syntaxTheme)
+
+	return codeColumnView{
+		id:   mouseZone.NewPrefix(),
 		code: codeModel,
 	}
 }
 
 // Init initializes the UI
-func (m *Model) Init() tea.Cmd {
+func (m *codeColumnView) Init() tea.Cmd {
 	return nil
 }
 
 // SetContent sets content
-func (m *Model) SetContent(content string, extension string) tea.Cmd {
-	return m.code.SetCode(content, extension)
+func (m *codeColumnView) SetContent(content string, language string) tea.Cmd {
+	return m.code.SetContent(content, language)
 }
 
 // Update handles all UI interactions
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *codeColumnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
 		cmds []tea.Cmd
@@ -41,13 +57,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.code.SetSize(msg.Width, msg.Height)
-
 		return m, nil
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc", "q":
-			cmds = append(cmds, tea.Quit)
-		}
 	}
 
 	mod, cmd := m.code.Update(msg)
@@ -58,6 +68,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View returns a string representation of the UI
-func (m *Model) View() string {
+func (m *codeColumnView) View() string {
 	return m.code.View()
 }

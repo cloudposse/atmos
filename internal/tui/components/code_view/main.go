@@ -26,7 +26,6 @@ func highlightCode(code string, language string, syntaxTheme string) tea.Cmd {
 	}
 }
 
-// Model represents the properties of a code bubble.
 type Model struct {
 	Viewport           viewport.Model
 	BorderColor        lipgloss.AdaptiveColor
@@ -37,8 +36,8 @@ type Model struct {
 	SyntaxTheme        string
 }
 
-// New creates a new instance of code.
-func New(active, borderless bool, borderColor lipgloss.AdaptiveColor) Model {
+// New creates a new instance of the model
+func New(active, borderless bool, borderColor lipgloss.AdaptiveColor, syntaxTheme string) Model {
 	viewPort := viewport.New(0, 0)
 	border := lipgloss.NormalBorder()
 
@@ -57,17 +56,17 @@ func New(active, borderless bool, borderColor lipgloss.AdaptiveColor) Model {
 		Borderless:  borderless,
 		Active:      active,
 		BorderColor: borderColor,
-		SyntaxTheme: "dracula",
+		SyntaxTheme: syntaxTheme,
 	}
 }
 
-// Init initializes the code bubble.
-func (m Model) Init() tea.Cmd {
+// Init initializes the model
+func (m *Model) Init() tea.Cmd {
 	return nil
 }
 
-// SetCode sets content
-func (m *Model) SetCode(code string, language string) tea.Cmd {
+// SetContent sets content
+func (m *Model) SetContent(code string, language string) tea.Cmd {
 	m.Filename = code
 
 	return highlightCode(code, language, m.SyntaxTheme)
@@ -78,7 +77,7 @@ func (m *Model) SetIsActive(active bool) {
 	m.Active = active
 }
 
-// SetBorderColor sets the current color of the border.
+// SetBorderColor sets the current color of the border
 func (m *Model) SetBorderColor(color lipgloss.AdaptiveColor) {
 	m.BorderColor = color
 }
