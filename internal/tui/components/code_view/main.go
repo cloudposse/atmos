@@ -1,4 +1,4 @@
-package code_viewport
+package code_view
 
 import (
 	u "github.com/cloudposse/atmos/internal/tui/utils"

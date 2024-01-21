@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	codeviewport "github.com/cloudposse/atmos/internal/tui/components/code_viewport"
+	codeviewport "github.com/cloudposse/atmos/internal/tui/components/code_view"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
