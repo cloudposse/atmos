@@ -18,8 +18,7 @@ import (
 type App struct {
 	help                 help.Model
 	loaded               bool
-	listColumnViews      []listColumnView
-	codeColumnView       codeColumnView
+	columnViews          []columnView
 	quit                 bool
 	workflows            map[string]schema.WorkflowConfig
 	selectedWorkflowFile string
@@ -55,14 +54,11 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		app.loaded = false
 		var cmd tea.Cmd
 		var cmds []tea.Cmd
-		var res tea.Model
 		app.help.Width = message.Width
-		res, cmd = app.codeColumnView.Update(message)
-		app.codeColumnView = *res.(*codeColumnView)
-		cmds = append(cmds, cmd)
-		for i := 0; i < len(app.listColumnViews); i++ {
-			res, cmd = app.listColumnViews[i].Update(message)
-			app.listColumnViews[i] = *res.(*listColumnView)
+		for i := 0; i < len(app.columnViews); i++ {
+			var res tea.Model
+			res, cmd = app.columnViews[i].Update(message)
+			app.columnViews[i] = *res.(*columnView)
 			cmds = append(cmds, cmd)
 		}
 		app.loaded = true
@@ -70,22 +66,22 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		if message.Button == tea.MouseButtonWheelUp {
-			app.listColumnViews[app.columnPointer].list.CursorUp()
+			app.columnViews[app.columnPointer].list.CursorUp()
 			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonWheelDown {
-			app.listColumnViews[app.columnPointer].list.CursorDown()
+			app.columnViews[app.columnPointer].list.CursorDown()
 			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonLeft {
-			for i := 0; i < len(app.listColumnViews); i++ {
-				zoneInfo := mouseZone.Get(app.listColumnViews[i].id)
+			for i := 0; i < len(app.columnViews); i++ {
+				zoneInfo := mouseZone.Get(app.columnViews[i].id)
 				if zoneInfo.InBounds(message) {
-					app.listColumnViews[app.columnPointer].Blur()
+					app.columnViews[app.columnPointer].Blur()
 					app.columnPointer = i
-					app.listColumnViews[app.columnPointer].Focus()
+					app.columnViews[app.columnPointer].Focus()
 					break
 				}
 			}
@@ -97,8 +93,8 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.quit = true
 			return app, tea.Quit
 		case key.Matches(message, keys.Escape):
-			res, cmd := app.listColumnViews[app.columnPointer].Update(msg)
-			app.listColumnViews[app.columnPointer] = *res.(*listColumnView)
+			res, cmd := app.columnViews[app.columnPointer].Update(msg)
+			app.columnViews[app.columnPointer] = *res.(*columnView)
 			if cmd == nil {
 				return app, nil
 			} else {
@@ -109,29 +105,29 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.execute()
 			return app, tea.Quit
 		case key.Matches(message, keys.Up):
-			app.listColumnViews[app.columnPointer].list.CursorUp()
+			app.columnViews[app.columnPointer].list.CursorUp()
 			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		case key.Matches(message, keys.Down):
-			app.listColumnViews[app.columnPointer].list.CursorDown()
+			app.columnViews[app.columnPointer].list.CursorDown()
 			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		case key.Matches(message, keys.Left):
-			app.listColumnViews[app.columnPointer].Blur()
+			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getPrevViewPointer()
-			app.listColumnViews[app.columnPointer].Focus()
+			app.columnViews[app.columnPointer].Focus()
 			return app, nil
 		case key.Matches(message, keys.Right):
-			app.listColumnViews[app.columnPointer].Blur()
+			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getNextViewPointer()
-			app.listColumnViews[app.columnPointer].Focus()
+			app.columnViews[app.columnPointer].Focus()
 			return app, nil
 		}
 	}
 
 	// Send all other messages to the selected child view
-	res, cmd := app.listColumnViews[app.columnPointer].Update(msg)
-	app.listColumnViews[app.columnPointer] = *res.(*listColumnView)
+	res, cmd := app.columnViews[app.columnPointer].Update(msg)
+	app.columnViews[app.columnPointer] = *res.(*columnView)
 	return app, cmd
 }
 
@@ -146,9 +142,9 @@ func (app *App) View() string {
 
 	layout := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		app.listColumnViews[0].View(),
-		app.listColumnViews[1].View(),
-		app.codeColumnView.View(),
+		app.columnViews[0].View(),
+		app.columnViews[1].View(),
+		app.columnViews[2].View(),
 	)
 
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
@@ -167,12 +163,11 @@ func (app *App) ExitStatusQuit() bool {
 }
 
 func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
-	app.listColumnViews = []listColumnView{
-		newListColumn(0),
-		newListColumn(1),
+	app.columnViews = []columnView{
+		newColumn(0),
+		newColumn(1),
+		newColumn(2),
 	}
-
-	app.codeColumnView = newCodeViewColumn("solarized-dark256")
 
 	workflowFileItems := []list.Item{}
 	workflowItems := []list.Item{}
@@ -190,25 +185,23 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 		})
 	}
 
-	app.listColumnViews[0].list.Title = "Workflow Manifests"
-	app.listColumnViews[0].list.SetDelegate(listItemDelegate{})
-	app.listColumnViews[0].list.SetItems(workflowFileItems)
-	app.listColumnViews[0].list.SetFilteringEnabled(true)
-	app.listColumnViews[0].list.SetShowFilter(true)
-	app.listColumnViews[0].list.InfiniteScrolling = true
+	app.columnViews[0].list.Title = "Workflow Manifests"
+	app.columnViews[0].list.SetDelegate(listItemDelegate{})
+	app.columnViews[0].list.SetItems(workflowFileItems)
+	app.columnViews[0].list.SetFilteringEnabled(true)
+	app.columnViews[0].list.SetShowFilter(true)
+	app.columnViews[0].list.InfiniteScrolling = true
 
-	app.listColumnViews[1].list.Title = "Workflows"
-	app.listColumnViews[1].list.SetDelegate(listItemDelegate{})
-	app.listColumnViews[1].list.SetItems(workflowItems)
-	app.listColumnViews[1].list.SetFilteringEnabled(true)
-	app.listColumnViews[1].list.SetShowFilter(true)
-	app.listColumnViews[1].list.InfiniteScrolling = true
-
-	app.codeColumnView.SetContent("workflows: {}", "yaml")
+	app.columnViews[1].list.Title = "Workflows"
+	app.columnViews[1].list.SetDelegate(listItemDelegate{})
+	app.columnViews[1].list.SetItems(workflowItems)
+	app.columnViews[1].list.SetFilteringEnabled(true)
+	app.columnViews[1].list.SetShowFilter(true)
+	app.columnViews[1].list.InfiniteScrolling = true
 }
 
 func (app *App) getNextViewPointer() int {
-	if app.columnPointer == 1 {
+	if app.columnPointer == 2 {
 		return 0
 	}
 	return app.columnPointer + 1
@@ -216,14 +209,14 @@ func (app *App) getNextViewPointer() int {
 
 func (app *App) getPrevViewPointer() int {
 	if app.columnPointer == 0 {
-		return 1
+		return 2
 	}
 	return app.columnPointer - 1
 }
 
 func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 	if app.columnPointer == 0 {
-		selected := app.listColumnViews[0].list.SelectedItem()
+		selected := app.columnViews[0].list.SelectedItem()
 		if selected == nil {
 			return
 		}
@@ -232,9 +225,9 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 		items := lo.Map(itemStrings, func(s string, _ int) list.Item {
 			return listItem(s)
 		})
-		app.listColumnViews[1].list.ResetFilter()
-		app.listColumnViews[1].list.ResetSelected()
-		app.listColumnViews[1].list.SetItems(items)
+		app.columnViews[1].list.ResetFilter()
+		app.columnViews[1].list.ResetSelected()
+		app.columnViews[1].list.SetItems(items)
 	}
 }
 
@@ -243,14 +236,14 @@ func (app *App) execute() {
 	workflowFilesViewIndex := 0
 	workflowsViewIndex := 1
 
-	selectedWorkflowFile := app.listColumnViews[workflowFilesViewIndex].list.SelectedItem()
+	selectedWorkflowFile := app.columnViews[workflowFilesViewIndex].list.SelectedItem()
 	if selectedWorkflowFile != nil {
 		app.selectedWorkflowFile = fmt.Sprintf("%s", selectedWorkflowFile)
 	} else {
 		app.selectedWorkflowFile = ""
 	}
 
-	selectedWorkflow := app.listColumnViews[workflowsViewIndex].list.SelectedItem()
+	selectedWorkflow := app.columnViews[workflowsViewIndex].list.SelectedItem()
 	if selectedWorkflow != nil {
 		app.selectedWorkflow = fmt.Sprintf("%s", selectedWorkflow)
 	} else {

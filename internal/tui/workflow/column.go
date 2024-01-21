@@ -4,30 +4,32 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	codeview "github.com/cloudposse/atmos/internal/tui/components/code_view"
 	mouseZone "github.com/lrstanley/bubblezone"
 )
 
-type listColumnView struct {
-	id      string
-	focused bool
-	list    list.Model
-	height  int
-	width   int
+type columnView struct {
+	id       string
+	focused  bool
+	list     list.Model
+	codeView codeview.Model
+	height   int
+	width    int
 }
 
-func (c *listColumnView) Focus() {
+func (c *columnView) Focus() {
 	c.focused = true
 }
 
-func (c *listColumnView) Blur() {
+func (c *columnView) Blur() {
 	c.focused = false
 }
 
-func (c *listColumnView) Focused() bool {
+func (c *columnView) Focused() bool {
 	return c.focused
 }
 
-func newListColumn(columnPointer int) listColumnView {
+func newColumn(columnPointer int) columnView {
 	var focused bool
 	if columnPointer == 0 {
 		focused = true
@@ -36,7 +38,7 @@ func newListColumn(columnPointer int) listColumnView {
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	defaultList.SetShowHelp(false)
 
-	return listColumnView{
+	return columnView{
 		id:      mouseZone.NewPrefix(),
 		focused: focused,
 		list:    defaultList,
@@ -44,12 +46,12 @@ func newListColumn(columnPointer int) listColumnView {
 }
 
 // Init does initial setup
-func (c *listColumnView) Init() tea.Cmd {
+func (c *columnView) Init() tea.Cmd {
 	return nil
 }
 
 // Update handles all the I/O
-func (c *listColumnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -60,15 +62,15 @@ func (c *listColumnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return c, cmd
 }
 
-func (c *listColumnView) View() string {
+func (c *columnView) View() string {
 	return mouseZone.Mark(c.id, c.getStyle().Render(c.list.View()))
 }
 
-func (c *listColumnView) setSize(width, height int) {
+func (c *columnView) setSize(width, height int) {
 	c.width = width / 4
 }
 
-func (c *listColumnView) getStyle() lipgloss.Style {
+func (c *columnView) getStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
 
 	if c.Focused() {
