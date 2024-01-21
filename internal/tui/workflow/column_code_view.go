@@ -9,9 +9,9 @@ import (
 )
 
 type codeColumnView struct {
-	id      string
-	code    codeview.Model
-	focused bool
+	id       string
+	codeView codeview.Model
+	focused  bool
 }
 
 func (c *codeColumnView) Focus() {
@@ -31,8 +31,8 @@ func newCodeViewColumn(syntaxTheme string) codeColumnView {
 	codeModel := codeview.New(true, true, lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"}, syntaxTheme)
 
 	return codeColumnView{
-		id:   mouseZone.NewPrefix(),
-		code: codeModel,
+		id:       mouseZone.NewPrefix(),
+		codeView: codeModel,
 	}
 }
 
@@ -43,7 +43,7 @@ func (m *codeColumnView) Init() tea.Cmd {
 
 // SetContent sets content
 func (m *codeColumnView) SetContent(content string, language string) tea.Cmd {
-	return m.code.SetContent(content, language)
+	return m.codeView.SetContent(content, language)
 }
 
 // Update handles all UI interactions
@@ -55,12 +55,12 @@ func (m *codeColumnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.code.SetSize(message.Width/4, message.Height/3)
+		m.codeView.SetSize(message.Width/4, message.Height/3)
 		return m, nil
 	}
 
-	mod, cmd := m.code.Update(msg)
-	m.code = *mod
+	mod, cmd := m.codeView.Update(msg)
+	m.codeView = *mod
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
@@ -68,5 +68,5 @@ func (m *codeColumnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View returns a string representation of the UI
 func (m *codeColumnView) View() string {
-	return m.code.View()
+	return m.codeView.View()
 }
