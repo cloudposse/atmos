@@ -68,12 +68,12 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		if message.Button == tea.MouseButtonWheelUp {
 			app.listColumnViews[app.columnPointer].list.CursorUp()
-			app.updateWorkflowsAndWorkflowFilesViews()
+			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonWheelDown {
 			app.listColumnViews[app.columnPointer].list.CursorDown()
-			app.updateWorkflowsAndWorkflowFilesViews()
+			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		}
 		if message.Button == tea.MouseButtonLeft {
@@ -107,11 +107,11 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, tea.Quit
 		case key.Matches(message, keys.Up):
 			app.listColumnViews[app.columnPointer].list.CursorUp()
-			app.updateWorkflowsAndWorkflowFilesViews()
+			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		case key.Matches(message, keys.Down):
 			app.listColumnViews[app.columnPointer].list.CursorDown()
-			app.updateWorkflowsAndWorkflowFilesViews()
+			app.updateWorkflowFilesAndWorkflowsViews()
 			return app, nil
 		case key.Matches(message, keys.Left):
 			app.listColumnViews[app.columnPointer].Blur()
@@ -218,19 +218,14 @@ func (app *App) getPrevViewPointer() int {
 	return app.columnPointer - 1
 }
 
-func (app *App) updateWorkflowsAndWorkflowFilesViews() {
+func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 	if app.columnPointer == 0 {
-		selected := app.listColumnViews[1].list.SelectedItem()
+		selected := app.listColumnViews[0].list.SelectedItem()
 		if selected == nil {
 			return
 		}
-		//selectedItem := fmt.Sprintf("%s", selected)
-		var itemStrings []string
-		//if app.workflowsInWorkflowFiles {
-		//	itemStrings = app.stacksComponentsMap[selectedItem]
-		//} else {
-		//	itemStrings = app.componentsStacksMap[selectedItem]
-		//}
+		selectedItem := fmt.Sprintf("%s", selected)
+		itemStrings := lo.Keys(app.workflows[selectedItem])
 		items := lo.Map(itemStrings, func(s string, _ int) list.Item {
 			return listItem(s)
 		})
