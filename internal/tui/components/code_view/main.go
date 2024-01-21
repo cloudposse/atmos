@@ -15,17 +15,6 @@ const (
 	padding = 1
 )
 
-func highlightCode(code string, language string, syntaxTheme string) tea.Cmd {
-	return func() tea.Msg {
-		highlighted, err := u.HighlightCode(code, language, syntaxTheme)
-		if err != nil {
-			return errorMsg(err)
-		}
-
-		return syntaxMsg(highlighted)
-	}
-}
-
 type Model struct {
 	Viewport           viewport.Model
 	BorderColor        lipgloss.AdaptiveColor
@@ -66,7 +55,14 @@ func (m *Model) Init() tea.Cmd {
 
 // SetContent sets content
 func (m *Model) SetContent(code string, language string) tea.Cmd {
-	return highlightCode(code, language, m.SyntaxTheme)
+	return func() tea.Msg {
+		highlighted, err := u.HighlightCode(code, language, m.SyntaxTheme)
+		if err != nil {
+			return errorMsg(err)
+		}
+
+		return syntaxMsg(highlighted)
+	}
 }
 
 // SetIsActive sets if the bubble is currently active.
@@ -89,20 +85,15 @@ func (m *Model) SetBorderless(borderless bool) {
 	m.Borderless = borderless
 }
 
-// SetSize sets the size of the bubble
-func (m *Model) SetSize(w, h int) {
-	m.Viewport.Width = w
-	m.Viewport.Height = h
+// SetSize sets the size of the view
+func (m *Model) SetSize(width int, height int) {
+	m.Viewport.Width = width
+	m.Viewport.Height = height
 
 	m.Viewport.SetContent(lipgloss.NewStyle().
 		Width(m.Viewport.Width).
 		Height(m.Viewport.Height).
 		Render(m.HighlightedContent))
-}
-
-// GotoTop jumps to the top of the viewport
-func (m *Model) GotoTop() {
-	m.Viewport.GotoTop()
 }
 
 // Update handles updating the UI

@@ -55,9 +55,12 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		app.loaded = false
 		var cmd tea.Cmd
 		var cmds []tea.Cmd
+		var res tea.Model
 		app.help.Width = message.Width
+		res, cmd = app.codeColumnView.Update(message)
+		app.codeColumnView = *res.(*codeColumnView)
+		cmds = append(cmds, cmd)
 		for i := 0; i < len(app.listColumnViews); i++ {
-			var res tea.Model
 			res, cmd = app.listColumnViews[i].Update(message)
 			app.listColumnViews[i] = *res.(*listColumnView)
 			cmds = append(cmds, cmd)
