@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -93,14 +94,17 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.quit = true
 			return app, tea.Quit
 		case key.Matches(message, keys.Escape):
-			res, cmd := app.columnViews[app.columnPointer].Update(msg)
-			app.columnViews[app.columnPointer] = *res.(*columnView)
-			if cmd == nil {
-				return app, nil
-			} else {
-				app.quit = true
-				return app, tea.Quit
+			if app.columnViews[app.columnPointer].viewType == "list" {
+				res, cmd := app.columnViews[app.columnPointer].Update(msg)
+				app.columnViews[app.columnPointer] = *res.(*columnView)
+				if cmd == nil {
+					return app, nil
+				} else {
+					app.quit = true
+					return app, tea.Quit
+				}
 			}
+			return app, tea.Quit
 		case key.Matches(message, keys.Execute):
 			app.execute()
 			return app, tea.Quit
@@ -174,15 +178,25 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	workflowFilesMapKeys := lo.Keys(workflows)
 	sort.Strings(workflowFilesMapKeys)
 
+	var firstWorkflowFile string
+	var firstWorkflowName string
+	var firstWorkflow string
+
 	if len(workflowFilesMapKeys) > 0 {
 		workflowFileItems = lo.Map(workflowFilesMapKeys, func(s string, _ int) list.Item {
 			return listItem(s)
 		})
 
-		firstWorkflowFile := workflowFilesMapKeys[0]
-		workflowItems = lo.Map(lo.Keys(workflows[firstWorkflowFile]), func(s string, _ int) list.Item {
-			return listItem(s)
-		})
+		firstWorkflowFile = workflowFilesMapKeys[0]
+		workflowsMapKeys := lo.Keys(workflows[firstWorkflowFile])
+
+		if len(workflowsMapKeys) > 0 {
+			workflowItems = lo.Map(workflowsMapKeys, func(s string, _ int) list.Item {
+				return listItem(s)
+			})
+			firstWorkflowName = workflowsMapKeys[0]
+			firstWorkflow, _ = u.ConvertToYAML(workflows[firstWorkflowFile][firstWorkflowName])
+		}
 	}
 
 	app.columnViews[0].list.Title = "Workflow Manifests"
@@ -198,6 +212,8 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	app.columnViews[1].list.SetFilteringEnabled(true)
 	app.columnViews[1].list.SetShowFilter(true)
 	app.columnViews[1].list.InfiniteScrolling = true
+
+	app.columnViews[2].SetContent(firstWorkflow, "yaml")
 }
 
 func (app *App) getNextViewPointer() int {

@@ -57,6 +57,8 @@ func newColumn(columnPointer int, viewType string) columnView {
 	}
 
 	if viewType == "codeView" {
+		// https://github.com/alecthomas/chroma/tree/master/styles
+		// https://xyproto.github.io/splash/docs/
 		codeView = codeview.New("solarized-dark256")
 	}
 
@@ -86,7 +88,7 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			c.list.SetSize(message.Width/4, message.Height/3)
 		}
 		if c.viewType == "codeView" {
-			c.codeView.SetSize(message.Width/4, message.Height/3)
+			c.codeView.SetSize(message.Width/3, message.Height/3)
 		}
 	}
 
