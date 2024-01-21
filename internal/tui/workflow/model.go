@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 
@@ -150,12 +151,12 @@ func (app *App) View() string {
 	return mouseZone.Scan(lipgloss.JoinVertical(lipgloss.Left, layout, app.help.View(keys)))
 }
 
-func (app *App) GetSelectedWorkflow() string {
-	return app.selectedWorkflow
-}
-
 func (app *App) GetSelectedWorkflowFile() string {
 	return app.selectedWorkflowFile
+}
+
+func (app *App) GetSelectedWorkflow() string {
+	return app.selectedWorkflow
 }
 
 func (app *App) ExitStatusQuit() bool {
@@ -170,35 +171,37 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 
 	app.codeColumnView = newCodeViewColumn("solarized-dark256")
 
-	//stackItems := []list.Item{}
-	//componentItems := []list.Item{}
-	//stacksComponentsMapKeys := lo.Keys(stacksComponentsMap)
-	//sort.Strings(stacksComponentsMapKeys)
-	//
-	//if len(stacksComponentsMapKeys) > 0 {
-	//	stackItems = lo.Map(stacksComponentsMapKeys, func(s string, _ int) list.Item {
-	//		return listItem(s)
-	//	})
-	//
-	//	firstStack := stacksComponentsMapKeys[0]
-	//	componentItems = lo.Map(stacksComponentsMap[firstStack], func(s string, _ int) list.Item {
-	//		return listItem(s)
-	//	})
-	//}
+	workflowFileItems := []list.Item{}
+	workflowItems := []list.Item{}
+	workflowFilesMapKeys := lo.Keys(workflows)
+	sort.Strings(workflowFilesMapKeys)
 
-	app.listColumnViews[0].list.Title = "Files"
+	if len(workflowFilesMapKeys) > 0 {
+		workflowFileItems = lo.Map(workflowFilesMapKeys, func(s string, _ int) list.Item {
+			return listItem(s)
+		})
+
+		firstWorkflowFile := workflowFilesMapKeys[0]
+		workflowItems = lo.Map(lo.Keys(workflows[firstWorkflowFile]), func(s string, _ int) list.Item {
+			return listItem(s)
+		})
+	}
+
+	app.listColumnViews[0].list.Title = "Workflow Manifests"
 	app.listColumnViews[0].list.SetDelegate(listItemDelegate{})
-	//app.listColumnViews[0].list.SetItems(commandItems)
+	app.listColumnViews[0].list.SetItems(workflowFileItems)
 	app.listColumnViews[0].list.SetFilteringEnabled(true)
 	app.listColumnViews[0].list.SetShowFilter(true)
 	app.listColumnViews[0].list.InfiniteScrolling = true
 
 	app.listColumnViews[1].list.Title = "Workflows"
 	app.listColumnViews[1].list.SetDelegate(listItemDelegate{})
-	//app.listColumnViews[1].list.SetItems(stackItems)
+	app.listColumnViews[1].list.SetItems(workflowItems)
 	app.listColumnViews[1].list.SetFilteringEnabled(true)
 	app.listColumnViews[1].list.SetShowFilter(true)
 	app.listColumnViews[1].list.InfiniteScrolling = true
+
+	app.codeColumnView.SetContent("workflow:", "yaml")
 }
 
 func (app *App) getNextViewPointer() int {
@@ -239,8 +242,8 @@ func (app *App) updateWorkflowsAndWorkflowFilesViews() {
 
 func (app *App) execute() {
 	app.quit = false
-	workflowsViewIndex := 0
-	workflowFilesViewIndex := 1
+	workflowFilesViewIndex := 0
+	workflowsViewIndex := 1
 
 	selectedWorkflowFile := app.listColumnViews[workflowFilesViewIndex].list.SelectedItem()
 	if selectedWorkflowFile != nil {

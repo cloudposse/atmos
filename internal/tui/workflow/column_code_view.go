@@ -8,7 +8,6 @@ import (
 	mouseZone "github.com/lrstanley/bubblezone"
 )
 
-// codeColumnView represents the properties of the UI
 type codeColumnView struct {
 	id      string
 	code    codeview.Model

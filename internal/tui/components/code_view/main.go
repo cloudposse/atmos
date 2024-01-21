@@ -31,7 +31,6 @@ type Model struct {
 	BorderColor        lipgloss.AdaptiveColor
 	Borderless         bool
 	Active             bool
-	Filename           string
 	HighlightedContent string
 	SyntaxTheme        string
 }
@@ -67,8 +66,6 @@ func (m *Model) Init() tea.Cmd {
 
 // SetContent sets content
 func (m *Model) SetContent(code string, language string) tea.Cmd {
-	m.Filename = code
-
 	return highlightCode(code, language, m.SyntaxTheme)
 }
 
@@ -117,7 +114,6 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case syntaxMsg:
-		m.Filename = ""
 		m.HighlightedContent = lipgloss.NewStyle().
 			Width(m.Viewport.Width).
 			Height(m.Viewport.Height).
@@ -127,7 +123,6 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 		return m, nil
 	case errorMsg:
-		m.Filename = ""
 		m.HighlightedContent = lipgloss.NewStyle().
 			Width(m.Viewport.Width).
 			Height(m.Viewport.Height).
