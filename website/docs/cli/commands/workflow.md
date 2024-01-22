@@ -32,11 +32,10 @@ atmos workflow <workflow_name> --file <workflow_file> [options]
 ### Examples
 
 ```shell
-atmos workflow test-1 -f workflow1
+atmos workflow
+atmos workflow plan-all-vpc-components --file networking
+atmos workflow apply-all-components -f networking --dry-run
 atmos workflow test-1 -f workflow1 --from-step step2
-atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev
-atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1 --dry-run
-atmos workflow terraform-plan-all-tenant1-ue2-dev -f workflow1
 ```
 
 <br/>
