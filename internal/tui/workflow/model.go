@@ -94,7 +94,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.quit = true
 			return app, tea.Quit
 		case key.Matches(message, keys.Escape):
-			if app.columnViews[app.columnPointer].viewType == "list" {
+			if app.columnViews[app.columnPointer].viewType == listViewType {
 				res, cmd := app.columnViews[app.columnPointer].Update(msg)
 				app.columnViews[app.columnPointer] = *res.(*columnView)
 				if cmd == nil {
@@ -168,18 +168,17 @@ func (app *App) ExitStatusQuit() bool {
 
 func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	app.columnViews = []columnView{
-		newColumn(0, "list"),
-		newColumn(1, "list"),
-		newColumn(2, "codeView"),
+		newColumn(0, listViewType),
+		newColumn(1, listViewType),
+		newColumn(2, codeViewType),
 	}
 
 	workflowFileItems := []list.Item{}
 	workflowItems := []list.Item{}
+
 	workflowFilesMapKeys := lo.Keys(workflows)
 	sort.Strings(workflowFilesMapKeys)
 
-	var firstWorkflowFile string
-	var firstWorkflowName string
 	var firstWorkflow string
 
 	if len(workflowFilesMapKeys) > 0 {
@@ -187,14 +186,15 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 			return listItem(s)
 		})
 
-		firstWorkflowFile = workflowFilesMapKeys[0]
+		firstWorkflowFile := workflowFilesMapKeys[0]
 		workflowsMapKeys := lo.Keys(workflows[firstWorkflowFile])
+		sort.Strings(workflowsMapKeys)
 
 		if len(workflowsMapKeys) > 0 {
 			workflowItems = lo.Map(workflowsMapKeys, func(s string, _ int) list.Item {
 				return listItem(s)
 			})
-			firstWorkflowName = workflowsMapKeys[0]
+			firstWorkflowName := workflowsMapKeys[0]
 			firstWorkflow, _ = u.ConvertToYAML(workflows[firstWorkflowFile][firstWorkflowName])
 		}
 	}

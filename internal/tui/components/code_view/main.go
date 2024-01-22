@@ -1,6 +1,7 @@
 package code_view
 
 import (
+	"fmt"
 	u "github.com/cloudposse/atmos/internal/tui/utils"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -42,6 +43,8 @@ func (m *Model) SetContent(content string, language string) {
 	highlighted, _ := u.HighlightCode(content, language, m.SyntaxTheme)
 	m.HighlightedContent = highlighted
 
+	m.Viewport.MouseWheelEnabled = true
+
 	m.Viewport.SetContent(lipgloss.NewStyle().
 		Width(m.Viewport.Width).
 		Height(m.Viewport.Height).
@@ -78,4 +81,14 @@ func (m *Model) View() string {
 		PaddingRight(defaultPadding)
 
 	return m.Viewport.View()
+}
+
+func (m *Model) CursorUp() {
+	lines := m.Viewport.LineUp(1)
+	m.Viewport.SetContent(fmt.Sprintf("%v", lines))
+}
+
+func (m *Model) CursorDown() {
+	lines := m.Viewport.LineDown(1)
+	m.Viewport.SetContent(fmt.Sprintf("%v", lines))
 }

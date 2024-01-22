@@ -8,6 +8,11 @@ import (
 	mouseZone "github.com/lrstanley/bubblezone"
 )
 
+const (
+	listViewType = "listView"
+	codeViewType = "codeView"
+)
+
 type columnView struct {
 	id       string
 	focused  bool
@@ -19,14 +24,20 @@ type columnView struct {
 }
 
 func (c *columnView) CursorUp() {
-	if c.viewType == "list" {
+	if c.viewType == listViewType {
 		c.list.CursorUp()
+	}
+	if c.viewType == codeViewType {
+		c.codeView.CursorUp()
 	}
 }
 
 func (c *columnView) CursorDown() {
-	if c.viewType == "list" {
+	if c.viewType == listViewType {
 		c.list.CursorDown()
+	}
+	if c.viewType == codeViewType {
+		c.codeView.CursorDown()
 	}
 }
 
@@ -51,12 +62,12 @@ func newColumn(columnPointer int, viewType string) columnView {
 	var defaultList list.Model
 	var codeView codeview.Model
 
-	if viewType == "list" {
+	if viewType == listViewType {
 		defaultList = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 		defaultList.SetShowHelp(false)
 	}
 
-	if viewType == "codeView" {
+	if viewType == codeViewType {
 		// https://github.com/alecthomas/chroma/tree/master/styles
 		// https://xyproto.github.io/splash/docs/
 		codeView = codeview.New("solarized-dark256")
@@ -84,18 +95,18 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		c.setSize(message.Width, message.Height)
 
-		if c.viewType == "list" {
+		if c.viewType == listViewType {
 			c.list.SetSize(message.Width/4, message.Height/3)
 		}
-		if c.viewType == "codeView" {
+		if c.viewType == codeViewType {
 			c.codeView.SetSize(message.Width/3, message.Height/3)
 		}
 	}
 
-	if c.viewType == "list" {
+	if c.viewType == listViewType {
 		c.list, cmd = c.list.Update(msg)
 	}
-	if c.viewType == "codeView" {
+	if c.viewType == codeViewType {
 		c.codeView, cmd = c.codeView.Update(msg)
 	}
 
@@ -103,10 +114,10 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (c *columnView) View() string {
-	if c.viewType == "list" {
+	if c.viewType == listViewType {
 		return mouseZone.Mark(c.id, c.getStyle().Render(c.list.View()))
 	}
-	if c.viewType == "codeView" {
+	if c.viewType == codeViewType {
 		return mouseZone.Mark(c.id, c.getStyle().Render(c.codeView.View()))
 	}
 
@@ -131,7 +142,7 @@ func (c *columnView) getStyle() lipgloss.Style {
 
 // SetContent sets content
 func (c *columnView) SetContent(content string, language string) {
-	if c.viewType == "codeView" {
+	if c.viewType == codeViewType {
 		c.codeView.SetContent(content, language)
 	}
 }
