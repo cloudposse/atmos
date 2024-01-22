@@ -23,7 +23,7 @@ atmos
 
 - Use the `right/left` arrow keys to navigate between the "Commands", "Stacks" and "Components" views
 
-- Use the `up/down` arrow keys to select a command to execute, component and stack
+- Use the `up/down` arrow keys (or the mouse wheel) to select a command to execute, component and stack
 
 - Use the `/` key to filter/search for the commands, components, and stacks in the corresponding views
 

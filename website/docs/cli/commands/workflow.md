@@ -58,7 +58,7 @@ atmos workflow
 
 - Use the `right/left` arrow keys to navigate between the "Workflow Manifests", "Workflows" and the selected workflow views
 
-- Use the `up/down` arrow keys to select a workflow manifest and a workflow to execute
+- Use the `up/down` arrow keys (or the mouse wheel) to select a workflow manifest and a workflow to execute
 
 - Use the `/` key to filter/search for the workflow manifests and workflows in the corresponding views
 
