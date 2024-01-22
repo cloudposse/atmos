@@ -235,14 +235,41 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 		if selectedWorkflowFile == nil {
 			return
 		}
+
 		selectedWorkflowFileName := fmt.Sprintf("%s", selectedWorkflowFile)
-		workflowItemsStrings := lo.Keys(app.workflows[selectedWorkflowFileName])
-		workflowItems := lo.Map(workflowItemsStrings, func(s string, _ int) list.Item {
-			return listItem(s)
-		})
-		app.columnViews[1].list.ResetFilter()
-		app.columnViews[1].list.ResetSelected()
-		app.columnViews[1].list.SetItems(workflowItems)
+		workflowsMapKeys := lo.Keys(app.workflows[selectedWorkflowFileName])
+		sort.Strings(workflowsMapKeys)
+
+		if len(workflowsMapKeys) > 0 {
+			workflowItems := lo.Map(workflowsMapKeys, func(s string, _ int) list.Item {
+				return listItem(s)
+			})
+
+			app.columnViews[1].list.ResetFilter()
+			app.columnViews[1].list.ResetSelected()
+			app.columnViews[1].list.SetItems(workflowItems)
+
+			selectedWorkflowName := workflowsMapKeys[0]
+			selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName][selectedWorkflowName])
+			app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
+		}
+	} else if app.columnPointer == 1 {
+		selectedWorkflowFile := app.columnViews[0].list.SelectedItem()
+		if selectedWorkflowFile == nil {
+			return
+		}
+
+		selectedWorkflowFileName := fmt.Sprintf("%s", selectedWorkflowFile)
+
+		selectedWorkflow := app.columnViews[1].list.SelectedItem()
+		if selectedWorkflow == nil {
+			return
+		}
+
+		selectedWorkflowName := fmt.Sprintf("%s", selectedWorkflow)
+
+		selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName][selectedWorkflowName])
+		app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
 	}
 }
 
