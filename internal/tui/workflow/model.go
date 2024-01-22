@@ -104,6 +104,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return app, tea.Quit
 				}
 			}
+			app.quit = true
 			return app, tea.Quit
 		case key.Matches(message, keys.Execute):
 			app.execute()
