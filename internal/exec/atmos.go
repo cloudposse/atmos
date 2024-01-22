@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fatih/color"
+	"github.com/samber/lo"
+
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
-	"github.com/samber/lo"
 )
 
 // ExecuteAtmosCmd executes `atmos` command
@@ -123,7 +124,7 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "validate component" {
-		_, err := ExecuteValidateComponent(cliConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
+		_, err = ExecuteValidateComponent(cliConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
 		if err != nil {
 			return err
 		}
@@ -138,7 +139,7 @@ func ExecuteAtmosCmd() error {
 		configAndStacksInfo.ComponentFromArg = selectedComponent
 		configAndStacksInfo.Stack = selectedStack
 		configAndStacksInfo.SubCommand = subcommand
-		err := ExecuteTerraform(configAndStacksInfo)
+		err = ExecuteTerraform(configAndStacksInfo)
 		if err != nil {
 			return err
 		}

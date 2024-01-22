@@ -23,7 +23,7 @@ atmos
 
 - Use the `right/left` arrow keys to navigate between the "Commands", "Stacks" and "Components" views
 
-- Use the `up/down` arrow keys to select a command to execute, component and stack
+- Use the `up/down` arrow keys (or the mouse wheel) to select a command to execute, component and stack
 
 - Use the `/` key to filter/search for the commands, components, and stacks in the corresponding views
 
@@ -40,8 +40,8 @@ atmos
 
 ### Mode 1: Components in Stacks
 
-![`atmos` CLI command mode 1](/img/cli/atmos-cli-command-1.png)
+![`atmos` CLI command mode 1](/img/cli/atmos/atmos-cli-command-1.png)
 
 ### Mode 2: Stacks for Components
 
-![`atmos` CLI command mode 2](/img/cli/atmos-cli-command-2.png)
+![`atmos` CLI command mode 2](/img/cli/atmos/atmos-cli-command-2.png)

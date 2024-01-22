@@ -132,3 +132,33 @@ func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	}
 	return false
 }
+
+// GetAllFilesInDir returns all files in the provided directory and all subdirectories
+func GetAllFilesInDir(dir string) ([]string, error) {
+	var files []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if !info.IsDir() {
+			files = append(files, strings.TrimPrefix(TrimBasePathFromPath(dir, path), "/"))
+		}
+		return nil
+	})
+	return files, err
+}
+
+// GetAllYamlFilesInDir returns all YAML files in the provided directory and all subdirectories
+func GetAllYamlFilesInDir(dir string) ([]string, error) {
+	var res []string
+
+	allFiles, err := GetAllFilesInDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, f := range allFiles {
+		if IsYaml(f) {
+			res = append(res, f)
+		}
+	}
+
+	return res, nil
+}

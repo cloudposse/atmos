@@ -66,7 +66,7 @@ func TestWorkflowCommand(t *testing.T) {
 		&workflowDefinition,
 		false,
 		"",
-		// The workflow does not have 5 steps, we we should get an error
+		// The workflow does not have 5 steps, we should get an error
 		"step5",
 	)
 	assert.Error(t, err)

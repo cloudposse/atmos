@@ -11,6 +11,7 @@ import (
 // helmfileCmd represents the base command for all helmfile sub-commands
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
+	Aliases:            []string{"hf"},
 	Short:              "Execute 'helmfile' commands",
 	Long:               `This command runs helmfile commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},

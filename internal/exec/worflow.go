@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"github.com/fatih/color"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,16 +11,16 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
+	tui "github.com/cloudposse/atmos/internal/tui/workflow"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteWorkflowCmd executes a workflow
+// ExecuteWorkflowCmd executes an Atmos workflow
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `workflow name`")
-	}
+	var workflow string
+	var workflowFile string
 
 	info, err := processCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -33,11 +34,31 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// If the `workflow` argument is not passed, start the workflow UI
+	if len(args) != 1 {
+		workflowFile, workflow, err = executeWorkflowUI(cliConfig)
+		if err != nil {
+			return err
+		}
+		if workflowFile == "" || workflow == "" {
+			return nil
+		}
+	}
+
+	if workflow == "" {
+		workflow = args[0]
+	}
+
 	flags := cmd.Flags()
 
-	workflowFile, err := flags.GetString("file")
-	if err != nil {
-		return err
+	if workflowFile == "" {
+		workflowFile, err = flags.GetString("file")
+		if err != nil {
+			return err
+		}
+		if workflowFile == "" {
+			return errors.New("'--file' flag is required to specify a workflow manifest")
+		}
 	}
 
 	dryRun, err := flags.GetBool("dry-run")
@@ -62,7 +83,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowPath = path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, workflowFile)
 	}
 
-	// If the file is specified without an extension, use the default extension
+	// If the workflow file is specified without an extension, use the default extension
 	ext := filepath.Ext(workflowPath)
 	if ext == "" {
 		ext = cfg.DefaultStackConfigFileExtension
@@ -70,7 +91,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		return fmt.Errorf("file '%s' does not exist", workflowPath)
+		return fmt.Errorf("the workflow manifest file '%s' does not exist", workflowPath)
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
@@ -87,15 +108,13 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if i, ok := yamlContent["workflows"]; !ok {
-		return errors.New("a workflow file must be a map with top-level 'workflows:' key")
+		return fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
 	} else {
 		workflowConfig = i
 	}
 
-	workflow := args[0]
-
 	if i, ok := workflowConfig[workflow]; !ok {
-		return fmt.Errorf("the file '%s' does not have the '%s' workflow defined", workflowPath, workflow)
+		return fmt.Errorf("the workflow manifest '%s' does not have the '%s' workflow defined", workflowPath, workflow)
 	} else {
 		workflowDefinition = i
 	}
@@ -106,4 +125,35 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func executeWorkflowUI(cliConfig schema.CliConfiguration) (string, string, error) {
+	_, _, allWorkflows, err := ExecuteDescribeWorkflows(cliConfig)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Start the UI
+	app, err := tui.Execute(allWorkflows)
+	fmt.Println()
+	if err != nil {
+		return "", "", err
+	}
+
+	selectedWorkflowFile := app.GetSelectedWorkflowFile()
+	selectedWorkflow := app.GetSelectedWorkflow()
+
+	// If the user quit the UI, exit
+	if app.ExitStatusQuit() || selectedWorkflowFile == "" || selectedWorkflow == "" {
+		return "", "", nil
+	}
+
+	fmt.Println()
+	u.PrintMessageInColor(fmt.Sprintf(
+		"Executing command: atmos workflow %s --file %s", selectedWorkflow, selectedWorkflowFile),
+		color.New(color.FgCyan),
+	)
+	fmt.Println()
+
+	return selectedWorkflowFile, selectedWorkflow, nil
 }

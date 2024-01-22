@@ -14,6 +14,7 @@ var ValidateStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "Execute 'validate stacks' command",
 	Long:               `This command validates stack manifest configurations: atmos validate stacks`,
+	Example:            "validate stacks",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteValidateStacksCmd(cmd, args)

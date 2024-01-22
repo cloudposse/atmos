@@ -6,6 +6,13 @@ sidebar_label: Workflows
 
 Workflows are a way of combining multiple commands into one executable unit of work.
 
+<br/>
+
+:::note
+You can use [Atmos Custom Commands](/core-concepts/custom-commands) in Atmos Workflows, and Atmos Workflows
+in [Atmos Custom Commands](/core-concepts/custom-commands)
+:::
+
 ## Simple Example
 
 Here's an example workflow called `eks-up` which runs a few commands that will bring up the EKS cluster:
@@ -105,11 +112,11 @@ workflows:
 
   workflow-1:
     description: "Description of Workflow #1"
-    steps: []
+    steps: [ ]
 
   workflow-2:
     description: "Description of Workflow #2"
-    steps: []
+    steps: [ ]
 ```
 
 Each workflow file must have the `workflows:` top-level section with a map of workflow definitions.
