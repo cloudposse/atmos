@@ -1,11 +1,10 @@
 package cmd
 
 import (
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -24,12 +23,7 @@ var validateComponentCmd = &cobra.Command{
 			u.LogErrorAndExit(err)
 		}
 
-		cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-		if err != nil {
-			u.LogErrorAndExit(err)
-		}
-
-		u.LogInfo(cliConfig, "component validated successfully\n")
+		u.PrintMessageInColor("component validated successfully\n", color.New(color.FgGreen))
 	},
 }
 
