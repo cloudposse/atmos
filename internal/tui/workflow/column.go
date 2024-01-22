@@ -70,7 +70,7 @@ func newColumn(columnPointer int, viewType string) columnView {
 	if viewType == codeViewType {
 		// https://github.com/alecthomas/chroma/tree/master/styles
 		// https://xyproto.github.io/splash/docs/
-		codeView = codeview.New("solarized-dark256")
+		codeView = codeview.New("friendly")
 	}
 
 	return columnView{

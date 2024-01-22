@@ -73,8 +73,8 @@ func (m *Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // View returns a string representation of the model
 func (m *Model) View() string {
 	m.Viewport.Style = lipgloss.NewStyle().
-		PaddingLeft(1).
-		PaddingRight(1)
+		PaddingLeft(0).
+		PaddingRight(0)
 
 	return m.Viewport.View()
 }
