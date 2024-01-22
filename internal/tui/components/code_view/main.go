@@ -1,16 +1,11 @@
 package code_view
 
 import (
-	"fmt"
 	u "github.com/cloudposse/atmos/internal/tui/utils"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-)
-
-const (
-	defaultPadding = 1
 )
 
 type Model struct {
@@ -24,8 +19,8 @@ func New(syntaxTheme string) Model {
 	viewPort := viewport.New(0, 0)
 
 	viewPort.Style = lipgloss.NewStyle().
-		PaddingLeft(defaultPadding).
-		PaddingRight(defaultPadding)
+		PaddingLeft(0).
+		PaddingRight(0)
 
 	return Model{
 		Viewport:    viewPort,
@@ -51,7 +46,7 @@ func (m *Model) SetContent(content string, language string) {
 		Render(highlighted))
 }
 
-// SetSyntaxTheme sets the syntax theme of the rendered code
+// SetSyntaxTheme sets the syntax theme
 func (m *Model) SetSyntaxTheme(theme string) {
 	m.SyntaxTheme = theme
 }
@@ -77,18 +72,16 @@ func (m *Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // View returns a string representation of the model
 func (m *Model) View() string {
 	m.Viewport.Style = lipgloss.NewStyle().
-		PaddingLeft(defaultPadding).
-		PaddingRight(defaultPadding)
+		PaddingLeft(0).
+		PaddingRight(0)
 
 	return m.Viewport.View()
 }
 
 func (m *Model) CursorUp() {
-	lines := m.Viewport.LineUp(1)
-	m.Viewport.SetContent(fmt.Sprintf("%v", lines))
+	m.Viewport.LineUp(1)
 }
 
 func (m *Model) CursorDown() {
-	lines := m.Viewport.LineDown(1)
-	m.Viewport.SetContent(fmt.Sprintf("%v", lines))
+	m.Viewport.LineDown(1)
 }

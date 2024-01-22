@@ -178,24 +178,23 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 
 	workflowFilesMapKeys := lo.Keys(workflows)
 	sort.Strings(workflowFilesMapKeys)
-
-	var firstWorkflow string
+	var selectedWorkflow string
 
 	if len(workflowFilesMapKeys) > 0 {
 		workflowFileItems = lo.Map(workflowFilesMapKeys, func(s string, _ int) list.Item {
 			return listItem(s)
 		})
 
-		firstWorkflowFile := workflowFilesMapKeys[0]
-		workflowsMapKeys := lo.Keys(workflows[firstWorkflowFile])
+		selectedWorkflowFileName := workflowFilesMapKeys[0]
+		workflowsMapKeys := lo.Keys(workflows[selectedWorkflowFileName])
 		sort.Strings(workflowsMapKeys)
 
 		if len(workflowsMapKeys) > 0 {
 			workflowItems = lo.Map(workflowsMapKeys, func(s string, _ int) list.Item {
 				return listItem(s)
 			})
-			firstWorkflowName := workflowsMapKeys[0]
-			firstWorkflow, _ = u.ConvertToYAML(workflows[firstWorkflowFile][firstWorkflowName])
+			selectedWorkflowName := workflowsMapKeys[0]
+			selectedWorkflow, _ = u.ConvertToYAML(workflows[selectedWorkflowFileName][selectedWorkflowName])
 		}
 	}
 
@@ -213,7 +212,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	app.columnViews[1].list.SetShowFilter(true)
 	app.columnViews[1].list.InfiniteScrolling = true
 
-	app.columnViews[2].SetContent(firstWorkflow, "yaml")
+	app.columnViews[2].SetContent(selectedWorkflow, "yaml")
 }
 
 func (app *App) getNextViewPointer() int {
@@ -232,18 +231,18 @@ func (app *App) getPrevViewPointer() int {
 
 func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 	if app.columnPointer == 0 {
-		selected := app.columnViews[0].list.SelectedItem()
-		if selected == nil {
+		selectedWorkflowFile := app.columnViews[0].list.SelectedItem()
+		if selectedWorkflowFile == nil {
 			return
 		}
-		selectedItem := fmt.Sprintf("%s", selected)
-		itemStrings := lo.Keys(app.workflows[selectedItem])
-		items := lo.Map(itemStrings, func(s string, _ int) list.Item {
+		selectedWorkflowFileName := fmt.Sprintf("%s", selectedWorkflowFile)
+		workflowItemsStrings := lo.Keys(app.workflows[selectedWorkflowFileName])
+		workflowItems := lo.Map(workflowItemsStrings, func(s string, _ int) list.Item {
 			return listItem(s)
 		})
 		app.columnViews[1].list.ResetFilter()
 		app.columnViews[1].list.ResetSelected()
-		app.columnViews[1].list.SetItems(items)
+		app.columnViews[1].list.SetItems(workflowItems)
 	}
 }
 
