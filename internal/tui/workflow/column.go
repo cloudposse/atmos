@@ -125,11 +125,16 @@ func (c *columnView) View() string {
 }
 
 func (c *columnView) setSize(width, height int) {
-	c.width = width / 4
+	if c.viewType == listViewType {
+		c.width = width / 4
+	}
+	if c.viewType == codeViewType {
+		c.width = width / 3
+	}
 }
 
 func (c *columnView) getStyle() lipgloss.Style {
-	s := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
+	s := lipgloss.NewStyle().Padding(0).Margin(2).Height(c.height).Width(c.width)
 
 	if c.Focused() {
 		s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))

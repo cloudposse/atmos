@@ -38,6 +38,7 @@ func (m *Model) SetContent(content string, language string) {
 	highlighted, _ := u.HighlightCode(content, language, m.SyntaxTheme)
 	m.HighlightedContent = highlighted
 
+	m.Viewport.ViewUp()
 	m.Viewport.MouseWheelEnabled = true
 
 	m.Viewport.SetContent(lipgloss.NewStyle().
@@ -72,8 +73,8 @@ func (m *Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // View returns a string representation of the model
 func (m *Model) View() string {
 	m.Viewport.Style = lipgloss.NewStyle().
-		PaddingLeft(0).
-		PaddingRight(0)
+		PaddingLeft(1).
+		PaddingRight(1)
 
 	return m.Viewport.View()
 }
