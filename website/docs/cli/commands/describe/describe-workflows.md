@@ -76,8 +76,6 @@ atmos describe workflows -o list
   workflow: plan-all-vpc-components
 - file: networking.yaml
   workflow: plan-all-vpc-flow-logs-bucket-components
-- file: vpc.yaml
-  workflow: vpc-tgw-eks
 ```
 
 <br/>
@@ -103,8 +101,6 @@ networking.yaml:
   - apply-all-components
   - plan-all-vpc-components
   - plan-all-vpc-flow-logs-bucket-components
-vpc.yaml:
-  - vpc-tgw-eks
 ```
 
 <br/>
