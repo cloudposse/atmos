@@ -40,8 +40,8 @@ atmos
 
 ### Mode 1: Components in Stacks
 
-![`atmos` CLI command mode 1](/img/cli/atmos-cli-command-1.png)
+![`atmos` CLI command mode 1](/img/cli/atmos/atmos-cli-command-1.png)
 
 ### Mode 2: Stacks for Components
 
-![`atmos` CLI command mode 2](/img/cli/atmos-cli-command-2.png)
+![`atmos` CLI command mode 2](/img/cli/atmos/atmos-cli-command-2.png)

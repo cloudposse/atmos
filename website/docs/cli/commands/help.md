@@ -16,7 +16,7 @@ atmos --help
 
 `atmos help` starts an interactive help UI in the terminal:
 
-![`atmos` help command](/img/cli/atmos-help-command.png)
+![`atmos` help command](/img/cli/help/atmos-help-command.png)
 
 <br/>
 
