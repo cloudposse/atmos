@@ -21,13 +21,13 @@ type App struct {
 	loaded               bool
 	columnViews          []columnView
 	quit                 bool
-	workflows            map[string]schema.WorkflowsConfig
+	workflows            map[string]schema.WorkflowConfig
 	selectedWorkflowFile string
 	selectedWorkflow     string
 	columnPointer        int
 }
 
-func NewApp(workflows map[string]schema.WorkflowsConfig) *App {
+func NewApp(workflows map[string]schema.WorkflowConfig) *App {
 	h := help.New()
 	h.ShowAll = true
 
@@ -167,7 +167,7 @@ func (app *App) ExitStatusQuit() bool {
 	return app.quit
 }
 
-func (app *App) initViews(workflows map[string]schema.WorkflowsConfig) {
+func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 	app.columnViews = []columnView{
 		newColumn(0, listViewType),
 		newColumn(1, listViewType),

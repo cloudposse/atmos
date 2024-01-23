@@ -100,7 +100,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	var workflowManifest schema.WorkflowManifest
-	var workflowConfig schema.WorkflowsConfig
+	var workflowConfig schema.WorkflowConfig
 	var workflowDefinition schema.WorkflowDefinition
 
 	if err = yaml.Unmarshal(fileContent, &workflowManifest); err != nil {

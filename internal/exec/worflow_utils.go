@@ -126,11 +126,11 @@ func ExecuteWorkflow(
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command
 func ExecuteDescribeWorkflows(
 	cliConfig schema.CliConfiguration,
-) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowsConfig, error) {
+) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowConfig, error) {
 
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
-	allResult := make(map[string]schema.WorkflowsConfig)
+	allResult := make(map[string]schema.WorkflowConfig)
 
 	if cliConfig.Workflows.BasePath == "" {
 		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in `atmos.yaml`")
@@ -158,7 +158,7 @@ func ExecuteDescribeWorkflows(
 		}
 
 		var workflowManifest schema.WorkflowManifest
-		var workflowConfig schema.WorkflowsConfig
+		var workflowConfig schema.WorkflowConfig
 
 		if err = yaml.Unmarshal(fileContent, &workflowManifest); err != nil {
 			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
