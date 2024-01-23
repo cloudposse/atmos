@@ -170,9 +170,9 @@ type WorkflowDefinition struct {
 	Stack       string         `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 }
 
-type WorkflowConfig map[string]WorkflowDefinition
+type WorkflowsConfig map[string]WorkflowDefinition
 
-type WorkflowManifest map[string]WorkflowConfig
+type WorkflowManifest map[string]WorkflowsConfig
 
 type DescribeWorkflowsItem struct {
 	File     string `yaml:"file" json:"file" mapstructure:"file"`
