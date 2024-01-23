@@ -157,14 +157,14 @@ func ExecuteDescribeWorkflows(
 			return nil, nil, nil, err
 		}
 
-		var yamlContent schema.WorkflowFile
+		var workflowManifest schema.WorkflowManifest
 		var workflowConfig schema.WorkflowConfig
 
-		if err = yaml.Unmarshal(fileContent, &yamlContent); err != nil {
+		if err = yaml.Unmarshal(fileContent, &workflowManifest); err != nil {
 			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
 		}
 
-		if i, ok := yamlContent["workflows"]; !ok {
+		if i, ok := workflowManifest["workflows"]; !ok {
 			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", f)
 		} else {
 			workflowConfig = i

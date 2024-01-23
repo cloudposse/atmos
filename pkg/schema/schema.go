@@ -172,7 +172,7 @@ type WorkflowDefinition struct {
 
 type WorkflowConfig map[string]WorkflowDefinition
 
-type WorkflowFile map[string]WorkflowConfig
+type WorkflowManifest map[string]WorkflowConfig
 
 type DescribeWorkflowsItem struct {
 	File     string `yaml:"file" json:"file" mapstructure:"file"`
