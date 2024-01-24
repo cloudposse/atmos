@@ -67,8 +67,21 @@ Right Sleep 500ms
 Down Sleep 500ms
 Down Sleep 500ms
 Down Sleep 500ms
+Right Sleep 500ms
 Down Sleep 500ms
-Down Sleep 2s
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
 Esc
 Sleep 2s
 
