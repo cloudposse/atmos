@@ -43,7 +43,6 @@ Sleep 1s
 Type "# In Atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
 Type "atmos" Sleep 500ms Enter
 Sleep 2s
-
 Down Sleep 500ms
 Down Sleep 500ms
 Up Sleep 500ms
@@ -59,6 +58,18 @@ Right Sleep 1s
 Down Sleep 500ms
 Up Sleep 1s
 Enter
+Sleep 2s
+
+Type "# In Atmos you can easily explore workflows, and run workflow commands..." Sleep 500ms Enter
+Type "atmos workflow" Sleep 500ms Enter
+Sleep 2s
+Right Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 2s
+Esc
 Sleep 2s
 
 Type "# Let's see what components we have available!" Sleep 500ms Enter
