@@ -1,3 +1,6 @@
+name: Networking
+description: Atmos workflows for VPCs and VPC Flow Logs
+
 workflows:
 
   plan-all-vpc-flow-logs-bucket-components:

@@ -21,13 +21,13 @@ type App struct {
 	loaded               bool
 	columnViews          []columnView
 	quit                 bool
-	workflows            map[string]schema.WorkflowConfig
+	workflows            map[string]schema.WorkflowManifest
 	selectedWorkflowFile string
 	selectedWorkflow     string
 	columnPointer        int
 }
 
-func NewApp(workflows map[string]schema.WorkflowConfig) *App {
+func NewApp(workflows map[string]schema.WorkflowManifest) *App {
 	h := help.New()
 	h.ShowAll = true
 
@@ -167,7 +167,7 @@ func (app *App) ExitStatusQuit() bool {
 	return app.quit
 }
 
-func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
+func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 	app.columnViews = []columnView{
 		newColumn(0, listViewType),
 		newColumn(1, listViewType),
@@ -187,7 +187,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 		})
 
 		selectedWorkflowFileName := workflowFilesMapKeys[0]
-		workflowsMapKeys := lo.Keys(workflows[selectedWorkflowFileName])
+		workflowsMapKeys := lo.Keys(workflows[selectedWorkflowFileName].Workflows)
 		sort.Strings(workflowsMapKeys)
 
 		if len(workflowsMapKeys) > 0 {
@@ -195,7 +195,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowConfig) {
 				return listItem(s)
 			})
 			selectedWorkflowName := workflowsMapKeys[0]
-			selectedWorkflow, _ = u.ConvertToYAML(workflows[selectedWorkflowFileName][selectedWorkflowName])
+			selectedWorkflow, _ = u.ConvertToYAML(workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 		}
 	}
 
@@ -238,7 +238,7 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 		}
 
 		selectedWorkflowFileName := fmt.Sprintf("%s", selectedWorkflowFile)
-		workflowsMapKeys := lo.Keys(app.workflows[selectedWorkflowFileName])
+		workflowsMapKeys := lo.Keys(app.workflows[selectedWorkflowFileName].Workflows)
 		sort.Strings(workflowsMapKeys)
 
 		if len(workflowsMapKeys) > 0 {
@@ -251,7 +251,7 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 			app.columnViews[1].list.SetItems(workflowItems)
 
 			selectedWorkflowName := workflowsMapKeys[0]
-			selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName][selectedWorkflowName])
+			selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 			app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
 		}
 	} else if app.columnPointer == 1 {
@@ -269,7 +269,7 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 
 		selectedWorkflowName := fmt.Sprintf("%s", selectedWorkflow)
 
-		selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName][selectedWorkflowName])
+		selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 		app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
 	}
 }

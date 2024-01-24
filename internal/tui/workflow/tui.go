@@ -8,7 +8,7 @@ import (
 )
 
 // Execute starts the TUI app and returns the selected items from the views
-func Execute(workflows map[string]schema.WorkflowConfig) (*App, error) {
+func Execute(workflows map[string]schema.WorkflowManifest) (*App, error) {
 	mouseZone.NewGlobal()
 	mouseZone.SetEnabled(true)
 

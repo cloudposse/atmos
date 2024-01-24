@@ -126,11 +126,11 @@ func ExecuteWorkflow(
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command
 func ExecuteDescribeWorkflows(
 	cliConfig schema.CliConfiguration,
-) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowConfig, error) {
+) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
 
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
-	allResult := make(map[string]schema.WorkflowConfig)
+	allResult := make(map[string]schema.WorkflowManifest)
 
 	if cliConfig.Workflows.BasePath == "" {
 		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in `atmos.yaml`")
@@ -173,7 +173,7 @@ func ExecuteDescribeWorkflows(
 		allWorkflowsInFile := lo.Keys(workflowConfig)
 		sort.Strings(allWorkflowsInFile)
 		mapResult[f] = allWorkflowsInFile
-		allResult[f] = workflowConfig
+		allResult[f] = workflowManifest
 	}
 
 	for k, v := range mapResult {
