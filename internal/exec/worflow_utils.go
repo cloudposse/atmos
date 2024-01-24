@@ -164,11 +164,11 @@ func ExecuteDescribeWorkflows(
 			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
 		}
 
-		if i, ok := workflowManifest["workflows"]; !ok {
-			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", f)
-		} else {
-			workflowConfig = i
+		if workflowManifest.Workflows == nil {
+			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
 		}
+
+		workflowConfig = workflowManifest.Workflows
 
 		allWorkflowsInFile := lo.Keys(workflowConfig)
 		sort.Strings(allWorkflowsInFile)

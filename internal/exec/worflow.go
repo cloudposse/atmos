@@ -107,11 +107,11 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if i, ok := workflowManifest["workflows"]; !ok {
+	if workflowManifest.Workflows == nil {
 		return fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
-	} else {
-		workflowConfig = i
 	}
+
+	workflowConfig = workflowManifest.Workflows
 
 	if i, ok := workflowConfig[workflow]; !ok {
 		return fmt.Errorf("the workflow manifest '%s' does not have the '%s' workflow defined", workflowPath, workflow)
