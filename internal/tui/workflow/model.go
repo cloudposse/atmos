@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -183,7 +182,11 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 
 	if len(workflowFilesMapKeys) > 0 {
 		workflowFileItems = lo.Map(workflowFilesMapKeys, func(s string, _ int) list.Item {
-			return listItem(s)
+			workflowManifest := workflows[s]
+			return listItem{
+				name: workflowManifest.Name,
+				item: s,
+			}
 		})
 
 		selectedWorkflowFileName := workflowFilesMapKeys[0]
@@ -192,7 +195,9 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 
 		if len(workflowsMapKeys) > 0 {
 			workflowItems = lo.Map(workflowsMapKeys, func(s string, _ int) list.Item {
-				return listItem(s)
+				return listItem{
+					item: s,
+				}
 			})
 			selectedWorkflowName := workflowsMapKeys[0]
 			selectedWorkflow, _ = u.ConvertToYAML(workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
@@ -237,13 +242,15 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 			return
 		}
 
-		selectedWorkflowFileName := fmt.Sprintf("%s", selectedWorkflowFile)
+		selectedWorkflowFileName := selectedWorkflowFile.(listItem).item
 		workflowsMapKeys := lo.Keys(app.workflows[selectedWorkflowFileName].Workflows)
 		sort.Strings(workflowsMapKeys)
 
 		if len(workflowsMapKeys) > 0 {
 			workflowItems := lo.Map(workflowsMapKeys, func(s string, _ int) list.Item {
-				return listItem(s)
+				return listItem{
+					item: s,
+				}
 			})
 
 			app.columnViews[1].list.ResetFilter()
@@ -260,14 +267,14 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 			return
 		}
 
-		selectedWorkflowFileName := fmt.Sprintf("%s", selectedWorkflowFile)
+		selectedWorkflowFileName := selectedWorkflowFile.(listItem).item
 
 		selectedWorkflow := app.columnViews[1].list.SelectedItem()
 		if selectedWorkflow == nil {
 			return
 		}
 
-		selectedWorkflowName := fmt.Sprintf("%s", selectedWorkflow)
+		selectedWorkflowName := selectedWorkflow.(listItem).item
 
 		selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 		app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
@@ -281,14 +288,14 @@ func (app *App) execute() {
 
 	selectedWorkflowFile := app.columnViews[workflowFilesViewIndex].list.SelectedItem()
 	if selectedWorkflowFile != nil {
-		app.selectedWorkflowFile = fmt.Sprintf("%s", selectedWorkflowFile)
+		app.selectedWorkflowFile = selectedWorkflowFile.(listItem).item
 	} else {
 		app.selectedWorkflowFile = ""
 	}
 
 	selectedWorkflow := app.columnViews[workflowsViewIndex].list.SelectedItem()
 	if selectedWorkflow != nil {
-		app.selectedWorkflow = fmt.Sprintf("%s", selectedWorkflow)
+		app.selectedWorkflow = selectedWorkflow.(listItem).item
 	} else {
 		app.selectedWorkflow = ""
 	}
