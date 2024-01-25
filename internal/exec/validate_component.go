@@ -14,19 +14,19 @@ import (
 )
 
 // ExecuteValidateComponentCmd executes `validate component` command
-func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
+func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
 	info, err := processCommandLineArgs("", cmd, args, nil)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument 'componentName'")
+		return "", "", errors.New("invalid arguments. The command requires one argument 'componentName'")
 	}
 
 	componentName := args[0]
@@ -35,35 +35,35 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) error {
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	schemaPath, err := flags.GetString("schema-path")
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	schemaType, err := flags.GetString("schema-type")
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	modulePaths, err := flags.GetStringSlice("module-paths")
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	timeout, err := flags.GetInt("timeout")
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	_, err = ExecuteValidateComponent(cliConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
-	return nil
+	return componentName, stack, nil
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents

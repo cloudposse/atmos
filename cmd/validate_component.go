@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
@@ -18,12 +20,13 @@ var validateComponentCmd = &cobra.Command{
 		"atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type opa --module-paths catalog",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteValidateComponentCmd(cmd, args)
+		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
 
-		u.PrintMessageInColor("component validated successfully\n", color.New(color.FgGreen))
+		m := fmt.Sprintf("component '%s' in the stack '%s' validated successfully", component, stack)
+		u.PrintMessageInColor(m, color.New(color.FgGreen))
 	},
 }
 
