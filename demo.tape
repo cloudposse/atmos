@@ -82,8 +82,12 @@ Up Sleep 500ms
 Up Sleep 500ms
 Up Sleep 500ms
 Up Sleep 500ms
-Esc
-Sleep 2s
+Right Sleep 500ms
+Down Sleep 500ms
+Right Sleep 500ms
+Down Sleep 500ms
+Enter
+Sleep 3s
 
 Type "# Let's see what components we have available!" Sleep 500ms Enter
 Type "atmos list components" Sleep 500ms Enter
