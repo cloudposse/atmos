@@ -45,7 +45,8 @@ atmos describe workflows -f json
 
 <br/>
 
-When the `--output list` flag is passed (default), the output of the command is a list of objects. Each object has the following schema:
+When the `--output list` flag is passed (default), the output of the command is a list of objects. Each object has the
+following schema:
 
 - `file` - the workflow manifest file name
 - `workflow` - the name of the workflow defined in the workflow manifest file
@@ -80,7 +81,8 @@ atmos describe workflows -o list
 
 <br/>
 
-When the `--output map` flag is passed, the output of the command is a map of workflow manifests to the lists of workflows defined in each manifest.
+When the `--output map` flag is passed, the output of the command is a map of workflow manifests to the lists of
+workflows defined in each manifest.
 For example:
 
 ```shell
@@ -105,7 +107,8 @@ networking.yaml:
 
 <br/>
 
-When the `--output all` flag is passed, the output of the command is a map of workflow manifests to the maps of all workflow definitions. For example:
+When the `--output all` flag is passed, the output of the command is a map of workflow manifests to the maps of all
+workflow definitions. For example:
 
 ```shell
 atmos describe workflows -o all
@@ -113,42 +116,67 @@ atmos describe workflows -o all
 
 ```yaml
 networking.yaml:
-  apply-all-components:
-    description: |
-      Run 'terraform apply' on all components in all stacks
-    steps:
-      - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-dev -auto-approve
-      - command: terraform apply vpc -s plat-ue2-dev -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-dev -auto-approve
-      - command: terraform apply vpc -s plat-uw2-dev -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-staging -auto-approve
-      - command: terraform apply vpc -s plat-ue2-staging -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-staging -auto-approve
-      - command: terraform apply vpc -s plat-uw2-staging -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-prod -auto-approve
-      - command: terraform apply vpc -s plat-ue2-prod -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-prod -auto-approve
-      - command: terraform apply vpc -s plat-uw2-prod -auto-approve
-  plan-all-vpc-components:
-    description: |
-      Run 'terraform plan' on all 'vpc' components in all stacks
-    steps:
-      - command: terraform plan vpc -s plat-ue2-dev
-      - command: terraform plan vpc -s plat-uw2-dev
-      - command: terraform plan vpc -s plat-ue2-staging
-      - command: terraform plan vpc -s plat-uw2-staging
-      - command: terraform plan vpc -s plat-ue2-prod
-      - command: terraform plan vpc -s plat-uw2-prod
-  plan-all-vpc-flow-logs-bucket-components:
-    description: |
-      Run 'terraform plan' on all 'vpc-flow-logs-bucket' components in all stacks
-    steps:
-      - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-dev
-      - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-dev
-      - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-staging
-      - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-staging
-      - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-prod
-      - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-prod
+  name: Networking & Logging
+  description: Atmos workflows for managing VPCs and VPC Flow Logs
+  workflows:
+    apply-all-components:
+      description: |
+        Run 'terraform apply' on all components in all stacks
+      steps:
+        - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-dev -auto-approve
+        - command: terraform apply vpc -s plat-ue2-dev -auto-approve
+        - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-dev -auto-approve
+        - command: terraform apply vpc -s plat-uw2-dev -auto-approve
+        - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-staging -auto-approve
+        - command: terraform apply vpc -s plat-ue2-staging -auto-approve
+        - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-staging -auto-approve
+        - command: terraform apply vpc -s plat-uw2-staging -auto-approve
+        - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-prod -auto-approve
+        - command: terraform apply vpc -s plat-ue2-prod -auto-approve
+        - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-prod -auto-approve
+        - command: terraform apply vpc -s plat-uw2-prod -auto-approve
+    plan-all-vpc-components:
+      description: |
+        Run 'terraform plan' on all 'vpc' components in all stacks
+      steps:
+        - command: terraform plan vpc -s plat-ue2-dev
+        - command: terraform plan vpc -s plat-uw2-dev
+        - command: terraform plan vpc -s plat-ue2-staging
+        - command: terraform plan vpc -s plat-uw2-staging
+        - command: terraform plan vpc -s plat-ue2-prod
+        - command: terraform plan vpc -s plat-uw2-prod
+    plan-all-vpc-flow-logs-bucket-components:
+      description: |
+        Run 'terraform plan' on all 'vpc-flow-logs-bucket' components in all stacks
+      steps:
+        - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-dev
+        - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-dev
+        - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-staging
+        - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-staging
+        - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-prod
+        - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-prod
+validation.yaml:
+  name: Validation
+  description: Atmos workflows for VPCs and VPC Flow Logs validation
+  workflows:
+    validate-all-vpc-components:
+      description: Validate all VPC components in all stacks
+      steps:
+        - command: validate component vpc -s plat-ue2-dev
+        - command: validate component vpc -s plat-uw2-dev
+        - command: validate component vpc -s plat-ue2-staging
+        - command: validate component vpc -s plat-uw2-staging
+        - command: validate component vpc -s plat-ue2-prod
+        - command: validate component vpc -s plat-uw2-prod
+    validate-all-vpc-flow-logs-bucket-components:
+      description: Validate all VPC Flow Logs bucket components in all stacks
+      steps:
+        - command: validate component vpc-flow-logs-bucket -s plat-ue2-dev
+        - command: validate component vpc-flow-logs-bucket -s plat-uw2-dev
+        - command: validate component vpc-flow-logs-bucket -s plat-ue2-staging
+        - command: validate component vpc-flow-logs-bucket -s plat-uw2-staging
+        - command: validate component vpc-flow-logs-bucket -s plat-ue2-prod
+        - command: validate component vpc-flow-logs-bucket -s plat-uw2-prod
 ```
 
 <br/>
