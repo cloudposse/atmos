@@ -6,7 +6,7 @@ sidebar_label: Vendoring
 id: vendoring
 ---
 
-Atmos natively supports the concept of "vendoring", which is making copies of the 3rd party components, stacks, and other artifacts in your own repo.
+Atmos natively supports the concept of "vendoring", which is making copies of 3rd-party components, stacks, and other artifacts in your own repo.
 
 With Atmos vendoring, you can copy components and other artifacts from the following sources:
 

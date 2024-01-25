@@ -34,11 +34,15 @@ Type "# First check you have Atmos installed" Sleep 500ms Enter
 Type "atmos version" Sleep 500ms Enter
 Sleep 1s
 
-Type "# Now let's explore the quick start example" Sleep 500ms Enter
+Type "# Now let's explore the Quick Start example" Sleep 500ms Enter
 Type "cd examples/quick-start" Sleep 500ms Enter
 
 Type "ls -al" Sleep 500ms Enter
 Sleep 1s
+
+Type "# In Atmos you can define vendoring config in 'vendor.yaml' and download 3rd-party components, stacks, and other artifacts ..." Sleep 500ms Enter
+Type "atmos vendor pull" Sleep 500ms Enter
+Sleep 3s
 
 Type "# In Atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
 Type "atmos" Sleep 500ms Enter
@@ -60,7 +64,7 @@ Up Sleep 1s
 Enter
 Sleep 2s
 
-Type "# In Atmos you can easily explore workflows, and run workflow commands..." Sleep 500ms Enter
+Type "# In Atmos you can easily explore workflows, and execute workflow commands..." Sleep 500ms Enter
 Type "atmos workflow" Sleep 500ms Enter
 Sleep 2s
 Right Sleep 500ms

@@ -7,7 +7,8 @@ sidebar_label: Glossary
 Here's a list of the terms, concepts and conventions used throughout the Atmos project.
 
 :::info
-Atmos borrows from many of the concepts of [Object-Oriented Programming](https://en.wikipedia.org/wiki/Object-oriented_programming) and applies them
+Atmos borrows from many of the concepts
+of [Object-Oriented Programming](https://en.wikipedia.org/wiki/Object-oriented_programming) and applies them
 to configuration, enabling you to model configuration in a way that makes sense for your organization.
 :::
 
@@ -30,7 +31,7 @@ to configuration, enabling you to model configuration in a way that makes sense 
 | [Stacks](/core-concepts/stacks)                                                                       | Atmos stacks are configurations that function like blueprints to describe all [components](/core-concepts/components)\nAn Atmos stack can be defined in one or more stack manifests |
 | [Terraform "Child Modules"](https://developer.hashicorp.com/terraform/language/modules#child-modules) | Any terraform module that is called from another module. A child module does not have terraform state.                                                                              |
 | [Terraform "Root Module"](https://developer.hashicorp.com/terraform/language/modules#child-modules)   | These are components. It's any top-level terraform module with a state backend. This is where "terraform" is run.                                                                   |
-| [Vendoring](/core-concepts/components/vendoring)                                                      | A mechanism of making a copy of the 3rd party components in your repository.                                                                                                        |
+| [Vendoring](/core-concepts/components/vendoring)                                                      | A mechanism of making a copy of 3rd-party components in your repository.                                                                                                            |
 | [Namespace](/core-concepts/stacks)                                                                    | A prefix for all resources in a Stack                                                                                                                                               |
 | [Tenant](/core-concepts/stacks)                                                                       | A logical grouping of resources. In AWS we use the Tenant to represent the Organizational Unit (OU).                                                                                |
 | [Environment](/core-concepts/stacks)                                                                  | A location where resources are deployed (e.g. `us-east-1`). See [Disambiguation](#disambiguation)                                                                                   |
