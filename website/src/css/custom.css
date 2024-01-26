@@ -25,6 +25,10 @@ body {
     font-family: "Lato", sans-serif;
 }
 
+.language-console pre > code, .language-text pre > code  {
+    line-height: 1.26em;
+}
+
 /*
 nav.navbar {
     -webkit-box-shadow: 0 4px 16px rgb(0 0 0 / 24%);

@@ -15,7 +15,9 @@ import Link from '@docusaurus/Link'
 
 # Atmos is a workflow automation tool
 
-Atmos is a workflow automation tool for DevOps that makes it more manageable to operate very large environments with DRY configuration.
+Atmos is a workflow automation tool for developers and DevOps teams alike, that make it fun to operate very large infrastructures with DRY configuration. 
+It's especially adept at [overcoming Terraform's limitations](/reference/terraform-limitations/) with [established conventions](/category/core-concepts) and [design patterns](/design-patterns/) that 
+give cloud architect's the warm and fuzzies.
 
 <Link
     to="/quick-start"
@@ -30,17 +32,30 @@ Atmos is a workflow automation tool for DevOps that makes it more manageable to 
 </Link>
 
 
+## Screenshots
+
+To get an idea of what it looks like using `atmos` on the command line, just [try our quickstart]() and run [`atmos`](/cli/commands/atmos) command to start an interactive UI in the terminal. Use the arrow keys to select stacks and components to deploy.
+
+![Atmos Screenshot](../../docs/demo.gif)
+
+<br/>
+
+In Atmos, you can easily search and navigate your configuration from the built-in UI.
+
+![`atmos` CLI command example 2](/img/cli/atmos/atmos-cli-command-1.png)
+
+
 ## Why Atmos?
 
-With [so many of these tools today](/reference/alternatives/), why does the world need another "workflow" automation tool?
+With [so many of these alternatives](/reference/alternatives/), why does the world need another "workflow" automation tool?
 
-That's simple. **None of them pull off what you can do with Atmos.**
+The answer is simple. **None of them pull off what you can do with Atmos.**
 
 To fully understand why, it may be helpful to understand some background.
 Atmos is a tool created by [Cloud Posse](https://cloudposse.com).
 We are [DevOps Accelerator for Startups](https://cloudposse.com/services/) (typically venture-backed, later-stage series A-D companies) and enterprises.
-We help our customers own their infrastructure using our [reference architecture blueprints](https://cloudposse.com/reference-architecture/) and implement it with their teams while showing them the ropes.
-We needed to scratch our own itch. After trying everything, we realized it would not be possible to achieve the outcome we wanted for our customers using a mashup of existing off-the-shelf tools.
+We help our customers own their infrastructure using our [reference architecture blueprints](https://cloudposse.com/reference-architecture/) and [implement it with their teams](https://cloudposse.com/services/) while showing them the ropes.
+We needed to scratch our own itch. After trying everything, and running upgainst [Terraform's limitations](/reference/terraform-limitations/), we realized it would not be possible to achieve the outcome we wanted for our customers using a mashup of existing off-the-shelf tools.
 That's why we created Atmos.
 
 ### TL;DR
@@ -61,7 +76,7 @@ Atmos is ideally suited for these use-cases.
 - Provide Service Catalogs, Landing Zones and Architectural Blueprints
 
 
-Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel.
+Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel, or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
 
 ### Atmos Gives Terraform Super Powers
 
@@ -70,7 +85,6 @@ Businesses succeed because of their processes. Those processes need to be captur
 The reason is that workflows give teams superpowers without needing to be superheroes. Let's face it: human error is the number one risk businesses face. It's the root cause of most outages and can strike anytime.
 
 The best workflows enable anyone, anywhere, to run them. They are easily understood, self-documenting and ensure fewer mistakes get made. When workflows are written down, they can be iterated upon and optimized.
-
 
 - Write components (root modules) once, reuse any number of times
 - Vanilla HCL without customizations
@@ -187,22 +201,21 @@ There are many problems encountered by teams working with Terraform at scale.
 - Terraform backend configurations cannot be parameterized
 - Terraform lacks built-in guardrails & policy controls that enterprises need
 
-
 ## The Solution
 
 ### Use Atmos
 
 Atmos is part of the solution because:
 - Opinionated workflows for terraform
-- Established conventions and patterns to manage terraform @ scale
-- Break terraliths into smaller pieces (“components”)
-- Enable team collaboration with catalogs and libraries
-- Enforce guardrails with OPA and JSON Schema
+- Established conventions and [design patterns](/design-patterns/) to manage terraform @ scale
+- Break terraliths into smaller pieces ([“components”](/components/))
+- Enable team collaboration with [catalogs](/core-concepts/stacks/catalogs) and [libraries](/core-concepts/components/library)
+- Enforce guardrails with [OPA and JSON Schema validation](/core-concepts/components/validation)
 - Zero Vendor Lock-in
 
 ### Established Conventions
 
-Part of the benefit of working with Atmos is we have many established conventions that you can adopt.
+Part of the benefit of working with Atmos is we have many [established conventions](/category/core-concepts) that you can adopt.
 
 Here are some of the examples:
 
@@ -224,18 +237,8 @@ We invite you to join us in the larger movement and impact the industry at large
 It might help to also understand what Atmos is not attempting to replace:
 
 - Atmos is not an alternative to tools like `terraform`, `kubectl`, `chef`, `puppet`, or `ansible`. Instead, atmos is the type of tool that would orchestrate these tools.
-- Atmos is not an alternative to CI/CD systems. If anything, those systems will still call Atmos.
+- Atmos is not an alternative to CI/CD systems, but you will likely call Atmos from those systems.
 
-### Atmos Configuration and UI Examples
-
-Just run [`atmos`](/cli/commands/atmos) command to start an interactive UI in the terminal to select an Atmos component and stack and a command to
-execute. Press `Enter` to execute the selected command for the selected component and stack.
-
-![`atmos` CLI command example 1](../../docs/demo.gif)
-
-<br/>
-
-![`atmos` CLI command example 2](/img/cli/atmos/atmos-cli-command-1.png)
 
 ### Live Demo of Atmos
 
