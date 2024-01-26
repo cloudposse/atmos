@@ -151,7 +151,7 @@ where:
 
 Each step is configured using the following attributes:
 
-- `command` - the command to execute. Can be either an Atmos [CLI command](/commands) (without the `atmos` binary name in front of it,
+- `command` - the command to execute. Can be either an Atmos [CLI command](/category/commands) (without the `atmos` binary name in front of it,
   for example `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute
 
 - `name` - step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step`
@@ -159,7 +159,7 @@ Each step is configured using the following attributes:
   step (the index starts with 1, so the first generated step name would be `step1`).
 
 - `type` - the type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command`
-  is an Atmos [CLI command](/commands). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
+  is an Atmos [CLI command](/category/commands). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
   Atmos prepends the `atmos` binary name to the provided command before executing it
 
 - `stack` - step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the
