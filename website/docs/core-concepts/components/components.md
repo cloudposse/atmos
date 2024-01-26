@@ -129,7 +129,7 @@ The `metadata` section extends functionality of the component.
 
 #### settings
 
-The `settings` block is a free-form map used to pass configuration information to [integrations](/category/integrations).
+The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations).
 
 ## Types of Components
 
