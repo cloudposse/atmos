@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
+	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -76,6 +77,13 @@ func ExecuteAtmosCmd() error {
 	// Sort the maps by the keys, and sort the lists of values
 	stacksComponentsMap = u.SortMapByKeysAndValuesUniq(stacksComponentsMap)
 	componentsStacksMap = u.SortMapByKeysAndValuesUniq(componentsStacksMap)
+
+	// Print a styled Atmos logo to the terminal
+	fmt.Println()
+	err = tuiUtils.PrintAtmosLogo()
+	if err != nil {
+		return err
+	}
 
 	// Start the UI
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
