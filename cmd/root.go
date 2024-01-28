@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 
+	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -58,11 +60,18 @@ func initConfig() {
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 
-	// `atmos help` command
 	RootCmd.SetUsageFunc(b.UsageFunc)
-	RootCmd.SetHelpFunc(b.HelpFunc)
 
-	// `atmos --help` command
+	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		// Print a styled Atmos logo to the terminal
+		fmt.Println()
+		err := tuiUtils.PrintAtmosLogo()
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
+
+		b.HelpFunc(command, strings)
+	})
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
