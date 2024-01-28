@@ -14,10 +14,9 @@ import (
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:     "atmos",
-	Short:   "Universal Tool for DevOps and Cloud Automation",
-	Long:    `'atmos' is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
-	Example: "atmos",
+	Use:   "atmos",
+	Short: "Universal Tool for DevOps and Cloud Automation",
+	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteAtmosCmd()
 		if err != nil {
@@ -59,8 +58,11 @@ func initConfig() {
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 
+	// `atmos help` command
 	RootCmd.SetUsageFunc(b.UsageFunc)
 	RootCmd.SetHelpFunc(b.HelpFunc)
+
+	// `atmos --help` command
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
