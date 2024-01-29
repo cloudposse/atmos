@@ -40,7 +40,7 @@ Type "cd examples/quick-start" Sleep 500ms Enter
 Type "ls -al" Sleep 500ms Enter
 Sleep 1s
 
-Type "# In Atmos you can define vendoring config in 'vendor.yaml' and download 3rd-party components, stacks, and other artifacts ..." Sleep 500ms Enter
+Type "# In Atmos you can define vendoring config in 'vendor.yaml' and download 3rd-party components and other artifacts ..." Sleep 500ms Enter
 Type "atmos vendor pull" Sleep 500ms Enter
 Sleep 3s
 
@@ -63,35 +63,6 @@ Down Sleep 500ms
 Up Sleep 1s
 Enter
 Sleep 2s
-
-Type "# In Atmos you can easily explore workflows, and execute workflow commands..." Sleep 500ms Enter
-Type "atmos workflow" Sleep 500ms Enter
-Sleep 2s
-Right Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Right Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Up Sleep 500ms
-Right Sleep 500ms
-Down Sleep 500ms
-Right Sleep 500ms
-Down Sleep 500ms
-Enter
-Sleep 3s
 
 Type "# Let's see what components we have available!" Sleep 500ms Enter
 Type "atmos list components" Sleep 500ms Enter
