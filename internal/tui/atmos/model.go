@@ -2,6 +2,8 @@ package atmos
 
 import (
 	"fmt"
+	"sort"
+
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -9,7 +11,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	mouseZone "github.com/lrstanley/bubblezone"
 	"github.com/samber/lo"
-	"sort"
 )
 
 type App struct {

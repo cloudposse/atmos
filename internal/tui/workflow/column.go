@@ -4,8 +4,9 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	codeview "github.com/cloudposse/atmos/internal/tui/components/code_view"
 	mouseZone "github.com/lrstanley/bubblezone"
+
+	codeview "github.com/cloudposse/atmos/internal/tui/components/code_view"
 )
 
 const (
