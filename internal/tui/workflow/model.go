@@ -3,9 +3,6 @@ package workflow
 import (
 	"sort"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
-
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -13,6 +10,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	mouseZone "github.com/lrstanley/bubblezone"
 	"github.com/samber/lo"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type App struct {
@@ -131,7 +131,6 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.columnViews[app.columnPointer].Focus()
 			return app, nil
 		case key.Matches(message, keys.FlipWorkflowStepsView):
-			// Flip the stacks and components views
 			app.flipWorkflowStepsView()
 			return app, nil
 		}
@@ -327,6 +326,11 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 }
 
 func (app *App) flipWorkflowStepsView() {
+	if app.columnViews[2].viewType == listViewType2 {
+		app.columnViews[2].viewType = codeViewType
+	} else {
+		app.columnViews[2].viewType = listViewType2
+	}
 	app.workflowStepsViewShowWorkflow = !app.workflowStepsViewShowWorkflow
 }
 

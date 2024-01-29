@@ -63,16 +63,12 @@ func newColumn(columnPointer int, viewType string) columnView {
 	var defaultList list.Model
 	var codeView codeview.Model
 
-	if viewType == listViewType || viewType == listViewType2 {
-		defaultList = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
-		defaultList.SetShowHelp(false)
-	}
+	defaultList = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+	defaultList.SetShowHelp(false)
 
-	if viewType == codeViewType {
-		// https://github.com/alecthomas/chroma/tree/master/styles
-		// https://xyproto.github.io/splash/docs/
-		codeView = codeview.New("friendly")
-	}
+	// https://github.com/alecthomas/chroma/tree/master/styles
+	// https://xyproto.github.io/splash/docs/
+	codeView = codeview.New("friendly")
 
 	return columnView{
 		id:       mouseZone.NewPrefix(),
@@ -157,7 +153,5 @@ func (c *columnView) getStyle() lipgloss.Style {
 
 // SetContent sets content
 func (c *columnView) SetContent(content string, language string) {
-	if c.viewType == codeViewType {
-		c.codeView.SetContent(content, language)
-	}
+	c.codeView.SetContent(content, language)
 }
