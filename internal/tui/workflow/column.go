@@ -91,15 +91,13 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
 		c.setSize(message.Width, message.Height)
+		c.codeView.SetSize(message.Width/3, message.Height/3)
 
 		if c.viewType == listViewType {
 			c.list.SetSize(message.Width/4, message.Height/3)
 		}
 		if c.viewType == listViewType2 {
 			c.list.SetSize(message.Width/3, message.Height/3)
-		}
-		if c.viewType == codeViewType {
-			c.codeView.SetSize(message.Width/3, message.Height/3)
 		}
 	}
 
