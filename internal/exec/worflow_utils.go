@@ -161,7 +161,7 @@ func ExecuteDescribeWorkflows(
 		sort.Strings(allWorkflowsInFile)
 
 		// Check if the workflow steps have the `name` attribute
-		lo.ForEach(allWorkflowsInFile, func(item string, index int) {
+		lo.ForEach(allWorkflowsInFile, func(item string, _ int) {
 			workflowDefinition := workflowConfig[item]
 			checkAndGenerateWorkflowStepNames(&workflowDefinition)
 		})
