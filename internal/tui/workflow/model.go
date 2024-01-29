@@ -132,7 +132,9 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return app, nil
 		case key.Matches(message, keys.FlipWorkflowStepsView):
 			app.flipWorkflowStepsView()
-			return app, nil
+			res, cmd := app.columnViews[2].Update(msg)
+			app.columnViews[2] = *res.(*columnView)
+			return app, cmd
 		}
 	}
 
