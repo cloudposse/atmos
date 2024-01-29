@@ -18,7 +18,7 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 	return buf.String(), nil
 }
 
-// PrintAtmosLogo prints a styled Atmos logo to the terminal
-func PrintAtmosLogo(text string) error {
+// PrintDecoratedText prints a decorated text to the terminal
+func PrintDecoratedText(text string) error {
 	return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
 }

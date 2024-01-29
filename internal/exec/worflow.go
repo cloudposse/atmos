@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/fatih/color"
 	"os"
 	"path"
@@ -131,6 +132,13 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 }
 
 func executeWorkflowUI(cliConfig schema.CliConfiguration) (string, string, string, error) {
+	// Print a styled Atmos Workflow logo to the terminal
+	fmt.Println()
+	err := tuiUtils.PrintDecoratedText("WORKFLOW")
+	if err != nil {
+		u.LogErrorAndExit(err)
+	}
+
 	_, _, allWorkflows, err := ExecuteDescribeWorkflows(cliConfig)
 	if err != nil {
 		return "", "", "", err
