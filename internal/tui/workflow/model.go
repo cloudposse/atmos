@@ -95,7 +95,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.quit = true
 			return app, tea.Quit
 		case key.Matches(message, keys.Escape):
-			if app.columnViews[app.columnPointer].viewType == listViewType {
+			if app.columnViews[app.columnPointer].viewType == listViewType || app.columnViews[app.columnPointer].viewType == listViewType2 {
 				res, cmd := app.columnViews[app.columnPointer].Update(msg)
 				app.columnViews[app.columnPointer] = *res.(*columnView)
 				if cmd == nil {
@@ -176,7 +176,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 	app.columnViews = []columnView{
 		newColumn(0, listViewType),
 		newColumn(1, listViewType),
-		newColumn(2, listViewType),
+		newColumn(2, listViewType2),
 	}
 
 	workflowFileItems := []list.Item{}
