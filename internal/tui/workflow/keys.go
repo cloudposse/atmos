@@ -11,6 +11,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 		k.Right,
 		k.Filter,
 		k.ClearFilter,
+		k.FlipWorkflowStepsView,
 		k.Execute,
 		k.Quit,
 	}
@@ -20,23 +21,24 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
-		{k.Filter, k.ClearFilter},
+		{k.Filter, k.ClearFilter, k.FlipWorkflowStepsView},
 		{k.Execute, k.Quit},
 	}
 }
 
 type keyMap struct {
-	Up          key.Binding
-	Down        key.Binding
-	Left        key.Binding
-	Right       key.Binding
-	Enter       key.Binding
-	Filter      key.Binding
-	ClearFilter key.Binding
-	Quit        key.Binding
-	Escape      key.Binding
-	Execute     key.Binding
-	CtrlC       key.Binding
+	Up                    key.Binding
+	Down                  key.Binding
+	Left                  key.Binding
+	Right                 key.Binding
+	Enter                 key.Binding
+	Filter                key.Binding
+	ClearFilter           key.Binding
+	Quit                  key.Binding
+	Escape                key.Binding
+	Execute               key.Binding
+	CtrlC                 key.Binding
+	FlipWorkflowStepsView key.Binding
 }
 
 var keys = keyMap{
@@ -83,5 +85,9 @@ var keys = keyMap{
 	Execute: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "execute"),
+	),
+	FlipWorkflowStepsView: key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "flip steps/full workflow"),
 	),
 }

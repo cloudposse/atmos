@@ -118,7 +118,10 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (c *columnView) View() string {
-	if c.viewType == listViewType || c.viewType == listViewType2 {
+	if c.viewType == listViewType {
+		return mouseZone.Mark(c.id, c.getStyle().Render(c.list.View()))
+	}
+	if c.viewType == listViewType2 {
 		return mouseZone.Mark(c.id, c.getStyle().Render(c.list.View()))
 	}
 	if c.viewType == codeViewType {

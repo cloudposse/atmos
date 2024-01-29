@@ -16,15 +16,16 @@ import (
 )
 
 type App struct {
-	help                 help.Model
-	loaded               bool
-	columnViews          []columnView
-	quit                 bool
-	workflows            map[string]schema.WorkflowManifest
-	selectedWorkflowFile string
-	selectedWorkflow     string
-	selectedWorkflowStep string
-	columnPointer        int
+	help                          help.Model
+	loaded                        bool
+	columnViews                   []columnView
+	quit                          bool
+	workflows                     map[string]schema.WorkflowManifest
+	selectedWorkflowFile          string
+	selectedWorkflow              string
+	selectedWorkflowStep          string
+	columnPointer                 int
+	workflowStepsViewShowWorkflow bool
 }
 
 func NewApp(workflows map[string]schema.WorkflowManifest) *App {
@@ -32,12 +33,13 @@ func NewApp(workflows map[string]schema.WorkflowManifest) *App {
 	h.ShowAll = true
 
 	app := &App{
-		help:                 h,
-		columnPointer:        0,
-		selectedWorkflowFile: "",
-		selectedWorkflow:     "",
-		selectedWorkflowStep: "",
-		workflows:            workflows,
+		help:                          h,
+		columnPointer:                 0,
+		selectedWorkflowFile:          "",
+		selectedWorkflow:              "",
+		selectedWorkflowStep:          "",
+		workflows:                     workflows,
+		workflowStepsViewShowWorkflow: false,
 	}
 
 	app.initViews(workflows)
@@ -127,6 +129,10 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getNextViewPointer()
 			app.columnViews[app.columnPointer].Focus()
+			return app, nil
+		case key.Matches(message, keys.FlipWorkflowStepsView):
+			// Flip the stacks and components views
+			app.flipWorkflowStepsView()
 			return app, nil
 		}
 	}
@@ -318,6 +324,10 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 		app.columnViews[2].list.ResetSelected()
 		app.columnViews[2].list.SetItems(stepItems)
 	}
+}
+
+func (app *App) flipWorkflowStepsView() {
+	app.workflowStepsViewShowWorkflow = !app.workflowStepsViewShowWorkflow
 }
 
 func (app *App) execute() {
