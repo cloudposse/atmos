@@ -88,6 +88,6 @@ var keys = keyMap{
 	),
 	FlipWorkflowStepsView: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "flip steps/full workflow"),
+		key.WithHelp("tab", "flip steps/workflow"),
 	),
 }
