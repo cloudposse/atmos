@@ -21,6 +21,7 @@ import (
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	var workflow string
 	var workflowFile string
+	var fromStep string
 
 	info, err := processCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -36,7 +37,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	// If the `workflow` argument is not passed, start the workflow UI
 	if len(args) != 1 {
-		workflowFile, workflow, err = executeWorkflowUI(cliConfig)
+		workflowFile, workflow, fromStep, err = executeWorkflowUI(cliConfig)
 		if err != nil {
 			return err
 		}
@@ -71,9 +72,11 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fromStep, err := flags.GetString("from-step")
-	if err != nil {
-		return err
+	if fromStep == "" {
+		fromStep, err = flags.GetString("from-step")
+		if err != nil {
+			return err
+		}
 	}
 
 	var workflowPath string
@@ -127,33 +130,34 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func executeWorkflowUI(cliConfig schema.CliConfiguration) (string, string, error) {
+func executeWorkflowUI(cliConfig schema.CliConfiguration) (string, string, string, error) {
 	_, _, allWorkflows, err := ExecuteDescribeWorkflows(cliConfig)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	// Start the UI
 	app, err := tui.Execute(allWorkflows)
 	fmt.Println()
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	selectedWorkflowFile := app.GetSelectedWorkflowFile()
 	selectedWorkflow := app.GetSelectedWorkflow()
+	selectedWorkflowStep := app.GetSelectedWorkflowStep()
 
 	// If the user quit the UI, exit
 	if app.ExitStatusQuit() || selectedWorkflowFile == "" || selectedWorkflow == "" {
-		return "", "", nil
+		return "", "", "", nil
 	}
 
 	fmt.Println()
 	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command: atmos workflow %s --file %s", selectedWorkflow, selectedWorkflowFile),
+		"Executing command: atmos workflow %s --file %s --from-step %s", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep),
 		color.New(color.FgCyan),
 	)
 	fmt.Println()
 
-	return selectedWorkflowFile, selectedWorkflow, nil
+	return selectedWorkflowFile, selectedWorkflow, selectedWorkflowStep, nil
 }

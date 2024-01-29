@@ -23,7 +23,7 @@ type App struct {
 	workflows            map[string]schema.WorkflowManifest
 	selectedWorkflowFile string
 	selectedWorkflow     string
-	selectedFromStep     string
+	selectedWorkflowStep string
 	columnPointer        int
 }
 
@@ -36,7 +36,7 @@ func NewApp(workflows map[string]schema.WorkflowManifest) *App {
 		columnPointer:        0,
 		selectedWorkflowFile: "",
 		selectedWorkflow:     "",
-		selectedFromStep:     "",
+		selectedWorkflowStep: "",
 		workflows:            workflows,
 	}
 
@@ -162,6 +162,10 @@ func (app *App) GetSelectedWorkflowFile() string {
 
 func (app *App) GetSelectedWorkflow() string {
 	return app.selectedWorkflow
+}
+
+func (app *App) GetSelectedWorkflowStep() string {
+	return app.selectedWorkflowStep
 }
 
 func (app *App) ExitStatusQuit() bool {
@@ -302,7 +306,7 @@ func (app *App) execute() {
 	app.quit = false
 	workflowFilesViewIndex := 0
 	workflowsViewIndex := 1
-	executeFromStepViewIndex := 2
+	workflowStepViewIndex := 2
 
 	selectedWorkflowFile := app.columnViews[workflowFilesViewIndex].list.SelectedItem()
 	if selectedWorkflowFile != nil {
@@ -318,10 +322,10 @@ func (app *App) execute() {
 		app.selectedWorkflow = ""
 	}
 
-	selectedFromStep := app.columnViews[executeFromStepViewIndex].list.SelectedItem()
-	if selectedFromStep != nil {
-		app.selectedFromStep = selectedFromStep.(listItem).item
+	selectedWorkflowStep := app.columnViews[workflowStepViewIndex].list.SelectedItem()
+	if selectedWorkflowStep != nil {
+		app.selectedWorkflowStep = selectedWorkflowStep.(listItem).item
 	} else {
-		app.selectedFromStep = ""
+		app.selectedWorkflowStep = ""
 	}
 }
