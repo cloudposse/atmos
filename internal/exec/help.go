@@ -3,21 +3,12 @@ package exec
 import (
 	"fmt"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
-
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // processHelp processes help commands
 func processHelp(componentType string, command string) error {
-	// Print a styled Atmos logo to the terminal
-	fmt.Println()
-	err := tuiUtils.PrintAtmosLogo()
-	if err != nil {
-		return err
-	}
-
 	cliConfig := schema.CliConfiguration{}
 
 	if len(command) == 0 {

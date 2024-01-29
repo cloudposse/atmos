@@ -10,17 +10,22 @@ order: 10
 ```shell
 atmos help
 atmos --help
+atmos -h
 ```
 
 <br/>
 
-`atmos help` starts an interactive help UI in the terminal:
+The `atmos help` starts an interactive help UI in the terminal:
 
-![`atmos` help command](/img/cli/help/atmos-help-command.png)
+![`atmos help` command](/img/cli/help/atmos-help-command.png)
 
 <br/>
 
-`atmos --help` shows help for all Atmos CLI commands.
+The `atmos --help` and `atmos -h` commands show help for all Atmos CLI commands:
+
+![`atmos --help` command](/img/cli/help/atmos-help-command-2.png)
+
+<br/>
 
 ```console
 'atmos' is a universal tool for DevOps and cloud automation used for provisioning, 
@@ -69,6 +74,7 @@ Use "atmos [command] --help" for more information about a command.
 ```shell
 atmos help               # Starts an interactive help UI in the terminal
 atmos --help             # Shows help for all Atmos CLI commands
+atmos -h                 # Shows help for all Atmos CLI commands
 atmos atlantis --help    # Executes 'atlantis' commands
 atmos aws --help         # Executes 'aws' commands
 atmos completion --help  # Executes 'completion' commands
