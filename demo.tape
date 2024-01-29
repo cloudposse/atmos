@@ -42,7 +42,7 @@ Sleep 1s
 
 Type "# In Atmos you can define vendoring config in 'vendor.yaml' and download 3rd-party components and other artifacts ..." Sleep 500ms Enter
 Type "atmos vendor pull" Sleep 500ms Enter
-Sleep 3s
+Sleep 7s
 
 Type "# In Atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
 Type "atmos" Sleep 500ms Enter
