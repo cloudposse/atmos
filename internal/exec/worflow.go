@@ -134,7 +134,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 func executeWorkflowUI(cliConfig schema.CliConfiguration) (string, string, string, error) {
 	// Print a styled Atmos Workflow logo to the terminal
 	fmt.Println()
-	err := tuiUtils.PrintDecoratedText("WORKFLOW")
+	err := tuiUtils.PrintStyledText("WORKFLOW")
 	if err != nil {
 		u.LogErrorAndExit(err)
 	}

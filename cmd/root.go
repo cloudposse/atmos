@@ -24,7 +24,7 @@ var RootCmd = &cobra.Command{
 	PreRun: func(cmd *cobra.Command, args []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		err := tuiUtils.PrintDecoratedText("ATMOS")
+		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
@@ -44,7 +44,7 @@ func Execute() error {
 	err := RootCmd.ParseFlags(os.Args)
 	if err != nil && errors.Is(err, pflag.ErrHelp) {
 		fmt.Println()
-		err = tuiUtils.PrintDecoratedText("ATMOS")
+		err = tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
@@ -85,7 +85,7 @@ func initConfig() {
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		err := tuiUtils.PrintDecoratedText("ATMOS")
+		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}

@@ -19,7 +19,7 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		err := tuiUtils.PrintDecoratedText("ATMOS")
+		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}

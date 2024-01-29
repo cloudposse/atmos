@@ -6,6 +6,7 @@ import (
 
 	"github.com/alecthomas/chroma/quick"
 	"github.com/arsham/figurine/figurine"
+	"github.com/jwalton/go-supportscolor"
 )
 
 // HighlightCode returns a syntax highlighted code for the specified language
@@ -18,7 +19,11 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 	return buf.String(), nil
 }
 
-// PrintDecoratedText prints a decorated text to the terminal
-func PrintDecoratedText(text string) error {
-	return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
+// PrintStyledText prints a styled text to the terminal
+func PrintStyledText(text string) error {
+	// Check oif the terminal supports colors
+	if supportscolor.Stdout().SupportsColor {
+		return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
+	}
+	return nil
 }
