@@ -68,6 +68,8 @@ atmos workflow
 
 ![`atmos workflow` CLI command 2](/img/cli/workflow/atmos-workflow-command-2.png)
 
+<br/>
+
 ## Arguments
 
 | Argument         | Description   | Required |
