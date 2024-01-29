@@ -36,20 +36,8 @@ func ExecuteWorkflow(
 		logFunc = u.LogInfo
 	}
 
-	// Check if the steps have the `name` attribute.
-	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
-	// step (the index starts with 1, so the first generated step name would be `step1`)
-	for index, step := range steps {
-		if step.Name == "" {
-			// When iterating through a slice with a range loop, if elements need to be changed,
-			// changing the returned value from the range is not changing the original slice element.
-			// That return value is a copy of the element.
-			// So doing changes to it will not affect the original elements.
-			// We need to access the element with the index returned from the range iterator and change it there.
-			// https://medium.com/@nsspathirana/common-mistakes-with-go-slices-95f2e9b362a9
-			steps[index].Name = fmt.Sprintf("step%d", index+1)
-		}
-	}
+	// Check if the workflow steps have the `name` attribute
+	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
 	logFunc(cliConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
@@ -169,9 +157,15 @@ func ExecuteDescribeWorkflows(
 		}
 
 		workflowConfig = workflowManifest.Workflows
-
 		allWorkflowsInFile := lo.Keys(workflowConfig)
 		sort.Strings(allWorkflowsInFile)
+
+		// Check if the workflow steps have the `name` attribute
+		lo.ForEach(allWorkflowsInFile, func(item string, index int) {
+			workflowDefinition := workflowConfig[item]
+			checkAndGenerateWorkflowStepNames(&workflowDefinition)
+		})
+
 		mapResult[f] = allWorkflowsInFile
 		allResult[f] = workflowManifest
 	}
@@ -186,4 +180,27 @@ func ExecuteDescribeWorkflows(
 	}
 
 	return listResult, mapResult, allResult, nil
+}
+
+func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
+	var steps = workflowDefinition.Steps
+
+	if steps == nil {
+		return
+	}
+
+	// Check if the steps have the `name` attribute.
+	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
+	// step (the index starts with 1, so the first generated step name would be `step1`)
+	for index, step := range steps {
+		if step.Name == "" {
+			// When iterating through a slice with a range loop, if elements need to be changed,
+			// changing the returned value from the range is not changing the original slice element.
+			// That return value is a copy of the element.
+			// So doing changes to it will not affect the original elements.
+			// We need to access the element with the index returned from the range iterator and change it there.
+			// https://medium.com/@nsspathirana/common-mistakes-with-go-slices-95f2e9b362a9
+			steps[index].Name = fmt.Sprintf("step%d", index+1)
+		}
+	}
 }
