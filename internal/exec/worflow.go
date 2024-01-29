@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	tui "github.com/cloudposse/atmos/internal/tui/workflow"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -132,13 +131,6 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 }
 
 func executeWorkflowUI(cliConfig schema.CliConfiguration) (string, string, string, error) {
-	// Print a styled Atmos Workflow logo to the terminal
-	fmt.Println()
-	err := tuiUtils.PrintStyledText("WORKFLOW")
-	if err != nil {
-		u.LogErrorAndExit(err)
-	}
-
 	_, _, allWorkflows, err := ExecuteDescribeWorkflows(cliConfig)
 	if err != nil {
 		return "", "", "", err
