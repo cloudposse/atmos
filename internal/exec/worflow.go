@@ -3,15 +3,15 @@ package exec
 import (
 	"errors"
 	"fmt"
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
-	"github.com/fatih/color"
 	"os"
 	"path"
 	"path/filepath"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
+	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	tui "github.com/cloudposse/atmos/internal/tui/workflow"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
