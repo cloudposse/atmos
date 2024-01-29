@@ -212,8 +212,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 			selectedWorkflowDefinition := workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName]
 			stepItems = lo.Map(selectedWorkflowDefinition.Steps, func(s schema.WorkflowStep, _ int) list.Item {
 				return listItem{
-					name: s.Name,
-					item: s.Command,
+					item: s.Name,
 				}
 			})
 		}
@@ -296,7 +295,6 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 		}
 
 		selectedWorkflowName := selectedWorkflow.(listItem).item
-
 		selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 		app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
 	}
