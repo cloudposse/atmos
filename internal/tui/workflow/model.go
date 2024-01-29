@@ -280,6 +280,16 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 			selectedWorkflowName := workflowsMapKeys[0]
 			selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 			app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
+
+			selectedWorkflowDefinition := app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName]
+			stepItems := lo.Map(selectedWorkflowDefinition.Steps, func(s schema.WorkflowStep, _ int) list.Item {
+				return listItem{
+					item: s.Name,
+				}
+			})
+			app.columnViews[2].list.ResetFilter()
+			app.columnViews[2].list.ResetSelected()
+			app.columnViews[2].list.SetItems(stepItems)
 		}
 	} else if app.columnPointer == 1 {
 		selectedWorkflowFile := app.columnViews[0].list.SelectedItem()
@@ -297,6 +307,16 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 		selectedWorkflowName := selectedWorkflow.(listItem).item
 		selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 		app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
+
+		selectedWorkflowDefinition := app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName]
+		stepItems := lo.Map(selectedWorkflowDefinition.Steps, func(s schema.WorkflowStep, _ int) list.Item {
+			return listItem{
+				item: s.Name,
+			}
+		})
+		app.columnViews[2].list.ResetFilter()
+		app.columnViews[2].list.ResetSelected()
+		app.columnViews[2].list.SetItems(stepItems)
 	}
 }
 
