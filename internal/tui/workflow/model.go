@@ -23,6 +23,7 @@ type App struct {
 	workflows            map[string]schema.WorkflowManifest
 	selectedWorkflowFile string
 	selectedWorkflow     string
+	selectedFromStep     string
 	columnPointer        int
 }
 
@@ -35,6 +36,7 @@ func NewApp(workflows map[string]schema.WorkflowManifest) *App {
 		columnPointer:        0,
 		selectedWorkflowFile: "",
 		selectedWorkflow:     "",
+		selectedFromStep:     "",
 		workflows:            workflows,
 	}
 
@@ -170,15 +172,16 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 	app.columnViews = []columnView{
 		newColumn(0, listViewType),
 		newColumn(1, listViewType),
-		newColumn(2, codeViewType),
+		newColumn(2, listViewType),
 	}
 
 	workflowFileItems := []list.Item{}
 	workflowItems := []list.Item{}
+	stepItems := []list.Item{}
 
 	workflowFilesMapKeys := lo.Keys(workflows)
 	sort.Strings(workflowFilesMapKeys)
-	var selectedWorkflow string
+	var selectedWorkflowContent string
 
 	if len(workflowFilesMapKeys) > 0 {
 		workflowFileItems = lo.Map(workflowFilesMapKeys, func(s string, _ int) list.Item {
@@ -200,7 +203,15 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 				}
 			})
 			selectedWorkflowName := workflowsMapKeys[0]
-			selectedWorkflow, _ = u.ConvertToYAML(workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
+			selectedWorkflowContent, _ = u.ConvertToYAML(workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
+
+			selectedWorkflowDefinition := workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName]
+			stepItems = lo.Map(selectedWorkflowDefinition.Steps, func(s schema.WorkflowStep, _ int) list.Item {
+				return listItem{
+					name: s.Name,
+					item: s.Command,
+				}
+			})
 		}
 	}
 
@@ -218,7 +229,13 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 	app.columnViews[1].list.SetShowFilter(true)
 	app.columnViews[1].list.InfiniteScrolling = true
 
-	app.columnViews[2].SetContent(selectedWorkflow, "yaml")
+	app.columnViews[2].list.Title = "Execute From Step"
+	app.columnViews[2].list.SetDelegate(listItemDelegate{})
+	app.columnViews[2].list.SetItems(stepItems)
+	app.columnViews[2].list.SetFilteringEnabled(true)
+	app.columnViews[2].list.SetShowFilter(true)
+	app.columnViews[2].list.InfiniteScrolling = true
+	app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
 }
 
 func (app *App) getNextViewPointer() int {
@@ -285,6 +302,7 @@ func (app *App) execute() {
 	app.quit = false
 	workflowFilesViewIndex := 0
 	workflowsViewIndex := 1
+	executeFromStepViewIndex := 2
 
 	selectedWorkflowFile := app.columnViews[workflowFilesViewIndex].list.SelectedItem()
 	if selectedWorkflowFile != nil {
@@ -298,5 +316,12 @@ func (app *App) execute() {
 		app.selectedWorkflow = selectedWorkflow.(listItem).item
 	} else {
 		app.selectedWorkflow = ""
+	}
+
+	selectedFromStep := app.columnViews[executeFromStepViewIndex].list.SelectedItem()
+	if selectedFromStep != nil {
+		app.selectedFromStep = selectedFromStep.(listItem).item
+	} else {
+		app.selectedFromStep = ""
 	}
 }
