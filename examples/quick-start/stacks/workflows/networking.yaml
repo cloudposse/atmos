@@ -16,7 +16,7 @@ workflows:
       - name: Plan 'vpc-flow-logs-bucket' in 'plat-uw2-staging'
         command: terraform plan vpc-flow-logs-bucket -s plat-uw2-staging
       - name: Plan 'vpc-flow-logs-bucket' in 'plat-ue2-prod'
-        command: terraform plan vpvpc-flow-logs-bucketc -s plat-ue2-prod
+        command: terraform plan vpc-flow-logs-bucket -s plat-ue2-prod
       - name: Plan 'vpc-flow-logs-bucket' in 'plat-uw2-prod'
         command: terraform plan vpc-flow-logs-bucket -s plat-uw2-prod
 
