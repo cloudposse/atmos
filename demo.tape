@@ -40,7 +40,7 @@ Type "cd examples/quick-start" Sleep 500ms Enter
 Type "ls -al" Sleep 500ms Enter
 Sleep 1s
 
-Type "# In Atmos you can define vendoring config in 'vendor.yaml' and download 3rd-party components and other artifacts ..." Sleep 500ms Enter
+Type "# We will start by installing some 3rd-party components and other artifacts..." Sleep 500ms Enter
 Type "atmos vendor pull" Sleep 500ms Enter
 Sleep 7s
 
