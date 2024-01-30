@@ -23,7 +23,7 @@ Set MarginFill "#674EFF"
 
 Set Padding 12
 
-Set Width 1600
+Set Width 1700
 Set Height 800
 
 Set PlaybackSpeed 1
@@ -62,7 +62,7 @@ Right Sleep 1s
 Down Sleep 500ms
 Up Sleep 1s
 Enter
-Sleep 3s
+Sleep 2s
 
 Type "# Let's see what components we have available!" Sleep 500ms Enter
 Type "atmos list components" Sleep 500ms Enter
@@ -120,7 +120,7 @@ Sleep 3s
 
 Type "# Atmos has native workflows for Terraform" Sleep 500ms Enter
 Type "atmos terraform --help" Sleep 500ms Enter
-Sleep 2s
+Sleep 3s
 
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
 Sleep 1s
