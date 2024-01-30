@@ -22,15 +22,15 @@ workflows:
   validate-all-vpc-flow-logs-bucket-components:
     description: "Validate all VPC Flow Logs bucket components in all stacks"
     steps:
-      - name: Validate component 'vpc-flow-logs-bucket' in stack 'plat-ue2-dev'
+      - name: Validate `vpc-flow-logs-bucket` in `plat-ue2-dev`
         command: validate component vpc-flow-logs-bucket -s plat-ue2-dev
-      - name: Validate component 'vpc-flow-logs-bucket' in stack 'plat-uw2-dev'
+      - name: Validate `vpc-flow-logs-bucket` in `plat-uw2-dev`
         command: validate component vpc-flow-logs-bucket -s plat-uw2-dev
-      - name: Validate component 'vpc-flow-logs-bucket' in stack 'plat-ue2-staging'
+      - name: Validate `vpc-flow-logs-bucket` in `plat-ue2-staging`
         command: validate component vpc-flow-logs-bucket -s plat-ue2-staging
-      - name: Validate component 'vpc-flow-logs-bucket' in stack 'plat-uw2-staging'
-        command: validate component vpc-flow-logs-bucket -s plat-uw2-staging
-      - name: Validate component 'vpc-flow-logs-bucket' in stack 'plat-ue2-prod'
+      - name: Validate `vpc-flow-logs-bucket` in `plat-uw2-staging`
+        command: validate vpc-flow-logs-bucket -s plat-uw2-staging
+      - name: Validate `vpc-flow-logs-bucket` in `plat-ue2-prod`
         command: validate component vpc-flow-logs-bucket -s plat-ue2-prod
-      - name: Validate component 'vpc-flow-logs-bucket' in stack 'plat-uw2-prod'
+      - name: Validate `vpc-flow-logs-bucket` in `plat-uw2-prod`
         command: validate component vpc-flow-logs-bucket -s plat-uw2-prod
