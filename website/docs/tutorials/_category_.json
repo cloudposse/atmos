@@ -1,8 +1,0 @@
-{
-  "label": "Tutorials",
-  "position": 7,
-  "link": {
-    "type": "generated-index",
-    "description": "Here are some lessons on how to implement Atmos in a project."
-  }
-}

@@ -25,7 +25,7 @@ and [Docker](https://docs.docker.com/get-docker/) installed on your local machin
 
 ### Understanding
 
-Prior to starting this tutorial, you should be sure you understand [our various concepts and terminology](/category/core-concepts)) and have gone
+Prior to starting this tutorial, you should be sure you understand [our various concepts and terminology](/core-concepts)) and have gone
 through our [Getting started with Geodesic](https://docs.cloudposse.com/tutorials/geodesic-getting-started/) tutorial because we'll be using Geodesic
 as our means to run `atmos`.
 

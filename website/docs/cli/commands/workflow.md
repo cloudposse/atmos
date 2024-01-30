@@ -11,8 +11,10 @@ Use this command to perform sequential execution of `atmos` and `shell` commands
 
 <br/>
 
-An Atmos workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is easily executed from the
-command line by calling `atmos workflow`. Use workflows to orchestrate any number of commands. Workflows can call any `atmos` subcommand (including
+An Atmos workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is
+easily executed from the
+command line by calling `atmos workflow`. Use workflows to orchestrate any number of commands. Workflows can call
+any `atmos` subcommand (including
 [Atmos Custom Commands](/core-concepts/custom-commands)), shell commands, and have access to the stack configurations.
 
 :::note
@@ -46,7 +48,8 @@ Run `atmos workflow --help` to see all the available options
 
 <br/>
 
-Alternatively, just run `atmos workflow` to start an interactive UI to view, search and execute the configured Atmos workflows:
+Alternatively, just run `atmos workflow` to start an interactive UI to view, search and execute the configured Atmos
+workflows:
 
 ```shell
 atmos workflow
@@ -56,17 +59,33 @@ atmos workflow
 
 ![`atmos workflow` CLI command 1](/img/cli/workflow/atmos-workflow-command-1.png)
 
-- Use the `right/left` arrow keys to navigate between the "Workflow Manifests", "Workflows" and the selected workflow views
+- Use the `right/left` arrow keys to navigate between the "Workflow Manifests", "Workflows" and the selected workflow
+  views
 
 - Use the `up/down` arrow keys (or the mouse wheel) to select a workflow manifest and a workflow to execute
 
 - Use the `/` key to filter/search for the workflow manifests and workflows in the corresponding views
 
-- Press `Enter` to execute the selected workflow from the selected workflow manifest
+- Press `Enter` to execute the selected workflow from the selected workflow manifest starting with the selected step
 
 <br/>
 
 ![`atmos workflow` CLI command 2](/img/cli/workflow/atmos-workflow-command-2.png)
+
+<br/>
+
+Use the `Tab` key to flip the 3rd column view between the selected workflow steps and full workflow definition.
+For example:
+
+<br/>
+
+![`atmos workflow` CLI command 3](/img/cli/workflow/atmos-workflow-command-3.png)
+
+<br/>
+
+![`atmos workflow` CLI command 4](/img/cli/workflow/atmos-workflow-command-4.png)
+
+<br/>
 
 ## Arguments
 

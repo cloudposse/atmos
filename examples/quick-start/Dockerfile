@@ -1,12 +1,12 @@
 # Geodesic: https://github.com/cloudposse/geodesic/
-ARG GEODESIC_VERSION=2.8.2
+ARG GEODESIC_VERSION=2.8.3
 ARG GEODESIC_OS=debian
 
 # atmos: https://github.com/cloudposse/atmos
-ARG ATMOS_VERSION=1.55.0
+ARG ATMOS_VERSION=1.56.0
 
 # Terraform: https://github.com/hashicorp/terraform/releases
-ARG TF_VERSION=1.6.6
+ARG TF_VERSION=1.7.0
 
 FROM cloudposse/geodesic:${GEODESIC_VERSION}-${GEODESIC_OS}
 

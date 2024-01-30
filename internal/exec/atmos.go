@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -96,7 +97,7 @@ func ExecuteAtmosCmd() error {
 	// Process the selected command, stack and component
 	fmt.Println()
 	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command: atmos %s %s --stack %s", selectedCommand, selectedComponent, selectedStack),
+		"Executing command:\n"+os.Args[0]+" %s %s --stack %s", selectedCommand, selectedComponent, selectedStack),
 		color.New(color.FgCyan),
 	)
 	fmt.Println()

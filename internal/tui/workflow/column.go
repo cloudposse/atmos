@@ -4,13 +4,15 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	codeview "github.com/cloudposse/atmos/internal/tui/components/code_view"
 	mouseZone "github.com/lrstanley/bubblezone"
+
+	codeview "github.com/cloudposse/atmos/internal/tui/components/code_view"
 )
 
 const (
-	listViewType = "listView"
-	codeViewType = "codeView"
+	listViewType  = "listView"
+	listViewType2 = "listView2"
+	codeViewType  = "codeView"
 )
 
 type columnView struct {
@@ -24,7 +26,7 @@ type columnView struct {
 }
 
 func (c *columnView) CursorUp() {
-	if c.viewType == listViewType {
+	if c.viewType == listViewType || c.viewType == listViewType2 {
 		c.list.CursorUp()
 	}
 	if c.viewType == codeViewType {
@@ -33,7 +35,7 @@ func (c *columnView) CursorUp() {
 }
 
 func (c *columnView) CursorDown() {
-	if c.viewType == listViewType {
+	if c.viewType == listViewType || c.viewType == listViewType2 {
 		c.list.CursorDown()
 	}
 	if c.viewType == codeViewType {
@@ -62,16 +64,12 @@ func newColumn(columnPointer int, viewType string) columnView {
 	var defaultList list.Model
 	var codeView codeview.Model
 
-	if viewType == listViewType {
-		defaultList = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
-		defaultList.SetShowHelp(false)
-	}
+	defaultList = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+	defaultList.SetShowHelp(false)
 
-	if viewType == codeViewType {
-		// https://github.com/alecthomas/chroma/tree/master/styles
-		// https://xyproto.github.io/splash/docs/
-		codeView = codeview.New("friendly")
-	}
+	// https://github.com/alecthomas/chroma/tree/master/styles
+	// https://xyproto.github.io/splash/docs/
+	codeView = codeview.New("friendly")
 
 	return columnView{
 		id:       mouseZone.NewPrefix(),
@@ -94,16 +92,17 @@ func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
 		c.setSize(message.Width, message.Height)
+		c.codeView.SetSize(message.Width/3, message.Height/3)
 
 		if c.viewType == listViewType {
 			c.list.SetSize(message.Width/4, message.Height/3)
 		}
-		if c.viewType == codeViewType {
-			c.codeView.SetSize(message.Width/3, message.Height/3)
+		if c.viewType == listViewType2 {
+			c.list.SetSize(message.Width/3, message.Height/3)
 		}
 	}
 
-	if c.viewType == listViewType {
+	if c.viewType == listViewType || c.viewType == listViewType2 {
 		c.list, cmd = c.list.Update(msg)
 	}
 	if c.viewType == codeViewType {
@@ -117,6 +116,9 @@ func (c *columnView) View() string {
 	if c.viewType == listViewType {
 		return mouseZone.Mark(c.id, c.getStyle().Render(c.list.View()))
 	}
+	if c.viewType == listViewType2 {
+		return mouseZone.Mark(c.id, c.getStyle().Render(c.list.View()))
+	}
 	if c.viewType == codeViewType {
 		return mouseZone.Mark(c.id, c.getStyle().Render(c.codeView.View()))
 	}
@@ -127,6 +129,9 @@ func (c *columnView) View() string {
 func (c *columnView) setSize(width, height int) {
 	if c.viewType == listViewType {
 		c.width = width / 4
+	}
+	if c.viewType == listViewType2 {
+		c.width = width / 3
 	}
 	if c.viewType == codeViewType {
 		c.width = width / 3
@@ -147,7 +152,5 @@ func (c *columnView) getStyle() lipgloss.Style {
 
 // SetContent sets content
 func (c *columnView) SetContent(content string, language string) {
-	if c.viewType == codeViewType {
-		c.codeView.SetContent(content, language)
-	}
+	c.codeView.SetContent(content, language)
 }

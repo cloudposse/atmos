@@ -91,7 +91,7 @@ where:
 
 In `atmos.yaml`, we set `workflows.base_path` to `stacks/workflows`. The folder is relative to the root of the repository.
 
-Refer to [workflow1.yaml](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/stacks/workflows/workflow1.yaml) for an example.
+Refer to [networking.yaml](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/stacks/workflows/networking.yaml) for an example.
 
 We put the workflow files into the folder. The workflow file names can be anything you want, but we recommend naming them according to the functions
 they perform, e.g. create separate workflow files per environment, account, team, or service.
@@ -151,7 +151,7 @@ where:
 
 Each step is configured using the following attributes:
 
-- `command` - the command to execute. Can be either an Atmos [CLI command](/category/commands-1) (without the `atmos` binary name in front of it,
+- `command` - the command to execute. Can be either an Atmos [CLI command](/category/commands) (without the `atmos` binary name in front of it,
   for example `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute
 
 - `name` - step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step`
@@ -159,7 +159,7 @@ Each step is configured using the following attributes:
   step (the index starts with 1, so the first generated step name would be `step1`).
 
 - `type` - the type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command`
-  is an Atmos [CLI command](/category/commands-1). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
+  is an Atmos [CLI command](/category/commands). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
   Atmos prepends the `atmos` binary name to the provided command before executing it
 
 - `stack` - step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the
@@ -227,7 +227,7 @@ For example:
 ```console
 > atmos workflow test-1 -f workflow1 --from-step step4
 
-Executing the workflow 'test-1' from 'examples/quick-start/stacks/workflows/workflow1.yaml'
+Executing the workflow 'test-1' from 'stacks/workflows/workflow1.yaml'
 
 description: Test workflow
 steps:

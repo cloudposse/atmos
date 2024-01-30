@@ -112,14 +112,6 @@ components:
         force_destroy: false
         name: tfstate
         prevent_unencrypted_uploads: true
-        access_roles:
-          default:
-            write_enabled: true
-            allowed_roles:
-              core-identity: [ "devops", "developers", "managers", "spacelift" ]
-              core-root: [ "admin" ]
-            allowed_permission_sets:
-              core-identity: [ "AdministratorAccess" ]
 ```
 
 ## Configure Terraform S3 Backend

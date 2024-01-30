@@ -1,0 +1,36 @@
+name: Validation
+description: Atmos workflows for VPCs and VPC Flow Logs validation
+
+workflows:
+
+  validate-all-vpc-components:
+    description: "Validate all VPC components in all stacks"
+    steps:
+      - name: Validate `vpc` in `plat-ue2-dev`
+        command: validate component vpc -s plat-ue2-dev
+      - name: Validate `vpc` in `plat-uw2-dev`
+        command: validate component vpc -s plat-uw2-dev
+      - name: Validate `vpc` in `plat-ue2-staging`
+        command: validate component vpc -s plat-ue2-staging
+      - name: Validate `vpc` in `plat-uw2-staging`
+        command: validate component vpc -s plat-uw2-staging
+      - name: Validate `vpc` in `plat-ue2-prod`
+        command: validate component vpc -s plat-ue2-prod
+      - name: Validate `vpc` in `plat-uw2-prod`
+        command: validate component vpc -s plat-uw2-prod
+
+  validate-all-vpc-flow-logs-bucket-components:
+    description: "Validate all VPC Flow Logs bucket components in all stacks"
+    steps:
+      - name: Validate `vpc-flow-logs-bucket` in `plat-ue2-dev`
+        command: validate component vpc-flow-logs-bucket -s plat-ue2-dev
+      - name: Validate `vpc-flow-logs-bucket` in `plat-uw2-dev`
+        command: validate component vpc-flow-logs-bucket -s plat-uw2-dev
+      - name: Validate `vpc-flow-logs-bucket` in `plat-ue2-staging`
+        command: validate component vpc-flow-logs-bucket -s plat-ue2-staging
+      - name: Validate `vpc-flow-logs-bucket` in `plat-uw2-staging`
+        command: validate component vpc-flow-logs-bucket -s plat-uw2-staging
+      - name: Validate `vpc-flow-logs-bucket` in `plat-ue2-prod`
+        command: validate component vpc-flow-logs-bucket -s plat-ue2-prod
+      - name: Validate `vpc-flow-logs-bucket` in `plat-uw2-prod`
+        command: validate component vpc-flow-logs-bucket -s plat-uw2-prod

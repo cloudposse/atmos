@@ -36,20 +36,8 @@ func ExecuteWorkflow(
 		logFunc = u.LogInfo
 	}
 
-	// Check if the steps have the `name` attribute.
-	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
-	// step (the index starts with 1, so the first generated step name would be `step1`)
-	for index, step := range steps {
-		if step.Name == "" {
-			// When iterating through a slice with a range loop, if elements need to be changed,
-			// changing the returned value from the range is not changing the original slice element.
-			// That return value is a copy of the element.
-			// So doing changes to it will not affect the original elements.
-			// We need to access the element with the index returned from the range iterator and change it there.
-			// https://medium.com/@nsspathirana/common-mistakes-with-go-slices-95f2e9b362a9
-			steps[index].Name = fmt.Sprintf("step%d", index+1)
-		}
-	}
+	// Check if the workflow steps have the `name` attribute
+	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
 	logFunc(cliConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
@@ -126,11 +114,11 @@ func ExecuteWorkflow(
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command
 func ExecuteDescribeWorkflows(
 	cliConfig schema.CliConfiguration,
-) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowConfig, error) {
+) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
 
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
-	allResult := make(map[string]schema.WorkflowConfig)
+	allResult := make(map[string]schema.WorkflowManifest)
 
 	if cliConfig.Workflows.BasePath == "" {
 		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in `atmos.yaml`")
@@ -157,23 +145,29 @@ func ExecuteDescribeWorkflows(
 			return nil, nil, nil, err
 		}
 
-		var yamlContent schema.WorkflowFile
+		var workflowManifest schema.WorkflowManifest
 		var workflowConfig schema.WorkflowConfig
 
-		if err = yaml.Unmarshal(fileContent, &yamlContent); err != nil {
+		if err = yaml.Unmarshal(fileContent, &workflowManifest); err != nil {
 			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
 		}
 
-		if i, ok := yamlContent["workflows"]; !ok {
-			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", f)
-		} else {
-			workflowConfig = i
+		if workflowManifest.Workflows == nil {
+			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
 		}
 
+		workflowConfig = workflowManifest.Workflows
 		allWorkflowsInFile := lo.Keys(workflowConfig)
 		sort.Strings(allWorkflowsInFile)
+
+		// Check if the workflow steps have the `name` attribute
+		lo.ForEach(allWorkflowsInFile, func(item string, _ int) {
+			workflowDefinition := workflowConfig[item]
+			checkAndGenerateWorkflowStepNames(&workflowDefinition)
+		})
+
 		mapResult[f] = allWorkflowsInFile
-		allResult[f] = workflowConfig
+		allResult[f] = workflowManifest
 	}
 
 	for k, v := range mapResult {
@@ -186,4 +180,27 @@ func ExecuteDescribeWorkflows(
 	}
 
 	return listResult, mapResult, allResult, nil
+}
+
+func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
+	var steps = workflowDefinition.Steps
+
+	if steps == nil {
+		return
+	}
+
+	// Check if the steps have the `name` attribute.
+	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
+	// step (the index starts with 1, so the first generated step name would be `step1`)
+	for index, step := range steps {
+		if step.Name == "" {
+			// When iterating through a slice with a range loop, if elements need to be changed,
+			// changing the returned value from the range is not changing the original slice element.
+			// That return value is a copy of the element.
+			// So doing changes to it will not affect the original elements.
+			// We need to access the element with the index returned from the range iterator and change it there.
+			// https://medium.com/@nsspathirana/common-mistakes-with-go-slices-95f2e9b362a9
+			steps[index].Name = fmt.Sprintf("step%d", index+1)
+		}
+	}
 }

@@ -27,7 +27,7 @@ Atmos supports the following concepts and principles of **Component-Oriented Pro
     and increase efficiency
   - Abstract Components: if a component is marked as `abstract`, it can be used only as a base for other components and can't be provisioned
     using `atmos` or CI/CD systems like [Spacelift](https://spacelift.io) or [Atlantis](https://www.runatlantis.io) (see
-    our [integrations](/category/integrations) for details)
+    our [integrations](/integrations) for details)
 
 <br/>
 

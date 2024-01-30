@@ -15,7 +15,10 @@ var (
 	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("#10ff10"))
 )
 
-type listItem string
+type listItem struct {
+	name string
+	item string
+}
 
 type listItemDelegate struct{}
 
@@ -25,7 +28,7 @@ func (d listItemDelegate) Spacing() int { return 0 }
 
 func (d listItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
-func (i listItem) FilterValue() string { return string(i) }
+func (i listItem) FilterValue() string { return string(i.item) }
 
 func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	i, ok := item.(listItem)
@@ -40,6 +43,13 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 		}
 	}
 
-	str := fmt.Sprintf("%s", i)
+	var itemName string
+	if i.name != "" {
+		itemName = fmt.Sprintf("%s (%s)", i.name, i.item)
+	} else {
+		itemName = i.item
+	}
+
+	str := fmt.Sprintf("%s", itemName)
 	_, _ = fmt.Fprint(w, fn(str))
 }

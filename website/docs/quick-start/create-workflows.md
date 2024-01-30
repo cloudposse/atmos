@@ -33,19 +33,23 @@ workflows:
   base_path: "stacks/workflows"
 ```
 
-- Add workflow manifests in the `stacks/workflows` folder. In this Quick Start example, we will define Atmos workflows in the `networking.yaml`
-  workflow manifest:
+- Add workflow manifests in the `stacks/workflows` folder. In this Quick Start example, we will define Atmos workflows
+  in the `networking.yaml` and `validation.yaml` workflow manifests:
 
 ```console
    │   # Centralized stacks configuration
    ├── stacks
    │   └── workflows
    │       ├── networking.yaml
+   │       └── validation.yaml
 ```
 
 - Add the following Atmos workflows to the `stacks/workflows/networking.yaml` file:
 
 ```yaml
+name: Networking & Logging
+description: Atmos workflows for managing VPCs and VPC Flow Logs
+
 workflows:
 
   plan-all-vpc-flow-logs-bucket-components:
@@ -88,17 +92,52 @@ workflows:
       - command: terraform apply vpc -s plat-uw2-prod -auto-approve
 ```
 
+- Add the following Atmos workflows to the `stacks/workflows/validation.yaml` file:
+
+```yaml
+name: Validation
+description: Atmos workflows for VPCs and VPC Flow Logs validation
+
+workflows:
+
+  validate-all-vpc-flow-logs-bucket-components:
+    description: "Validate all VPC Flow Logs bucket components in all stacks"
+    steps:
+      - command: validate component vpc-flow-logs-bucket -s plat-ue2-dev
+      - command: validate component vpc-flow-logs-bucket -s plat-uw2-dev
+      - command: validate component vpc-flow-logs-bucket -s plat-ue2-staging
+      - command: validate component vpc-flow-logs-bucket -s plat-uw2-staging
+      - command: validate component vpc-flow-logs-bucket -s plat-ue2-prod
+      - command: validate component vpc-flow-logs-bucket -s plat-uw2-prod
+
+  validate-all-vpc-components:
+    description: "Validate all VPC components in all stacks"
+    steps:
+      - command: validate component vpc -s plat-ue2-dev
+      - command: validate component vpc -s plat-uw2-dev
+      - command: validate component vpc -s plat-ue2-staging
+      - command: validate component vpc -s plat-uw2-staging
+      - command: validate component vpc -s plat-ue2-prod
+      - command: validate component vpc -s plat-uw2-prod
+```
+
 - Run the following Atmos commands to execute the workflows:
 
 ```shell
-# Execute the workflow `plan-all-vpc-flow-logs-bucket-components` from the workflow manifest `networking`
+# Execute the workflow `plan-all-vpc-flow-logs-bucket-components` from the workflow manifest `networking.yaml`
 atmos workflow plan-all-vpc-flow-logs-bucket-components -f networking
 
-# Execute the workflow `plan-all-vpc-components` from the workflow manifest `networking`
+# Execute the workflow `plan-all-vpc-components` from the workflow manifest `networking.yaml`
 atmos workflow plan-all-vpc-components -f networking
 
-# Execute the workflow `apply-all-components` from the workflow manifest `networking`
+# Execute the workflow `apply-all-components` from the workflow manifest `networking.yaml`
 atmos workflow apply-all-components -f networking
+
+# Execute the workflow `validate-all-vpc-flow-logs-bucket-components` from the workflow manifest `validation.yaml`
+atmos workflow validate-all-vpc-flow-logs-bucket-components -f validation
+
+# Execute the workflow `validate-all-vpc-components` from the workflow manifest `validation.yaml`
+atmos workflow validate-all-vpc-components -f validation
 ```
 
 <br/>
@@ -109,8 +148,8 @@ Refer to [atmos workflow](/cli/commands/workflow) for more information on the `a
 
 <br/>
 
-The `atmos workflow` CLI command supports the `--dry-run` flag. If passed, the command will just print information about the executed workflow steps
-without executing them. For example:
+The `atmos workflow` CLI command supports the `--dry-run` flag. If passed, the command will just print information about
+the executed workflow steps without executing them. For example:
 
 <br/>
 

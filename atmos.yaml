@@ -241,12 +241,7 @@ commands:
             {{ end }}
 
   - name: set-eks-cluster
-    description: |
-      Download 'kubeconfig' and set EKS cluster.
-
-      Example usage:
-        atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
-        atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
+    description: Download 'kubeconfig' and set EKS cluster
     verbose: false  # Set to `true` to see verbose outputs
     arguments:
       - name: component
