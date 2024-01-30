@@ -105,10 +105,8 @@ Down Sleep 500ms
 Right Sleep 500ms
 Down Sleep 500ms
 Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
+Up Sleep 500ms
+Up Sleep 500ms
 Enter
 Sleep 3s
 
