@@ -241,8 +241,7 @@ commands:
             {{ end }}
 
   - name: set-eks-cluster
-    description: |
-      Download 'kubeconfig' and set EKS cluster
+    description: Download 'kubeconfig' and set EKS cluster
     verbose: false  # Set to `true` to see verbose outputs
     arguments:
       - name: component
