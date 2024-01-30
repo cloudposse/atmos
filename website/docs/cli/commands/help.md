@@ -27,48 +27,6 @@ The `atmos --help` and `atmos -h` commands show help for all Atmos CLI commands:
 
 <br/>
 
-```console
-'atmos' is a universal tool for DevOps and cloud automation used for provisioning, 
-managing and orchestrating workflows across various toolchains
-
-Usage:
-  atmos [flags]
-  atmos [command]
-
-Examples:
-atmos
-
-Available Commands:
-  atlantis        Execute 'atlantis' commands
-  aws             Execute 'aws' commands
-  completion      Generate completion script for Bash, Zsh, Fish and PowerShell
-  describe        Execute 'describe' commands
-  helmfile        Execute 'helmfile' commands
-  help            Help about any command
-  list            Execute 'atmos list' commands
-  play            This command plays games
-  set-eks-cluster Download 'kubeconfig' and set EKS cluster.
-
-Example usage:
-  atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
-  atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
-
-  show            Execute 'show' commands
-  terraform       Execute 'terraform' commands
-  tf              Execute 'terraform' commands
-  validate        Execute 'validate' commands
-  vendor          Execute 'vendor' commands
-  version         Print the CLI version
-  workflow        Execute a workflow
-
-Flags:
-  -h, --help   help for atmos
-
-Use "atmos [command] --help" for more information about a command.
-```
-
-<br/>
-
 ## Examples
 
 ```shell
