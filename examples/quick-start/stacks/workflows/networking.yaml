@@ -41,27 +41,27 @@ workflows:
     description: |
       Run 'terraform apply' on all components in all stacks
     steps:
-      - name: Apply component 'vpc-flow-logs-bucket' in stack 'plat-ue2-dev'
+      - name: Apply `vpc-flow-logs-bucket` in `plat-ue2-dev`
         command: terraform apply vpc-flow-logs-bucket -s plat-ue2-dev -auto-approve
-      - name: Apply component 'vpc' in stack 'plat-ue2-dev'
+      - name: Apply 'vpc' in `plat-ue2-dev`
         command: terraform apply vpc -s plat-ue2-dev -auto-approve
-      - name: Apply component 'vpc-flow-logs-bucket' in stack 'plat-uw2-dev'
+      - name: Apply `vpc-flow-logs-bucket` in `plat-uw2-dev`
         command: terraform apply vpc-flow-logs-bucket -s plat-uw2-dev -auto-approve
-      - name: Apply component 'vpc' in stack 'plat-uw2-dev'
+      - name: Apply 'vpc' in `plat-uw2-dev`
         command: terraform apply vpc -s plat-uw2-dev -auto-approve
-      - name: Apply component 'vpc-flow-logs-bucket' in stack 'plat-ue2-staging'
+      - name: Apply `vpc-flow-logs-bucket` in `plat-ue2-staging`
         command: terraform apply vpc-flow-logs-bucket -s plat-ue2-staging -auto-approve
-      - name: Apply component 'vpc' in stack 'plat-ue2-staging'
+      - name: Apply `vpc` in `plat-ue2-staging`
         command: terraform apply vpc -s plat-ue2-staging -auto-approve
-      - name: Apply component 'vpc-flow-logs-bucket' in stack 'plat-uw2-staging'
+      - name: Apply `vpc-flow-logs-bucket` in `plat-uw2-staging`
         command: terraform apply vpc-flow-logs-bucket -s plat-uw2-staging -auto-approve
-      - name: Apply component 'vpc' in stack 'plat-uw2-staging'
+      - name: Apply `vpc` in stack `plat-uw2-staging`
         command: terraform apply vpc -s plat-uw2-staging -auto-approve
-      - name: Apply component 'vpc-flow-logs-bucket' in stack 'plat-ue2-prod'
+      - name: Apply `vpc-flow-logs-bucket` in `plat-ue2-prod`
         command: terraform apply vpc-flow-logs-bucket -s plat-ue2-prod -auto-approve
-      - name: Apply component 'vpc' in stack 'plat-ue2-prod'
+      - name: Apply `vpc` in `plat-ue2-prod`
         command: terraform apply vpc -s plat-ue2-prod -auto-approve
-      - name: Apply component 'vpc-flow-logs-bucket' in stack 'plat-uw2-prod'
+      - name: Apply `vpc-flow-logs-bucket` in `plat-uw2-prod`
         command: terraform apply vpc-flow-logs-bucket -s plat-uw2-prod -auto-approve
-      - name: Apply component 'vpc' in stack 'plat-uw2-prod'
+      - name: Apply `vpc` in `plat-uw2-prod`
         command: terraform apply vpc -s plat-uw2-prod -auto-approve
