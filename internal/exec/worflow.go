@@ -154,7 +154,7 @@ func executeWorkflowUI(cliConfig schema.CliConfiguration) (string, string, strin
 
 	fmt.Println()
 	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command:\natmos workflow %s --file %s --from-step \"%s\"", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep),
+		"Executing command:\n"+os.Args[0]+" workflow %s --file %s --from-step \"%s\"", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep),
 		color.New(color.FgCyan),
 	)
 	fmt.Println()
