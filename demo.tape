@@ -92,6 +92,8 @@ Down 25 Sleep 500ms
 Type "q" Sleep 500ms
 Sleep 1s
 
+Set FontSize 11.5
+
 Type "# In Atmos you can easily explore workflows and execute workflow commands..." Sleep 500ms Enter
 Type "atmos workflow" Sleep 500ms Enter
 Sleep 2s
@@ -113,6 +115,8 @@ Down Sleep 500ms
 Down Sleep 500ms
 Enter
 Sleep 3s
+
+Set FontSize 12
 
 Type "# Atmos has a lot of documented commands" Sleep 500ms Enter
 Type "atmos --help" Sleep 500ms Enter
