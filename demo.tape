@@ -18,13 +18,13 @@ Set CursorBlink true
 
 Set BorderRadius 8
 
-Set Margin 15
+Set Margin 20
 Set MarginFill "#674EFF"
 
 Set Padding 10
 
-Set Width 1200
-Set Height 600
+Set Width 1400
+Set Height 800
 
 Set PlaybackSpeed 1
 
