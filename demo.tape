@@ -96,11 +96,7 @@ Type "# In Atmos you can easily explore workflows and execute workflow commands.
 Type "atmos workflow" Sleep 500ms Enter
 Sleep 2s
 Down Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
 Right Sleep 500ms
-Down Sleep 500ms
-Down Sleep 500ms
 Down Sleep 500ms
 Right Sleep 500ms
 Down Sleep 500ms
@@ -116,7 +112,7 @@ Sleep 3s
 
 Type "# Atmos has native workflows for Terraform" Sleep 500ms Enter
 Type "atmos terraform --help" Sleep 500ms Enter
-Sleep 4s
+Sleep 5s
 
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
 Sleep 1s
