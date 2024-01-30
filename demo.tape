@@ -23,8 +23,8 @@ Set MarginFill "#674EFF"
 
 Set Padding 12
 
-Set Width 1200
-Set Height 600
+Set Width 1400
+Set Height 800
 
 Set PlaybackSpeed 1
 
