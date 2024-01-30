@@ -6,7 +6,7 @@ Set Theme "Monokai Vivid"
 
 Set FontFamily "FiraCode Nerd Font"
 #Set FontFamily "Hack Nerd Font"
-Set FontSize 12
+Set FontSize 14
 
 Set TypingSpeed 40ms
 
