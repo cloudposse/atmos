@@ -76,7 +76,7 @@ atmos describe workflows -o list
 - file: networking.yaml
   workflow: plan-all-vpc-components
 - file: networking.yaml
-  workflow: plan-all-vpc-flow-logs-bucket-components
+  workflow: plan-all-vpc-flow-logs-buckets
 ```
 
 <br/>
@@ -102,7 +102,7 @@ helpers.yaml:
 networking.yaml:
   - apply-all-components
   - plan-all-vpc-components
-  - plan-all-vpc-flow-logs-bucket-components
+  - plan-all-vpc-flow-logs-buckets
 ```
 
 <br/>
@@ -145,7 +145,7 @@ networking.yaml:
         - command: terraform plan vpc -s plat-uw2-staging
         - command: terraform plan vpc -s plat-ue2-prod
         - command: terraform plan vpc -s plat-uw2-prod
-    plan-all-vpc-flow-logs-bucket-components:
+    plan-all-vpc-flow-logs-buckets:
       description: |
         Run 'terraform plan' on all 'vpc-flow-logs-bucket' components in all stacks
       steps:

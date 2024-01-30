@@ -52,7 +52,7 @@ description: Atmos workflows for managing VPCs and VPC Flow Logs
 
 workflows:
 
-  plan-all-vpc-flow-logs-bucket-components:
+  plan-all-vpc-flow-logs-buckets:
     description: |
       Run 'terraform plan' on all 'vpc-flow-logs-bucket' components in all stacks
     steps:
@@ -124,8 +124,8 @@ workflows:
 - Run the following Atmos commands to execute the workflows:
 
 ```shell
-# Execute the workflow `plan-all-vpc-flow-logs-bucket-components` from the workflow manifest `networking.yaml`
-atmos workflow plan-all-vpc-flow-logs-bucket-components -f networking
+# Execute the workflow `plan-all-vpc-flow-logs-buckets` from the workflow manifest `networking.yaml`
+atmos workflow plan-all-vpc-flow-logs-buckets -f networking
 
 # Execute the workflow `plan-all-vpc-components` from the workflow manifest `networking.yaml`
 atmos workflow plan-all-vpc-components -f networking
@@ -133,8 +133,8 @@ atmos workflow plan-all-vpc-components -f networking
 # Execute the workflow `apply-all-components` from the workflow manifest `networking.yaml`
 atmos workflow apply-all-components -f networking
 
-# Execute the workflow `validate-all-vpc-flow-logs-bucket-components` from the workflow manifest `validation.yaml`
-atmos workflow validate-all-vpc-flow-logs-bucket-components -f validation
+# Execute the workflow `validate-all-vpc-flow-logs-buckets` from the workflow manifest `validation.yaml`
+atmos workflow validate-all-vpc-flow-logs-buckets -f validation
 
 # Execute the workflow `validate-all-vpc-components` from the workflow manifest `validation.yaml`
 atmos workflow validate-all-vpc-components -f validation

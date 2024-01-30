@@ -3,7 +3,7 @@ description: Atmos workflows for managing VPCs and VPC Flow Logs
 
 workflows:
 
-  plan-all-vpc-flow-logs-bucket-components:
+  plan-all-vpc-flow-logs-buckets:
     description: |
       Run 'terraform plan' on all 'vpc-flow-logs-bucket' components in all stacks
     steps:
