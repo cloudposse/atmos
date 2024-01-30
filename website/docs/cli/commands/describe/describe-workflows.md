@@ -74,9 +74,9 @@ atmos describe workflows -o list
 - file: networking.yaml
   workflow: apply-all-components
 - file: networking.yaml
-  workflow: plan-all-vpc-components
+  workflow: plan-all-vpc
 - file: networking.yaml
-  workflow: plan-all-vpc-flow-logs-buckets
+  workflow: plan-all-vpc-flow-logs
 ```
 
 <br/>
@@ -101,8 +101,8 @@ helpers.yaml:
   - save/docker-config-json
 networking.yaml:
   - apply-all-components
-  - plan-all-vpc-components
-  - plan-all-vpc-flow-logs-buckets
+  - plan-all-vpc
+  - plan-all-vpc-flow-logs
 ```
 
 <br/>
@@ -135,7 +135,7 @@ networking.yaml:
         - command: terraform apply vpc -s plat-ue2-prod -auto-approve
         - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-prod -auto-approve
         - command: terraform apply vpc -s plat-uw2-prod -auto-approve
-    plan-all-vpc-components:
+    plan-all-vpc:
       description: |
         Run 'terraform plan' on all 'vpc' components in all stacks
       steps:
@@ -145,7 +145,7 @@ networking.yaml:
         - command: terraform plan vpc -s plat-uw2-staging
         - command: terraform plan vpc -s plat-ue2-prod
         - command: terraform plan vpc -s plat-uw2-prod
-    plan-all-vpc-flow-logs-buckets:
+    plan-all-vpc-flow-logs:
       description: |
         Run 'terraform plan' on all 'vpc-flow-logs-bucket' components in all stacks
       steps:
@@ -159,7 +159,7 @@ validation.yaml:
   name: Validation
   description: Atmos workflows for VPCs and VPC Flow Logs validation
   workflows:
-    validate-all-vpc-components:
+    validate-all-vpc:
       description: Validate all VPC components in all stacks
       steps:
         - command: validate component vpc -s plat-ue2-dev
@@ -168,7 +168,7 @@ validation.yaml:
         - command: validate component vpc -s plat-uw2-staging
         - command: validate component vpc -s plat-ue2-prod
         - command: validate component vpc -s plat-uw2-prod
-    validate-all-vpc-flow-logs-bucket-components:
+    validate-all-vpc-flow-logs:
       description: Validate all VPC Flow Logs bucket components in all stacks
       steps:
         - command: validate component vpc-flow-logs-bucket -s plat-ue2-dev

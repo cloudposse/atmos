@@ -52,7 +52,7 @@ description: Atmos workflows for managing VPCs and VPC Flow Logs
 
 workflows:
 
-  plan-all-vpc-flow-logs-buckets:
+  plan-all-vpc-flow-logs:
     description: |
       Run 'terraform plan' on all 'vpc-flow-logs-bucket' components in all stacks
     steps:
@@ -63,7 +63,7 @@ workflows:
       - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-prod
       - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-prod
 
-  plan-all-vpc-components:
+  plan-all-vpc:
     description: |
       Run 'terraform plan' on all 'vpc' components in all stacks
     steps:
@@ -100,7 +100,7 @@ description: Atmos workflows for VPCs and VPC Flow Logs validation
 
 workflows:
 
-  validate-all-vpc-flow-logs-bucket-components:
+  validate-all-vpc-flow-logs:
     description: "Validate all VPC Flow Logs bucket components in all stacks"
     steps:
       - command: validate component vpc-flow-logs-bucket -s plat-ue2-dev
@@ -110,7 +110,7 @@ workflows:
       - command: validate component vpc-flow-logs-bucket -s plat-ue2-prod
       - command: validate component vpc-flow-logs-bucket -s plat-uw2-prod
 
-  validate-all-vpc-components:
+  validate-all-vpc:
     description: "Validate all VPC components in all stacks"
     steps:
       - command: validate component vpc -s plat-ue2-dev
@@ -124,20 +124,20 @@ workflows:
 - Run the following Atmos commands to execute the workflows:
 
 ```shell
-# Execute the workflow `plan-all-vpc-flow-logs-buckets` from the workflow manifest `networking.yaml`
-atmos workflow plan-all-vpc-flow-logs-buckets -f networking
+# Execute the workflow `plan-all-vpc-flow-logs` from the workflow manifest `networking.yaml`
+atmos workflow plan-all-vpc-flow-logs -f networking
 
-# Execute the workflow `plan-all-vpc-components` from the workflow manifest `networking.yaml`
-atmos workflow plan-all-vpc-components -f networking
+# Execute the workflow `plan-all-vpc` from the workflow manifest `networking.yaml`
+atmos workflow plan-all-vpc -f networking
 
 # Execute the workflow `apply-all-components` from the workflow manifest `networking.yaml`
 atmos workflow apply-all-components -f networking
 
-# Execute the workflow `validate-all-vpc-flow-logs-buckets` from the workflow manifest `validation.yaml`
-atmos workflow validate-all-vpc-flow-logs-buckets -f validation
+# Execute the workflow `validate-all-vpc-flow-logs` from the workflow manifest `validation.yaml`
+atmos workflow validate-all-vpc-flow-logs -f validation
 
-# Execute the workflow `validate-all-vpc-components` from the workflow manifest `validation.yaml`
-atmos workflow validate-all-vpc-components -f validation
+# Execute the workflow `validate-all-vpc` from the workflow manifest `validation.yaml`
+atmos workflow validate-all-vpc -f validation
 ```
 
 <br/>
@@ -154,11 +154,11 @@ the executed workflow steps without executing them. For example:
 <br/>
 
 ```shell
-atmos workflow plan-all-vpc-components -f networking --dry-run
+atmos workflow plan-all-vpc -f networking --dry-run
 ```
 
 ```console
-Executing the workflow 'plan-all-vpc-components' from 'stacks/workflows/networking.yaml'
+Executing the workflow 'plan-all-vpc' from 'stacks/workflows/networking.yaml'
 
 Executing workflow step: terraform plan vpc -s plat-ue2-dev
 Executing workflow step: terraform plan vpc -s plat-uw2-dev
