@@ -115,7 +115,7 @@ Type "atmos terraform --help" Sleep 500ms Enter
 Sleep 5s
 
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
-Sleep 1s
+Sleep 2s
 
 Type "# or join us in #atmos at https://slack.cloudposse.com!" Sleep 500ms Enter
 Sleep 3s
