@@ -1,4 +1,4 @@
-name: Networking & Logging
+name: Networking
 description: Atmos workflows for managing VPCs and VPC Flow Logs
 
 workflows:
