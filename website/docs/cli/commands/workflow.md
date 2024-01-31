@@ -35,7 +35,7 @@ atmos workflow <workflow_name> --file <workflow_file> [options]
 
 ```shell
 atmos workflow
-atmos workflow plan-all-vpc-components --file networking
+atmos workflow plan-all-vpc --file networking
 atmos workflow apply-all-components -f networking --dry-run
 atmos workflow test-1 -f workflow1 --from-step step2
 ```

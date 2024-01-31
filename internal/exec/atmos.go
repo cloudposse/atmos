@@ -111,6 +111,7 @@ func ExecuteAtmosCmd() error {
 		if err != nil {
 			return err
 		}
+		return nil
 	}
 
 	if selectedCommand == "describe dependents" {
@@ -122,6 +123,7 @@ func ExecuteAtmosCmd() error {
 		if err != nil {
 			return err
 		}
+		return nil
 	}
 
 	if selectedCommand == "validate component" {
@@ -129,6 +131,10 @@ func ExecuteAtmosCmd() error {
 		if err != nil {
 			return err
 		}
+
+		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully", selectedComponent, selectedStack)
+		u.PrintMessageInColor(m, color.New(color.FgGreen))
+		return nil
 	}
 
 	// All Terraform commands
