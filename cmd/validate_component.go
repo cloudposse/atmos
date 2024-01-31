@@ -25,7 +25,7 @@ var validateComponentCmd = &cobra.Command{
 			u.LogErrorAndExit(err)
 		}
 
-		m := fmt.Sprintf("component '%s' in the stack '%s' validated successfully", component, stack)
+		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully", component, stack)
 		u.PrintMessageInColor(m, color.New(color.FgGreen))
 	},
 }
