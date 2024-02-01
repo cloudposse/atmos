@@ -14,5 +14,5 @@ jobs:
       - uses: cloudposse/github-action-auto-release@v1
         with:
           prerelease: false
-          publish: true
+          publish: false
           config-name: auto-release.yml
