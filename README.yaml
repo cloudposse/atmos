@@ -7,15 +7,18 @@ license: APACHE2
 github_repo: cloudposse/atmos
 
 badges:
-  - name: Latest Release
-    image: https://img.shields.io/github/release/cloudposse/atmos.svg
-    url: https://github.com/cloudposse/atmos/releases/latest
-  - name: Tests
-    image: https://github.com/cloudposse/atmos/actions/workflows/test.yml/badge.svg
-    url: https://github.com/cloudposse/atmos/actions/workflows/test.yml
   - name: Slack Community
-    image: https://slack.cloudposse.com/badge.svg
+    image: https://slack.cloudposse.com/for-the-badge.svg
     url: https://slack.cloudposse.com
+  - name: Latest Release
+    image: https://img.shields.io/github/release/cloudposse/atmos.svg?style=for-the-badge
+    url: https://github.com/cloudposse/atmos/releases/latest
+  - name: "Last Updated"
+    image: https://img.shields.io/github/last-commit/cloudposse/.github/main?style=for-the-badge
+    url: https://github.com/cloudposse/.github/commits/main/
+  - name: Tests
+    image: https://img.shields.io/github/actions/workflow/status/cloudposse/atmos/test.yml?style=for-the-badge
+    url: https://github.com/cloudposse/atmos/actions/workflows/test.yml
 
 categories:
   - cli
