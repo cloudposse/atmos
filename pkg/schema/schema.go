@@ -5,20 +5,20 @@ type CliConfiguration struct {
 	BasePath                      string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components                    Components   `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
-	Workflows                     Workflows    `yaml:"workflows" json:"workflows" mapstructure:"workflows"`
-	Logs                          Logs         `yaml:"logs" json:"logs" mapstructure:"logs"`
-	Commands                      []Command    `yaml:"commands" json:"commands" mapstructure:"commands"`
-	Integrations                  Integrations `yaml:"integrations" json:"integrations" mapstructure:"integrations"`
-	Schemas                       Schemas      `yaml:"schemas" json:"schemas" mapstructure:"schemas"`
+	Workflows                     Workflows    `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
+	Logs                          Logs         `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Commands                      []Command    `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
+	Integrations                  Integrations `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
+	Schemas                       Schemas      `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Initialized                   bool         `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
-	StacksBaseAbsolutePath        string       `yaml:"stacksBaseAbsolutePath" json:"stacksBaseAbsolutePath"`
-	IncludeStackAbsolutePaths     []string     `yaml:"includeStackAbsolutePaths" json:"includeStackAbsolutePaths"`
-	ExcludeStackAbsolutePaths     []string     `yaml:"excludeStackAbsolutePaths" json:"excludeStackAbsolutePaths"`
-	TerraformDirAbsolutePath      string       `yaml:"terraformDirAbsolutePath" json:"terraformDirAbsolutePath"`
-	HelmfileDirAbsolutePath       string       `yaml:"helmfileDirAbsolutePath" json:"helmfileDirAbsolutePath"`
-	StackConfigFilesRelativePaths []string     `yaml:"stackConfigFilesRelativePaths" json:"stackConfigFilesRelativePaths"`
-	StackConfigFilesAbsolutePaths []string     `yaml:"stackConfigFilesAbsolutePaths" json:"stackConfigFilesAbsolutePaths"`
-	StackType                     string       `yaml:"stackType" json:"StackType"`
+	StacksBaseAbsolutePath        string       `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
+	IncludeStackAbsolutePaths     []string     `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
+	ExcludeStackAbsolutePaths     []string     `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
+	TerraformDirAbsolutePath      string       `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
+	HelmfileDirAbsolutePath       string       `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
+	StackConfigFilesRelativePaths []string     `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
+	StackConfigFilesAbsolutePaths []string     `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
+	StackType                     string       `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
 }
 
 type Terraform struct {
@@ -329,26 +329,26 @@ type AtlantisConfigOutput struct {
 // Validation schemas
 
 type JsonSchema struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
 }
 
 type Cue struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
 }
 
 type Opa struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
 }
 
 type AtmosSchema struct {
-	Manifest string `yaml:"manifest" json:"manifest" mapstructure:"manifest"`
+	Manifest string `yaml:"manifest,omitempty" json:"manifest,omitempty" mapstructure:"manifest"`
 }
 
 type Schemas struct {
-	JsonSchema JsonSchema  `yaml:"jsonschema" json:"jsonschema" mapstructure:"jsonschema"`
-	Cue        Cue         `yaml:"cue" json:"cue" mapstructure:"cue"`
-	Opa        Opa         `yaml:"opa" json:"opa" mapstructure:"opa"`
-	Atmos      AtmosSchema `yaml:"atmos" json:"atmos" mapstructure:"atmos"`
+	JsonSchema JsonSchema  `yaml:"jsonschema,omitempty" json:"jsonschema,omitempty" mapstructure:"jsonschema"`
+	Cue        Cue         `yaml:"cue,omitempty" json:"cue,omitempty" mapstructure:"cue"`
+	Opa        Opa         `yaml:"opa,omitempty" json:"opa,omitempty" mapstructure:"opa"`
+	Atmos      AtmosSchema `yaml:"atmos,omitempty" json:"atmos,omitempty" mapstructure:"atmos"`
 }
 
 type ValidationItem struct {

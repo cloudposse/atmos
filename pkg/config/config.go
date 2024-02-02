@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -19,7 +20,7 @@ import (
 )
 
 var (
-	NotFound = errors.New("\n'atmos.yaml' CLI config not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+	NotFound = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
 		"\nYou can download a sample config and adapt it to your requirements from " +
 		"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
 
@@ -66,6 +67,7 @@ var (
 				BasePath: "stacks/schemas/opa",
 			},
 		},
+		Initialized: true,
 	}
 )
 
@@ -181,13 +183,15 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		// Set `ATMOS_LOGS_LEVEL` ENV var to "Debug" to see the message about Atmos using the default CLI config
 		logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
 		if logsLevelEnvVar == "Debug" {
-			u.PrintMessage("'atmos.yaml' CLI config not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n" +
-				"Using the default CLI config:\n")
+			u.PrintMessageInColor("'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n"+
+				"Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'.\n"+
+				"Using the default CLI config:\n", color.New(color.FgCyan))
 
 			err = u.PrintAsYAML(defaultCliConfig)
 			if err != nil {
 				return cliConfig, err
 			}
+			fmt.Println()
 		}
 
 		j, err := json.Marshal(defaultCliConfig)
