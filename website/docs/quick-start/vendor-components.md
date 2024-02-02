@@ -204,6 +204,9 @@ module "vpc_flow_logs_bucket" {
 
 ## Remote State Notes
 
+The [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module uses the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) 
+Terraform provider to read Atmos configuration and obtain the remote state for Atmos components.
+
 Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
 which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
 
@@ -221,15 +224,6 @@ component's directory (e.g. `components/terraform/vpc`), and we don't want to re
 - Home dir (`~/.atmos/atmos.yaml`)
 - Current directory
 - ENV variables `ATMOS_CLI_CONFIG_PATH` and `ATMOS_BASE_PATH`
-
-:::
-
-:::note
-
-Initial Atmos configuration can be controlled by these ENV vars:
-
-- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Absolute path to a folder where the `atmos.yaml` CLI config file is located
-- `ATMOS_BASE_PATH` - absolute path to the folder containing the `components` and `stacks` folders
 
 :::
 
