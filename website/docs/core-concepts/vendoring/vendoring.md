@@ -208,6 +208,30 @@ spec:
   **NOTE:** The imported file extensions are optional. If an import is defined without an extension, the `.yaml` extension is assumed and used
   by default.
 
+<br/>
+
+:::warning
+
+The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+
+:::
+
+```yaml title="vendor.yaml"
+sources:
+  - component: "vpc"
+    source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+    version: "latest"
+    targets:
+      - "components/terraform/infra/vpc"
+    included_paths:
+      - "**/**"
+      # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+      - "**/modules/**"
+```
+
+<br/>
+
 ## Hierarchical Imports in Vendoring Manifests
 
 Use `imports` to split the main `vendor.yaml` manifest into smaller files for maintainability, or by their roles in the infrastructure.

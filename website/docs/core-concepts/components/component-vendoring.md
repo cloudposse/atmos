@@ -69,6 +69,24 @@ spec:
       filename: introspection.mixin.tf
 ```
 
+<br/>
+
+:::warning
+
+The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+
+:::
+
+```yaml title="component.yaml"
+included_paths:
+  - "**/**"
+  # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+  - "**/modules/**"
+```
+
+<br/>
+
 ## Vendoring Modules as Components
 
 Any terraform module can also be used as a component, provided that Atmos backend
