@@ -14,9 +14,56 @@ import (
 	"runtime"
 )
 
-var NotFound = errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
-	"\nYou can download a sample config and adapt it to your requirements from " +
-	"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
+var (
+	NotFound = errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+		"\nYou can download a sample config and adapt it to your requirements from " +
+		"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
+
+	defaultCliConfig = schema.CliConfiguration{
+		BasePath: ".",
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{tenant}-{environment}-{stage}",
+			IncludedPaths: []string{
+				"orgs/**/*",
+			},
+			ExcludedPaths: []string{
+				"**/_defaults.yaml",
+			},
+		},
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath:                "components/terraform",
+				ApplyAutoApprove:        false,
+				DeployRunInit:           true,
+				InitRunReconfigure:      true,
+				AutoGenerateBackendFile: true,
+			},
+			Helmfile: schema.Helmfile{
+				BasePath:              "components/helmfile",
+				KubeconfigPath:        "/dev/shm",
+				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
+				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
+				UseEKS:                true,
+			},
+		},
+		Workflows: schema.Workflows{
+			BasePath: "stacks/workflows",
+		},
+		Logs: schema.Logs{
+			File:  "/dev/stdout",
+			Level: "Info",
+		},
+		Schemas: schema.Schemas{
+			JsonSchema: schema.JsonSchema{
+				BasePath: "stacks/schemas/jsonschema",
+			},
+			Opa: schema.Opa{
+				BasePath: "stacks/schemas/opa",
+			},
+		},
+	}
+)
 
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
