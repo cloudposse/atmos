@@ -202,6 +202,57 @@ module "vpc_flow_logs_bucket" {
 }
 ```
 
+## Remote State Notes
+
+Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
+which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
+
+This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
+
+While placing `atmos.yaml` at the root of the repository will work for Atmos, it will not work for
+the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider because the provider gets executed from the
+component's directory (e.g. `components/terraform/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
+
+:::info
+
+`atmos.yaml` is loaded from the following locations (from lowest to highest priority):
+
+- System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- Home dir (`~/.atmos/atmos.yaml`)
+- Current directory
+- ENV variables `ATMOS_CLI_CONFIG_PATH` and `ATMOS_BASE_PATH`
+
+:::
+
+:::note
+
+Initial Atmos configuration can be controlled by these ENV vars:
+
+- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Absolute path to a folder where the `atmos.yaml` CLI config file is located
+- `ATMOS_BASE_PATH` - absolute path to the folder containing the `components` and `stacks` folders
+
+:::
+
 <br/>
+
+For this to work for both the `atmos` CLI and the Terraform `utils` provider, we recommend doing one of the following:
+
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root
+  of the repo
+
+- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of
+  the repo
+
+- Put `atmos.yaml` at a location in the file system and then set the ENV var `ATMOS_CLI_CONFIG_PATH` to point to that location. The ENV var must
+  point to a folder without the `atmos.yaml` file name. For example, if `atmos.yaml` is at `/atmos/config/atmos.yaml`,
+  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
+
+- When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/Dockerfile)
+  by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
+  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
+  uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
+  var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
 
 For a complete description of how Atmos components use remote state, refer to [Component Remote State](/core-concepts/components/remote-state).
