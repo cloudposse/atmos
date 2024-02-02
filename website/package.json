@@ -32,7 +32,7 @@
     "unified": "^11.0.4"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.1.0"
+    "@docusaurus/module-type-aliases": "^3.1.1"
   },
   "browserslist": {
     "production": [
