@@ -9,7 +9,7 @@ module "vpc_flow_logs_bucket" {
   component = "vpc-flow-logs-bucket"
 
   # Override the context variables to point to a different Atmos stack if the
-  # `vpc-flow-logs-bucket-1` Atmos component is provisioned in another AWS account, OU or region
+  # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region
   stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
   environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
