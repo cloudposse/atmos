@@ -1,22 +1,75 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/mitchellh/go-homedir"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+
+	"github.com/fatih/color"
+	"github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var NotFound = errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
-	"\nYou can download a sample config and adapt it to your requirements from " +
-	"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
+var (
+	NotFound = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+		"\nYou can download a sample config and adapt it to your requirements from " +
+		"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
+
+	defaultCliConfig = schema.CliConfiguration{
+		BasePath: ".",
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{tenant}-{environment}-{stage}",
+			IncludedPaths: []string{
+				"orgs/**/*",
+			},
+			ExcludedPaths: []string{
+				"**/_defaults.yaml",
+			},
+		},
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath:                "components/terraform",
+				ApplyAutoApprove:        false,
+				DeployRunInit:           true,
+				InitRunReconfigure:      true,
+				AutoGenerateBackendFile: true,
+			},
+			Helmfile: schema.Helmfile{
+				BasePath:              "components/helmfile",
+				KubeconfigPath:        "/dev/shm",
+				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
+				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
+				UseEKS:                true,
+			},
+		},
+		Workflows: schema.Workflows{
+			BasePath: "stacks/workflows",
+		},
+		Logs: schema.Logs{
+			File:  "/dev/stdout",
+			Level: "Info",
+		},
+		Schemas: schema.Schemas{
+			JsonSchema: schema.JsonSchema{
+				BasePath: "stacks/schemas/jsonschema",
+			},
+			Opa: schema.Opa{
+				BasePath: "stacks/schemas/opa",
+			},
+		},
+		Initialized: true,
+	}
+)
 
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
@@ -126,7 +179,31 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	if !configFound {
-		return cliConfig, NotFound
+		// If `atmos.yaml` not found, use the default config
+		// Set `ATMOS_LOGS_LEVEL` ENV var to "Debug" to see the message about Atmos using the default CLI config
+		logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
+		if logsLevelEnvVar == "Debug" {
+			u.PrintMessageInColor("'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n"+
+				"Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'.\n"+
+				"Using the default CLI config:\n", color.New(color.FgCyan))
+
+			err = u.PrintAsYAML(defaultCliConfig)
+			if err != nil {
+				return cliConfig, err
+			}
+			fmt.Println()
+		}
+
+		j, err := json.Marshal(defaultCliConfig)
+		if err != nil {
+			return cliConfig, err
+		}
+
+		reader := bytes.NewReader(j)
+		err = v.MergeConfig(reader)
+		if err != nil {
+			return cliConfig, err
+		}
 	}
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644

@@ -42,7 +42,7 @@ Sleep 1s
 
 Type "# We will start by installing some 3rd-party components and other artifacts..." Sleep 500ms Enter
 Type "atmos vendor pull" Sleep 500ms Enter
-Sleep 7s
+Sleep 8s
 
 Type "# In Atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
 Type "atmos" Sleep 500ms Enter
@@ -55,8 +55,6 @@ Up Sleep 500ms
 Up Sleep 500ms
 Up Sleep 1s
 Right Sleep 1s
-Down Sleep 500ms
-Down Sleep 500ms
 Down Sleep 500ms
 Right Sleep 1s
 Down Sleep 500ms

@@ -12,23 +12,63 @@ Use this command to show a list of Atmos components in Atmos stacks that depend 
 
 ## Description
 
-In Atmos, you can define component dependencies by using the `settings.depends_on` section. The section used to define all the Atmos components (in
-the same or different stacks) that the current component depends on.
+In Atmos, you can define component dependencies by using the `settings.depends_on` section. The section used to define 
+all the Atmos components (in the same or different stacks) that the current component depends on.
 
 The `settings.depends_on` section is a map of objects. The map keys are just the descriptions of dependencies and can be strings or numbers.
 Provide meaningful descriptions so that people can understand what the dependencies are about.
 
 Each object in the `settings.depends_on` section has the following schema:
 
-- `component` (required) - an Atmos component that the current component depends on
-- `namespace` (optional) - the `namespace` where the Atmos component is provisioned
-- `tenant` (optional) - the `tenant` where the Atmos component is provisioned
-- `environment` (optional) - the `environment` where the Atmos component is provisioned
-- `stage` (optional) - the `stage` where the Atmos component is provisioned
+- `file` (optional) - a file on the local filesystem that the current component depends on
+- `folder` (optional) - a folder on the local filesystem that the current component depends on
+- `component` (required if `file` or `folder` is not specified) - an Atmos component that the current component depends on
+- `namespace` (optional) - the `namespace` where the `component` is provisioned
+- `tenant` (optional) - the `tenant` where the `component` is provisioned
+- `environment` (optional) - the `environment` where the `component` is provisioned
+- `stage` (optional) - the `stage` where the `component` is provisioned
 
 <br/>
 
-The `component` attribute is required. The rest are the context variables and are used to define Atmos stacks other than the current stack.
+One of `component`, `file` or `folder` is required.
+
+Dependencies on external files (not in the component's folder) are defined using the `file` attribute. For example:
+
+```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
+components:
+  terraform:
+    top-level-component3:
+      metadata:
+        component: "top-level-component1"
+      settings:
+        depends_on:
+          1:
+            file: "examples/tests/components/terraform/mixins/introspection.mixin.tf"
+```
+
+In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
+`examples/tests/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder).
+
+Dependencies on external folders are defined using the `folder` attribute. For example:
+
+```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
+components:
+  terraform:
+    top-level-component3:
+      metadata:
+        component: "top-level-component1"
+      settings:
+        depends_on:
+          1:
+            file: "examples/tests/components/terraform/mixins/introspection.mixin.tf"
+          2:
+            folder: "examples/tests/components/helmfile/infra/infra-server"
+```
+
+In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
+`examples/tests/components/helmfile/infra/infra-server`.
+
+If `component` is specified, the rest of the attributes are the context variables and are used to define Atmos stacks other than the current stack.
 For example, you can specify:
 
 - `namespace` if the `component` is from a different Organization

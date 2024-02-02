@@ -63,7 +63,7 @@ spec:
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
     - component: "vpc"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
-      version: "1.372.0"
+      version: "1.398.0"
       targets:
         - "components/terraform/vpc"
       # Only include the files that match the 'included_paths' patterns.
@@ -82,7 +82,7 @@ spec:
         - networking
     - component: "vpc-flow-logs-bucket"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-      version: "1.372.0"
+      version: "1.398.0"
       targets:
         - "components/terraform/vpc-flow-logs-bucket"
       included_paths:
@@ -95,6 +95,31 @@ spec:
       tags:
         - storage
 ```
+
+<br/>
+
+:::warning
+
+The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+
+:::
+
+```yaml title="vendor.yaml"
+spec:
+  sources:
+    - component: "vpc-flow-logs-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      version: "1.398.0"
+      targets:
+        - "components/terraform/vpc-flow-logs-bucket"
+      included_paths:
+        - "**/*.tf"
+        # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+        - "**/modules/**"
+```
+
+<br/>
 
 - Execute the command `atmos vendor pull` from the root of the repo
 
@@ -156,7 +181,7 @@ recommends. There are a few additions:
 
 ```hcl title="components/terraform/vpc/remote-state.tf"
 module "vpc_flow_logs_bucket" {
-  count = var.vpc_flow_logs_enabled ? 1 : 0
+  count = local.vpc_flow_logs_enabled ? 1 : 0
 
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
   version = "1.5.0"
@@ -167,15 +192,62 @@ module "vpc_flow_logs_bucket" {
 
   # Override the context variables to point to a different Atmos stack if the 
   # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region
-  environment = var.vpc_flow_logs_bucket_environment_name
-  stage       = var.vpc_flow_logs_bucket_stage_name
+  stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
+  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
 
   # `context` input is a way to provide the information about the stack (using the context
   # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
   context = module.this.context
 }
 ```
+
+## Remote State Notes
+
+The [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module uses the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) 
+Terraform provider to read Atmos configuration and obtain the remote state for Atmos components.
+
+Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
+which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
+
+This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
+
+While placing `atmos.yaml` at the root of the repository will work for Atmos, it will not work for
+the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider because the provider gets executed from the
+component's directory (e.g. `components/terraform/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
+
+:::info
+
+`atmos.yaml` is loaded from the following locations (from lowest to highest priority):
+
+- System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- Home dir (`~/.atmos/atmos.yaml`)
+- Current directory
+- ENV variables `ATMOS_CLI_CONFIG_PATH` and `ATMOS_BASE_PATH`
+
+:::
+
+<br/>
+
+For this to work for both the `atmos` CLI and the Terraform `utils` provider, we recommend doing one of the following:
+
+- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root
+  of the repo
+
+- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of
+  the repo
+
+- Put `atmos.yaml` at a location in the file system and then set the ENV var `ATMOS_CLI_CONFIG_PATH` to point to that location. The ENV var must
+  point to a folder without the `atmos.yaml` file name. For example, if `atmos.yaml` is at `/atmos/config/atmos.yaml`,
+  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
+
+- When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/Dockerfile)
+  by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
+  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
+  uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
+  var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
 
 <br/>
 

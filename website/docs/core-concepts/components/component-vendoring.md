@@ -40,7 +40,7 @@ spec:
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
     # To vendor a module from a Git repo, use the following format: 'github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
     uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
-    version: 0.194.0
+    version: 1.398.0
 
     # Only include the files that match the 'included_paths' patterns
     # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
@@ -65,9 +65,31 @@ spec:
     - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
       filename: context.tf
     - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
-      version: 0.194.0
+      version: 1.398.0
       filename: introspection.mixin.tf
 ```
+
+<br/>
+
+:::warning
+
+The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+
+:::
+
+```yaml title="component.yaml"
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
+    version: 1.398.0
+    included_paths:
+      - "**/**"
+      # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+      - "**/modules/**"
+```
+
+<br/>
 
 ## Vendoring Modules as Components
 

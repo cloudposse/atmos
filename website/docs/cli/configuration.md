@@ -36,6 +36,53 @@ names/paths (double-star/globstar `**` is supported as well)
 
 <br/>
 
+If `atmos.yaml` is not found in any of the searched locations, Atmos will use the default CLI configuration:
+
+```yaml
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+  helmfile:
+    base_path: components/helmfile
+    use_eks: true
+    kubeconfig_path: /dev/shm
+    helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
+    cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+stacks:
+  base_path: stacks
+  included_paths:
+  - orgs/**/*
+  excluded_paths:
+  - '**/_defaults.yaml'
+  name_pattern: '{tenant}-{environment}-{stage}'
+workflows:
+  base_path: stacks/workflows
+logs:
+  file: /dev/stdout
+  level: Info
+schemas:
+  jsonschema:
+    base_path: stacks/schemas/jsonschema
+  opa:
+    base_path: stacks/schemas/opa
+```
+
+<br/>
+
+If Atmos does not find an `atmos.yaml` file and the default CLI config is used, and if you set the ENV variable `ATMOS_LOGS_LEVEL` to `Debug` 
+(e.g. `export ATMOS_LOGS_LEVEL=Debug`) before executing Atmos commands, you'll see the following message:
+
+<br/>
+
+![`atmos` CLI command mode 1](/img/cli/atmos.yaml/atmos-default-cli-config-message.png)
+
+<br/>
+
 What follows are all the sections of the `atmos.yaml` configuration file.
 
 ## Base Path

@@ -134,10 +134,10 @@ for the `vpc-flow-logs-bucket-1` Atmos component:
 
 ```hcl title="components/terraform/infra/vpc/remote-state.tf"
 module "vpc_flow_logs_bucket" {
-  count = var.vpc_flow_logs_enabled ? 1 : 0
+  count = local.vpc_flow_logs_enabled ? 1 : 0
 
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
-  version = "1.3.1"
+  version = "1.5.0"
 
   # Specify the Atmos component name (defined in YAML stack config files) 
   # for which to get the remote state outputs
@@ -279,7 +279,7 @@ component's directory (e.g. `components/terraform/infra/vpc`), and we don't want
 - System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
 - Home dir (`~/.atmos/atmos.yaml`)
 - Current directory
-- ENV var `ATMOS_CLI_CONFIG_PATH`
+- ENV variables `ATMOS_CLI_CONFIG_PATH` and `ATMOS_BASE_PATH`
 
 :::
 
@@ -287,8 +287,8 @@ component's directory (e.g. `components/terraform/infra/vpc`), and we don't want
 
 Initial Atmos configuration can be controlled by these ENV vars:
 
-- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Path to a folder where the `atmos.yaml` CLI config file is located
-- `ATMOS_BASE_PATH` - base path to `components` and `stacks` folders
+- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Absolute path to a folder where the `atmos.yaml` CLI config file is located
+- `ATMOS_BASE_PATH` - absolute path to the folder containing the `components` and `stacks` folders
 
 :::
 
