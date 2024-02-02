@@ -63,7 +63,7 @@ spec:
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
     - component: "vpc"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
-      version: "1.372.0"
+      version: "1.398.0"
       targets:
         - "components/terraform/vpc"
       # Only include the files that match the 'included_paths' patterns.
@@ -82,7 +82,7 @@ spec:
         - networking
     - component: "vpc-flow-logs-bucket"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-      version: "1.372.0"
+      version: "1.398.0"
       targets:
         - "components/terraform/vpc-flow-logs-bucket"
       included_paths:
@@ -95,6 +95,31 @@ spec:
       tags:
         - storage
 ```
+
+<br/>
+
+:::warning
+
+The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+
+:::
+
+```yaml title="vendor.yaml"
+spec:
+  sources:
+    - component: "vpc-flow-logs-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      version: "1.398.0"
+      targets:
+        - "components/terraform/vpc-flow-logs-bucket"
+      included_paths:
+        - "**/*.tf"
+        # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+        - "**/modules/**"
+```
+
+<br/>
 
 - Execute the command `atmos vendor pull` from the root of the repo
 

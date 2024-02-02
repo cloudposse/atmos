@@ -218,16 +218,17 @@ If the component's folder has sub-folders, and you need to vendor them, they hav
 :::
 
 ```yaml title="vendor.yaml"
-sources:
-  - component: "vpc"
-    source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
-    version: "latest"
-    targets:
-      - "components/terraform/infra/vpc"
-    included_paths:
-      - "**/**"
-      # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
-      - "**/modules/**"
+spec:
+  sources:
+    - component: "vpc-flow-logs-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      version: "1.323.0"
+      targets:
+        - "components/terraform/vpc-flow-logs-bucket"
+      included_paths:
+        - "**/**"
+        # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+        - "**/modules/**"
 ```
 
 <br/>
