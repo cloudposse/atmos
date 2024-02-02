@@ -39,7 +39,7 @@ names/paths (double-star/globstar `**` is supported as well)
 If `atmos.yaml` is not found in any of the searched locations, Atmos will use the default CLI configuration:
 
 ```yaml
-base_path: .
+base_path: "."
 components:
   terraform:
     base_path: components/terraform
