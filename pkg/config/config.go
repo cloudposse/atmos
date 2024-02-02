@@ -1,21 +1,25 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/mitchellh/go-homedir"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+
+	"github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
-	NotFound = errors.New("\n'atmos.yaml' CLI config files not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+	NotFound = errors.New("\n'atmos.yaml' CLI config not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
 		"\nYou can download a sample config and adapt it to your requirements from " +
 		"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
 
@@ -173,7 +177,29 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	if !configFound {
-		return cliConfig, NotFound
+		// If `atmos.yaml` not found, use the default config
+		// Set `ATMOS_LOGS_LEVEL` ENV var to "Debug" to see the message about Atmos using the default CLI config
+		logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
+		if logsLevelEnvVar == "Debug" {
+			u.PrintMessage("'atmos.yaml' CLI config not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n" +
+				"Using the default CLI config:\n")
+
+			err = u.PrintAsYAML(defaultCliConfig)
+			if err != nil {
+				return cliConfig, err
+			}
+		}
+
+		j, err := json.Marshal(defaultCliConfig)
+		if err != nil {
+			return cliConfig, err
+		}
+
+		reader := bytes.NewReader(j)
+		err = v.MergeConfig(reader)
+		if err != nil {
+			return cliConfig, err
+		}
 	}
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
