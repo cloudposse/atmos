@@ -156,7 +156,7 @@ recommends. There are a few additions:
 
 ```hcl title="components/terraform/vpc/remote-state.tf"
 module "vpc_flow_logs_bucket" {
-  count = var.vpc_flow_logs_enabled ? 1 : 0
+  count = local.vpc_flow_logs_enabled ? 1 : 0
 
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
   version = "1.5.0"
@@ -167,9 +167,9 @@ module "vpc_flow_logs_bucket" {
 
   # Override the context variables to point to a different Atmos stack if the 
   # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region
-  environment = var.vpc_flow_logs_bucket_environment_name
-  stage       = var.vpc_flow_logs_bucket_stage_name
+  stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
+  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
 
   # `context` input is a way to provide the information about the stack (using the context
   # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)

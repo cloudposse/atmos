@@ -134,10 +134,10 @@ for the `vpc-flow-logs-bucket-1` Atmos component:
 
 ```hcl title="components/terraform/infra/vpc/remote-state.tf"
 module "vpc_flow_logs_bucket" {
-  count = var.vpc_flow_logs_enabled ? 1 : 0
+  count = local.vpc_flow_logs_enabled ? 1 : 0
 
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
-  version = "1.3.1"
+  version = "1.5.0"
 
   # Specify the Atmos component name (defined in YAML stack config files) 
   # for which to get the remote state outputs
