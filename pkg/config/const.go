@@ -41,4 +41,7 @@ const (
 
 	ImportSectionName    = "import"
 	OverridesSectionName = "overrides"
+
+	LogsLevelFlag = "--logs-level"
+	LogsFileFlag  = "--logs-file"
 )

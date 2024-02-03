@@ -98,6 +98,8 @@ type ArgsAndFlagsInfo struct {
 	CueDir                  string
 	AtmosManifestJsonSchema string
 	RedirectStdErr          string
+	LogsLevel               string
+	LogsFile                string
 }
 
 type ConfigAndStacksInfo struct {
@@ -153,6 +155,8 @@ type ConfigAndStacksInfo struct {
 	AtmosCliConfigPath            string
 	AtmosBasePath                 string
 	RedirectStdErr                string
+	LogsLevel                     string
+	LogsFile                      string
 }
 
 // Workflows
