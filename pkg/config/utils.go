@@ -387,7 +387,7 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
 	}
 	if len(configAndStacksInfo.LogsFile) > 0 {
-		cliConfig.Logs.Level = configAndStacksInfo.LogsFile
+		cliConfig.Logs.File = configAndStacksInfo.LogsFile
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
 	}
 
