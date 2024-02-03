@@ -87,6 +87,9 @@ func initConfig() {
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
 
+	RootCmd.PersistentFlags().String("logs-level", "", "Logs level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages")
+	RootCmd.PersistentFlags().String("logs-file", "", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`")
+
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 
