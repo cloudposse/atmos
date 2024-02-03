@@ -34,7 +34,6 @@ components:
         name: "common"
         max_subnet_count: 3
         map_public_ip_on_launch: true
-        dns_hostnames_enabled: true
         assign_generated_ipv6_cidr_block: false
         nat_gateway_enabled: true
         nat_instance_enabled: false

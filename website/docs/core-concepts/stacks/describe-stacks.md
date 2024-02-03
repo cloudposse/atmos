@@ -61,7 +61,6 @@ plat-ue2-dev:
             - us-east-2a
             - us-east-2b
             - us-east-2c
-          dns_hostnames_enabled: true
           enabled: true
           environment: ue2
           map_public_ip_on_launch: true
