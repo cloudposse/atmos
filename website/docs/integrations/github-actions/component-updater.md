@@ -8,9 +8,9 @@ sidebar_label: Component Updater
 
 Use Cloud Posse's GitHub Action for updating [Atmos components](/core-concepts/components/) (e.g. [like the one's provided by Cloud Posse](https://github.com/cloudposse/terraform-aws-components/)) to streamline your infrastructure management.
 
-Keep your infrastructure repositories current with the latest versions of components using the [Cloud Posse GitHub Actions for Updating Atmos Components](https://github.com/cloudposse/github-action-atmos-component-updater). This powerful tool simplifies and accelerates the management of pull requests, ensuring that updates are processed quickly, accurately, and without hassle.
+Keep your infrastructure repositories current with the latest versions of components using the [Cloud Posse GitHub Actions for Updating Atmos Components](https://github.com/cloudposse/github-action-atmos-component-updater). This powerful action simplifies and accelerates the management of component updates using pull requests, ensuring that updates are processed quickly, accurately, and without hassle.
 
-Leverage the [Atmos components GitHub Action](https://github.com/cloudposse/terraform-aws-components/) to automate the creation and management of pull requests for component updates. With its customizable features, you can design an automated workflow tailored to your needs, making infrastructure repository maintenance more efficient and less error-prone.
+With its customizable features, you can design an automated workflow tailored to your needs, making infrastructure repository maintenance more efficient and less error-prone.
 
 ## Key Features:
 
