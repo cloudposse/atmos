@@ -16,7 +16,7 @@ import Link from '@docusaurus/Link'
 # Atmos is a workflow automation tool
 
 Atmos is a workflow automation tool for developers and DevOps teams alike, that make it fun to operate very large infrastructures with DRY configuration. 
-It's especially adept at [overcoming Terraform's limitations](/reference/terraform-limitations/) with [established conventions](/category/core-concepts) and [design patterns](/design-patterns/) that 
+It's especially adept at [overcoming Terraform's limitations](/reference/terraform-limitations/) with [established conventions](/core-concepts) and [design patterns](/design-patterns/) that 
 give cloud architect's the warm and fuzzies.
 
 <Link
@@ -127,7 +127,7 @@ Atmos solves this by introducing powerful capabilities most tools lack:
 
 - [Hierarchical configurations](/core-concepts/stacks/catalogs#filesystem-layout) to reduce complexity
 - DRYness with [inheritance](/core-concepts/components/inheritance) and [imports](/core-concepts/stacks/imports), and native [vendoring](/core-concepts/vendoring/)
-- Team collaboration with [reusable service catalogs](/core-concepts/stacks/catalogs), and [GitOps-style automation](/category/integrations).
+- Team collaboration with [reusable service catalogs](/core-concepts/stacks/catalogs), and [GitOps-style automation](/integrations).
 - [Reusable workflows](/core-concepts/workflows/) that run anywhere and a beautiful UI to run them.
 - Consistent command line interface that can combine multiple tools into one command (`atmos`)
 - A [single binary, cross-compiled for every architecture](https://github.com/cloudposse/atmos/releases) (golang) and [easily installed](/quick-start/install-atmos)
@@ -208,14 +208,14 @@ There are many problems encountered by teams working with Terraform at scale.
 Atmos is part of the solution because:
 - Opinionated workflows for terraform
 - Established conventions and [design patterns](/design-patterns/) to manage terraform @ scale
-- Break terraliths into smaller pieces ([“components”](/components/))
+- Break terraliths into smaller pieces ([“components”](/core-concepts/components/))
 - Enable team collaboration with [catalogs](/core-concepts/stacks/catalogs) and [libraries](/core-concepts/components/library)
 - Enforce guardrails with [OPA and JSON Schema validation](/core-concepts/components/validation)
 - Zero Vendor Lock-in
 
 ### Established Conventions
 
-Part of the benefit of working with Atmos is we have many [established conventions](/category/core-concepts) that you can adopt.
+Part of the benefit of working with Atmos is we have many [established conventions](/core-concepts) that you can adopt.
 
 Here are some of the examples:
 
