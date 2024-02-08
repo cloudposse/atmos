@@ -296,8 +296,12 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 		u.LogErrorAndExit(err)
 	}
 
-	u.PrintMessage(fmt.Sprintf("Atmos CLI config 'stacks.base_path' points to the '%s' directory.",
-		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
+	fmt.Print("Atmos CLI config ")
+	u.PrintMessageInColor("stacks.base_path ", c)
+	fmt.Print("points to the ")
+	u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c)
+	fmt.Println(" directory.")
+
 	u.PrintMessage("The directory does not exist or has no Atmos stack configuration.\n")
 
 	u.PrintMessage("To configure and start using Atmos, refer to the following documents:\n")
