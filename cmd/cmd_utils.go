@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -270,4 +272,25 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	}
 
 	return &clone, nil
+}
+
+// checkAtmosConfig checks Atmos config
+func checkAtmosConfig(cliConfig schema.CliConfiguration) (bool, error) {
+	return false, nil
+}
+
+func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
+	fmt.Println()
+	err := tuiUtils.PrintStyledText("ATMOS")
+	if err != nil {
+		u.LogErrorAndExit(err)
+	}
+
+	u.PrintMessage(fmt.Sprintf("Atmos CLI config 'stacks.base_path' points to the '%s' directory.", path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
+	u.PrintMessage("The directory does not exist or has no Atmos stack manifests.\n")
+	u.PrintMessage("To configure Atmos, refer to the following documents:\n")
+	u.PrintMessage("Atmos CLI Configuration: https://atmos.tools/cli/configuration")
+	u.PrintMessage("Atmos Components: https://atmos.tools/core-concepts/components")
+	u.PrintMessage("Atmos Stacks: https://atmos.tools/core-concepts/stacks")
+	u.PrintMessage("Quick Start: https://atmos.tools/quick-start\n")
 }

@@ -87,6 +87,18 @@ func init() {
 			u.LogErrorAndExit(err)
 		}
 	}
+
+	// Check if Atmos configuration present.
+	// If not, print the styled logo and description on how to set up Atmos.
+	ok, err := checkAtmosConfig(cliConfig)
+	if err != nil {
+		u.LogErrorAndExit(err)
+	}
+
+	if !ok {
+		printMessageForMissingAtmosConfig(cliConfig)
+		os.Exit(0)
+	}
 }
 
 func initConfig() {
