@@ -4,11 +4,13 @@ package exec
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"os"
 	"path"
 
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+
+	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -32,6 +34,23 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.NeedHelp {
+		return nil
+	}
+
+	// If the user just types `atmos helmfile`, print Atmos logo and show helmfile help
+	if info.SubCommand == "" {
+		fmt.Println()
+		err = tuiUtils.PrintStyledText("ATMOS")
+		if err != nil {
+			return err
+		}
+
+		err = processHelp("helmfile", "")
+		if err != nil {
+			return err
+		}
+
+		fmt.Println()
 		return nil
 	}
 
