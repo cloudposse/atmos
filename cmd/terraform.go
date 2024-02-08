@@ -16,6 +16,9 @@ var terraformCmd = &cobra.Command{
 	Long:               `This command executes 'terraform'' commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
+		checkAtmosConfig()
+
 		var argsAfterDoubleDash []string
 		var finalArgs = args
 

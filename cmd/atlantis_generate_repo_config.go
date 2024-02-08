@@ -14,6 +14,9 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 	Long:               "This command generates repository configuration for Atlantis",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
+		checkAtmosConfig()
+
 		err := e.ExecuteAtlantisGenerateRepoConfigCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(err)
