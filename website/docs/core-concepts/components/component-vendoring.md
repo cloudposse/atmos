@@ -10,7 +10,7 @@ Atmos natively supports the concept of "vendoring", which is making a copy of 3r
 Our implementation is primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir). While Atmos does not
 call `vendir`, it functions and supports a configuration that is very similar.
 
-Atmos supports two different ways of vendoring components, stacks and other artifacts:
+Atmos supports two different ways of vendoring components:
 
 - Using `vendor.yaml` vendoring manifest
 - Using `component.yaml` vendoring manifest
