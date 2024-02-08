@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -280,6 +281,8 @@ func checkAtmosConfig(cliConfig schema.CliConfiguration) (bool, error) {
 }
 
 func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
+	c := color.New(color.FgGreen)
+
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	if err != nil {
@@ -288,9 +291,18 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 
 	u.PrintMessage(fmt.Sprintf("Atmos CLI config 'stacks.base_path' points to the '%s' directory.", path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 	u.PrintMessage("The directory does not exist or has no Atmos stack manifests.\n")
-	u.PrintMessage("To configure Atmos, refer to the following documents:\n")
-	u.PrintMessage("Atmos CLI Configuration: https://atmos.tools/cli/configuration")
-	u.PrintMessage("Atmos Components: https://atmos.tools/core-concepts/components")
-	u.PrintMessage("Atmos Stacks: https://atmos.tools/core-concepts/stacks")
-	u.PrintMessage("Quick Start: https://atmos.tools/quick-start\n")
+
+	u.PrintMessage("To configure and start using Atmos, refer to the following documents:\n")
+
+	u.PrintMessageInColor("Atmos CLI Configuration:", c)
+	u.PrintMessage("https://atmos.tools/cli/configuration\n")
+
+	u.PrintMessageInColor("Atmos Components:", c)
+	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
+
+	u.PrintMessageInColor("Atmos Stacks:", c)
+	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
+
+	u.PrintMessageInColor("Quick Start:", c)
+	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
