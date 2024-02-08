@@ -292,7 +292,8 @@ func checkAtmosConfig() {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
 func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
-	c := color.New(color.FgGreen)
+	c1 := color.New(color.FgCyan)
+	c2 := color.New(color.FgGreen)
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
@@ -301,24 +302,24 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	}
 
 	fmt.Print("Atmos CLI config ")
-	u.PrintMessageInColor("stacks.base_path ", c)
+	u.PrintMessageInColor("stacks.base_path ", c1)
 	fmt.Print("points to the ")
-	u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c)
+	u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
 	fmt.Println(" directory.")
 
-	u.PrintMessage("The directory does not exist or has no Atmos stack configuration.\n")
+	u.PrintMessage("The directory does not exist or has no Atmos stack configurations.\n")
 
 	u.PrintMessage("To configure and start using Atmos, refer to the following documents:\n")
 
-	u.PrintMessageInColor("Atmos CLI Configuration:\n", c)
+	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
 	u.PrintMessage("https://atmos.tools/cli/configuration\n")
 
-	u.PrintMessageInColor("Atmos Components:\n", c)
+	u.PrintMessageInColor("Atmos Components:\n", c2)
 	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
 
-	u.PrintMessageInColor("Atmos Stacks:\n", c)
+	u.PrintMessageInColor("Atmos Stacks:\n", c2)
 	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
 
-	u.PrintMessageInColor("Quick Start:\n", c)
+	u.PrintMessageInColor("Quick Start:\n", c2)
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
