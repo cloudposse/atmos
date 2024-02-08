@@ -302,15 +302,15 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 
 	u.PrintMessage("To configure and start using Atmos, refer to the following documents:\n")
 
-	u.PrintMessageInColor("Atmos CLI Configuration:", c)
+	u.PrintMessageInColor("Atmos CLI Configuration:\n", c)
 	u.PrintMessage("https://atmos.tools/cli/configuration\n")
 
-	u.PrintMessageInColor("Atmos Components:", c)
+	u.PrintMessageInColor("Atmos Components:\n", c)
 	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
 
-	u.PrintMessageInColor("Atmos Stacks:", c)
+	u.PrintMessageInColor("Atmos Stacks:\n", c)
 	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
 
-	u.PrintMessageInColor("Quick Start:", c)
+	u.PrintMessageInColor("Quick Start:\n", c)
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
