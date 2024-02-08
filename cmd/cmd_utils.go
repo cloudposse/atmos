@@ -276,10 +276,17 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config
-func checkAtmosConfig(cliConfig schema.CliConfiguration) (bool, error) {
-	return false, nil
+func checkAtmosConfig() {
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		u.LogErrorAndExit(err)
+	}
+
+	printMessageForMissingAtmosConfig(cliConfig)
+	os.Exit(0)
 }
 
+// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
 func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	c := color.New(color.FgGreen)
 
@@ -289,8 +296,9 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 		u.LogErrorAndExit(err)
 	}
 
-	u.PrintMessage(fmt.Sprintf("Atmos CLI config 'stacks.base_path' points to the '%s' directory.", path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
-	u.PrintMessage("The directory does not exist or has no Atmos stack manifests.\n")
+	u.PrintMessage(fmt.Sprintf("Atmos CLI config 'stacks.base_path' points to the '%s' directory.",
+		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
+	u.PrintMessage("The directory does not exist or has no Atmos stack configuration.\n")
 
 	u.PrintMessage("To configure and start using Atmos, refer to the following documents:\n")
 

@@ -23,15 +23,19 @@ var RootCmd = &cobra.Command{
 	Short: "Universal Tool for DevOps and Cloud Automation",
 	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	PreRun: func(cmd *cobra.Command, args []string) {
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
+		checkAtmosConfig()
+
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
-	},
-	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteAtmosCmd()
+
+		err = e.ExecuteAtmosCmd()
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
@@ -86,18 +90,6 @@ func init() {
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
-	}
-
-	// Check if Atmos configuration present.
-	// If not, print the styled logo and description on how to set up Atmos.
-	ok, err := checkAtmosConfig(cliConfig)
-	if err != nil {
-		u.LogErrorAndExit(err)
-	}
-
-	if !ok {
-		printMessageForMissingAtmosConfig(cliConfig)
-		os.Exit(0)
 	}
 }
 
