@@ -69,12 +69,12 @@ The `import` section supports the following two formats:
 
   ```yaml
   import:
-    - path: "<path_to_imported_file1>"
+    - path: "<path_to_atmos_manifest1>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: false
       skip_if_missing: false
-    - path: "<path_to_imported_file2>"
+    - path: "<path_to_atmos_manifest2>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: true
@@ -106,8 +106,8 @@ A combination of the two formats is also supported:
   import:
     - mixins/region/us-east-2
     - orgs/cp/tenant1/test1/_defaults
-    - path: "<path_to_imported_file1>"
-    - path: "<path_to_imported_file2>"
+    - path: "<path_to_atmos_manifest1>"
+    - path: "<path_to_atmos_manifest2>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: true
