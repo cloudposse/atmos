@@ -282,8 +282,12 @@ func checkAtmosConfig() {
 		u.LogErrorAndExit(err)
 	}
 
-	printMessageForMissingAtmosConfig(cliConfig)
-	os.Exit(0)
+	atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
+
+	if !atmosConfigExists || err != nil {
+		printMessageForMissingAtmosConfig(cliConfig)
+		os.Exit(0)
+	}
 }
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
