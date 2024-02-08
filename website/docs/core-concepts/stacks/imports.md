@@ -73,10 +73,12 @@ The `import` section supports the following two formats:
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: false
+      skip_if_missing: false
     - path: "<path_to_imported_file2>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: true
+      skip_if_missing: true
   ```
 
 where:
@@ -94,6 +96,9 @@ where:
   and will skip the missing values in the templates for the external systems without throwing an error. The `ignore_missing_template_values` setting 
   is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file,
   while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values
+
+- `skip_if_missing` - (boolean) Set it to `true` to ignore the imported manifest if it does not exist and don't throw an error.
+  This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
 
 A combination of the two formats is also supported:
 
