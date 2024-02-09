@@ -78,6 +78,7 @@ func ProcessYAMLConfigFiles(
 				ignoreMissingFiles,
 				false,
 				false,
+				false,
 				map[any]any{},
 				map[any]any{},
 				"",
@@ -155,6 +156,7 @@ func ProcessYAMLConfigFile(
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
+	skipIfMissing bool,
 	parentTerraformOverrides map[any]any,
 	parentHelmfileOverrides map[any]any,
 	atmosManifestJsonSchemaFilePath string,
@@ -179,11 +181,20 @@ func ProcessYAMLConfigFile(
 	stackYamlConfig, err := getFileContent(filePath)
 
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
+	//
 	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
 	// If we add a new stack manifest with some component configurations to the current branch, then the new file will not be present in
-	// the remote branch (with which the current branch is compared), and `atmos` would throw an error.
-	if err != nil && !ignoreMissingFiles {
-		return nil, nil, nil, err
+	// the remote branch (with which the current branch is compared), and Atmos would throw an error.
+	//
+	// `skipIfMissing` is used in Atmos imports (https://atmos.tools/core-concepts/stacks/imports).
+	// Set it to `true` to ignore the imported manifest if it does not exist, and don't throw an error.
+	// This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
+	if err != nil {
+		if ignoreMissingFiles || skipIfMissing {
+			return map[any]any{}, map[string]map[any]any{}, map[any]any{}, nil
+		} else {
+			return nil, nil, nil, err
+		}
 	}
 
 	// Process `Go` templates in the stack manifest using the provided context
@@ -413,6 +424,7 @@ func ProcessYAMLConfigFile(
 				ignoreMissingFiles,
 				importStruct.SkipTemplatesProcessing,
 				importStruct.IgnoreMissingTemplateValues,
+				importStruct.SkipIfMissing,
 				finalTerraformOverrides,
 				finalHelmfileOverrides,
 				"",

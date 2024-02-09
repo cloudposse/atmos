@@ -23,15 +23,19 @@ var RootCmd = &cobra.Command{
 	Short: "Universal Tool for DevOps and Cloud Automation",
 	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	PreRun: func(cmd *cobra.Command, args []string) {
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
+		checkAtmosConfig()
+
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
-	},
-	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteAtmosCmd()
+
+		err = e.ExecuteAtmosCmd()
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
@@ -64,6 +68,12 @@ func Execute() error {
 }
 
 func init() {
+	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
+		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
+
+	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
+	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
+
 	cobra.OnInitialize(initConfig)
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
@@ -84,9 +94,6 @@ func init() {
 }
 
 func initConfig() {
-	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
-		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
-
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 

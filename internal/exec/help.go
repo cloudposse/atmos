@@ -59,6 +59,7 @@ func processHelp(componentType string, command string) error {
 				"native arguments and flags for the 'helmfile' commands")
 		}
 
+		fmt.Println()
 		err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, "")
 		if err != nil {
 			return err
@@ -109,6 +110,7 @@ func processHelp(componentType string, command string) error {
 		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
 		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
 
+		fmt.Println()
 		err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, "")
 		if err != nil {
 			return err

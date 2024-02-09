@@ -382,6 +382,14 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 		cliConfig.Schemas.Atmos.Manifest = configAndStacksInfo.AtmosManifestJsonSchema
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
 	}
+	if len(configAndStacksInfo.LogsLevel) > 0 {
+		cliConfig.Logs.Level = configAndStacksInfo.LogsLevel
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
+	}
+	if len(configAndStacksInfo.LogsFile) > 0 {
+		cliConfig.Logs.File = configAndStacksInfo.LogsFile
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
+	}
 
 	return nil
 }

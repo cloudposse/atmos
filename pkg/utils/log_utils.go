@@ -25,7 +25,7 @@ func PrintMessage(message string) {
 
 // PrintMessageInColor prints the message to the console using the provided color
 func PrintMessageInColor(message string, messageColor *color.Color) {
-	_, _ = messageColor.Fprintln(os.Stdout, message)
+	_, _ = messageColor.Fprint(os.Stdout, message)
 }
 
 // LogErrorAndExit logs errors to std.Error and exits with an error code

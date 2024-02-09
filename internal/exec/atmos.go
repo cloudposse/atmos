@@ -97,7 +97,7 @@ func ExecuteAtmosCmd() error {
 	// Process the selected command, stack and component
 	fmt.Println()
 	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command:\n"+os.Args[0]+" %s %s --stack %s", selectedCommand, selectedComponent, selectedStack),
+		"Executing command:\n"+os.Args[0]+" %s %s --stack %s\n", selectedCommand, selectedComponent, selectedStack),
 		color.New(color.FgCyan),
 	)
 	fmt.Println()
@@ -132,7 +132,7 @@ func ExecuteAtmosCmd() error {
 			return err
 		}
 
-		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully", selectedComponent, selectedStack)
+		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", selectedComponent, selectedStack)
 		u.PrintMessageInColor(m, color.New(color.FgGreen))
 		return nil
 	}

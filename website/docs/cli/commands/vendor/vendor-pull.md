@@ -36,8 +36,8 @@ atmos vendor pull --tags <tag1>,<tag2> [options]
 
 Atmos supports two different ways of vendoring components, stacks and other artifacts:
 
-- Using `vendor.yaml` vendoring manifest
 - Using `component.yaml` vendoring manifest
+- Using `vendor.yaml` vendoring manifest
 
 The `component.yaml` vendoring manifest can be used to vendor components from remote repositories.
 A `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.

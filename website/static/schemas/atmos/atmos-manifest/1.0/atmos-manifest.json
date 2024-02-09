@@ -114,6 +114,9 @@
               "ignore_missing_template_values": {
                 "type": "boolean"
               },
+              "skip_if_missing": {
+                "type": "boolean"
+              },
               "context": {
                 "type": "object",
                 "additionalProperties": true

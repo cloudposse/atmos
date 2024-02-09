@@ -69,14 +69,16 @@ The `import` section supports the following two formats:
 
   ```yaml
   import:
-    - path: "<path_to_imported_file1>"
+    - path: "<path_to_atmos_manifest1>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: false
-    - path: "<path_to_imported_file2>"
+      skip_if_missing: false
+    - path: "<path_to_atmos_manifest2>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: true
+      skip_if_missing: true
   ```
 
 where:
@@ -95,14 +97,17 @@ where:
   is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file,
   while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values
 
+- `skip_if_missing` - (boolean) Set it to `true` to ignore the imported manifest if it does not exist, and don't throw an error.
+  This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
+
 A combination of the two formats is also supported:
 
   ```yaml
   import:
     - mixins/region/us-east-2
     - orgs/cp/tenant1/test1/_defaults
-    - path: "<path_to_imported_file1>"
-    - path: "<path_to_imported_file2>"
+    - path: "<path_to_atmos_manifest1>"
+    - path: "<path_to_atmos_manifest2>"
       context: {}
       skip_templates_processing: false
       ignore_missing_template_values: true

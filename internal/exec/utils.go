@@ -43,6 +43,8 @@ var (
 		cfg.CueDirFlag,
 		cfg.AtmosManifestJsonSchemaFlag,
 		cfg.RedirectStdErrFlag,
+		cfg.LogsLevelFlag,
+		cfg.LogsFileFlag,
 	}
 )
 
@@ -201,6 +203,8 @@ func processCommandLineArgs(
 	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
 	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
+	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
+	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
@@ -750,6 +754,32 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			}
 			info.PlanFile = planFileFlagParts[1]
 			info.UseTerraformPlan = true
+		}
+
+		if arg == cfg.LogsLevelFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.LogsLevel = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.LogsLevelFlag) {
+			var logsLevelFlagParts = strings.Split(arg, "=")
+			if len(logsLevelFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.LogsLevel = logsLevelFlagParts[1]
+		}
+
+		if arg == cfg.LogsFileFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.LogsFile = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.LogsFileFlag) {
+			var logsFileFlagParts = strings.Split(arg, "=")
+			if len(logsFileFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.LogsFile = logsFileFlagParts[1]
 		}
 
 		if arg == cfg.FromPlanFlag {

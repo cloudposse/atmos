@@ -185,7 +185,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		if logsLevelEnvVar == "Debug" {
 			u.PrintMessageInColor("'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n"+
 				"Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'.\n"+
-				"Using the default CLI config:\n", color.New(color.FgCyan))
+				"Using the default CLI config:\n\n", color.New(color.FgCyan))
 
 			err = u.PrintAsYAML(defaultCliConfig)
 			if err != nil {

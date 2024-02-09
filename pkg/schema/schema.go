@@ -98,6 +98,8 @@ type ArgsAndFlagsInfo struct {
 	CueDir                  string
 	AtmosManifestJsonSchema string
 	RedirectStdErr          string
+	LogsLevel               string
+	LogsFile                string
 }
 
 type ConfigAndStacksInfo struct {
@@ -153,6 +155,8 @@ type ConfigAndStacksInfo struct {
 	AtmosCliConfigPath            string
 	AtmosBasePath                 string
 	RedirectStdErr                string
+	LogsLevel                     string
+	LogsFile                      string
 }
 
 // Workflows
@@ -399,8 +403,9 @@ type BaseComponentConfig struct {
 type StackImport struct {
 	Path                        string         `yaml:"path" json:"path" mapstructure:"path"`
 	Context                     map[string]any `yaml:"context" json:"context" mapstructure:"context"`
-	SkipTemplatesProcessing     bool           `yaml:"skip_templates_processing" json:"skip_templates_processing" mapstructure:"skip_templates_processing"`
-	IgnoreMissingTemplateValues bool           `yaml:"ignore_missing_template_values" json:"ignore_missing_template_values" mapstructure:"ignore_missing_template_values"`
+	SkipTemplatesProcessing     bool           `yaml:"skip_templates_processing,omitempty" json:"skip_templates_processing,omitempty" mapstructure:"skip_templates_processing"`
+	IgnoreMissingTemplateValues bool           `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
+	SkipIfMissing               bool           `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty" mapstructure:"skip_if_missing"`
 }
 
 // Dependencies
