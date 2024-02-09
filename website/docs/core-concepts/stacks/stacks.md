@@ -24,11 +24,11 @@ the [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-s
 
 ### Child Stacks
 
-*Child Stacks* are any stacks that cannot be instantiated by themselves without getting imported by a Parent Stack.
+*Child Stacks* are any stacks that cannot be deployed by themselves without getting imported by a Parent Stack.
 
 ## Schema
 
-A Stack file contains a manifest that is defined in YAML and follows a simple, extensible schema. In fact, every Stack file follows the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/inheritance).
+A Stack file contains a manifest that is defined in YAML and follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/inheritance).
 
 ```yaml
 # Configurations that should get deep-merged into this one
