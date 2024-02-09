@@ -18,7 +18,7 @@ Terraform's HCL started strictly as a configuration language, not a markup or pr
 
 ## How has Terraform HCL Evolved?
 
-As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating features typical of programming languages (albeit without a debugger!) This shift enriched infrastructure definitions, positioning HCL more as a domain-specific programming language for defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result, the complexity of configuring Terraform projects has risen, while Terraform's inherent capabilities to be configured haven't evolved at the same pace.
+As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating features typical of programming languages (albeit without a debugger!). This shift enriched infrastructure definitions, positioning HCL more as a domain-specific programming language for defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result, the complexity of configuring Terraform projects has risen, while Terraform's inherent capabilities to be configured haven't evolved at the same pace.
 
 - **Rich Expressions:** Introduced a richer expression syntax, removing the need for interpolations.
 
@@ -30,22 +30,22 @@ As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HC
 
 **Every foundational tool begins simply.**
 
-As users grow more advanced and their ambitions expand, the need for advanced tooling emerges. These shifts demonstrate that core technologies naturally progress, spawning more advanced constructs to tackle increased intricacies and enhance efficiency--all while retaining their core essence. Just as CSS, JavaScript, Docker, Helm, and many other tools have evolved to include higher-order utilities, Terraform, too, benefits from additional orchestration tools, given the complexities and challenges users face at different stages of adoption.
+As users grow more advanced and their ambitions expand, the need for advanced tooling emerges. These shifts demonstrate that core technologies naturally progress, spawning more advanced constructs to tackle increased intricacies and enhance efficiency -- all while retaining their core essence. Just as CSS, JavaScript, Docker, Helm, and many other tools have evolved to include higher-order utilities, Terraform, too, benefits from additional orchestration tools, given the complexities and challenges users face at different stages of adoption.
 
 Examples of tools like these are numerous, like
 
 - **CSS has Sass:** Sass provides more expressive styling capabilities, variables, and functions, making stylesheets more maintainable and organized, especially for large projects.
 - **JavaScript has TypeScript:** TypeScript brings static typing to JavaScript, improving code robustness, aiding in catching errors at compile-time, and better supporting large-scale applications.
 - **Docker has Docker Compose:** Docker Compose simplifies the management and orchestration of multi-container Docker applications, making it easier to define, run, and scale services collectively.
-- **Helm charts have Helmfiles.** While Helm charts define the blueprint of Kubernetes services, Helmfiles enable better orchestration, management, and deployment of multiple charts, similar to coordinating various instruments in a symphony.
-- **Kubernetes manifests and Kustomize:** Kustomize allows customization of Kubernetes manifests without changing their original form, facilitating dynamic configurations tailored to specific deployment scenarios.
+- **Helm charts have Helmfiles.** While Helm charts define the blueprints of Kubernetes services, Helmfiles enable better orchestration, management, and deployment of multiple charts, similar to coordinating various instruments in a symphony.
+- **Kubernetes manifests have Kustomize:** Kustomize allows customization of Kubernetes manifests without changing their original form, facilitating dynamic configurations tailored to specific deployment scenarios.
 
 When considering Terraform in the context of large-scale organizations or enterprises, it's clear that Terraform and its inherent language don't address all challenges. With thousands of components spread across hundreds of accounts, cloud providers and managed by a vast number of DevOps engineers and developers, the complexity becomes overwhelming and difficult to manage.
 
 A lot of the same challenges faced by CSS, Javascript, Docker, Helm and Kubernetes also exist in Terraform as well.
 
-- Making modules more maintainable and organized, especially for large projects.
-- Better support for large-scale service-oriented architectures.
+- Making modules more maintainable and organized, especially for large projects
+- Better support for large-scale service-oriented architectures
 - Easier ways to define, run, and scale services collectively
 - Better orchestration, management, and deployment of multiple services
 
@@ -58,7 +58,7 @@ Here's a more exhaustive list:
 - **Dependency Management**: Community edition of Terraform doesn't provide any mechanisms for orchestrating dependencies among root modules.
 - **Absence of Stack Management**: Organizing configurations into structured stacks isn't a built-in feature of the community edition.
 - **Lack of Automatic Dependency Ordering**: Standalone Terraform doesn't inherently determine execution order based on inter-stack dependencies.
-- **No Native Workflow Automation and Standardization**: Dynamic workflow executions, such as having a unified workflow both in CI/CD platforms like GitHub Actions (GHA) and locally, are not inherently supported. Workflow standardization and automation capabilities do not exist, making provisioning and management tasks more manual, or relying on custom scripts, Makefiles, or other tooling
+- **No Native Workflow Automation and Standardization**: Dynamic workflow executions, such as having a unified workflow both in CI/CD platforms like GitHub Actions (GHA) and locally, are not inherently supported. Workflow standardization and automation capabilities do not exist, making provisioning and management tasks more manual, or relying on custom scripts, Makefiles, or other tooling.
 - **Basic Environment Management**: Managing configurations across multiple environments can become complex without higher-level tooling.
 
 For each of these challenges, a tailored solution is essential. Ultimately, the goal is to make Terraform more scalable, maintainable, and developer-friendly, especially in complex and large-scale environments.
@@ -130,36 +130,36 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 :::warning New Problems
 1. Increased feature flags and configuration management using `.tfvars`.
 2. Performance becomes a concern with overly large root modules.
-3. Very poor reusability across the organization due to the "snowflake" nature of the root modules
+3. Very poor reusability across the organization due to the "snowflake" nature of the root modules.
 :::
 
 ### **Stage 6:** Refactoring for DRY Configuration
 
 1. Now, with many environments, many root modules, and many accounts or organizations, the problem is not how we define the infrastructure as code, it's how do we maintain all this configuration?!
 2. Symlinks are used to link common files, or other similar techniques.
-3. Code Generation is adopted to overcome perceived limitations of Terraform (when, in fact it's a flaw in the architecture of the project)
+3. Code Generation is adopted to overcome perceived limitations of Terraform (when, in fact it's a flaw in the architecture of the project).
 
 :::warning New Problems
 1. Every time a new application is developed, the knee-jerk reaction is to write more root modules, each one bespoke to the need. Sure, each one reuses child modules, but why write a new root module for every application?
-2. With more root modules, dependency management becomes difficult and there's no automatic dependency resolution for multiple root modules in Terraform
-3. Large root modules become more complicated, often necessitating use of `-target` as a hack to work around cycles.
+2. With more root modules, dependency management becomes difficult and there's no automatic dependency resolution for multiple root modules in Terraform.
+3. Large root modules become more complicated, often necessitating the use of `-target` as a hack to work around cycles.
 :::
 
 ### **Stage 7:** Terraform Scripting
 
-1. The first path usually involves adopting a simple `bash` script or `Makefile` to orchestrate Terraform. This works well, up to a point (we know because this is how we started)
+1. The first path usually involves adopting a simple `bash` script or `Makefile` to orchestrate Terraform. This works well, up to a point (we know because this is how we started).
 2. The scripts evolve to solve specific problems encountered that made Terraform cumbersome as a tool.
 
 :::warning New Problems
 1. What happens in practice is every team/company using Terraform ends up building different scripts, often then combining those with Makefiles, into a hodgepodge of configurations with different levels of validation. The scripts grow in complexity and have to survive generations of developers.
 2. New patterns emerge, for example, hacks that involve Jinja templates, string concatenation, symlinks, and worse... sed & awk replacements!!!
-3. Terraform is run mostly from local workstations/laptops with no thought for how it will run in CI/CD
+3. Terraform is run mostly from local workstations/laptops with no thought for how it will run in CI/CD.
 :::
 
 ### **Stage 8:** Team Adoption
 
-1. Change velocity increases dramatically
-2. Codebase increases in size by 10x (but lots of duplication)
+1. Change velocity increases dramatically.
+2. Codebase increases in size by 10x (but lots of duplication).
 3. New SLA/Commitment to keep it all running all the time.
 
 :::warning New Problems
@@ -170,14 +170,14 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 
 ### **Stage 9:** DIY GitOps, *Hello Jenkins!*
 
-With the greater adoption of Terraform and DevOps principles, Developers are now using Terraform daily. They decide to use the same patterns for deploying applications with Terraform. Only Terraform is extremely different from deploying containerized apps. There are no rollbacks. It's more akin to performing database migrations without transactions (YOLO!) It's a scary business. Controls are needed.
+With the greater adoption of Terraform and DevOps principles, Developers are now using Terraform daily. They decide to use the same patterns for deploying applications with Terraform. Only Terraform is extremely different from deploying containerized apps. There are no rollbacks. It's more akin to performing database migrations without transactions (YOLO!). It's a scary business. Controls are needed.
 
 1. Developers stick their scripts in a CI/CD pipeline. 
-2. Pipeline posts comments for each commit ot every PR containing the raw output of the `terraform plan`, to validate what *should* happen during `terraform apply`
+2. Pipeline posts comments for each commit on every PR containing the raw output of the `terraform plan`, to validate what *should* happen during `terraform apply`.
 3. On merge to main, `terraform apply` is run *without* a planfile. 🤞
 
 :::warning New Problems
-- Using Jenkins 🧌🔥
+- Still using Jenkins. 🧌🔥
 - CI/CD system promoted to *God Mode*. 🤞 Static administrative cloud credentials are exposed as environment variables, ripe for exfiltration
 - No visibility into the impact of the changes across multiple environments at the same time
 - Inadequate security mechanisms, creating a critical risk of catastrophic business loss
@@ -195,7 +195,7 @@ Developers realize something is not right. They begin to ask, why is this so har
 :::danger
 - Scripts all over the place that call terraform
 - Inconsistent conventions on what is a module, root module and when to combine them
-- Root modules that need to be provisioned in a specific order to bring them up and down, often necessitating use of `-target`
+- Root modules that need to be provisioned in a specific order to bring them up and down, often necessitating the use of `-target`
 - No way to define dependencies between root modules
 - Passing state between root modules is inconsistent
 - Automating the terraform in CI/CD is oversimplified, lacking project-level locks and planfile retrieval
@@ -241,14 +241,14 @@ Here's what you can expect after adopting Atmos:
 - **Separation of Configuration from Code** Unlike most alternatives, Atmos clearly separates the configuration into Stacks, separate from Components (terraform root modules). This ensure root modules remain highly reusable across teams and promotes testing.
 - **Enables Efficient Configuration:** Borrowing from the Kustomize playbook, Atmos makes configurations streamlined. It employs imports, hierarchy, inheritance, and deep merging, thus establishing company-wide standards effortlessly.
 - **Environment Consistency:** With a nod to helmfile, Atmos ensures environments remain consistent, providing a toolkit that ensures reliability, no matter where you deploy.
-- **Ensures Structured Modularity:** With Atmos, Terraform configurations are built modularly using stacks and catalogs. This not only ensures code is recyclable but also that it's efficient.
+- **Ensures Structured Modularity:** With Atmos, Terraform configurations are built modularly using stacks and catalogs. This not only ensures code is reusable but also that it's efficient.
 - **Promotes Reusable Building Blocks:** Set up a robust library of proven and easily reusable components (terraform root modules). Once done, there's minimal need for extra HCL work. This reduces the number of custom root modules needed in an organization and facilitates integration testing.
 - **Makes Composition Easier:** Think Docker Compose, but for Terraform. Atmos seamlessly integrates root modules into a stack manifest.
-- **Stack Organization:** Keeping Terraform configurations organized is a breeze with Atmos's stack-based approach for combing components to build your "Stack". It's the solution for those multi-config puzzles.
-- **Simplifies State Backends:** Atmos can generate a backend configuration dynamically based on the context within it's stack.
-- **OPA Policy Controls:** Atmos integrates OPA, offering high-level policy enforcement based on configuration values rather than the intricate HCL code details. This enhancement doesn't negate using tools like tfsec, tflint, or checkov, since none function at this elevated capacity.
+- **Stack Organization:** Keeping Terraform configurations organized is a breeze with Atmos's stack-based approach for combining components to build your "Stack". It's the solution for those multi-config puzzles.
+- **Simplifies State Backends:** Atmos can generate a backend configuration dynamically based on the context within its stack.
+- **OPA Policy Controls:** Atmos integrates [OPA](https://www.openpolicyagent.org/), offering high-level policy enforcement based on configuration values rather than the intricate HCL code details. This enhancement doesn't negate using tools like tfsec, tflint, or checkov, since none function at this elevated capacity.
 - **Dependency Coordination:** Atmos takes the lead, ensuring Terraform components that depend on each other play nicely.
 - **Standardized Workflows:** Workflows capture the intricate details of how to invoke commands, so it's easy to codify routine operations, the same way developers use Makefiles (or more accurately, "Gotask")
-- **Turnkey CI/CD:** Integrate with [GitHub Actions](https://atmos.tools/category/github-actions), [Spacelift](https://atmos.tools/integrations/spacelift), or [Atlantis](https://atmos.tools/integrations/atlantis) seamlessly. With Atmos, you can avoid the steep costs associated with commercial solutions that charge based on the number of resources under management, self-hosted runners, or users.
+- **Turnkey CI/CD:** Integrate with [GitHub Actions](https://atmos.tools/integrations/github-actions), [Spacelift](https://atmos.tools/integrations/spacelift), or [Atlantis](https://atmos.tools/integrations/atlantis) seamlessly. With Atmos, you can avoid the steep costs associated with commercial solutions that charge based on the number of resources under management, self-hosted runners, or users.
 
 Oh yes, and it's entirely free and truly Open Source (licensed APACHE2) like [everything else Cloud Posse builds](https://github.com/cloudposse)! 🔥
