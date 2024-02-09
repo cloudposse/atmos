@@ -210,7 +210,7 @@ This should be a solved problem.
 
 *(...and then they discover [Atmos](/)!)* 😉
 
-### **Stage 11:** New Toolchain Adoption, *Hello Atmos!* 👽
+### **Stage 11:** New Toolchain Selection
 
 Having learned Terraform the hard way, developers are now equipped with strong opinions on what they need to win at this stage of the game.
 
@@ -230,7 +230,7 @@ Having learned Terraform the hard way, developers are now equipped with strong o
 
 *Oh, one last ask. Can it also be free and open source?*
 
-## What's the Solution?
+## What's the Solution? *Hello Atmos!* 👽
 
 😎 Good news! Atmos supports all of this out of the box and exactly what you **cannot** achieve with "standalone" (a.k.a community edition) Terraform and [none of the alternatives](/reference/alternatives) can do it all.
 
