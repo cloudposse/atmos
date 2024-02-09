@@ -1,13 +1,13 @@
 ---
-title: Terraform Limitations
-description: Terraform Limitations
-sidebar_label: Terraform Limitations
+title: Overcoming Terraform Limitations with Atmos
+description: Overcoming Terraform Limitations with Atmos
+sidebar_label: Overcoming Terraform Limitations
 sidebar_position: 6
 ---
 
-# Terraform Limitations
+# Overcoming Terraform Limitations with Atmos
 
-To grasp the motivation behind Atmos's creation, it's helpful to examine Terraform—a tool integral to our development processes. 
+To grasp the motivation behind Atmos's creation, it's helpful to examine Terraform — a tool integral to our development processes. 
 Let's delve into the challenges and limitations we encountered with Terraform, setting the stage for Atmos's development.
 
 ## What is Terraform?
