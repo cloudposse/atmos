@@ -12,9 +12,9 @@ Let's delve into the challenges and limitations we encountered with Terraform, s
 
 ## What is Terraform?
 
-Terraform is a command-line utility that processes infrastructure configurations in ["HashiCorp's Configuration Langauge" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning. Its chief role is to delineate and structure infrastructure definitions.
+Terraform is a command-line utility that processes infrastructure configurations in ["HashiCorp's Configuration Language" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning. Its chief role is to delineate and structure infrastructure definitions.
   
-Terraform's HCL started strictly as a configuration language, not a markup or programming language, although has evolved considerably over the years. HCL is backward compatible with JSON, although it's not a strict superset of JSON. HCL is more human-friendly and readable, while JSON is often used for machine-generated configurations. This means you can write Terraform configurations in HCL or JSON, and Terraform will understand them. This feature is particularly useful for generating configurations programmatically or interoperation with systems that already use JSON.
+Terraform's HCL started strictly as a configuration language, not a markup or programming language, although it has evolved considerably over the years. HCL is backward compatible with JSON, although it's not a strict superset of JSON. HCL is more human-friendly and readable, while JSON is often used for machine-generated configurations. This means you can write Terraform configurations in HCL or JSON, and Terraform will understand them. This feature is particularly useful for generating configurations programmatically or interoperation with systems that already use JSON.
 
 ## How has Terraform HCL Evolved?
 
@@ -94,7 +94,7 @@ all-encompassing Terraform configuration that attempts to manage every aspect of
 
 1. Developers begin by composing a single root module that continuously expands.
 2. Define all environments as code (dev, staging, production) in a single Terraform root module.
-3. Extensive use of feature flags for everything (e.g. `prod_cluster_size`, `staging_cluster_size`, etc)
+3. Extensive use of feature flags for everything (e.g. `prod_cluster_size`, `staging_cluster_size`, etc.)
 
 :::warning New Problems
 1. A million parameters duplicated for each environment in order to toggle settings.
@@ -141,7 +141,7 @@ Developers begin their Terraform journey often by crafting their own modules, in
 
 Developers recognize the pitfalls of having all environments in one root module. After having refactored their code heavily into modules, Developers realize it was a bad idea to define dev, staging and prod, all in the same root module. Developers realize terraform gets very slow and brittle when a root module is too large.
 
-1. Initiate the split of the monolythic root module into smaller, more manageable units while incorporating additional feature flags
+1. Initiate the split of the monolithic root module into smaller, more manageable units while incorporating additional feature flags
    and expanding configuration management through `.tfvars` files.
 2. Move towards a structure where multiple root modules are used, each one precisely aligned with specific environments
    to enhance maintainability and performance.
@@ -244,7 +244,7 @@ This should be a solved problem.
 
 ### **Stage 11:** New Toolchain Selection
 
-Having learned Terraform the hard way, developers emerge with a well-defined set of requirements for a toolchain that can address the complexities they've encountered. Their experiences have crystalized what is necessary to operate infrastructure at scale based on real-world experience.
+Having learned Terraform the hard way, developers emerge with a well-defined set of requirements for a toolchain that can address the complexities they've encountered. Their experiences have crystallized what is necessary to operate infrastructure at scale based on real-world experience.
 
 1. **Consistent Invocation:** I want a tool that standardizes how Terraform is invoked across the organization.
 2. **Made Composition Easier:** It would be amazing if it were an equivalent to Docker Compose for piecing together root modules.
@@ -264,13 +264,13 @@ Having learned Terraform the hard way, developers emerge with a well-defined set
 
 ## What's the Solution? *Hello Atmos!* 👽
 
-😎 Good news! Atmos supports all of this out of the box and exactly what you **cannot** achieve with "standalone" (a.k.a community edition) Terraform and [none of the alternatives](/reference/alternatives) can do it all. Plus, there's no need to abandon Terraform—it's actually a great tool, and Atmos enhances its strengths.
+😎 Good news! Atmos supports all of this out of the box and exactly what you **cannot** achieve with "standalone" (a.k.a. community edition) Terraform and [none of the alternatives](/reference/alternatives) can do it all. Plus, there's no need to abandon Terraform—it's actually a great tool, and Atmos enhances its strengths.
 
 Here's what you can expect after adopting Atmos:
 
 - **Consistent Invocation:** Atmos ensures Terraform is invoked the same way every time; no more need to pass complicated arguments to `terraform`. This removes guesswork and confusion across teams with what parameters to pass, and what order of operations things need to be invoked.
 - **Seamless Initialization:** Backend? Modules? Prep steps? Atmos makes sure everything is ready before you run `terraform apply`.
-- **Separation of Configuration from Code** Unlike most alternatives, Atmos clearly separates the configuration into Stacks, separate from Components (terraform root modules). This ensure root modules remain highly reusable across teams and promotes testing.
+- **Separation of Configuration from Code** Unlike most alternatives, Atmos clearly separates the configuration into Stacks, separate from Components (terraform root modules). This ensures that root modules remain highly reusable across teams and promotes testing.
 - **Enables Efficient Configuration:** Borrowing from the Kustomize playbook, Atmos makes configurations streamlined. It employs imports, hierarchy, inheritance, and deep merging, thus establishing company-wide standards effortlessly.
 - **Environment Consistency:** With a nod to helmfile, Atmos ensures environments remain consistent, providing a toolkit that ensures reliability, no matter where you deploy.
 - **Ensures Structured Modularity:** With Atmos, Terraform configurations are built modularly using stacks and catalogs. This not only ensures code is reusable but also that it's efficient.
