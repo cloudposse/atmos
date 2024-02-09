@@ -14,8 +14,8 @@ badges:
     image: https://img.shields.io/github/release/cloudposse/atmos.svg?style=for-the-badge
     url: https://github.com/cloudposse/atmos/releases/latest
   - name: "Last Updated"
-    image: https://img.shields.io/github/last-commit/cloudposse/.github/main?style=for-the-badge
-    url: https://github.com/cloudposse/.github/commits/main/
+    image: https://img.shields.io/github/last-commit/cloudposse/atmos/main?style=for-the-badge
+    url: https://github.com/cloudposse/atmos/commits/main/
   - name: Tests
     image: https://img.shields.io/github/actions/workflow/status/cloudposse/atmos/test.yml?style=for-the-badge
     url: https://github.com/cloudposse/atmos/actions/workflows/test.yml

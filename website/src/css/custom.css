@@ -8,6 +8,47 @@
     font-size: 2em;
 }
 
+.navbar__title {
+    font-size: 2em;
+}
+
+.navbar__brand
+{
+    position: relative;
+    bottom: 2px;
+}
+
+div.atmos__effect, html[data-theme='dark'] div.navbar__logo {
+    position: relative;
+    display: inline-block;
+    overflow:hidden;
+}
+
+div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    /*background:  -webkit-linear-gradient(45deg, rgba(238, 119, 82, 0.5), rgba(231, 60, 126, 0.5), rgba(35, 166, 213, 0.5), rgba(35, 213, 171, 0.5));*/
+    background: -webkit-linear-gradient(-45deg, rgba(235, 26, 26, 0.5), rgba(88, 60, 231, 0.5), rgba(46, 200, 255, 0.5), rgba(35, 213, 171, 0.5));
+
+    mix-blend-mode: color;
+    animation: gradient 15s ease infinite;
+}
+
+.atmos__text, html[data-theme='dark'] b.navbar__title  {
+    background: -webkit-linear-gradient(-45deg, #eb1a1a, #583ce7, #2ec8ff, #23d5ab);
+    animation: gradient 15s ease infinite;
+    background-size: 300% 300%;
+    background-clip: text;
+    color: transparent;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+
 .menu__list-item-collapsible {
     font-weight: bold;
 }
@@ -23,6 +64,10 @@ body {
     background-size: 15em;
     background-attachment: fixed;
     font-family: "Lato", sans-serif;
+}
+
+.language-console pre > code, .language-text pre > code  {
+    line-height: 1.26em;
 }
 
 /*
@@ -42,6 +87,18 @@ nav.navbar {
 
 li > ul.menu__list {
     margin-left: 1.5em;
+}
+
+html[data-theme='dark'] article ul strong, html[data-theme='dark'] article ol strong {
+    color: rgb(173, 219, 103)
+}
+
+article ul strong, article ol strong {
+    color: #4CAF50;
+}
+
+article .theme-admonition-danger ul li strong, article .theme-admonition-danger ol li strong {
+    color: #ff8a8a
 }
 
 /* You can override the default Infima variables here. */
@@ -164,4 +221,16 @@ li.menu__list-item.command {
 
 .navbar-cta-button:hover {
     color: var(--ifm-button-color);
+}
+
+@keyframes gradient {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
 }

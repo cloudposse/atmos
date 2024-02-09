@@ -13,9 +13,11 @@ description: >-
 import ReactPlayer from 'react-player'
 import Link from '@docusaurus/Link'
 
-# Atmos is a workflow automation tool
+# Atmos is the Ultimate Terraform Composition Tool for DevOps
 
-Atmos is a workflow automation tool for DevOps that makes it more manageable to operate very large environments with DRY configuration.
+Use Atmos to easily compose complex architectures based on Terraform with very [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) configuration. 
+Concepts like [Stacks](/core-concepts/stacks) and [Components](/core-concepts/components), help you overcome most of [Terraform's limitations](/reference/terraform-limitations/) 
+by using [established conventions](/core-concepts) and proven [design patterns](/design-patterns/).
 
 <Link
     to="/quick-start"
@@ -30,212 +32,112 @@ Atmos is a workflow automation tool for DevOps that makes it more manageable to 
 </Link>
 
 
-## Why Atmos?
+## Screenshots
 
-With [so many of these tools today](/reference/alternatives/), why does the world need another "workflow" automation tool?
+To get an idea of what it looks like using `atmos` on the command line, just [try our quickstart](/quick-start/) and run the [`atmos`](/cli/commands/atmos) command to start an interactive UI in the terminal. Use the arrow keys to select stacks and components to deploy.
 
-That's simple. **None of them pull off what you can do with Atmos.**
-
-To fully understand why, it may be helpful to understand some background.
-Atmos is a tool created by [Cloud Posse](https://cloudposse.com).
-We are [DevOps Accelerator for Startups](https://cloudposse.com/services/) (typically venture-backed, later-stage series A-D companies) and enterprises.
-We help our customers own their infrastructure using our [reference architecture blueprints](https://cloudposse.com/reference-architecture/) and implement it with their teams while showing them the ropes.
-We needed to scratch our own itch. After trying everything, we realized it would not be possible to achieve the outcome we wanted for our customers using a mashup of existing off-the-shelf tools.
-That's why we created Atmos.
-
-### TL;DR
-- Businesses need to capture their processes as workflows
-- Terraform configuration is difficult to manage at scale
-- Terraform by itself is not enough to be successful
-- Atmos makes managing those configurations easier
-
-### Use Cases
-
-Atmos is ideally suited for these use-cases.
-
-- Terraform Automation and Collaboration (TACOs)
-- Large Multi-Account Environments
-- Resilient Multi-Region Cloud Deployments
-- Implement Guardrails with Policy as Code (ideal for enterprise environments!)
-- Enable Team Autonomy with Self-Service with Infrastructure as Code
-- Provide Service Catalogs, Landing Zones and Architectural Blueprints
-
-
-Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel.
-
-### Atmos Gives Terraform Super Powers
-
-Businesses succeed because of their processes. Those processes need to be captured through workflows.
-
-The reason is that workflows give teams superpowers without needing to be superheroes. Let's face it: human error is the number one risk businesses face. It's the root cause of most outages and can strike anytime.
-
-The best workflows enable anyone, anywhere, to run them. They are easily understood, self-documenting and ensure fewer mistakes get made. When workflows are written down, they can be iterated upon and optimized.
-
-
-- Write components (root modules) once, reuse any number of times
-- Vanilla HCL without customizations
-- Use our terraform provider to read YAML configurations from anywhere
-- Easily deploy across any number of regions without touching a line of HCL
-- Duplicate entire stacks by just copying a single YAML file
-- Generate YAML configurations e.g. Cookie Cutter, Service Now
-
-### We Built Atmos to Solve Our Problems
-
-Cloud Posse works with many customers who have a diverse set of requirements. We couldn't consistently deliver the outcomes we wanted using the existing tools on the market. Since everything we build at Cloud Posse is designed to be reusable across organizations, we needed something that allowed us to replicate configurations without repetitive steps and editing.
-
-Here are some of the problems we needed to solve...
-- How to **support many teams** concurrently across multiple organizations.
-- How to **automate our deliverables** so that teams could *own* them.
-- How to engineer an **extensible tool** that could handle unknown-unknown requirements.
-- How to design an **easy to use tool** that was stable and consistent (aka testable)
-
-## Atmos Differentiators
-
-### Zero Vendor Lock-in for Terraform
-
-When you use **Atmos there is zero vendor lock-in**. This is because Atmos does not require changing (harming) any Terraform code in order to run.
-Every [terraform component](/core-concepts/components) is just a vanilla HCL terraform "root" module. Atmos is simply handling the complexity
-associated with managing hierarchical configurations.
-
-:::info
-By running a [single command](/cli/commands/terraform/generate-varfiles), you can eject from Atmos and never touch it again.
-:::
+![Atmos Screenshot](../../docs/demo.gif)
 
 <br/>
 
-[Why not give Atmos a try?](/quick-start)
+In Atmos, you can easily search and navigate your configuration from the built-in UI.
 
-### Designed for Configuration @ Scale
+![`atmos` CLI command example 2](/img/cli/atmos/atmos-cli-command-1.png)
 
-Most tools suffer when configurations get large and complex. They are not optimized for this; Terraform is a prime example.
+## Introduction
 
-Atmos solves this by introducing powerful capabilities most tools lack:
+With Atmos, you gain simplified control over your cloud resources, enabling you to manage unlimited environments, services, 
+and configurations using simple, clear YAML configuration files. Best of all, it works without writing a single line of HCL or code generation. 
+This approach not only ensures that your infrastructure's deployment and scaling are as straightforward as executing a single command,
+ but also cleanly separates your configuration from your Terraform code keeping it portable, thereby streamlining the entire process.
 
-- Hierarchical configurations to reduce complexity
-- DRYness with inheritance and imports
-- Team collaboration with reusable service catalogs
-- Reusable workflows that run anywhere
-- Consistent command line interface that can combine multiple tools into one command (`atmos`)
-- A [single binary, cross-compiled for every architecture](https://github.com/cloudposse/atmos/releases) (golang) and [easily installed](/quick-start/install-atmos)
+Designed to operate seamlessly across diverse environments—be it production, staging, development, or testing — Atmos integrates 
+perfectly into continuous integration (CI/CD) workflows with it's [GitHub Actions](/integrations/github-actions/) or support for other [TACOS](/integrations/). 
+It offers a comprehensive set of commands for managing the lifecycle of your cloud infrastructure, from creation to maintenance and beyond.
 
-### YAML Configuration
+:::tip Did you know?
+By leveraging Atmos in conjunction with Cloud Posse's [*expertise in AWS*](https://cloudposse.com),
+[*terraform blueprints*](https://cloudposse.com/services/), and our [*knowledgable community*](https://slack.cloudposse.com), teams can achieve
+operational mastery and innovation faster, transforming their infrastructure management practices into a competitive advantage.
+:::
 
-So, why did we choose YAML? That's simple: **everyone knows YAML.**
+## How does Atmos work?
 
-YAML is an extensible markup language. It's ideal for defining a declarative DSL.
+At a high-level, Atmos is responsible for managing the configuration that get's passed to Components when they are instantiated.
 
-Using YAML, Atmos is easily able to support features like [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/components/inheritance), deep merging, and [policies](/core-concepts/components/validation).
+To make this less abstract, we're going to focus on Terraform and how configuration gets passed to it.
+The secret to scaling architectures with Terraform, is to decompose it into smaller root modules. We want to keep these root modules 
+as generic and resuable as possible by parameterizing them. In doing so, we shift the complexity from the HCL code, to managing 
+the configuration itself. In terraform, there is the concept of variable files (aka "var files"), 
+which are JSON-esque configuration files and how external configuration is passed to `terraform plan` using 
+the [`-var-file` argument](https://developer.hashicorp.com/terraform/language/values/variables#variable-definitions-tfvars-files). 
+All we need to do is tap into this power, and pass our own configuration that comes from Atmos.
 
-YAML is also "tool agnostic" (unlike HCL); it's not tied to Terraform or explicitly associated with HashiCorp products.
-- **Every language can read it** (e.g. from python or node. Even read it remotely, e.g. via http)
-- **Every language can write it** (e.g. generate it from a web UI)
+With Atmos, we organize our configuration into [Stacks](/core-concepts/stacks). Stacks are YAML manifests that compose all the 
+[Components](/core-concepts/components) (e.g. Terraform root modules) we need to bring up our environment. For example, in it's 
+simplest form, we may have `production`, `dev`, and `staging` stacks.  We can then deploy any of these stacks to provision 
+everything using Terraform. All that Atmos does, is deep-merge the variables from the stack configurations and produce a single "var file" 
+that we pass to the `terraform plan`. There's very little magic, which is how to ensure future compatibility with Terraform and 
+interoperability with the entire Terraform ecosystem.
 
-There are other cool things we get "for free" by adopting YAML:
+:::info Summary
+- Terraform configuration is difficult to manage at scale without tooling
+- Terraform by itself is not enough to be successful
+- Atmos makes managing those configurations easier
+:::
 
-- [Atmos Manifests Validation](/reference/schemas) to validate Atmos stack manifests and provide auto-completion
-- [YAML Anchors and Aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases) can help DRY up configurations
-- Easy [OPA Validation for Atmos Components](/core-concepts/components/validation#open-policy-agent-opa)
-- [JSON Schema Validation for Atmos Components](/core-concepts/components/validation#json-schema)
+### Use Cases
 
-The possibilities are endless.
+Atmos has consistently demonstrated its effectiveness in addressing these key use-cases, showcasing its adaptability and 
+strength in the cloud infrastructure and DevOps domains:
 
-### Supports Guardrails Out-of-the-box
+- **Managing Large Multi-Account Cloud Environments:** Suitable for organizations using multiple cloud accounts to separate different 
+  projects or stages of development.
+- **Cross-Platform Cloud Architectures:** Ideal for businesses that use services across AWS, GCP, Azure, etc., to build a cohesive system.
+- **Multi-Tenant Systems for SaaS:** Perfect for SaaS companies that need to securely host multiple customers within the same infrastructure.
+- **Stable Multi-Region Deployments:** Ensures high availability and disaster recovery by spanning cloud services across different 
+  geographical regions.
+- **Compliant Infrastructure for Regulated Industries:** Provides a robust base for developing vetted, compliant configurations that
+  align with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations, accessible through the service catalog,
+  empower anyone constructing services on this foundation to achieve and maintain strict compliance with ease.
+- **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using 
+  predefined templates and policies.
+- **Streamlining Deployment with Service Catalogs, Landing Zones, and Blueprints:** Provides ready-to-use templates and guidelines for
+  setting up cloud environments quickly and consistently.
 
-Configuration "at scale" requires policies and validation. To err is human. No one reads all the docs. We must clarify expectations using
-"policies as code" and "shift left" to raise errors early.
+Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel, or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
 
-Atmos supports OPA to lay down the law and enforce it.
+### Atmos is Open Source (APACHE2)
+[![Last Commit](https://img.shields.io/github/last-commit/cloudposse/atmos/main?style=social)](https://github.com/cloudposse/atmos/commits/main/)
+[![Atmos Repo](https://img.shields.io/github/stars/cloudposse/atmos)](https://github.com/cloudposse/atmos)
 
-For example, here are some things that are possible:
-- Never allow some value in a particular environment
-- Never allow two types of things to be deployed concurrent in staging
-- Never allow a team to deploy some component
-- Never allow production to use unstable versions of components
+Best of all [Atmos is truly open-source](https://github.com/cloudposse/atmos) (APACHE2) with an [active community](https://slack.cloudposse.com) supporting it.
+There are no strings attached, and it's under active development with hundreds of GitHub stars.
 
-The possibilities are endless.
-
-### Supports Multiple Inheritance
-
-- [Atmos Component Inheritance](/core-concepts/components/inheritance) to combine multiple configurations through ordered deep-merging of configurations
-- Make configuration hierarchical with imports and deep merging
-- Organize it anyway that make sense for your organization
-- Define logical groups of configuration
-- Define something once and reuse it
-- Know exactly where configuration differs
-
-## The Problems with Tools
-
-### Generalized Tools Always Suffer
-
-A generalized tool will always suffer for a specialized use case, even Atmos and its custom workflows.
-That’s why we wrote it all in Golang, and implemented opinionated workflows for the tools we use like `terraform` and `helmfile`.
-We also acknowledged that not everyone knows Golang, so we created a porcelain-style plugin interface (inspired by Helm, which itself is partially modeled on Git's plugin model).
-This enables you to write your commands in any language, but expose them through the Atmos CLI interface for a standard CLI UX.
-Or better yet, it's possible to combine both the built-in workflows for terraform and helmfile with the custom workflows.
-
-We like to think this tool gives us superpowers. It’s definitely attributable to our meteoric success of the past couple years and we want that to be yours too.
-
-### Terraform by itself does not scale
-
-There are many problems encountered by teams working with Terraform at scale.
-
-- Terraform GitOps (CI/CD) for teams is non-trivial
-- Terraform configuration is not DRY
-- Terraliths are a terraform anti-pattern, yet…
-- Terraform “root modules” are not easily shared
-- Terraform has no native support for multiple root modules (dependency ordering)
-- Terraform backend configurations cannot be parameterized
-- Terraform lacks built-in guardrails & policy controls that enterprises need
-
-
-## The Solution
-
-### Use Atmos
-
-Atmos is part of the solution because:
-- Opinionated workflows for terraform
-- Established conventions and patterns to manage terraform @ scale
-- Break terraliths into smaller pieces (“components”)
-- Enable team collaboration with catalogs and libraries
-- Enforce guardrails with OPA and JSON Schema
-- Zero Vendor Lock-in
-
-### Established Conventions
-
-Part of the benefit of working with Atmos is we have many established conventions that you can adopt.
-
-Here are some of the examples:
-
-- **[Components](/core-concepts/components)**: these are the fundamental building blocks. For terraform, these are opinionated terraform “root modules”.
-- **[Stacks](/core-concepts/stacks)**: these are the combination of components into an architecture.
-- **[Catalogs](/core-concepts/stacks/imports)**: these are collections of reusable stack configurations.
-
-### It's All Open Source (APACHE2)
-
-Best of all [Atmos is open-source](https://github.com/cloudposse/atmos) with an active community supporting it. There are no strings attached, and it's under active development with hundreds of stars.
-
-There's also an ecosystem of tools that it works with, and Terraform modules downloaded tens of millions of times.
+There's also an ecosystem of tools that it works with, and [Terraform modules](https://github.com/cloudposse/?q=&type=all&language=hcl&sort=) downloaded hundreds of millions of times.
 
 We invite you to join us in the larger movement and impact the industry at large.
 
+<a href="https://github.com/cloudposse/atmos/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=cloudposse/atmos&max=24" />
+</a>
 
 ### What Atmos is Not...
 
 It might help to also understand what Atmos is not attempting to replace:
 
-- Atmos is not an alternative to tools like `terraform`, `kubectl`, `chef`, `puppet`, or `ansible`. Instead, atmos is the type of tool that would orchestrate these tools.
-- Atmos is not an alternative to CI/CD systems. If anything, those systems will still call Atmos.
-
-### Atmos Configuration and UI Examples
-
-Just run [`atmos`](/cli/commands/atmos) command to start an interactive UI in the terminal to select an Atmos component and stack and a command to
-execute. Press `Enter` to execute the selected command for the selected component and stack.
-
-![`atmos` CLI command example 1](../../docs/demo.gif)
-
-<br/>
-
-![`atmos` CLI command example 2](/img/cli/atmos/atmos-cli-command-1.png)
+- **Atmos is not an alternative for certain tools.** Under the hood, it still executes `terraform`, `kubectl`, `docker`, `helm`, etc.
+  Atmos composes tools together via [Stack](/core-concepts/stacks/) configurations and orchestrates their execution via [workflows](/core-concepts/workflows/), [custom commands](/core-concepts/custom-commands/), or [other integrations](/integrations/).
+- **Atmos is not an alternative to CI/CD systems.**  It complements these systems by being an operational tool that can be invoked
+  from within CI/CD pipelines, as detailed in our [integrations](/integrations/).
+- **Atmos is not a competitor to Terraform Cloud or Terraform Enterprise.** It’s a command-line tool that makes working with other
+  CLI’s like `terraform`, `helm` and other infrastructure management tools better. It streamlines infrastructure configuration management
+  and integrates nicely with existing CI/CD pipelines. Atmos is not a commercial product and has no proprietary lock-ins.
+- **Atmos is not tied to any specific cloud provider.** It is cloud-agnostic, and designed to work across various cloud platforms
+  (e.g. AWS, GCP, Azure, etc), enhancing interoperability rather than tying users to a single cloud environment.
+- **Atmos is not a configuration management database ([CMDB](https://en.wikipedia.org/wiki/Configuration_management_database)).** Although it can manage and deploy the desired state of configurations,
+  it doesn't serve as a repository for tracking the actual state of IT assets and configurations in the _traditional_ sense of a CMDB.
+- **Atmos is not a replacement for development environments or IDEs.** It focuses on the orchestration and deployment aspects of infrastructure, without aiming to replace the tools developers use to write and test code.
 
 ### Live Demo of Atmos
 
@@ -244,9 +146,16 @@ Here's a live demo we did on [our weekly "Office Hours"](https://cloudposse.com/
 <ReactPlayer className={"react-player"} controls url='https://www.youtube.com/watch?v=0dFEixCK0Wk&t=1415s'/>
 <br/>
 
+### How do we make money?
+
+[Cloud Posse](https://cloudposse.com/) sells [reference architectures for AWS](https://cloudposse.com/services/) that are based on Atmos and Terraform. 
+Our typical customers are <strong>Funded Startups</strong> and <strong>Enterprises</strong> that want to leverage AWS together with platforms 
+like GitHub, GitHub Actions, Datadog, OpsGenie, Okta, etc.
 
 ## Next Steps
 
-* Do you need to present a compelling case for Atmos at your company? [Check out our slides](/reference/slides).
-* [Check out our Quick Start](/quick-start)
-* [Review the Core Concepts](/core-concepts)
+* [Review the Core Concepts](/core-concepts). Learn about our conventions.
+* [Check out our Quick Start](/quick-start). Get started in as little as 30 minutes.
+* [Check out our slides](/reference/slides). Present a compelling case for using Atmos at your company.
+
+

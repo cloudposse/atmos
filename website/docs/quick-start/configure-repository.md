@@ -9,12 +9,10 @@ and stacks.
 
 :::info
 
-Monorepo is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure.
-Monorepo usually improves collaboration, CI/CD build speed, and overall productivity.
+A "monorepo" is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure composed of individual components with indepentent lifecycles. Monorepos usually improve collaboration, CI/CD build speed, and overall productivity. A monorepo should not be confused with a [monolith](https://en.wikipedia.org/wiki/Monolithic_application), which is a single, often large, codebase for an application.
 
-Polyrepo architecture consists of several version-controlled repositories for code, configurations and scripts for different parts of the
-infrastructure. For example, depending on various requirements (including security, lifecycle management, access control, audit, etc.), separate
-repositories can be used to manage infrastructure per account (e.g. `dev`, `staging`, `prod`), per service, or per team.
+Polyrepo architectures consists of several version-controlled repositories for code, configurations and scripts for different parts of the
+infrastructure. For example, depending on various requirements (including security, lifecycle management, access control, audit, etc.), separate repositories can be used to manage infrastructure per account (e.g. `dev`, `staging`, `prod`), per service, or per team.
 
 :::
 
@@ -38,10 +36,7 @@ Atmos requires a few common directories and files, which need to be configured i
 - `Dockerfile` (optional)
 - `rootfs` directory (optional) - root filesystem for the Docker image (if `Dockerfile` is used)
 
-Atmos separates code from configuration (separation of concerns). The code is in the `components` directories and the configurations for different
-environments are in the `stacks` directory. This allows the code (Terraform and Helmfile components) to be environment-agnostic, meaning the
-components don't know and don't care how and where they will be provisioned. They can be provisioned into many accounts and regions - the
-configurations for different environments are defined in the `stacks` directory.
+Atmos separates code from configuration (separation of concerns). The code is in the `components` directories and the configurations for different environments are in the `stacks` directory. This allows the code (Terraform and Helmfile components) to be environment-agnostic, meaning the components don't know and don't care how and where they will be provisioned. They can be provisioned into many accounts and regions - the configurations for different environments are defined in the `stacks` directory.
 
 <br/>
 
@@ -56,21 +51,21 @@ The following example provides the simplest filesystem layout that Atmos can wor
 
 ```console
    │   # Centralized stacks configuration
-   ├── stacks
-   │   ├── <stack_1>
-   │   ├── <stack_2>
-   │   └── <stack_3>
+   ├── stacks/
+   │   ├── <stack_1>.yaml
+   │   ├── <stack_2>.yaml
+   │   └── <stack_3>.yaml
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   ├── components
-   │   ├── terraform   # Terraform components (Terraform root modules)
-   │   │   ├── <terraform_component_1>
-   │   │   ├── <terraform_component_2>
-   │   │   └── <terraform_component_3>
-   │   └── helmfile  # Helmfile components are organized by Helm chart
-   │       ├── <helmfile_component_1>
-   │       ├── <helmfile_component_2>
-   │       └── <helmfile_component_3>
+   ├── components/
+   │   ├── terraform/   # Terraform components (Terraform root modules)
+   │   │   ├── <terraform_component_1>/
+   │   │   ├── <terraform_component_2>/
+   │   │   └── <terraform_component_3>/
+   │   └── helmfile/  # Helmfile components are organized by Helm chart
+   │       ├── <helmfile_component_1>/
+   │       ├── <helmfile_component_2>/
+   │       └── <helmfile_component_3>/
    │
    │   # Atmos CLI configuration
    ├── atmos.yaml
@@ -143,16 +138,16 @@ layout:
 
 ```console
    │   # Centralized stacks configuration
-   ├── stacks
-   │   ├── <stack_1>
-   │   ├── <stack_2>
-   │   └── <stack_3>
+   ├── stacks/
+   │   ├── <stack_1>.yaml
+   │   ├── <stack_2>.yaml
+   │   └── <stack_3>.yaml
    │  
    │   # Centralized components configuration. Components are broken down by tool
-   └── components
-       └── terraform   # Terraform components (Terraform root modules)
-           ├── vpc
-           └── vpc-flow-logs-bucket
+   └── components/
+       └── terraform/   # Terraform components (Terraform root modules)
+           ├── vpc/
+           └── vpc-flow-logs-bucket/
 ```
 
 <br/>

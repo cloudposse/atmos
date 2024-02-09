@@ -79,7 +79,7 @@ const config = {
                 logo: {
                     alt: 'Atmos Logo',
                     src: '/img/atmos-logo.svg',
-                    srcDark: '/img/atmos-logo.svg',
+                    srcDark: '/img/atmos-logo-bw.svg',
                     href: '/',
                     target: '_self',
                     height: 36
@@ -158,7 +158,19 @@ const config = {
                         dark: 'rgb(50, 50, 50)'
                     }
                 }
-            }
+            },
+            colorMode: {
+                // "light" | "dark"
+                defaultMode: 'dark',
+          
+                // Hides the switch in the navbar
+                // Useful if you want to force a specific mode
+                disableSwitch: false,
+          
+                // Should respect the user's color scheme preference
+                // "light" | "dark" | "system"
+                respectPrefersColorScheme: false,
+              },
         }),
 
     markdown: {
