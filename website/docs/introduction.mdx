@@ -97,8 +97,9 @@ strength in the cloud infrastructure and DevOps domains:
 - **Multi-Tenant Systems for SaaS:** Perfect for SaaS companies that need to securely host multiple customers within the same infrastructure.
 - **Stable Multi-Region Deployments:** Ensures high availability and disaster recovery by spanning cloud services across different 
   geographical regions.
-- **Compliant Infrastructure for Regulated Industries:** Offers frameworks to meet SOC2, HIPAA, HITRUST, PCI, etc., requirements with 
-  automated policy enforcement, ideal for enterprises needing strict compliance.
+- **Compliant Infrastructure for Regulated Industries:** Provides a robust base for developing vetted, compliant configurations that
+  align with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations, accessible through the service catalog,
+  empower anyone constructing services on this foundation to achieve and maintain strict compliance with ease.
 - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using 
   predefined templates and policies.
 - **Streamlining Deployment with Service Catalogs, Landing Zones, and Blueprints:** Provides ready-to-use templates and guidelines for
@@ -107,20 +108,36 @@ strength in the cloud infrastructure and DevOps domains:
 Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel, or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
 
 ### Atmos is Open Source (APACHE2)
+[![Last Commit](https://img.shields.io/github/last-commit/cloudposse/.github/main?style=social)](https://github.com/cloudposse/.github/commits/main/)
+[![Atmos Repo](https://img.shields.io/github/stars/cloudposse/atmos)](https://github.com/cloudposse/atmos)
 
-Best of all [Atmos is open-source](https://github.com/cloudposse/atmos) with an [active community](https://slack.cloudposse.com) supporting it. 
-There are no strings attached, and it's under active development with hundreds of stars.
+Best of all [Atmos is truly open-source](https://github.com/cloudposse/atmos) (APACHE2) with an [active community](https://slack.cloudposse.com) supporting it.
+There are no strings attached, and it's under active development with hundreds of GitHub stars.
 
 There's also an ecosystem of tools that it works with, and [Terraform modules](https://github.com/cloudposse/?q=&type=all&language=hcl&sort=) downloaded hundreds of millions of times.
 
 We invite you to join us in the larger movement and impact the industry at large.
 
+<a href="https://github.com/cloudposse/atmos/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=cloudposse/atmos&max=24" />
+</a>
+
 ### What Atmos is Not...
 
 It might help to also understand what Atmos is not attempting to replace:
 
-- Atmos is not an alternative to tools like `terraform`, `kubectl`, `chef`, `puppet`, or `ansible`. Rather it composes them together and orchestrates their execution.
-- Atmos is not an alternative to CI/CD systems, but rather something that would be [called from those systems](/integrations/).
+- **Atmos is not an alternative for certain tools.** Under the hood, it still executes `terraform`, `kubectl`, `docker`, `helm`, etc.
+  Atmos composes tools together via [Stack](/core-concepts/stacks/) configurations and orchestrates their execution via [workflows](/core-concepts/workflows/), [custom commands](/core-concepts/custom-commands/), or [other integrations](/integrations/).
+- **Atmos is not an alternative to CI/CD systems.**  It complements these systems by being an operational tool that can be invoked
+  from within CI/CD pipelines, as detailed in our [integrations](/integrations/).
+- **Atmos is not a competitor to Terraform Cloud or Terraform Enterprise.** It’s a command-line tool that makes working with other
+  CLI’s like `terraform`, `helm` and other infrastructure management tools better. It steamsline infrastructure comfiguration management
+  and integrates nicely with existing CI/CD pipelines. Atmos is not a commercial product and has no proprietary lock-ins.
+- **Atmos is not tied to any specific cloud provider.** It is cloud-agnostic, and designed to work across various cloud platforms
+  (e.g. AWS, GCP, Azure, etc), enhancing interoperability rather than tying users to a single cloud environment.
+- **Atmos is not a configuration management database ([CMDB](https://en.wikipedia.org/wiki/Configuration_management_database)).** Although it can manage and deploy the desired state of configurations,
+  it doesn't serve as a repository for tracking the actual state of IT assets and configurations in the _traditional_ sense of a CMDB.
+- **Atmos is not a replacement for development environments or IDEs.** It focuses on the orchestration and deployment aspects of infrastructure, without aiming to replace the tools developers use to write and test code.
 
 ### Live Demo of Atmos
 

@@ -18,7 +18,7 @@ Terraform's HCL started strictly as a configuration language, not a markup or pr
 
 ## How has Terraform HCL Evolved?
 
-As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating features typical of programming languages (albeit without a debugger!). This shift enriched infrastructure definitions, positioning HCL more as a domain-specific programming language for defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result, the complexity of configuring Terraform projects has risen, while Terraform's inherent capabilities to be configured haven't evolved at the same pace.
+As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating features typical of programming languages (albeit without a debugger!). This shift enriched infrastructure definitions, positioning HCL more as a [domain-specific programming language](https://en.wikipedia.org/wiki/Domain-specific_language) for defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result, the complexity of configuring Terraform projects has risen, while Terraform's inherent capabilities to be configured haven't evolved at the same pace.
 
 - **Rich Expressions:** Introduced a richer expression syntax, removing the need for interpolations.
 
@@ -71,9 +71,14 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 
 ### **Stage 1:** Introduction to Terraform, *Hello World!*
 
-1. Developers roll up their sleeves and get a simple terraform example up and running. No modules are used and mostly hardcoded resources with settings.
-2. Local state files (since this is just an exploration)
-3. No Version Control System (VCS) is used, just stored locally on workstation.
+At this initial stage, developers begin their Terraform journey with the basics, focusing on getting a grasp of its core concepts through a straightforward implementation.
+
+1. Developers roll up their sleeves to get a simple terraform example up and running. They create resources directly in the
+   configuration without the use of modules. This phase is characterized by hard-coded settings and a hands-on approach to learning
+   Terraform's syntax and capabilities.
+2. Local state files (since this is just an exploration). This approach simplifies the learning process by avoiding the complexities of remote state management.
+3. Version control systems are not yet in use, so Developers store their Terraform configurations directly on their local workstations
+   allowing developers to focus on learning Terraform's mechanics without the added complexity of collaboration tools or best practices.
 
 :::warning New Problems
 1. How do we handle secrets?
@@ -83,16 +88,23 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 
 ### **Stage 2:** The Monolithic Root Module (aka Terralith)
 
+As developers grow more comfortable with Terraform, they often transition to a more ambitious approach of automating everything.
+It results in creating a monolithic root module, also known as a Terralith. This stage is characterized by an expansive,
+all-encompassing Terraform configuration that attempts to manage every aspect of the infrastructure within a single module.
+
 1. Developers begin by composing a single root module that continuously expands.
-2. Define all environments as code (dev, staging, production) in a single Terraform root module, and use feature flags for everything (e.g. `prod_cluster_size`, `staging_cluster_size`, etc)
+2. Define all environments as code (dev, staging, production) in a single Terraform root module.
+3. Extensive use of feature flags for everything (e.g. `prod_cluster_size`, `staging_cluster_size`, etc)
 
 :::warning New Problems
-1. A million parameters for each environment to toggle settings.
+1. A million parameters duplicated for each environment in order to toggle settings.
 2. Impossible to test every combination of parameters.
 3. Not very DRY. Lots of code duplication.
 :::
 
 ### **Stage 3:** Move Towards Modularization
+
+As developers dive deeper into Terraform's capabilities, they begin to recognize the inefficiencies of their initial approaches. The move towards modularization represents a significant leap in managing infrastructure as code more effectively.
 
 1. Developers realize that a lot of code is getting copied and pasted, so they advance to writing modules to avoid duplication.
 2. Modules act like functions in Terraform: reusable and parameterized. They can be called multiple times and accept parameters.
@@ -108,9 +120,12 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 
 ### **Stage 4:** Adoption of Open Source Modules
 
-1. Developers learning terraform, frequently start by writing their own modules. Frequently, they are even unaware that a huge module ecosystem already exists (like [Cloud Posse's terraform modules](https://github.com/cloudposse))
-2. Now, aware of well-maintained open-source modules, they start ripping out their custom modules (VPC, clusters, etc) for community modules.
-3. Everyone is amazed when PRs remove hundreds or thousands of lines of code.
+Developers begin their Terraform journey often by crafting their own modules, initially overlooking the extensive ecosystem of pre-existing modules, such as [Cloud Posse's terraform modules](https://github.com/cloudposse).
+
+1. Developers, initially crafting bespoke modules, discover hundreds of freely available open-source Terraform modules.
+2. With the recognition of high-quality, well-maintained open-source modules, developers start to replace their custom solutions (like VPCs and clusters) with those from the community, streamlining their infrastructure code.
+3. The switch to open-source modules often leads to pull requests that dramatically reduce the complexity and lines of code,
+   sometimes cutting out hundreds or even thousands of lines, to the team's astonishment and delight.
 
 :::warning New Problems
 1. How will they keep their modules current and ensure they meet certain policies for the organization?
@@ -124,8 +139,15 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 
 ### **Stage 5:** Multiple Root Modules
 
-1. Recognition of the pitfalls of having all environments in one root module and after having refactored their code heavily into modules, Developers realize it was a bad idea to define dev, staging and prod, all in the same root module. Developers realize terraform gets very slow and brittle when a root module is too large. So they break it all out, add more feature flags, and now need to manage more configuration (e.g. `.tfvars`)
-2. Transition to multiple root modules, each tailored to specific environments.
+Developers recognize the pitfalls of having all environments in one root module. After having refactored their code heavily into modules, Developers realize it was a bad idea to define dev, staging and prod, all in the same root module. Developers realize terraform gets very slow and brittle when a root module is too large.
+
+1. Initiate the split of the monolythic root module into smaller, more manageable units while incorporating additional feature flags
+   and expanding configuration management through `.tfvars` files.
+2. Move towards a structure where multiple root modules are used, each one precisely aligned with specific environments
+   to enhance maintainability and performance.
+3. Recognize the efficiency gains and increased adaptability that came from segregating large root modules, leading to quicker
+   Terraform operations and easier adjustments per environment.
+
 
 :::warning New Problems
 1. Increased feature flags and configuration management using `.tfvars`.
@@ -135,9 +157,11 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 
 ### **Stage 6:** Refactoring for DRY Configuration
 
+As developers navigate the complexities of managing multiple environments, root modules, and accounts or organizations, the focus shifts from merely defining infrastructure as code to the overarching challenge of maintaining these expansive configurations efficiently.
+
 1. Now, with many environments, many root modules, and many accounts or organizations, the problem is not how we define the infrastructure as code, it's how do we maintain all this configuration?!
-2. Symlinks are used to link common files, or other similar techniques.
-3. Code Generation is adopted to overcome perceived limitations of Terraform (when, in fact it's a flaw in the architecture of the project).
+2. In an effort to manage repetitive configurations, developers resort to using symlinks or other methods to link common files across projects, seeking to reduce redundancy.
+3. Code Generation is adopted to overcome *perceived* limitations of Terraform (when, in fact it's often a flaw in the architecture of the project).
 
 :::warning New Problems
 1. Every time a new application is developed, the knee-jerk reaction is to write more root modules, each one bespoke to the need. Sure, each one reuses child modules, but why write a new root module for every application?
@@ -147,8 +171,11 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 
 ### **Stage 7:** Terraform Scripting
 
-1. The first path usually involves adopting a simple `bash` script or `Makefile` to orchestrate Terraform. This works well, up to a point (we know because this is how we started).
-2. The scripts evolve to solve specific problems encountered that made Terraform cumbersome as a tool.
+As Terraform projects grow in complexity and scale, developers seek ways to automate and streamline their workflows beyond what native Terraform commands offer. This leads to the exploration of scripting as a means to orchestrate Terraform operations.
+
+1. The first path usually involves adopting a simple `bash` script or `Makefile` to orchestrate Terraform. This works well, up to a point (we know this because it is how we started using Terraform at Cloud Posse).
+2. These scripts evolve to solve specific problems encountered that made Terraform cumbersome as a tool.
+3. Terraform scripts are still run on local machines, a reflection of the initial stages of development focus.
 
 :::warning New Problems
 1. What happens in practice is every team/company using Terraform ends up building different scripts, often then combining those with Makefiles, into a hodgepodge of configurations with different levels of validation. The scripts grow in complexity and have to survive generations of developers.
@@ -157,6 +184,9 @@ Every advancement in tool adoption is accompanied by new challenges, introducing
 :::
 
 ### **Stage 8:** Team Adoption
+
+As Terraform use grows within the team, it becomes clear that what facilitated the initial success, is insufficient for the next level of growth and teamwork. This stage is a turning point, emphasizing the need for evolved workflows, enhanced collaboration tools, and a
+more structured approach to managing scalable infrastructure projects.
 
 1. Change velocity increases dramatically.
 2. Codebase increases in size by 10x (but lots of duplication).
@@ -188,9 +218,11 @@ With the greater adoption of Terraform and DevOps principles, Developers are now
 - Automated drift detection needed to ensure environments converge with what's in version control
 :::
 
-### **Stage 10:** Terraform Bankruptcy 💰
+### **Stage 10:** Terraform Bankruptcy 💥
 
-Developers realize something is not right. They begin to ask, why is this so hard? 
+As the complexity and scale of Terraform projects reach a tipping point, developers face a stark realization.
+Questions arise about the inherent difficulties of managing sprawling infrastructure codebases using Terraform, 
+leading to a moment of reckoning. Some might question if Terraform is even the right tool.
 
 :::danger
 - Scripts all over the place that call terraform
@@ -212,7 +244,7 @@ This should be a solved problem.
 
 ### **Stage 11:** New Toolchain Selection
 
-Having learned Terraform the hard way, developers are now equipped with strong opinions on what they need to win at this stage of the game.
+Having learned Terraform the hard way, developers emerge with a well-defined set of requirements for a toolchain that can address the complexities they've encountered. Their experiences have crystalized what is necessary to operate infrastructure at scale based on real-world experience.
 
 1. **Consistent Invocation:** I want a tool that standardizes how Terraform is invoked across the organization.
 2. **Made Composition Easier:** It would be amazing if it were an equivalent to Docker Compose for piecing together root modules.
@@ -232,7 +264,7 @@ Having learned Terraform the hard way, developers are now equipped with strong o
 
 ## What's the Solution? *Hello Atmos!* 👽
 
-😎 Good news! Atmos supports all of this out of the box and exactly what you **cannot** achieve with "standalone" (a.k.a community edition) Terraform and [none of the alternatives](/reference/alternatives) can do it all.
+😎 Good news! Atmos supports all of this out of the box and exactly what you **cannot** achieve with "standalone" (a.k.a community edition) Terraform and [none of the alternatives](/reference/alternatives) can do it all. Plus, there's no need to abandon Terraform—it's actually a great tool, and Atmos enhances its strengths.
 
 Here's what you can expect after adopting Atmos:
 
