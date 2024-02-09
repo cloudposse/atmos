@@ -201,14 +201,14 @@ Developers realize something is not right. They begin to ask, why is this so har
 - Automating the terraform in CI/CD is oversimplified, lacking project-level locks and planfile retrieval
 - Inconsistent conventions or a total lack of conventions
 - Incomplete or out of date documentation
-- **No one understands how it all works anymore**
+- **No one understands how it all works anymore ⚠️**
 :::
 
 This should be a solved problem. 
 
 **If only there were a tool to compose everything together...**
 
-*(Then they discover [Atmos](/)!)* 😉
+*(...and then they discover [Atmos](/)!)* 😉
 
 ### **Stage 11:** New Toolchain Adoption, *Hello Atmos!* 👽
 

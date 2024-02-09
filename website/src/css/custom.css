@@ -89,8 +89,16 @@ li > ul.menu__list {
     margin-left: 1.5em;
 }
 
+html[data-theme='dark'] article ul strong, html[data-theme='dark'] article ol strong {
+    color: rgb(173, 219, 103)
+}
+
 article ul strong, article ol strong {
     color: #4CAF50;
+}
+
+article .theme-admonition-danger ul li strong, article .theme-admonition-danger ol li strong {
+    color: #ff8a8a
 }
 
 /* You can override the default Infima variables here. */
