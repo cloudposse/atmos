@@ -19,7 +19,21 @@ atmos version
 
 This will show the CLI version.
 
+<br/>
+
 :::tip
-To find the latest version of Atmos go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub. For help with installing newer
-version of Atmos, check out our [installation](/quick-start/install-atmos) page.
+To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.
+For help with installing newer version of Atmos, check out our [installation](/quick-start/install-atmos) page.
 :::
+
+<br/>
+
+When executing the `atmos version` command, Atmos automatically checks for the latest release
+from the [Atmos releases](https://github.com/cloudposse/atmos/releases) page on GitHub and compares the current
+version with the latest release.
+
+If the installed Atmos version is out of date, the following information is presented to the user:
+
+<br/>
+
+![`atmos version` CLI command](/img/cli/version/atmos-version-command-1.png)

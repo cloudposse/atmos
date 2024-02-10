@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"github.com/cloudposse/atmos/pkg/schema"
 	"os"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/pkg/convert"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console

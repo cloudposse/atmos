@@ -323,3 +323,22 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	u.PrintMessageInColor("Quick Start:\n", c2)
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
+
+// printMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
+func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
+	c1 := color.New(color.FgCyan)
+	c2 := color.New(color.FgGreen)
+
+	fmt.Println()
+	fmt.Print("Your version of Atmos is out of date. The latest version is ")
+	u.PrintMessageInColor(latestVersion, c1)
+	fmt.Println()
+
+	u.PrintMessage("To upgrade Atmos, refer to the following links and documents:\n")
+
+	u.PrintMessageInColor("Atmos Releases:\n", c2)
+	u.PrintMessage("https://github.com/cloudposse/atmos/releases\n")
+
+	u.PrintMessageInColor("Install Atmos:\n", c2)
+	u.PrintMessage("https://atmos.tools/quick-start/install-atmos\n")
+}

@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/spf13/cobra"
 
+	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -23,8 +23,19 @@ var versionCmd = &cobra.Command{
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
+
 		u.PrintMessage(Version)
 		fmt.Println()
+
+		// Check for the latest Atmos release on GitHub
+		latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
+
+		if latestReleaseTag != Version {
+			printMessageToUpgradeToAtmosLatestRelease(latestReleaseTag)
+		}
 	},
 }
 
