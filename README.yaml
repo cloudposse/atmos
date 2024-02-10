@@ -11,8 +11,8 @@ badges:
     image: https://img.shields.io/github/release/cloudposse/atmos.svg?style=for-the-badge
     url: https://github.com/cloudposse/atmos/releases/latest
   - name: "Last Updated"
-    image: https://img.shields.io/github/last-commit/cloudposse/atmos/main?style=for-the-badge
-    url: https://github.com/cloudposse/atmos/commits/main/
+    image: https://img.shields.io/github/last-commit/cloudposse/atmos/master?style=for-the-badge
+    url: https://github.com/cloudposse/atmos/commits/master/
   - name: Tests
     image: https://img.shields.io/github/actions/workflow/status/cloudposse/atmos/test.yml?style=for-the-badge
     url: https://github.com/cloudposse/atmos/actions/workflows/test.yml
@@ -44,13 +44,13 @@ description: |-
   [design patterns](https://atmos.tools/design-patterns/), comprehensive [documentation](https://atmos.tools/), and a
   [passionate community](https://slack.cloudposse.com/), making it a versatile [tool for both startups and enterprises](https://cloudposse.com/).
   Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes
-  [policy controls](https://atmos.tools/core-concepts/components/validation), [vendoring](https://atmos.tools/core-concepts/vendoring/), 
+  [policy controls](https://atmos.tools/core-concepts/components/validation), [vendoring](https://atmos.tools/core-concepts/vendoring/),
   and [GitOps capabilities](https://atmos.tools/category/github-actions) out of the box. Everything is open source and free.
 
 introduction: |-
 
-  [Atmos](https://atmos.tools) centralizes the DevOps chain and cloud automation/orchestration into a robust command-line tool, 
-  streamlining environments and workflows into straightforward CLI commands. Leveraging advanced hierarchical configurations, 
+  [Atmos](https://atmos.tools) centralizes the DevOps chain and cloud automation/orchestration into a robust command-line tool,
+  streamlining environments and workflows into straightforward CLI commands. Leveraging advanced hierarchical configurations,
   it efficiently orchestrates both local and CI/CD pipeline tasks, optimizing infrastructure management for engineers and cloud 
   architects alike. You can then run the CLI anywhere, such as locally or in CI/CD.
 
@@ -63,19 +63,19 @@ introduction: |-
 
   ## Use Cases
 
-  Atmos has consistently demonstrated its effectiveness in addressing these key use-cases, showcasing its adaptability and 
+  Atmos has consistently demonstrated its effectiveness in addressing these key use-cases, showcasing its adaptability and
   strength in the cloud infrastructure and DevOps domains:
 
-  - **Managing Large Multi-Account Cloud Environments:** Suitable for organizations using multiple cloud accounts to separate different 
+  - **Managing Large Multi-Account Cloud Environments:** Suitable for organizations using multiple cloud accounts to separate different
     projects or stages of development.
   - **Cross-Platform Cloud Architectures:** Ideal for businesses that use services across AWS, GCP, Azure, etc., to build a cohesive system.
   - **Multi-Tenant Systems for SaaS:** Perfect for SaaS companies that need to securely host multiple customers within the same infrastructure.
-  - **Stable Multi-Region Deployments:** Ensures high availability and disaster recovery by spanning cloud services across different 
+  - **Stable Multi-Region Deployments:** Ensures high availability and disaster recovery by spanning cloud services across different
     geographical regions.
   - **Compliant Infrastructure for Regulated Industries:** Provides a robust base for developing vetted, compliant configurations that
     align with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations, accessible through the service catalog,
     empower anyone constructing services on this foundation to achieve and maintain strict compliance with ease.
-  - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using 
+  - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using
     predefined templates and policies.
   - **Streamlining Deployment with Service Catalogs, Landing Zones, and Blueprints:** Provides ready-to-use templates and guidelines for
     setting up cloud environments quickly and consistently.
@@ -85,7 +85,7 @@ introduction: |-
   > or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
 
 
-  Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns 
+  Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns
   and best practices, such as:
   - Enforces a project structure convention, so everybody knows where to find things.
   - Provides clear separation of configuration from code, so the same code is easily deployed to different regions, environments and stages)

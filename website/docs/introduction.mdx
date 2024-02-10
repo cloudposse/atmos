@@ -86,7 +86,7 @@ interoperability with the entire Terraform ecosystem.
 - Atmos makes managing those configurations easier
 :::
 
-### Use Cases
+## Use Cases
 
 Atmos has consistently demonstrated its effectiveness in addressing these key use-cases, showcasing its adaptability and 
 strength in the cloud infrastructure and DevOps domains:
@@ -107,8 +107,42 @@ strength in the cloud infrastructure and DevOps domains:
 
 Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel, or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
 
-### Atmos is Open Source (APACHE2)
-[![Last Commit](https://img.shields.io/github/last-commit/cloudposse/atmos/main?style=social)](https://github.com/cloudposse/atmos/commits/main/)
+## Features
+
+Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a set of
+powerful tools to tackle deployment challenges. Its features boost efficiency, clarity, and control across various environments,
+making it an indispensable asset for managing complex infrastructures precisely. Atmos revolutionizes technical workflows, ensuring
+seamless, automated infrastructure management.
+
+* **Consistent Invocation:** Standardizes how Terraform is invoked to avoid confusion and errors.
+* **Seamless Initialization:** Prepares backends, modules, and other prerequisites automatically.
+* **Separation of Configuration from Code:** Divides configuration into Stacks and Components for clarity and reusability.
+* **Enables Efficient Configuration:** Utilizes imports, hierarchy, inheritance, and deep merging for streamlined configurations.
+* **Ensures Structured Modularity:** Builds Terraform configurations using stacks and catalogs for modular design.
+* **Promotes Reusable Building Blocks:** Establishes a library of reusable components (a.k.a Terraform root modules). Reduce the need for custom Terraform components.
+* **Makes Composition Easier:** Integrates root modules into a stack manifest, akin to Docker Compose.
+* **Stack Organization:** Utilizes a stack-based approach for organizing Terraform configurations.
+* **Simplifies State Backends:** Dynamically generates backend configurations (as JSON) based on the stack context.
+* **OPA Policy Controls:** Integrates Open Policy Agent for high-level policy enforcement.
+* **Dependency Coordination:** Manages dependencies among Terraform components.
+* **Standardized Workflows:** Offers workflows for standardizing command invocation.
+* **Turnkey CI/CD:** Facilitates integration with CI/CD platforms without the overhead of commercial solutions
+
+## Benefits
+
+Atmos offers crucial benefits for **funded startups** and **enterprises** aiming to efficiently scale their infrastructure and teams.
+In dynamic, **growth-focused environments**, its integration into DevOps practices ensures **agility, compliance, and cost-effectiveness,**
+providing key competitive advantages for managing complex systems with precision.
+
+1. **Remove Guesswork and Confusion:** Make Terraform operations easier to understand so that teams can manage their own Terraform projects.
+2. **Establish Company-Wide Standards:** Simplify the management and enforcement of infrastructure standards, with documented processes for repeatable and efficient collaboration.
+3. **Ease of Configuration Management & Environments:** Simplify managing complex configurations, ensure uniform deployments across environments, and replace homegrown solutions.
+4. **Policy Compliance:** Help maintain compliance with internal and external regulations.
+5. **Cost Savings:** Leverage your existing GitHub and GitHub Enterprise setups for cost-effective Terraform automation and collaboration, avoiding expensive tools.
+
+
+## Atmos is Open Source (APACHE2)
+[![Last Commit](https://img.shields.io/github/last-commit/cloudposse/atmos/master?style=social)](https://github.com/cloudposse/atmos/commits/master/)
 [![Atmos Repo](https://img.shields.io/github/stars/cloudposse/atmos)](https://github.com/cloudposse/atmos)
 
 Best of all [Atmos is truly open-source](https://github.com/cloudposse/atmos) (APACHE2) with an [active community](https://slack.cloudposse.com) supporting it.
@@ -157,5 +191,3 @@ like GitHub, GitHub Actions, Datadog, OpsGenie, Okta, etc.
 * [Review the Core Concepts](/core-concepts). Learn about our conventions.
 * [Check out our Quick Start](/quick-start). Get started in as little as 30 minutes.
 * [Check out our slides](/reference/slides). Present a compelling case for using Atmos at your company.
-
-
