@@ -341,7 +341,7 @@ func ProcessYAMLConfigFile(
 		imp := importStruct.Path
 
 		if imp == "" {
-			return nil, nil, nil, fmt.Errorf("invalid empty import in the file '%s'", relativeFilePath)
+			return nil, nil, nil, fmt.Errorf("invalid empty import in the manifest '%s'", relativeFilePath)
 		}
 
 		// If the import file is specified without extension, use `.yaml` as default
@@ -355,7 +355,7 @@ func ProcessYAMLConfigFile(
 		impWithExtPath := path.Join(basePath, impWithExt)
 
 		if impWithExtPath == filePath {
-			errorMessage := fmt.Sprintf("invalid import in the file '%s'\nThe file imports itself in '%s'",
+			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
 				relativeFilePath,
 				imp)
 			return nil, nil, nil, errors.New(errorMessage)
@@ -385,8 +385,8 @@ func ProcessYAMLConfigFile(
 					}
 				}
 
-				// If the import is not a Go template, return the error
-				if !isGoTemplate {
+				// If the import is not a Go template and SkipIfMissing is false, return the error
+				if !isGoTemplate && !importStruct.SkipIfMissing {
 					if err != nil {
 						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
 							imp,
@@ -415,6 +415,7 @@ func ProcessYAMLConfigFile(
 			return nil, nil, nil, err
 		}
 
+		// Process the imports in the current manifest
 		for _, importFile := range importMatches {
 			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(
 				basePath,

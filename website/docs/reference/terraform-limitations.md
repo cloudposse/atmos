@@ -1,7 +1,7 @@
 ---
 title: Overcoming Terraform Limitations with Atmos
 description: Overcoming Terraform Limitations with Atmos
-sidebar_label: Terraform Limitations
+sidebar_label: Overcoming Terraform Limitations
 sidebar_position: 6
 ---
 
@@ -11,7 +11,7 @@ To better understand the rationale behind Atmos's design, it may be helpful to h
 
 ## What is Terraform?
 
-Terraform is a command-line utility that processes infrastructure configurations in ["HashiCorp's Configuration Langauge" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning. Its chief role is to delineate and structure infrastructure definitions.
+Terraform is a command-line utility that processes infrastructure configurations in ["HashiCorp's Configuration Language" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning. Its chief role is to delineate and structure infrastructure definitions.
   
 Terraform's HCL started strictly as a configuration language, not a markup or programming language, although has evolved considerably over the years. HCL is backward compatible with JSON, although it's not a strict superset of JSON. HCL is more human-friendly and readable, while JSON is often used for machine-generated configurations. This means you can write Terraform configurations in HCL or JSON, and Terraform will understand them. This feature is particularly useful for generating configurations programmatically or integration with systems that already use JSON.
 
@@ -93,7 +93,7 @@ all-encompassing Terraform configuration that attempts to manage every aspect of
 
 1. Developers begin by composing a single root module that continuously expands.
 2. Define all environments as code (dev, staging, production) in a single Terraform root module.
-3. Extensive use of feature flags for everything (e.g. `prod_cluster_size`, `staging_cluster_size`, etc)
+3. Extensive use of feature flags for everything (e.g. `prod_cluster_size`, `staging_cluster_size`, etc.)
 
 :::warning New Problems
 1. Massive blast radius for every change. It's literally scary to apply the changes, because anything can go wrong.
@@ -272,7 +272,7 @@ Having learned Terraform the hard way, developers emerge with a well-defined set
 
 ## What's the Solution? *Hello Atmos!* 👽
 
-😎 Good news! Atmos supports all of this out of the box and exactly what you **cannot** achieve with "standalone" (a.k.a community edition) Terraform and [none of the alternatives](/reference/alternatives) can do it all. Plus, there's no need to abandon Terraform—it's actually a great tool, and Atmos enhances its strengths.
+😎 Good news! Atmos supports all of this out of the box and exactly what you **cannot** achieve with "standalone" (a.k.a. community edition) Terraform and [none of the alternatives](/reference/alternatives) can do it all. Plus, there's no need to abandon Terraform—it's actually a great tool, and Atmos enhances its strengths.
 
 Here's what you can expect after adopting Atmos:
 
