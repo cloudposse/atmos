@@ -22,7 +22,7 @@ the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-
 
 ## Conventions
 
-The differentiation between the following two types of stacks is crucial for understanding how stacks are organized are are the basis for the
+The differentiation between the following two types of stacks is crucial for understanding how to organize stacks and the basis for the
 various [design patterns](/design-patterns/).
 
 ### Parent Stacks
