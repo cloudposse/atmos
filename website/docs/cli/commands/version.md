@@ -23,7 +23,7 @@ This will show the CLI version.
 
 :::tip
 To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.
-For help with installing newer version of Atmos, check out our [installation](/quick-start/install-atmos) page.
+For help with installing the latest version of Atmos, check out our [installation](/quick-start/install-atmos) page.
 :::
 
 <br/>
