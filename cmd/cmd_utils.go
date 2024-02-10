@@ -329,11 +329,7 @@ func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	c1 := color.New(color.FgCyan)
 	c2 := color.New(color.FgGreen)
 
-	fmt.Println()
-	fmt.Print("Your version of Atmos is out of date. The latest version is ")
-	u.PrintMessageInColor(latestVersion, c1)
-	fmt.Println()
-
+	u.PrintMessageInColor(fmt.Sprintf("\nYour version of Atmos is out of date. The latest version is %s\n\n", latestVersion), c1)
 	u.PrintMessage("To upgrade Atmos, refer to the following links and documents:\n")
 
 	u.PrintMessageInColor("Atmos Releases:\n", c2)

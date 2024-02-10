@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/spf13/cobra"
 
@@ -24,7 +25,7 @@ var versionCmd = &cobra.Command{
 			u.LogErrorAndExit(err)
 		}
 
-		u.PrintMessage(Version)
+		u.PrintMessage(fmt.Sprintf("Atmos %s on %s/%s", Version, runtime.GOOS, runtime.GOARCH))
 		fmt.Println()
 
 		// Check for the latest Atmos release on GitHub
