@@ -65,6 +65,13 @@ You can even access the configurations natively from within terraform using our 
 [Cloud Posse](https://cloudposse.com/) uses this tool extensively for automating cloud infrastructure with
 [Terraform](https://hashicorp.com/) and [Kubernetes](https://kubernetes.io/), but it can be used to automate any complex workflow.
 
+> [!TIP]
+> ### Did you know?
+>
+> By leveraging Atmos in conjunction with Cloud Posse's [*expertise in AWS*](https://cloudposse.com),
+> [*terraform blueprints*](https://cloudposse.com/services/), and our [*knowledgable community*](https://slack.cloudposse.com), teams can achieve
+> operational mastery and innovation faster, transforming their infrastructure management practices into a competitive advantage.
+
 ## Use Cases
 
 Atmos has consistently demonstrated its effectiveness in addressing these key use-cases, showcasing its adaptability and
