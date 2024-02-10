@@ -14,7 +14,7 @@ Each partial top-level stack manifest imports or configures a set of related Atm
 top-level stack manifests. The pattern helps to group all components by category or function and to make each partial stack manifest smaller and
 easier to manage.
 
-## Applicability
+## Use-cases
 
 Use the **Partial Stack Configuration** pattern when:
 

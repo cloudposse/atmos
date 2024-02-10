@@ -10,25 +10,33 @@ Stacks are a way to express the complete infrastructure needed for an environmen
 of one or more [Components](/core-concepts/components) and defined using a
 [standardized YAML configuration](#schema).
 
-Stacks are an abstraction layer that is used to instantiate Components (e.g. Terraform "root" modules). Stacks consist of a set of YAML files that follow a standard schema to enable a fully declarative description of your various environments. This empowers you to separate your infrastructure’s environment configuration settings from the code itself (e.g. Terraform components).
+Stacks are an abstraction layer that is used to instantiate Components (e.g. to deploy Terraform "root" modules). Stacks are defined
+in YAML and managed in one more files that follow a standard schema to enable a fully declarative description of your various environments. This empowers you to separate your infrastructure’s environment configuration settings from the code itself (e.g. Terraform components).
 
-Atmos utilizes a custom YAML configuration format for stacks because it’s an easy-to-work-with format that is nicely portable across multiple tools. The stack YAML format is natively supported today via Atmos,
-the [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-stack-config) module, and Spacelift via the
-[terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module.
+Atmos utilizes a custom YAML configuration format for stacks. YAML is an ideal choice because it’s an easy-to-work-with format that is nicely portable across multiple tools and every developer understands it. The stack YAML format is natively supported by Atmos,
+the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-utils) provider, and Spacelift via the
+[terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module. This means that from Terraform, you can natively access the entire infrastructure configuration.
+
+## Use-cases
+
 
 ## Conventions
 
+The differentiation between the following two types of stacks is crucial for understanding how stacks are organized are are the basis for the
+various [design patterns](/design-patterns/).
+
 ### Parent Stacks
 
-*Parent Stacks* are the top-level Stacks that are responsible for importing Child Stacks. Parent stacks are deployable, unlike Child stacks.
+*Parent Stacks* are the top-level stacks that are responsible for importing Child stacks. Components inside of Parent stacks are deployable, unlike in Child stacks.
 
 ### Child Stacks
 
-*Child Stacks* are any stacks that cannot be deployed by themselves without getting imported by a Parent Stack.
+*Child Stacks* are any stacks whose components cannot be deployed independently without being imported by a Parent Stack.
+[Catalogs](/core-concepts/stacks/catalogs) are typically where we keep our Child Stacks.
 
 ## Schema
 
-A Stack file contains a manifest that is defined in YAML and follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/inheritance).
+A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and use [inheritance](/core-concepts/components/inheritance) to achieve DRY configuration.
 
 ```yaml
 # Configurations that should get deep-merged into this one

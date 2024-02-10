@@ -14,16 +14,7 @@ instances must be kept unchanged and never destroyed.
 This is achieved by using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and
 [Hierarchical Imports with Context](/core-concepts/stacks/imports#hierarchical-imports-with-context).
 
-The **Component Catalog Template** pattern recommends the following:
-
-- In the component's catalog folder, create a [`Go` template](https://pkg.go.dev/text/template) manifest with all the configurations for the
-  component (refer to [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) for more details)
-
-- Import the `Go` template manifest into a top-level stack many times to configure the component's instances
-  using [Hierarchical Imports with Context](/core-concepts/stacks/imports#hierarchical-imports-with-context) and providing different template values
-  for each import
-
-## Applicability
+## Use-cases
 
 Use the **Component Catalog Template** pattern when:
 
@@ -34,6 +25,17 @@ Use the **Component Catalog Template** pattern when:
 - The old instances of the component must be kept unchanged and never destroyed
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+## Design Pattern
+
+The **Component Catalog Template** pattern recommends the following:
+
+- In the component's catalog folder, create a [`Go` template](https://pkg.go.dev/text/template) manifest with all the configurations for the
+  component (refer to [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) for more details)
+
+- Import the `Go` template manifest into a top-level stack many times to configure the component's instances
+  using [Hierarchical Imports with Context](/core-concepts/stacks/imports#hierarchical-imports-with-context) and providing different template values
+  for each import
 
 ## Example
 

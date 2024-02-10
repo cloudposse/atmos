@@ -7,6 +7,25 @@ id: vendoring
 ---
 
 Atmos natively supports the concept of "vendoring", which is making copies of 3rd-party components, stacks, and other artifacts in your own repo.
+It key infrastructure management challenges by facilitating consistent dependency management, enabling enterprise-wide component sharing, and ensuring compliance, all while providing teams the flexibility to customize and independently manage their vendored components.
+
+## Use-cases
+
+Use vendoring to maintain a local copy of external dependencies critical for managing your infrastructure. Organize the dependencies in the manner that best suits your project's structure. Even create multiple vendor manifests, for example, tailored to specific layers, products, or teams. Then easily
+update those dependencies by bumping the versions in the vendor manifest.
+
+- **Managing Third-Party Dependencies**: Use vendoring in Atmos to efficiently manage and version-control third-party Terraform components, modules or other infrastructure dependencies. This approach is crucial for teams relying on external libraries, root modules, and configurations from sources such as Git repositories. Vendoring these dependencies into your project repository ensures that every team member and CI/CD pipeline works with the same dependency versions, enhancing consistency and reliability across development, testing, and production environments.
+- **Sharing Components Across an Enterprise**: Utilize Atmos vendoring to access a centralized component library, promoting code reuse and efficiency across teams while enabling customization and independent version control post-vendoring. This approach enhances collaboration without sacrificing the flexibility for teams to tailor components to their specific needs or update them at their preferred pace.
+- **Maintaining Immutable Artifacts for Compliance**: Employ vendoring through Atmos to maintain local, immutable copies of remote dependencies, essential for meeting compliance and regulatory requirements. Keeping a local version-controlled artifact of dependencies ensures that your infrastructure complies with policies that mandate a record of all external components used within the system. This practice supports auditability and traceability, key aspects of maintaining a secure and compliant infrastructure.
+- **Overcoming Tooling Limitations with Remote Dependencies**: Utilize Atmos vendoring as a practical solution when your tooling lacks native support for managing remote dependencies. By copying these dependencies into your project repository, you can work around these limitations, ensuring that your infrastructure can still leverage essential external modules and configurations. This approach allows for greater flexibility in infrastructure management, adapting to tooling constraints while still benefiting from the broad ecosystem of available infrastructure modules and configurations.
+
+:::tip Pro Tip! Use GitOps
+Vendoring plays nicely with GitOps practices, especially when leveraging [GitHub Actions](/integrations/github-actions/).
+Use a workflow that automatically updates the vendor manifest and opens a pull request (PR) with all the changes.
+This allows you to inspect and precisely assess the impact of any upgrades before merging by reviewing the job summary of the PR.
+:::
+
+## Features
 
 With Atmos vendoring, you can copy components and other artifacts from the following sources:
 
@@ -20,9 +39,11 @@ With Atmos vendoring, you can copy components and other artifacts from the follo
 
 The vendoring configuration is defined in the `vendor.yaml` manifest (vendor config file).
 
+## How it works
+
 Atmos searches for the vendoring manifest in the following locations, and uses the first one found:
 
-- In the directory from which the `atmos vendor pull` command is executed, usually in the root of the infrastructure repo
+- In the directory from which the [`atmos vendor pull`](/cli/commands/vendor/pull) command is executed, usually in the root of the infrastructure repo
 
 - In the directory pointed to by the [`base_path`](/cli/configuration#base-path) setting in the [`atmos.yaml`](/cli/configuration) CLI config file
 

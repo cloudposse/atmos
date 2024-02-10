@@ -10,7 +10,7 @@ description: Inline Component Configuration Atmos Design Pattern
 The **Inline Component Configuration** pattern is used when the [components](/core-concepts/components) in a [stack](/core-concepts/stacks) 
 are configured inline in the stack manifest without [importing](/core-concepts/stacks/imports) and reusing default/base configurations. If you're starting with Atmos, this will be the easiest to understand until you need the more advanced features.
 
-## Applicability
+## Use-cases
 
 Use the **Inline Component Configuration** pattern when:
 

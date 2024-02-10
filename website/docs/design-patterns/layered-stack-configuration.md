@@ -16,13 +16,15 @@ Each layer can be managed separately, possibly by different teams.
 <br/>
 
 :::note
+
 The **Layered Stack Configuration** Design Pattern works around the limitations of
 the [Partial Stack Configuration](/design-patterns/partial-stack-configuration) pattern. Instead of splitting the top-level Atmos stacks into parts,
 the **Layered Stack Configuration** pattern adds separate layers to group the related Atmos components by category, and then import the layer
 manifests into the top-level Atmos stacks.
+
 :::
 
-## Applicability
+## Use-cases
 
 Use the **Layered Stack Configuration** pattern when:
 

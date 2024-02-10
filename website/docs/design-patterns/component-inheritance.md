@@ -19,7 +19,7 @@ Atmos supports many different types on component inheritance. Refer to [Componen
 more details.
 :::
 
-## Applicability
+## Use-cases
 
 Use the **Component Inheritance** pattern when:
 

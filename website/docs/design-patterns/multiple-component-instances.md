@@ -16,7 +16,7 @@ for the Terraform component.
 
 For example, two different Atmos components `vpc/1` and `vpc/2` can provide configuration for the same Terraform component `vpc`.
 
-## Applicability
+## Use-cases
 
 Use the **Multiple Component Instances** pattern when:
 

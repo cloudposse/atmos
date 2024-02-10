@@ -6,7 +6,8 @@ description: Use JSON Schema and OPA policies to validate Components.
 id: validation
 ---
 
-Validation is critical to maintaining hygienic configurations in distributed team environments.
+Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute 
+to the development and deployment processes. Atmos enhances this validation process in two significant ways with JSON Schema and OPA validation.
 
 Atmos component validation allows:
 
@@ -41,18 +42,25 @@ Atmos `validate component` command supports `--schema-path`, `--schema-type` and
 If the arguments are not provided, Atmos will try to find and use the `settings.validation` section defined in the component's YAML config.
 
 ```bash
+# Validate 'vpc' component using JSON Schema in the 'plat-ue2-prod' stack
 atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.json --schema-type jsonschema
 
+# Validate 'vpc' component using OPA policy in the 'plat-ue2-prod' stack
 atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.rego --schema-type opa
 
+# Validate 'vpc' component using OPA policy in the 'plat-ue2-dev' stack with additional module paths 'catalog/constants'
 atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog/constants
 
+# Validate 'vpc' component using OPA policy in the 'plat-ue2-dev' stack with additional module paths 'catalog'
 atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog
 
+# Validate 'vpc' component in the 'plat-ue2-prod' stack
 atmos validate component vpc -s plat-ue2-prod
 
+# Validate 'vpc' component in the 'plat-ue2-dev' stack
 atmos validate component vpc -s plat-ue2-dev
 
+# Validate 'vpc' component in the 'plat-ue2-dev' stack with a timeout of 15 seconds
 atmos validate component vpc -s plat-ue2-dev --timeout 15
 ```
 

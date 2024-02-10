@@ -13,7 +13,7 @@ and stacks to design for organizational complexity and provision multi-account e
 The pattern is used to model multi-region infrastructures for organizations with multiple organizational units/departments/tenants and multiple
 accounts.
 
-## Applicability
+## Use-cases
 
 Use the **Organizational Structure Configuration** pattern when:
 

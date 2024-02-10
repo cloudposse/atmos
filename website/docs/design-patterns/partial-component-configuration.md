@@ -26,7 +26,7 @@ Variations of the **Partial Component Configuration** Design Pattern were also i
 
 :::
 
-## Applicability
+## Use-cases
 
 Use the **Partial Component Configuration** pattern when:
 

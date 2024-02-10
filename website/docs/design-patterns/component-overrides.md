@@ -18,7 +18,7 @@ This is achieved by using the `overrides` section in Atmos stack manifests.
 Refer to [Component Overrides](/core-concepts/components/overrides) for more information on the `overrides` section
 :::
 
-## Applicability
+## Use-cases
 
 Use the **Component Overrides** pattern when:
 

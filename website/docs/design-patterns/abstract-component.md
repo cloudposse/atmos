@@ -27,7 +27,7 @@ For more details, refer to:
 
 :::
 
-## Applicability
+## Use-cases
 
 Use the **Abstract Component** pattern when:
 
