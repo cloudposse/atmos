@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/go-github/v59/github"
 )
@@ -11,7 +12,10 @@ func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
 	opt := &github.ListOptions{Page: 1, PerPage: 1}
 	client := github.NewClient(nil)
 
-	releases, _, err := client.Repositories.ListReleases(context.Background(), owner, repo, opt)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	releases, _, err := client.Repositories.ListReleases(ctx, owner, repo, opt)
 	if err != nil {
 		return "", err
 	}
