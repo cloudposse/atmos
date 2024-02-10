@@ -29,12 +29,10 @@ var versionCmd = &cobra.Command{
 
 		// Check for the latest Atmos release on GitHub
 		latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
-		if err != nil {
-			u.LogErrorAndExit(err)
-		}
-
-		if latestReleaseTag != Version {
-			printMessageToUpgradeToAtmosLatestRelease(latestReleaseTag)
+		if err == nil && latestReleaseTag != "" {
+			if latestReleaseTag != Version {
+				printMessageToUpgradeToAtmosLatestRelease(latestReleaseTag)
+			}
 		}
 	},
 }
