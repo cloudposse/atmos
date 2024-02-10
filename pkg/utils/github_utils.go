@@ -12,7 +12,7 @@ func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
 	opt := &github.ListOptions{Page: 1, PerPage: 1}
 	client := github.NewClient(nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 
 	releases, _, err := client.Repositories.ListReleases(ctx, owner, repo, opt)
