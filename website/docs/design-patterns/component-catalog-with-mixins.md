@@ -13,6 +13,25 @@ assemble environment-specific manifests from the parts, and then import the envi
 
 It's similar to how [Helm](https://helm.sh/) and [helmfile](https://helmfile.readthedocs.io/en/latest/#environment) handle environments.
 
+## Use-cases
+
+Use the **Component Catalog** pattern when:
+
+- You have many components that are provisioned in multiple stacks (many OUs, accounts, regions) with different configurations for each stack
+
+- You need to make the component configurations reusable across different environments
+
+- You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+:::note
+Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
+multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
+top-level stack manifests.
+:::
+
+
+## Design Pattern
+
 The **Component Catalog with Mixins** Design Pattern prescribes the following:
 
 - For a Terraform component, create a folder with the same name in `stacks/catalog` to make it symmetrical and easy to find.
@@ -64,21 +83,6 @@ The **Component Catalog with Mixins** Design Pattern prescribes the following:
   | Import the `stacks/catalog/vpc/org2-plat-ue2-dev.yaml` manifest      | `stacks/orgs/org2/plat/dev/us-east-2.yaml`          |
   | etc.                                                                 |                                                     |
 
-## Use-cases
-
-Use the **Component Catalog** pattern when:
-
-- You have many components that are provisioned in multiple stacks (many OUs, accounts, regions) with different configurations for each stack
-
-- You need to make the component configurations reusable across different environments
-
-- You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-:::note
-Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
-multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
-top-level stack manifests.
-:::
 
 ## Example
 

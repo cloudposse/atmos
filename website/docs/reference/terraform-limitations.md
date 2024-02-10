@@ -7,8 +7,7 @@ sidebar_position: 6
 
 # Overcoming Terraform Limitations with Atmos
 
-To grasp the motivation behind Atmos's creation, it's helpful to examine Terraform—a tool integral to our development processes. 
-Let's delve into the challenges and limitations we encountered with Terraform, setting the stage for Atmos's development.
+To better understand the rationale behind Atmos's design, it may be helpful to hear about our experiences with Terraform—a tool integral to our development processes. Let's explore the challenges and constraints we faced using Terraform, which paved the way for creating Atmos.
 
 ## What is Terraform?
 
@@ -77,8 +76,8 @@ At this initial stage, developers begin their Terraform journey with the basics,
    configuration without the use of modules. This phase is characterized by hard-coded settings and a hands-on approach to learning
    Terraform's syntax and capabilities.
 2. Local state files (since this is just an exploration). This approach simplifies the learning process by avoiding the complexities of remote state management.
-3. Version control systems are not yet in use, so Developers store their Terraform configurations directly on their local workstations
-   allowing developers to focus on learning Terraform's mechanics without the added complexity of collaboration tools or best practices.
+3. Version control systems are not yet in use. Developers store their Terraform configurations directly on their local workstations
+   allowing them to focus on learning Terraform's mechanics without the added complexity of collaboration tools or best practices.
 
 :::warning New Problems
 1. How do we handle secrets?

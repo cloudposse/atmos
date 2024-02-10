@@ -5,13 +5,19 @@ sidebar_label: Components
 description: Components are opinionated building blocks of infrastructure as code that solve one specific problem or use-case.
 ---
 
-Components are opinionated, self-contained building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case. Atmos was
-written to support any number of tools, but also supports a couple of native integration with tools like `terraform` and `helmfile`. A common use-case
-for Atmos is implementing workflows for Terraform "root modules".
+Components are opinionated, self-contained building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case. 
+Those Components are then configured inside of one or more [Stacks](/core-concepts/stacks).
+
+Atmos was designed to be tool-agnostic, but also supports several native integrations with tools like `terraform` and `helmfile`. 
+A common use-case for Atmos is implementing components for [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module).
+
+## Use-cases
+
+There are many uses for developing components. You see how we think about them by checking our []`cloudposse/terraform-aws-components`
 
 ## Component Schema
 
-A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
+To configure a Component inside of a [Stack], A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
 component. The configuration of a component is stored in a Stack configuration.
 
 <br/>
