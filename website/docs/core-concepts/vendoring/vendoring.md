@@ -6,8 +6,9 @@ sidebar_label: Vendoring
 id: vendoring
 ---
 
-Atmos natively supports the concept of "vendoring", which is making copies of 3rd-party components, stacks, and other artifacts in your own repo.
-It key infrastructure management challenges by facilitating consistent dependency management, enabling enterprise-wide component sharing, and ensuring compliance, all while providing teams the flexibility to customize and independently manage their vendored components.
+Atmos natively supports "vendoring," a practice that involves replicating 3rd-party components, stacks, and artifacts within your own repository.
+This feature is particularly beneficial for managing dependencies in software like Terraform, which do not support pulling root modules remotely
+by configuration. Vendoring standardizes dependency management, encourages enterprise component reuse, and ensures compliance standards adherence. Furthermore, it allows teams to customize and independently manage their vendored components according to their specific requirements.
 
 ## Use-cases
 
