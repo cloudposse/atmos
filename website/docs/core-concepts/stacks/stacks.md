@@ -6,16 +6,16 @@ description: Stacks are a way to express the complete infrastructure needed for 
 id: stacks
 ---
 
-Stacks are a way to express the complete infrastructure needed for an environment. Think of a Stack as an architectural "Blueprint" composed
-of one or more [Components](/core-concepts/components) and defined using a
-[standardized YAML configuration](#schema).
+Stacks are a way to express the complete infrastructure needed for an environment. Think of a Stack like an architectural "Blueprint" composed
+of one or more [Components](/core-concepts/components) and defined using a [standardized YAML configuration](#schema).
 
-Stacks are an abstraction layer that is used to instantiate Components (e.g. to deploy Terraform "root" modules). Stacks are defined
-in YAML and managed in one more files that follow a standard schema to enable a fully declarative description of your various environments. This empowers you to separate your infrastructure’s environment configuration settings from the code itself (e.g. Terraform components).
+This abstraction layer helps to automate the orchestration and deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. They enable scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks)
+by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., Terraform components).
 
-Atmos utilizes a custom YAML configuration format for stacks. YAML is an ideal choice because it’s an easy-to-work-with format that is nicely portable across multiple tools and every developer understands it. The stack YAML format is natively supported by Atmos,
-the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-utils) provider, and Spacelift via the
-[terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module. This means that from Terraform, you can natively access the entire infrastructure configuration.
+By facilitating the infrastructure configurations this way, developers achieve DRY (Don't Repeat Yourself) architectures with minimal configuration. Stacks make infrastructure more streamlined and consistent, significantly enhancing productivity. Best of all, Stacks can deploy 
+vanilla Terraform "root" modules *without* any code generation, custom vendor extensions, or changes to the HCL code.
+
+Atmos utilizes a custom YAML configuration format for stacks. YAML is ideal because it's portable across multiple toolchains and languages; every developer understands it. The Atmos [CLI](/cli/), the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-utils) provider, and Spacelift via the [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module all support stacks. Utilizing the Terraform provider enables native access to the entire infrastructure configuration directly from Terraform.
 
 ## Use-cases
 
