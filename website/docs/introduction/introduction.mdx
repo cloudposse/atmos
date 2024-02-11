@@ -110,52 +110,6 @@ strength in the cloud infrastructure and DevOps domains:
 
 Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel, or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
 
-## Features
-
-Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a set of
-powerful tools to tackle deployment challenges. Its features boost efficiency, clarity, and control across various environments,
-making it an indispensable asset for managing complex infrastructures precisely. Atmos provides technical workflows, ensuring
-seamless, automated infrastructure management.
-
-* **Terminal UI** Atmos ships with a polished terminal UI making it easy for beginners (and power users) to interact with Terraform, workflows and other commands
-* **Stacks** Atmos stacks serve as a powerful abstraction layer, defined in YAML, that are used to automate the orchestration, deployment, and lifecycles of loosely coupled components (e.g. Terraform "root" modules).
- They facilitate scalable infrastructure as code configurations by allowing environments to inherit from one or more common base configurations and import settings, reducing manual configuration efforts and duplication. 
- Stacks enhance productivity by enabling developers to rapidly create, duplicate, or update infrastructure configurations in a DRY (Don't Repeat Yourself) manner, 
- leveraging vanilla Terraform root modules, just in a more efficient and consistent way.
-* **Components** A generic abstraction for anything that gets deployed (e.g. a Terraform "root" module)
-* **Deep-merged Imports & Inheritance** easily re-use configuration with [imports](/core-concepts/stacks/imports) that gets deep-merged, or [inherit from multiple other settings](/core-concepts/components/inheritance).
-* **Vendoring** can [pull down any dependencies](/core-concepts/vendoring/) from remote sources like Git, OCI, HTTP, etc. 
-* **Schema Validation**
-* **OPA Policy Controls:** Integrates Open Policy Agent for high-level policy enforcement at the configuration level. 
-  Different stacks can use different policies making it a powerful control for enterprise environments.
-* **Native Terraform Support** including backend generation (leveraging inheritance), and varfile generation (ensuring atmos works with vanilla terraform!)
-* **Mixins** are reusable pieces of configuration snippets that can be included in multiple stack configurations to avoid repetition. 
-  They allow for defining common settings, variables, or configurations once and applying them across various environments efficiently.
-* **Custom Commands** ensure that atmos is fully extensible and can wrap literally any command you configure, with full access to the stack configuration.
-* **Terraform Provider**
-* **Service Catalogs**
-* **Component Libraries**
-* **Cloud-agonostic**
-* **Terraform**
-* **Helmfile**
-* **Supports GitHub Actions, Atlantis, and Spacelift out-of-the-box:** Facilitates integration with CI/CD platforms without the overhead of commercial solutions
-
-
-X* **Stack Organization:** Utilizes a stack-based approach for organizing Terraform configurations.
-
-X* **Consistent Invocation:** Standardizes how Terraform is invoked to avoid confusion and errors.
-X* **Seamless Initialization:** Prepares backends, modules, and other prerequisites automatically.
-X* **Separation of Configuration from Code:** Divides configuration into Stacks and Components for clarity and reusability.
-X* **Enables Efficient Configuration:** Utilizes imports, hierarchy, inheritance, and deep merging for streamlined configurations.
-X* **Ensures Structured Modularity:** Builds Terraform configurations using stacks and catalogs for modular design.
-X* **Promotes Reusable Building Blocks:** Establishes a library of reusable components (a.k.a Terraform root modules). Reduce the need for custom Terraform components.
-X* **Makes Composition Easier:** Integrates root modules into a stack manifest, akin to Docker Compose.
-
-X* **Simplifies State Backends:** Dynamically generates backend configurations (as JSON) based on the stack context.
-
-X* **Dependency Coordination:** Manages dependencies among Terraform components.
-* **Workflow Orchestration:** Use workflows to standardize repetitive command invocations.
-
 ## Benefits
 
 Atmos offers crucial benefits for **funded startups** and **enterprises** aiming to efficiently scale their infrastructure and teams.
@@ -169,17 +123,64 @@ providing key competitive advantages for managing complex systems with precision
 5. **Cost Savings:** Leverage your existing GitHub and GitHub Enterprise setups for cost-effective Terraform automation and collaboration, avoiding expensive tools.
 
 
+## Features
+
+Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a set of
+powerful tools to tackle deployment challenges. Its features boost efficiency, clarity, and control across various environments,
+making it an indispensable asset for managing complex infrastructures precisely. Atmos provides technical workflows, ensuring
+seamless, automated infrastructure management.
+
+* **Terminal UI** Atmos ships with a polished terminal UI making it easy for beginners (and power users) to interact with Terraform,
+  workflows and other commands.
+* **Components** A generic abstraction for anything that gets deployed (e.g. a Terraform "root" module)
+* **Stacks** Atmos stacks serve as a powerful abstraction layer, defined in YAML, that are used to automate the orchestration,
+  deployment, and lifecycles of loosely coupled components (e.g. Terraform "root" modules). They facilitate scalable infrastructure
+  as code configurations by allowing environments to inherit from one or more common base configurations and import settings, reducing manual configuration efforts and duplication. Stacks enhance productivity by enabling developers to rapidly create, duplicate, or update infrastructure configurations in a DRY (Don't Repeat Yourself) manner, leveraging vanilla Terraform root modules, just in a more efficient and consistent way.
+* **Deep-merged Imports & Inheritance** easily re-use configuration with [imports](/core-concepts/stacks/imports) that gets deep-merged, or [inherit from multiple other settings](/core-concepts/components/inheritance).
+* **Vendoring** can [pull down any dependencies](/core-concepts/vendoring/) from remote sources like Git, OCI, HTTP, etc.
+* **Schema Validation** Atmos can validate your configuration against a JSON schema to ensure it's correct.
+* **OPA Policy Controls** Integrates Open Policy Agent for high-level policy enforcement at the configuration level.
+  Different stacks can use different policies making it a powerful control for enterprise environments.
+* **Native Terraform Support** including backend generation (leveraging inheritance), and varfile generation (ensuring atmos works with vanilla terraform!)
+* **Mixins** are reusable pieces of configuration snippets that can be included in multiple stack configurations to avoid repetition.
+  They allow for defining common settings, variables, or configurations once and applying them across various environments efficiently.
+* **Custom Commands** ensure that atmos is fully extensible and can wrap literally any command you configure, with full access to the stack configuration.
+* **Terraform Provider** Atmos has a Terraform provider that can be used to manage Atmos configurations and stacks.
+* **Service Catalogs** are a collection of reusable components (e.g. Terraform root modules) that can be shared across stacks,
+  enabling teams to build and maintain a library of reusable components for consistent and efficient infrastructure management.
+* **Component Libraries** are a collection of reusable components (e.g. Terraform root modules) that can be shared across stacks,
+  enabling teams to build and maintain a library of reusable components for consistent and efficient infrastructure management.
+* **Cloud-agonostic** Nothiping in Atmos is tied to a specific cloud provider. It's designed to work across various cloud platforms
+  (e.g. AWS, GCP, Azure, etc.), enhancing interoperability rather than tying users to a single cloud environment.
+* **Terraform Support** Atmos is designed to work with Terraform, and can be used to manage Terraform configurations and deployments.
+* **Helmfile Support** Atmos natively supports opinionated workflows for [Helmfile](/integrations/helmfile), a declarative specification
+  for deploying helm charts.
+* **GitHub Actions Support** Implement GitOps workflows for Terraform [Plan](/integrations/github-actions/atmos-terraform-plan[),
+  [Apply](/integrations/github-actions/atmos-terraform-plan) and [Drift Detection](/integrations/github-actions/atmos-terraform-drift-detection)
+  with GitHub Actions
+* **Works with Atlantis, and Spacelift out-of-the-box:** Atmos can be used to manage the configuration of these popular
+  Terraform Automation & Collaboration Software (**TACOS**).
+* **Workflow Orchestration:** Atmos provides a comprehensive support for [workflows to run commands](/core-concepts/workflows) for managing the
+  lifecycle of your cloud infrastructure, from bootstrapping to maintenance and beyond.
+
+
 ## Atmos is Open Source (APACHE2)
 
 [![Last Commit](https://img.shields.io/github/last-commit/cloudposse/atmos/master?style=social)](https://github.com/cloudposse/atmos/commits/master/)
 [![Atmos Repo](https://img.shields.io/github/stars/cloudposse/atmos)](https://github.com/cloudposse/atmos)
 
-Best of all [Atmos is truly open-source](https://github.com/cloudposse/atmos) (APACHE2) with an [active community](https://slack.cloudposse.com) supporting it.
-There are no strings attached, and it's under active development with hundreds of GitHub stars.
+Best of all [Atmos is truly open-source](https://github.com/cloudposse/atmos) (APACHE2) with an [active community](https://slack.cloudposse.com)
+supporting it. There are no strings attached, and it's under active development with hundreds of GitHub stars.
 
-There's also an ecosystem of tools that it works with, and [Terraform modules](https://github.com/cloudposse/?q=&type=all&language=hcl&sort=) downloaded hundreds of millions of times.
+There's also an ecosystem of tools that it works with, and [Terraform modules](https://github.com/cloudposse/?q=&type=all&language=hcl&sort=)
+downloaded hundreds of millions of times.
 
-We invite you to join us in the larger movement and impact the industry at large.
+
+:::tip Become a part of our Movement
+We encourage you to become a part of our movement and make a significant impact on the industry as a whole. 
+
+Join us on [Slack](https://slack.cloudposse.com/) or tune-in on our [Weekly "DevOps" Office Hours](https://cloudposse.com/office-hours/)
+:::
 
 <a href="https://github.com/cloudposse/atmos/graphs/contributors">
   <img alt="Atmos Contributors" src="https://contrib.rocks/image?repo=cloudposse/atmos&max=24" />
