@@ -21,7 +21,7 @@ Here are some recommendations.
 
 This [Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start) repository presents an example of an infrastructure managed
 by Atmos. You can clone it and configure to your own needs. The repository should be a good start to get yourself familiar with Atmos and the
-Design Patterns. The [Quick Start Guide](/quick-start) describes the step required to configure and start using the repository.
+Design Patterns. The [Quick Start Guide](/quick-start) describes the steps required to configure and start using the repository.
 
 The [Atmos Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start) repository, that is described in
 the [Quick Start](/quick-start) guide, uses the following Atmos Design Patterns:
