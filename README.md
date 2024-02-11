@@ -28,12 +28,12 @@
 > ### Automated Terraform Management & Orchestration Software (ATMOS)
 
 Atmos simplifies complex cloud architectures and DevOps workflows into [intuitive CLI commands](https://atmos.tools/category/cli).
-Its strength in managing [DRY configurations at scale](https://atmos.tools/category/core-concepts/) is supported by robust
+Its strength in managing [DRY configurations at scale](https://atmos.tools/core-concepts/) is supported by robust
 [design patterns](https://atmos.tools/design-patterns/), comprehensive [documentation](https://atmos.tools/), and a
 [passionate community](https://slack.cloudposse.com/), making it a versatile [tool for both startups and enterprises](https://cloudposse.com/).
 Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes
 [policy controls](https://atmos.tools/core-concepts/components/validation), [vendoring](https://atmos.tools/core-concepts/vendoring/),
-and [GitOps capabilities](https://atmos.tools/category/github-actions) out of the box. Everything is open source and free.
+and [GitOps capabilities](https://atmos.tools/integrations/github-actions) out of the box. Everything is open source and free.
 
 ## Screenshots
 
@@ -60,12 +60,12 @@ streamlining environments and workflows into straightforward CLI commands. Lever
 it efficiently orchestrates both local and CI/CD pipeline tasks, optimizing infrastructure management for engineers and cloud 
 architects alike. You can then run the CLI anywhere, such as locally or in CI/CD.
 
-The Atmos project consists of a command-line tool, a `Go` library, and even terraform provider.  It provides numerous
+The Atmos project consists of a command-line tool, a `Go` library, and even a terraform provider.  It provides numerous
 [conventions](https://atmos.tools/design-patterns/) to help you provision, manage, and orchestrate workflows across various toolchains.
 You can even access the configurations natively from within terraform using our [`terraform-provider-utils`](https://github.com/cloudposse/terraform-provider-utils/).
 
 [Cloud Posse](https://cloudposse.com/) uses this tool extensively for automating cloud infrastructure with
-[Terraform](https://hashicorp.com/) and [Kubernetes](https://kubernetes.io/), but it can be used to automate any complex workflow.
+[Terraform](https://www.hashicorp.com/products/terraform) and [Kubernetes](https://kubernetes.io/), but it can be used to automate any complex workflow.
 
 > [!TIP]
 > ### Did you know?
@@ -101,7 +101,7 @@ strength in the cloud infrastructure and DevOps domains:
 Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns
 and best practices, such as:
 - Enforces a project structure convention, so everybody knows where to find things.
-- Provides clear separation of configuration from code, so the same code is easily deployed to different regions, environments and stages)
+- Provides clear separation of configuration from code, so the same code is easily deployed to different regions, environments and stages
 - It can be extended to include new features, commands, and workflows
 - The commands have a clean, consistent and easy to understand syntax
 - The CLI code is modular and self-documenting
