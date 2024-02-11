@@ -13,11 +13,11 @@ A common use-case for Atmos is implementing components for [Terraform "root modu
 
 ## Use-cases
 
-There are many uses for developing components. You see how we think about them by checking our []`cloudposse/terraform-aws-components`
+There are many uses for developing components. You see how we think about them by checking our [`terraform-aws-components`](https://github.com/cloudposse/terraform-aws-components)
 
 ## Component Schema
 
-To configure a Component inside of a [Stack], A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
+To configure a Component inside of a [Stack], a Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
 component. The configuration of a component is stored in a Stack configuration.
 
 <br/>

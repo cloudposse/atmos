@@ -32,7 +32,7 @@ various [design patterns](/design-patterns/).
 ### Child Stacks
 
 *Child Stacks* are any stacks whose components cannot be deployed independently without being imported by a Parent Stack.
-[Catalogs](/core-concepts/stacks/catalogs) are typically where we keep our Child Stacks.
+[Catalogs](/core-concepts/stacks/catalogs) are typically where we keep our Child stacks.
 
 ## Schema
 

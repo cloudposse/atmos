@@ -15,7 +15,8 @@ how an organization wants to model its infrastructure.
 
 :::tip See Design Patterns
 
-We go into greater depth on this convention in our [design patterns](/design-patterns/component-catalog).
+We go into greater depth on this convention in our [design patterns](/design-patterns/):
+
 - [Component Catalogs](/design-patterns/component-catalog)
 - [Component Catalogs with Mixins](/design-patterns/component-catalog-with-mixins)
 - [Component Catalogs with Templates](/design-patterns/component-catalog-template)
@@ -129,7 +130,7 @@ In sticking with this theme, a good filesystem layout for infrastructure looks l
 
 :::info
 Cloud Posse uses the "Organizations" layout for all the "parent stacks". Parent stacks are the top-level stacks which are responsible for importing
-the other child stacks (E.g. teams, mixins, etc)
+the other child stacks (e.g. teams, mixins, etc.)
 :::
 
 What's important to point out is that all these conventions are not mutually exclusive. In fact, we like to combine them.

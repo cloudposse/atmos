@@ -7,7 +7,7 @@ id: validation
 ---
 
 Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute 
-to the development and deployment processes. Atmos enhances this validation process in two significant ways with JSON Schema and OPA validation.
+to the development and deployment processes. Atmos enhances this validation process in two significant ways with [JSON Schema](https://json-schema.org/) and [OPA](https://www.openpolicyagent.org/) policies.
 
 Atmos component validation allows:
 
