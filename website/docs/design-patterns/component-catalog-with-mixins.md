@@ -23,12 +23,6 @@ Use the **Component Catalog** pattern when:
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-:::note
-Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
-multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
-top-level stack manifests.
-:::
-
 
 ## Design Pattern
 
@@ -39,6 +33,12 @@ The **Component Catalog with Mixins** Design Pattern prescribes the following:
 
 - In the component's catalog folder, in the `mixins` sub-folder, add manifests with component configurations for specific environments (organizations,
   tenants, regions, accounts). For example:
+
+:::note
+Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
+multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported
+into multiple Org/OU top-level stack manifests.
+:::
 
 
   | File Path                                      | Description                                                |
