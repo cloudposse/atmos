@@ -25,6 +25,8 @@
 
 -->
 
+> ### Automated Terraform Management & Orchestration Software (ATMOS)
+
 Atmos simplifies complex cloud architectures and DevOps workflows into [intuitive CLI commands](https://atmos.tools/category/cli).
 Its strength in managing [DRY configurations at scale](https://atmos.tools/category/core-concepts/) is supported by robust
 [design patterns](https://atmos.tools/design-patterns/), comprehensive [documentation](https://atmos.tools/), and a
