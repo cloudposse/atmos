@@ -5,13 +5,19 @@ sidebar_label: Mixins
 id: mixins
 ---
 
-Mixins are a special kind of "[import](/core-concepts/stacks/imports)". 
-It's simply a convention we recommend to distribute reusable snippets of configuration that alter the behavior in some deliberate way. 
-Mixins are not handled in any special way. They are technically identical to all other imports. 
+Mixins are reusable snippets of configurations (like regions, tags, etc) included in stack configurations to avoid repetition and enhance modularity. 
+They allow for defining common settings, variables, or configurations once and applying them efficiently across various stacks.
 
-## Conventions
+Mixins are really just a [Design Pattern](/design-patterns/component-catalog-with-mixins) that uses [`imports`](/core-concepts/stacks/imports) to
+alter the Stack in some deliberate way. 
 
-Here are some examples of how we recommend using Mixins.
+:::important 
+Mixins are treated the same as all other imports in Atmos, with no special handling or technical distinction.
+:::
+
+## Use-cases
+
+Here are some use-cases for when to Mixins.
 
 ### Mixins by Region
 
@@ -22,30 +28,61 @@ Consider naming them after the canonical region name for the cloud provider you'
 For example, here's what it would look like for AWS. Let's name this file `mixins/region/us-east-1.yaml`.
 Now, anytime we want a Parent Stack deployed in the `us-east-1` region, we just need to specify this import, and we'll automatically inherit all the settings for that region.
 
-```yaml
+
+For example, let's define a mixin with the defaults for operating in the `us-east-1` region. 
+
+file named `mixins/stage/prod.yaml`
+
+```yaml title="mixins/region/us-east-1.yaml"
+vars:
+  region: us-east-1   # the canonical cloud region
+  availability_zones: # the designated availability zones to use in this region
+  - us-east-1a  
+  - us-east-1b
+```
+
+Then we can use this mixin, anytime we deploy in `us-east-1` to ensure we conform to the organization's standards.
+
+```yaml title="stacks/prod/network.yaml"
 imports:
 - mixins/region/us-east-1
+
+terraform:
+  components:
+    vpc:
+    # ...
 ```
 
 ### Mixins by Stage
 
 Provide the default settings for operating in a particular stage (e.g. Dev, Staging, Prod) to enforce consistency.
 
-For example, let's define the stage name for production in the mixin file named `mixins/stage/prod.yaml`
+For example, let's define the stage name and required tags for production in the mixin file named `mixins/stage/prod.yaml`
 
-```yaml
+```yaml title="mixins/stage/prod.yaml"
 vars:
   stage: prod
+  tags:
+    CostCenter: 12345
 ```
 
 Now, anytime we want to provision a parent stack in production, we'll want to add this to the imports:
 
-```yaml
+```yaml title="stacks/prod/backing-services.yaml"
 imports:
 - mixins/stage/prod
+
+terraform:
+  components:
+    rds-cluster:
+    # ...
 ```
 
-While this is a fleetingly simple example, it helps an organization impart consistency. There are many ways developers will define "production".
+:::tip Use Mixins for Naming Conventions
+This simple example highlights a simple fix for one of the most common issues in enterprise organizations: naming inconsistency.
+Using a mixin is a great way for organizations ensure naming conventions are followed consistently. 
+
+For example, there are many ways developers will define `production`.
 
 - e.g. `prd`
 - e.g. `prod`
@@ -54,8 +91,9 @@ While this is a fleetingly simple example, it helps an organization impart consi
 - e.g. `Prod`
 - e.g. `PROD`
 - etc
+:::
 
-To avoid this situation, use the mixin `mixings/stage/prod` to always use the appropriate naming convention.
+To avoid this situation, use the mixin `mixins/stage/prod` and always use the appropriate naming convention.
 
 ## References
 

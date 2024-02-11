@@ -1,5 +1,6 @@
 ---
 id: introduction
+label: Introduction
 slug: /
 sidebar_label: Introduction
 sidebar_position: 1
@@ -40,7 +41,7 @@ by using [established conventions](/core-concepts) and proven [design patterns](
 To get an idea of what it looks like using `atmos` on the command line, just [try our quickstart](/quick-start/) and run the [`atmos`](/cli/commands/atmos) command to start
 an interactive UI in the terminal. Use the arrow keys to select stacks and components to deploy.
 
-![Atmos Screenshot](../../docs/demo.gif)
+![Atmos Screenshot](../../../docs/demo.gif)
 
 <br/>
 
@@ -115,22 +116,47 @@ Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposs
 
 Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a set of
 powerful tools to tackle deployment challenges. Its features boost efficiency, clarity, and control across various environments,
-making it an indispensable asset for managing complex infrastructures precisely. Atmos revolutionizes technical workflows, ensuring
+making it an indispensable asset for managing complex infrastructures precisely. Atmos provides technical workflows, ensuring
 seamless, automated infrastructure management.
 
-* **Consistent Invocation:** Standardizes how Terraform is invoked to avoid confusion and errors.
-* **Seamless Initialization:** Prepares backends, modules, and other prerequisites automatically.
-* **Separation of Configuration from Code:** Divides configuration into Stacks and Components for clarity and reusability.
-* **Enables Efficient Configuration:** Utilizes imports, hierarchy, inheritance, and deep merging for streamlined configurations.
-* **Ensures Structured Modularity:** Builds Terraform configurations using stacks and catalogs for modular design.
-* **Promotes Reusable Building Blocks:** Establishes a library of reusable components (a.k.a Terraform root modules). Reduce the need for custom Terraform components.
-* **Makes Composition Easier:** Integrates root modules into a stack manifest, akin to Docker Compose.
-* **Stack Organization:** Utilizes a stack-based approach for organizing Terraform configurations.
-* **Simplifies State Backends:** Dynamically generates backend configurations (as JSON) based on the stack context.
-* **OPA Policy Controls:** Integrates Open Policy Agent for high-level policy enforcement.
-* **Dependency Coordination:** Manages dependencies among Terraform components.
-* **Standardized Workflows:** Offers workflows for standardizing command invocation.
-* **Turnkey CI/CD:** Facilitates integration with CI/CD platforms without the overhead of commercial solutions
+* **Terminal UI** Atmos ships with a polished terminal UI making it easy for beginners (and power users) to interact with Terraform, workflows and other commands
+* **Stacks** Atmos stacks serve as a powerful abstraction layer, defined in YAML, that are used to automate the orchestration, deployment, and lifecycles of loosely coupled components (e.g. Terraform "root" modules).
+ They facilitate scalable infrastructure as code configurations by allowing environments to inherit from one or more common base configurations and import settings, reducing manual configuration efforts and duplication. 
+ Stacks enhance productivity by enabling developers to rapidly create, duplicate, or update infrastructure configurations in a DRY (Don't Repeat Yourself) manner, 
+ leveraging vanilla Terraform root modules, just in a more efficient and consistent way.
+* **Components** A generic abstraction for anything that gets deployed (e.g. a Terraform "root" module)
+* **Deep-merged Imports & Inheritance** easily re-use configuration with [imports](/core-concepts/stacks/imports) that gets deep-merged, or [inherit from multiple other settings](/core-concepts/components/inheritance).
+* **Vendoring** can [pull down any dependencies](/core-concepts/vendoring/) from remote sources like Git, OCI, HTTP, etc. 
+* **Schema Validation**
+* **OPA Policy Controls:** Integrates Open Policy Agent for high-level policy enforcement at the configuration level. 
+  Different stacks can use different policies making it a powerful control for enterprise environments.
+* **Native Terraform Support** including backend generation (leveraging inheritance), and varfile generation (ensuring atmos works with vanilla terraform!)
+* **Mixins** are reusable pieces of configuration snippets that can be included in multiple stack configurations to avoid repetition. 
+  They allow for defining common settings, variables, or configurations once and applying them across various environments efficiently.
+* **Custom Commands** ensure that atmos is fully extensible and can wrap literally any command you configure, with full access to the stack configuration.
+* **Terraform Provider**
+* **Service Catalogs**
+* **Component Libraries**
+* **Cloud-agonostic**
+* **Terraform**
+* **Helmfile**
+* **Supports GitHub Actions, Atlantis, and Spacelift out-of-the-box:** Facilitates integration with CI/CD platforms without the overhead of commercial solutions
+
+
+X* **Stack Organization:** Utilizes a stack-based approach for organizing Terraform configurations.
+
+X* **Consistent Invocation:** Standardizes how Terraform is invoked to avoid confusion and errors.
+X* **Seamless Initialization:** Prepares backends, modules, and other prerequisites automatically.
+X* **Separation of Configuration from Code:** Divides configuration into Stacks and Components for clarity and reusability.
+X* **Enables Efficient Configuration:** Utilizes imports, hierarchy, inheritance, and deep merging for streamlined configurations.
+X* **Ensures Structured Modularity:** Builds Terraform configurations using stacks and catalogs for modular design.
+X* **Promotes Reusable Building Blocks:** Establishes a library of reusable components (a.k.a Terraform root modules). Reduce the need for custom Terraform components.
+X* **Makes Composition Easier:** Integrates root modules into a stack manifest, akin to Docker Compose.
+
+X* **Simplifies State Backends:** Dynamically generates backend configurations (as JSON) based on the stack context.
+
+X* **Dependency Coordination:** Manages dependencies among Terraform components.
+* **Workflow Orchestration:** Use workflows to standardize repetitive command invocations.
 
 ## Benefits
 

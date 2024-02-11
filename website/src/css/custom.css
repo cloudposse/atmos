@@ -167,8 +167,10 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
 }
 
 html[data-theme='dark'] {
-    --ifm-background-color: #1e2125;
-    --ifm-background-surface-color: #1b1e22;
+    --ifm-background-color: #0a1922;
+    --ifm-background-surface-color: #0a1922;
+    --ifm-navbar-background-color: #0a1922;
+    --ifm-background-color: #0a1922;
 }
 
 table tr td {

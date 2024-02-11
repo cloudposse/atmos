@@ -36,7 +36,12 @@ const config = {
     plugins: [
         [
             'docusaurus-plugin-image-zoom', {},
-        ]
+        ],
+        //['@grnet/docusaurus-terminology', {
+        //    termsDir: './docs/terms',
+        //    docsDir: './docs/',
+        //    glossaryFilepath: './docs/reference/glossary.md'
+        //}],
     ],
 
     presets: [
@@ -87,7 +92,7 @@ const config = {
                 items: [
                     {
                         type: 'doc',
-                        docId: 'introduction',
+                        docId: 'introduction/introduction',
                         position: 'left',
                         label: 'Docs',
                     },

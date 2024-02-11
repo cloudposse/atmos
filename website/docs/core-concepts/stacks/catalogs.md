@@ -17,7 +17,7 @@ how an organization wants to model its infrastructure.
 
 We go into greater depth on this convention in our [design patterns](/design-patterns/component-catalog).
 - [Component Catalogs](/design-patterns/component-catalog)
-- [Component Catalogs with Mixins](/design-patterns/component-catalog-with-mixins])
+- [Component Catalogs with Mixins](/design-patterns/component-catalog-with-mixins)
 - [Component Catalogs with Templates](/design-patterns/component-catalog-template)
 :::
 
