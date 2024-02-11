@@ -13,11 +13,41 @@ A common use-case for Atmos is implementing components for [Terraform "root modu
 
 ## Use-cases
 
-There are many uses for developing components. You see how we think about them by checking our [`terraform-aws-components`](https://github.com/cloudposse/terraform-aws-components)
+Components offer a multitude of applications across various business scenarios. Cloud Posse publishes its AWS components for free, so you can see
+some [technical use-cases for Terraform components](https://docs.cloudposse.com/components/category/aws/).
+
+- **Accelerate Development Cycles:** By reusing components, development teams can significantly shorten the time from concept to deployment, facilitating faster product iterations and quicker responses to market changes.
+
+- **Security policies and compliance controls** DevOps and SecOps teams implement components to uniformly apply security policies and compliance controls across all cloud environments, ensuring regulatory adherence.
+
+- **Enhance Collaboration Across Teams:** Components foster a shared understanding and approach to infrastructure, promoting collaboration between development, operations, and security teams, leading to more cohesive and secure product development.
+
+## Best Practices
+
+Here are some essential best practices to follow when designing architectures using infrastructure as code (IaC), focusing on optimizing
+component design, reusability, and lifecycle management. These guidelines are designed to help developers and operators build efficient,
+scalable, and reliable systems, ensuring a smooth and effective infrastructure management process.
+
+- **Keep Your Components Small to Reduce the Blast Radius of Changes.** <br/>Focus on creating small, reusable components that adhere to the UNIX philosophy
+  by doing one thing well. This strategy leads to simpler updates, more straightforward troubleshooting, quicker plan/apply cycles, and a
+  clearer separation of responsibilities.
+- **Split Components By Lifecycle.** <br/>For instance, a VPC, which is rarely destroyed, should be managed separately from more dynamic
+  resources like clusters or databases that may frequently scale or undergo updates.
+- **Make Them Opinionated, But Not Too Opinionated.** <br/> Ensure components are generalized to prevent the proliferation of similar components,
+  thereby promoting easier testing, reuse, and maintenance.
+- **Use Parameterization, But Avoid Over-Parameterization.** <br/> Good parameterization ensures components are reusable, but components become difficult to
+  test and document with too many parameters.
+- **Avoid Creating Factories Inside of Components.** <br/> Minimize the blast radius of changes and maintain fast plan/apply cycles by not embedding factories within components that provision lists of resources. Instead, leverage [Stack configurations to serve as factories](https://en.wikipedia.org/wiki/Factory_(object-oriented_programming)) for provisioning multiple component instances. This approach keeps the state isolated and scales efficiently with the increasing number of component instances.
+- Use vendoring of components pull down remote dependencies.
+- Use component validation with stacks to define policies on how components should be used.
+- **Implement Versioning for Components.** <br/> Organize multiple related components in a common folder
+- **Document Component Interfaces and Usage.** <br/> Utilize tools such as terraform-docs to thoroughly document the input variables and outputs of your component. Include snippets of stack configuration to simplify understanding for developers on integrating the component into their stack configurations. Providing examples that cover common use-cases of the component is particularly effective.
+- **Version Components for Breaking Changes**.** <br/> Use versioned folders within the component to delineate major versions.
+- **Use a Monorepo for your Components.** <br/> For streamlined development and simplified dependency management, smaller companies should consolidate stacks and components in a single monorepo, facilitating easier updates and unified versioning. Larger companies and enterprises with multiple monorepos can benefit from a central repository for upstream components, and then use vendoring to easily pull in these shared components to team-specific monorepos.
 
 ## Component Schema
 
-To configure a Component inside of a [Stack], a Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
+To configure a Component inside of a [Stack], A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
 component. The configuration of a component is stored in a Stack configuration.
 
 <br/>

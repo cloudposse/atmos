@@ -10,8 +10,7 @@ description: Partial Component Configuration Atmos Design Pattern
 The **Partial Component Configuration** Design Pattern describes the mechanism of splitting an Atmos component's configuration across many Atmos
 manifests to manage, modify and apply them separately and independently in one top-level stack without affecting the others.
 
-The mechanism is similar to [Partial Classes in
-C#](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
+The mechanism is similar to [Partial Classes in C#](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
 
 This is not the same as Atmos [Component Inheritance](/core-concepts/components/inheritance) where more than one Atmos components
 take part in the inheritance chain. The **Partial Component Configuration** pattern deals with just one Atmos component with its configuration split

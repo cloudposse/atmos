@@ -1,11 +1,11 @@
 ---
-id: introduction
+id: index
 label: Introduction
 slug: /
 sidebar_label: Introduction
 sidebar_position: 1
 keywords: [atmos, terraform, helmfile, introduction]
-title: Introduction to Atmos
+title: Automated Terraform Management & Orchestration Software (ATMOS)
 description: >-
   Atmos is the Ultimate Terraform Environment Configuration and Orchestration Tool for DevOps to manage complex configurations with ease.
   It's compatible with Terraform and many other tools.
@@ -14,12 +14,13 @@ description: >-
 import ReactPlayer from 'react-player'
 import Link from '@docusaurus/Link'
 
-## Automated Terraform Management & Orchestration Software
 
 Use Atmos to easily compose complex architectures based on Terraform with very [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) configuration. 
 Concepts like [Stacks](/core-concepts/stacks) and [Components](/core-concepts/components)
 help you overcome most of [Terraform's limitations](/reference/terraform-limitations/)
 by using [established conventions](/core-concepts) and proven [design patterns](/design-patterns/).
+
+#### Are you tired of doing Terraform the old way? Try the new way.
 
 <Link
     to="/quick-start"
@@ -89,26 +90,6 @@ interoperability with the entire Terraform ecosystem.
 - Atmos makes managing those configurations easier
 :::
 
-## Use Cases
-
-Atmos has consistently demonstrated its effectiveness in addressing these key use-cases, showcasing its adaptability and 
-strength in the cloud infrastructure and DevOps domains:
-
-- **Managing Large Multi-Account Cloud Environments:** Suitable for organizations using multiple cloud accounts to separate different 
-  projects or stages of development.
-- **Cross-Platform Cloud Architectures:** Ideal for businesses that use services across AWS, GCP, Azure, etc., to build a cohesive system.
-- **Multi-Tenant Systems for SaaS:** Perfect for SaaS companies that need to securely host multiple customers within the same infrastructure.
-- **Stable Multi-Region Deployments:** Ensures high availability and disaster recovery by spanning cloud services across different 
-  geographical regions.
-- **Compliant Infrastructure for Regulated Industries:** Provides a robust base for developing vetted, compliant configurations that
-  align with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations, accessible through the service catalog,
-  empower anyone constructing services on this foundation to achieve and maintain strict compliance with ease.
-- **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using 
-  predefined templates and policies.
-- **Streamlining Deployment with Service Catalogs, Landing Zones, and Blueprints:** Provides ready-to-use templates and guidelines for
-  setting up cloud environments quickly and consistently.
-
-Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel, or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
 
 ## Benefits
 
@@ -126,9 +107,31 @@ providing key competitive advantages for managing complex systems with precision
 ## Features
 
 Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a set of
-powerful tools to tackle deployment challenges. Its features boost efficiency, clarity, and control across various environments,
-making it an indispensable asset for managing complex infrastructures precisely. Atmos provides technical workflows, ensuring
-seamless, automated infrastructure management.
+powerful tools to tackle deployment challenges. Designed to be cloud agnostic, it enables you to operate consistently across
+various cloud platforms. These features boost efficiency, clarity, and control across various environments, making it an
+indispensable asset for managing complex infrastructures with confidence.
+
+### Core Features
+- **Terminal UI** Polished interface for easier interaction with Terraform, workflows, and commands.
+- **Native Terraform Support:** Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
+- **Stacks:** Powerful abstraction layer defined in YAML for orchestrating and deploying components.
+- **Components:** A generic abstraction for deployable units, such as Terraform "root" modules.
+- **Custom Commands:** Extends Atmos's functionality, allowing integration of any command with stack configurations.
+- **Workflow Orchestration:** Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
+
+### Configuration and Management
+- **Service Catalogs and Component Libraries:** Collections of reusable components for efficient infrastructure management.
+- **Schema Validation:** Ensures configurations are correct against a JSON schema.
+- **Vendoring:** Pulls dependencies from remote sources, supporting immutable infrastructure practices.
+- **Deep-merged Imports & Inheritance:** Streamlines configuration reuse and simplifies managing complex setups.
+- **Mixins:** Reusable snippets of configuration to avoid repetition across stack configurations.
+- **OPA Policy Controls:** Integrates Open Policy Agent for configuration-level policy enforcement, suitable for varied stack policies.
+
+### Integrations
+- **GitHub Actions Support:** Facilitates GitOps workflows with Terraform Plan, Apply, and Drift Detection.
+- **Helmfile Support:** Provides declarative specifications for deploying helm charts, supporting Kubernetes management.
+- **Works with Atlantis, and Spacelift:** Ensures compatibility with popular Terraform Automation & Collaboration Software (TACOS).
+
 
 * **Terminal UI** Atmos ships with a polished terminal UI making it easy for beginners (and power users) to interact with Terraform,
   workflows and other commands.
@@ -150,12 +153,14 @@ seamless, automated infrastructure management.
   enabling teams to build and maintain a library of reusable components for consistent and efficient infrastructure management.
 * **Component Libraries** are a collection of reusable components (e.g. Terraform root modules) that can be shared across stacks,
   enabling teams to build and maintain a library of reusable components for consistent and efficient infrastructure management.
+* **Automatic Component Updates** Using the [Atmos Component Updater GitHub Action](/integrations/github-actions/component-updater), Pull Requests are automatically generated to update components
+  to their latest versions, ensuring the infrastructure remains continually up-to-date.
 * **Cloud-agonostic** Nothiping in Atmos is tied to a specific cloud provider. It's designed to work across various cloud platforms
   (e.g. AWS, GCP, Azure, etc.), enhancing interoperability rather than tying users to a single cloud environment.
 * **Terraform Support** Atmos is designed to work with Terraform, and can be used to manage Terraform configurations and deployments.
 * **Helmfile Support** Atmos natively supports opinionated workflows for [Helmfile](/integrations/helmfile), a declarative specification
   for deploying helm charts.
-* **GitHub Actions Support** Implement GitOps workflows for Terraform [Plan](/integrations/github-actions/atmos-terraform-plan[),
+* **GitHub Actions Support** Implement GitOps workflows for Terraform [Plan](/integrations/github-actions/atmos-terraform-plan),
   [Apply](/integrations/github-actions/atmos-terraform-plan) and [Drift Detection](/integrations/github-actions/atmos-terraform-drift-detection)
   with GitHub Actions
 * **Works with Atlantis, and Spacelift out-of-the-box:** Atmos can be used to manage the configuration of these popular

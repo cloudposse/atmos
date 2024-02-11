@@ -18,6 +18,8 @@ Atmos vendoring streamlines component sharing and version control across an ente
   efficiency across teams (or business units) while enabling customization and independent version control post-vendoring. This approach enhances collaboration without sacrificing the flexibility for teams to tailor components to their specific needs or update them at their preferred pace.
 - **Managing Multiple Versions of Dependencies:** Use Atmos vendoring to manage multiple versions of remote dependencies, 
   effectively implementing version pinning through locally controlled artifacts. By configuring a stacks component directory (e.g., `vpc/v1` or `vpc/v2`), vendoring provides maximum flexibility while still aligning with best practices in DevOps environments.
+- **Reinforce Immutable Infrastructure**: Employ Atmos vendoring to store immutable infrastructure artifacts, guaranteeing that once a committed,
+  it remains unaltered throughout its lifecycle, ensuring stability and reliability in deployments.
 
 ## Usage
 

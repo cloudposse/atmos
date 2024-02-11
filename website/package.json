@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@docusaurus/core": "^3.1.1",
+    "@docusaurus/plugin-client-redirects": "^3.1.1",
     "@docusaurus/preset-classic": "^3.1.1",
     "@docusaurus/theme-mermaid": "^3.1.1",
     "@grnet/docusaurus-glossary-view": "^2.0.0-rc",
