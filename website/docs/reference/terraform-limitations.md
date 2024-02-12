@@ -17,7 +17,7 @@ Terraform's HCL started strictly as a configuration language, not a markup or pr
 
 ## How has Terraform HCL Evolved?
 
-As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating features typical of programming languages (albeit without a debugger!). This shift enriched infrastructure definitions, positioning HCL more as a [domain-specific programming language](https://en.wikipedia.org/wiki/Domain-specific_language) for defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result, the complexity of configuring Terraform projects has risen, while Terraform's inherent capabilities to be configured haven't evolved at the same pace.
+As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating fetatures typical of programming languages (albeit without a debugger!). This shift enriched infrastructure definitions, positioning HCL more as a [domain-specific programming language](https://en.wikipedia.org/wiki/Domain-specific_language) for defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result, the complexity of configuring Terraform projects has risen, while Terraform's inherent capabilities to be configured haven't evolved at the same pace.
 
 - **Rich Expressions:** Introduced a richer expression syntax, removing the need for interpolations.
 

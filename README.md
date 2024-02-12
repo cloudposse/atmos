@@ -74,6 +74,23 @@ You can even access the configurations natively from within terraform using our 
 > [*terraform blueprints*](https://cloudposse.com/services/), and our [*knowledgable community*](https://slack.cloudposse.com), teams can achieve
 > operational mastery and innovation faster, transforming their infrastructure management practices into a competitive advantage.
 
+## Core Features
+
+Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a set of
+powerful tools to tackle deployment challenges. Designed to be cloud agnostic, it enables you to operate consistently across
+various cloud platforms. These features boost efficiency, clarity, and control across various environments, making it an
+indispensable asset for managing complex infrastructures with confidence.
+
+- **Terminal UI** Polished interface for easier interaction with Terraform, workflows, and commands.
+- **Native Terraform Support:** Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
+- **Stacks:** Powerful abstraction layer defined in YAML for orchestrating and deploying components.
+- **Components:** A generic abstraction for deployable units, such as Terraform "root" modules.
+- **Vendoring:** Pulls dependencies from remote sources, supporting immutable infrastructure practices.
+- **Custom Commands:** Extends Atmos's functionality, allowing integration of any command with stack configurations.
+- **Workflow Orchestration:** Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
+
+See [all features of Atmos](https://atmos.tools/features).
+
 ## Use Cases
 
 Atmos has consistently demonstrated its effectiveness in addressing these key use-cases, showcasing its adaptability and

@@ -134,6 +134,7 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
     --ifm-color-primary-lighter: #72a1ed;
     --ifm-color-primary-lightest: #9abcf2;
     --ifm-card-background-color: #eeeeee14;
+    --ifm-button-color: #ccc;
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
 
