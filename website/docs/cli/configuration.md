@@ -8,12 +8,12 @@ description: Use the `atmos.yaml` configuration file to control the behavior of 
 # CLI Configuration
 
 :::note Purpose
-Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI
+Use the `atmos.yaml` configuration file to control the behavior of the [`atmos` CLI](/cli)
 :::
 
 <br/>
 
-Everything in the `atmos` CLI is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
+Everything in the [`atmos` CLI](/cli) is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
 be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
 ## Configuration File (`atmos.yaml`)
