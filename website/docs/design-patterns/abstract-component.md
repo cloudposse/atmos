@@ -23,7 +23,7 @@ The type of component is expressed in the `metadata.type` parameter of a given c
 For more details, refer to:
 
 - [Atmos Components](/core-concepts/components)
-- [Glossary](/reference/glossary)
+- [Glossary](/terms)
 
 :::
 

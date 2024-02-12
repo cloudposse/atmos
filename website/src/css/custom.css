@@ -77,9 +77,11 @@ nav.navbar {
 }
 */
 
+/* Uncomment to shift carets to the left 
 .menu__link {
     order: 1;
 }
+*/
 
 .menu__caret:before {
     background: var(--ifm-menu-link-sublist-icon) 50% / 2rem 1.5rem;
@@ -258,6 +260,21 @@ q::after {
 q .author {
     display: inline-block;
     float: right;
+}
+
+dl dt {
+  font-weight: bold;
+}
+
+dl dd {
+    font-style: italic
+}
+
+dd.disambiguation {
+    font-style: normal;
+}
+dd.disambiguation a {
+     margin-left: 0.5em;
 }
 
 @keyframes gradient {

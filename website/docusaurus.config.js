@@ -50,9 +50,9 @@ const config = {
         [
             '@grnet/docusaurus-terminology', {
                 docsDir: './docs/',
-                termsDir: './docs/terms/',
-                glossaryFilepath: './docs/terms/index.mdx',
-                glossaryComponentPath: '../../src/components/glossary/Glossary.tsx'
+                termsDir: './reference/glossary/',
+                glossaryFilepath: './docs/reference/glossary/index.mdx',
+                glossaryComponentPath: '../../../src/components/glossary/Glossary.tsx'
         }],
     ],
 

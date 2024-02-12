@@ -14,7 +14,7 @@ Atmos component validation allows:
 * Validate component config (`vars`, `settings`, `backend`, `env`, `overrides` and other sections) using JSON Schema
 
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
-  OPA/Rego policies
+  OPA/Rego policiesx
 
 :::tip
 

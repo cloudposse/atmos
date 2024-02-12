@@ -134,7 +134,7 @@ vars:
 
 This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
-The `stage` is where workloads run. See our [glossary](/reference/glossary) for disamgiguation.
+The `stage` is where workloads run. See our [glossary](/terms) for disamgiguation.
 
 Example:
 
@@ -148,7 +148,7 @@ vars:
 
 This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
-The `environment` is used for location where things run. See our [glossary](/reference/glossary) for disamgiguation.
+The `environment` is used for location where things run. See our [glossary](/terms) for disamgiguation.
 
 Example:
 

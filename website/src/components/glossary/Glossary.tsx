@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import { useBaseUrlUtils } from '@docusaurus/useBaseUrl';
 import Link from '@docusaurus/Link';
+import { marked } from 'marked';
 
 const Glossary = () => {
   const [content, setContent] = useState();
@@ -25,24 +26,37 @@ const Glossary = () => {
     }
   }, [content])
 
+  // Use content[key].content, for the body content. However, it's raw and there's no way to render it as markdown or MDX
   return (
     <BrowserOnly
-      fallback={<div>The fallback content to display on prerendering</div>}>
+      fallback={<div>Failed to render glossary.</div>}>
       {() =>
-        <div>{content ?
+        <dl>{content ?
           <>
             {
-              Object.keys(content).map(key => {
+            Object.keys(content).sort().map(key => {
                 return (
-                  <p key={key}>
-                    <Link to={withBaseUrl(`${key.replace('/\\/g', '/')}`)}>{content[key].metadata.title}</Link>: <span style={{ display: 'inline-flex' }} dangerouslySetInnerHTML={{ __html: content[key].metadata.hoverText }} />
-                  </p>
+                    <p key={key}>
+                        <dt><Link to={withBaseUrl(`${key.replace('/\\/g', '/')}`)}>{content[key].metadata.title}</Link></dt>
+                        <dd dangerouslySetInnerHTML={{ __html: marked(content[key].metadata.hoverText) }}/>
+                        {content[key].metadata.disambiguation && Object.entries(content[key].metadata.disambiguation).length > 0 && (
+                            <dd class="disambiguation">
+                                See also: 
+                                {Object.entries(content[key].metadata.disambiguation).map(([term, desc]) => {
+                                    return (
+                                        <Link to={withBaseUrl('reference/glossary/' + term)}>{desc}</Link>
+                                    )       
+                                })}
+                            </dd>
+                        )}
+                        
+                    </p>
                 )
-              })
+            })
             }
           </> :
           'loading...'}
-        </div>
+        </dl>
       }
     </BrowserOnly>
   );
