@@ -37,7 +37,7 @@ by using [established conventions](/core-concepts) and proven [design patterns](
 
 ## Screenshots
 
-To get an idea of what it looks like using `atmos` on the command line, just [try our quickstart](/quick-start/) and run the [`atmos`](/cli/commands/atmos) command to start
+To get an idea of what it looks like using `atmos` on the command line, just [try our quickstart](/quick-start/) and run the [`atmos`](/cli) command to start
 an interactive UI in the terminal. Use the arrow keys to select stacks and components to deploy.
 
 ![Atmos Screenshot](../../../docs/demo.gif)
@@ -67,7 +67,7 @@ operational mastery and innovation faster, transforming their infrastructure man
 
 ## How does Atmos work?
 
-At a high-level, Atmos is responsible for managing the configuration that gets passed to Components when they are instantiated.
+At a high-level, Atmos is responsible for managing the configuration that gets passed to [Components](/reference/glossary/component) when they are instantiated.
 
 To make this less abstract, we're going to focus on Terraform and how configuration gets passed to it.
 The secret to scaling architectures with Terraform, is to decompose it into smaller root modules. We want to keep these root modules 
@@ -115,9 +115,9 @@ indispensable asset for managing complex infrastructures with confidence.
 - **Native Terraform Support:** Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
 - **Stacks:** Powerful abstraction layer defined in YAML for orchestrating and deploying components.
 - **Components:** A generic abstraction for deployable units, such as Terraform "root" modules.
+- **Vendoring:** Pulls dependencies from remote sources, supporting immutable infrastructure practices.
 - **Custom Commands:** Extends Atmos's functionality, allowing integration of any command with stack configurations.
 - **Workflow Orchestration:** Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
-* **Terraform Provider** Atmos has a Terraform provider that can be used to manage Atmos configurations and stacks.
 
 See [all features of Atmos](/features).
 

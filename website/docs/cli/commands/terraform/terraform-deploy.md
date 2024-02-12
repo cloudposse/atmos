@@ -31,7 +31,7 @@ atmos terraform deploy <component> -s <stack>
   `atmos terraform plan <component> -s <stack> -out=<FILE>`, which will save the generated plan to a file on disk,
   and then execute the command `atmos terraform deploy <component> -s <stack> --planfile <FILE>` to apply the previously generated planfile
 
-See [all flags](#Flags).
+See [all flags](#flags).
 
 <br/>
 
@@ -41,10 +41,33 @@ Run `atmos terraform deploy --help` to see all the available options
 
 ## Examples
 
+### Simple Example
+
+Deploy the `top-level-component1` using the configuration specified in the `tenant1-ue2-dev` stack. This command explicitly targets a stack, which defines the environment and region settings for the deployment.
+
 ```shell
 atmos terraform deploy top-level-component1 --stack tenant1-ue2-dev
+```
+
+### Planfiles
+
+Deploy `top-level-component1` based on a previously generated execution plan. The `-s` flag specifies the `tenant1-ue2-dev` stack, and `--from-plan` indicates that the deploy should proceed with the plan that was previously created, ensuring that the deployment matches the plan's specifications.
+
+```shell
 atmos terraform deploy top-level-component1 -s tenant1-ue2-dev --from-plan
+```
+
+Or use `-s` for a specific execution plan file located at `<path_to_planfile>` to ensure precision in what is deployed.
+
+```shell
 atmos terraform deploy top-level-component1 -s tenant1-ue2-dev --planfile <path_to_planfile>
+```
+
+### Targeting Specific Stages
+
+This demonstrates how Atmos can be used to deploy infrastructure components, like a VPC, specifying the stack to ensure the deployment occurs within the correct environment and configuration context.
+
+```shell
 atmos terraform deploy infra/vpc -s tenant1-ue2-staging
 atmos terraform deploy test/test-component -s tenant1-ue2-dev
 atmos terraform deploy test/test-component-override-2 -s tenant2-ue2-prod

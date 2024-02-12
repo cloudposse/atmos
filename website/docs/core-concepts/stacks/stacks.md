@@ -15,10 +15,25 @@ by importing configuration that gets deep-merged, thus minimizing config duplica
 By facilitating the infrastructure configurations this way, developers achieve DRY (Don't Repeat Yourself) architectures with minimal configuration. Stacks make infrastructure more streamlined and consistent, significantly enhancing productivity. Best of all, Stacks can deploy 
 vanilla Terraform "root" modules *without* any code generation, custom vendor extensions, or changes to the HCL code.
 
-Atmos utilizes a custom YAML configuration format for stacks. YAML is ideal because it's portable across multiple toolchains and languages; every developer understands it. The Atmos [CLI](/cli/configuration), the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-utils) provider, and Spacelift via the [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module all support stacks. Utilizing the Terraform provider enables native access to the entire infrastructure configuration directly from Terraform.
+Atmos utilizes a custom YAML configuration format for stacks. YAML is ideal because it's portable across multiple toolchains and languages; every developer understands it. The Atmos [CLI](/cli), the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-utils) provider, and Spacelift via the [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module all support stacks. Utilizing the Terraform provider enables native access to the entire infrastructure configuration directly from Terraform.
 
 ## Use-cases
 
+- **Rapid Environment Provisioning:** Leverage stacks to swiftly set up and replicate development, testing, and production environments, ensuring consistency and reducing manual setup errors. This accelerates the development cycle and enables businesses to respond quickly to market demands or development needs.
+- **Multi-Tenant Infrastructure Management:** Utilize stacks to manage and isolate resources for different clients or projects within a single cloud infrastructure. This approach supports SaaS companies in providing secure, isolated environments for each tenant, optimizing resource utilization and simplifying the management of complex, multi-tenant architectures.
+- **Compliance and Governance:** Implement stacks to enforce compliance and governance policies across all environments systematically. By defining standard configurations that meet regulatory requirements, businesses can ensure that every deployment is compliant, reducing the risk of violations and enhancing security posture.
+
+## Best Practices
+
+:::tip
+Remember to adhere to the laws physics. All other laws are meant broken.
+:::
+
+- **Treat Stack Templates like an Escape Hatch** Apply it carefully and only when necessary. Using templates instead of inheritance can make stack configurations complex and hard to manage. Be careful using stack templates together with the component factory pattern.
+- **Avoid Too Many Levels of Imports** It's very difficult for others to follow relationships when there are too many nested levels and overrides.
+- **Balance DRY Principles with Configuration Clarity** Avoid overly DRY configuration as it leads to complexity rashes. Sometimes repeating configuration is beneficial for maintenance and clarity.
+- **Reserve Code Generation for Stack Configuration** While we generally advise against using code generation for application logic (components), it's beneficial for creating configurations where appropriate, such as developer environments and SaaS tenants. These configurations ought to be committed.
+- **Use Mixin Pattern for Snippets of Stack Configuration** Employ the mixin pattern for clarity when there there is brief configuration snippets that are reusable. Steer clear of minimal stack configurations simply for the sake of DRYness as it frequently leads to too many levels of imports.
 
 ## Conventions
 

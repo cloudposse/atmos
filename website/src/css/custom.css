@@ -206,6 +206,10 @@ li.menu__list-item.command {
     font-family: var(--ifm-font-family-monospace);
 }
 
+li.menu__list-item.hidden {
+    display: none;
+}
+
 .aa-Autocomplete > .aa-DetachedSearchButton {
     border-radius: 32px;
 }

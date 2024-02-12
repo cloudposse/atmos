@@ -40,10 +40,11 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
+                    /*
                     {
                         from: '/cli',
                         to: '/cli/configuration'
-                    }
+                    }*/
                 ],
             },
         ],
@@ -109,7 +110,7 @@ const config = {
                         label: 'Docs',
                     },
                     {
-                        to: '/cli/configuration',
+                        to: '/cli',
                         position: 'left',
                         label: 'CLI'
                     },
