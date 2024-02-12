@@ -1,5 +1,6 @@
 ---
 id: abstract-component
+slug: /terms/abstract-component
 title: Abstract Component
 hoverText: "Component baseline for Real Component inheritance"
 ---

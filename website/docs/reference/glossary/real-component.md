@@ -1,5 +1,6 @@
 ---
 id: real-component
+slug: /terms/real-component
 title: Real Component
 hoverText: "Instantiated component in a Parent Stack"
 ---

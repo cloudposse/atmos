@@ -270,9 +270,23 @@ dl dd {
     font-style: italic
 }
 
+dd p {
+    margin: 0;
+}
+
+dd.disambiguation label {
+    font-weight: bold;
+}
+
 dd.disambiguation {
     font-style: normal;
+    display: inline-block;
+    float: right;
 }
+dd.disambiguation > a:not(:last-child)::after {
+    content: ",";
+}
+
 dd.disambiguation a {
      margin-left: 0.5em;
 }

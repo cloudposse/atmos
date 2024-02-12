@@ -1,5 +1,6 @@
 ---
 id: stack-manifest
+slug: /terms/stack-manifest
 title: Stack Manifest
 hoverText: "Configuration definition for Atmos stacks"
 ---

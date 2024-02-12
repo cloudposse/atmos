@@ -1,5 +1,6 @@
 ---
 id: imports
+slug: /terms/imports
 title: Imports
 hoverText: "Configuration inclusion mechanism"
 ---

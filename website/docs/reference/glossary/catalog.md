@@ -1,5 +1,6 @@
 ---
 id: catalog
+slug: /terms/catalog
 title: Catalog
 hoverText: "Collection of reusable configurations"
 ---

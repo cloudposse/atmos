@@ -1,5 +1,6 @@
 ---
 id: inheritance
+slug: /terms/inheritance
 title: Inheritance
 hoverText: "Configuration derivation mechanism"
 ---

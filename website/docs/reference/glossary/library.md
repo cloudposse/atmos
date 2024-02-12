@@ -1,5 +1,6 @@
 ---
 id: library
+slug: /terms/library
 title: Library
 hoverText: "Collection of reusable Components"
 ---

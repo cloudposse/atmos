@@ -1,5 +1,6 @@
 ---
 id: mixins
+slug: /terms/mixins
 title: Mixins
 hoverText: "Partial configuration import mechanism"
 ---

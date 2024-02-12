@@ -37,19 +37,18 @@ const Glossary = () => {
             Object.keys(content).sort().map(key => {
                 return (
                     <p key={key}>
-                        <dt><Link to={withBaseUrl(`${key.replace('/\\/g', '/')}`)}>{content[key].metadata.title}</Link></dt>
+                        <dt><Link to={withBaseUrl(content[key].metadata.slug || key)}>{content[key].metadata.title}</Link></dt>
                         <dd dangerouslySetInnerHTML={{ __html: marked(content[key].metadata.hoverText) }}/>
                         {content[key].metadata.disambiguation && Object.entries(content[key].metadata.disambiguation).length > 0 && (
                             <dd class="disambiguation">
-                                See also: 
+                                <label>See also:</label>
                                 {Object.entries(content[key].metadata.disambiguation).map(([term, desc]) => {
                                     return (
-                                        <Link to={withBaseUrl('reference/glossary/' + term)}>{desc}</Link>
+                                        <Link to={withBaseUrl('terms/' + term)}>{desc}</Link>
                                     )       
                                 })}
                             </dd>
                         )}
-                        
                     </p>
                 )
             })

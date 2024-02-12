@@ -1,5 +1,6 @@
 ---
 id: environment
+slug: /terms/environment
 title: Environment
 hoverText: "Location where resources are deployed"
 disamgiguation:

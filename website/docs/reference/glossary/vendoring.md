@@ -1,5 +1,6 @@
 ---
 id: vendoring
+slug: /terms/vendoring
 title: Vendoring
 hoverText: "Copying 3rd-party components into your repository"
 ---

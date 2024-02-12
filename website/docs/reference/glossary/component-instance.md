@@ -1,5 +1,6 @@
 ---
 id: component-instance
+slug: /terms/component-instance
 title: Component Instance
 hoverText: "Configured instance of a real component"
 ---

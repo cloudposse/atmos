@@ -1,5 +1,6 @@
 ---
 id: integration
+slug: /terms/integration
 title: Integration
 hoverText: "Mechanism for working with other tools and APIs"
 ---

@@ -1,5 +1,6 @@
 ---
 id: tenant
+slug: /terms/tenant
 title: Tenant
 hoverText: "Logical grouping of resources"
 ---

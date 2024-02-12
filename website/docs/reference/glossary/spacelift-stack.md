@@ -1,5 +1,6 @@
 ---
 id: spacelift-stack
+slug: /terms/spacelift-stack
 title: Spacelift Stack
 hoverText: "Spacelift Stacks correspond to Atmos Component Instances"
 disambiguation:

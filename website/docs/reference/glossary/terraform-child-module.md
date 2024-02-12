@@ -1,5 +1,6 @@
 ---
 id: terraform-child-module
+slug: /terms/terraform-child-module
 title: Terraform "Child Module"
 hoverText: "Modules are reusable Terraform code that gets called from another module or root module."
 ---
