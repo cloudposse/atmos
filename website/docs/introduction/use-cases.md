@@ -1,7 +1,9 @@
 ---
 title: Atmos Use-Cases
+id: use-cases
+slug: /use-cases
 sidebar_label: Use-cases
-sidebar_position: 1
+sidebar_position: 2
 ---
 
 ## Use Cases
