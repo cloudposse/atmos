@@ -46,12 +46,6 @@ The **Component Catalog with Mixins** Design Pattern prescribes the following:
 - In the component's catalog folder, in the `mixins` sub-folder, add manifests with component configurations for specific environments (organizations,
   tenants, regions, accounts). For example:
 
-:::note
-Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
-multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported
-into multiple Org/OU top-level stack manifests.
-:::
-
 
   | File Path                                      | Description                                                |
   | ----------------------------------------------| ----------------------------------------------------------- |
@@ -66,6 +60,15 @@ into multiple Org/OU top-level stack manifests.
   | `stacks/catalog/vpc/mixins/org1.yaml`          | Component manifest with settings for `org1` organization   |
   | `stacks/catalog/vpc/mixins/org2.yaml`          | Component manifest with settings for `org2` organization   |
 
+  <br/>
+
+  :::note
+  Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
+  multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported
+  into multiple Org/OU top-level stack manifests.
+  :::
+
+  <br/>
 
 - In the component's catalog folder, add manifests for specific environments by assembling the corresponding mixins together (using imports). For
   example:
@@ -84,6 +87,8 @@ into multiple Org/OU top-level stack manifests.
   | `stacks/catalog/vpc/org2-plat-uw2-dev.yaml`     | Manifest for the `org2` organization, `plat` tenant, `uw2` region, `dev` account     |
   | `stacks/catalog/vpc/org2-plat-uw2-prod.yaml`    | Manifest for the `org2` organization, `plat` tenant, `uw2` region, `prod` account    |
   | `stacks/catalog/vpc/org2-plat-uw2-staging.yaml` | Manifest for the `org2` organization, `plat` tenant, `uw2` region, `staging` account |
+
+  <br/>
 
 - Import the environment manifests into the top-level stacks. For example:
 

@@ -35,7 +35,7 @@ The **Partial Stack Configuration** pattern provides the following benefits:
 - Makes the configurations easier to understand
 
 - Allows creating and modifying the partial stack manifests independently, possibly by different teams
-- 
+
 ## Example
 
 In the following structure, we have many Terraform components (Terraform root modules) in the `components/terraform` folder.

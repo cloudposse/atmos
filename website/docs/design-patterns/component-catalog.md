@@ -78,7 +78,6 @@ top-level stack manifests.
   - etc.
 
 
-
 ## Example
 
 The following example shows the Atmos stack and component configurations to provision the `vpc` and `vpc-flow-logs-bucket` components into
