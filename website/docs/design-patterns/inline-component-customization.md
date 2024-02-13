@@ -22,6 +22,17 @@ Use the **Inline Component Customization** pattern when:
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
+## Benefits
+
+The **Inline Component Customization** pattern provides the following benefits:
+
+- The defaults for the components are defined in just one place making the entire
+  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+- The defaults for the components are reusable across many stacks
+
+- Simple stack and component configurations
+
 ## Example
 
 Suppose you need a simple setup with only `dev`, `staging` and `prod` stages (accounts). Here's how you might organize the stacks and
@@ -201,17 +212,6 @@ atmos terraform apply vpc -s staging
 atmos terraform apply vpc-flow-logs-bucket -s prod
 atmos terraform apply vpc -s prod
 ```
-
-## Benefits
-
-The **Inline Component Customization** pattern provides the following benefits:
-
-- The defaults for the components are defined in just one place making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-- The defaults for the components are reusable across many stacks
-
-- Simple stack and component configurations
 
 ## Limitations
 

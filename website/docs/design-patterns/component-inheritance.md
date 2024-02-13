@@ -27,6 +27,15 @@ Use the **Component Inheritance** pattern when:
 
 - You need to keep the configuration of all components [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
+## Benefits
+
+The **Component Inheritance** pattern provides the following benefits:
+
+- Enables very DRY, consistent, and reusable configurations built upon existing components
+
+- Any Atmos component can serve as a building block for other Atmos components
+  
+
 ## Example
 
 The following example shows the Atmos stack and component configurations to provision the `vpc` component into
@@ -163,14 +172,6 @@ components:
 ```
 
 <br/>
-
-## Benefits
-
-The **Component Inheritance** pattern provides the following benefits:
-
-- Allows creating very DRY, consistent, and reusable configurations that are built upon existing components
-
-- Any Atmos component can serve as a building block for other Atmos components
 
 ## Related Patterns
 

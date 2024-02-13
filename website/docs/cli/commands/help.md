@@ -13,7 +13,7 @@ atmos --help
 atmos -h
 ```
 
-<br/>
+## Screenshots
 
 The `atmos help` starts an interactive help UI in the terminal:
 

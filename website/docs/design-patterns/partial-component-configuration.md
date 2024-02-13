@@ -36,6 +36,17 @@ Use the **Partial Component Configuration** pattern when:
 
 - You want to keep the parts of the configuration reusable and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
+## Benefits
+
+The **Partial Component Configuration** pattern provides the following benefits:
+
+- Allows managing components with complex configurations where some parts of the configurations must be managed and modified independently of the
+  other parts
+
+- Different parts of component' configurations can be applied to different stacks independently of the other stacks
+
+- Allows keeping the parts of the configurations reusable across many stacks and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
 ## Example
 
 Suppose that we have EKS clusters provisioned in many accounts and regions. The clusters can run different Kubernetes versions.
@@ -207,17 +218,6 @@ When you need to upgrade an EKS cluster in one account and region to the next Ku
 stack and provision the EKS cluster without affecting the clusters in the other stacks. For example, to upgrade the cluster to the next Kubernetes
 version `1.28`, update the imported mixin from `catalog/eks/clusters/mixins/k8s-1-27` to `catalog/eks/clusters/mixins/k8s-1-28`. All other EKS
 clusters in the other accounts and regions will stay at the current Kubernetes version `1.27` until they are ready to be upgraded.
-
-## Benefits
-
-The **Partial Component Configuration** pattern provides the following benefits:
-
-- Allows managing components with complex configurations where some parts of the configurations must be managed and modified independently of the
-  other parts
-
-- Different parts of component' configurations can be applied to different stacks independently of the other stacks
-
-- Allows keeping the parts of the configurations reusable across many stacks and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Related Patterns
 

@@ -23,6 +23,25 @@ Use the **Organizational Structure Configuration** pattern when:
 
 - You want to provision the infrastructure into many regions
 
+## Benefits
+
+The **Organizational Structure Configuration** pattern provides the following benefits:
+
+- The defaults for the components, organizations, tenants/OUs, regions, account/stages are defined in just one place (and then imported) making the
+  entire configuration extremely [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself), reusable, and easy to understand and manage
+
+- New Organizations can be easily added and configured without affecting the configurations for the existing organizations
+
+- New tenants/OUs can be easily added to an organization without affecting the configurations for the existing tenants/OUs
+
+- New stages/accounts can be easily added to a tenant/OU without affecting the configurations for the existing stages/accounts
+
+- New regions can be added to the infrastructure, configured with Atmos, and components provisioned into the regions. New regions can be used for
+  te general infrastructure, or for disaster recovery (DR), or for compliance and audit
+
+- After adding new organizations, tenants, accounts or regions, the entire configuration will still remain DRY, reusable and easy to manage thanks to
+  using the described folder structure, catalogs, mixins, and hierarchical [imports](/core-concepts/stacks/imports)
+
 ## Example
 
 The following example shows the Atmos stack and component configurations to provision the `vpc` and `vpc-flow-logs-bucket` components into
@@ -500,25 +519,6 @@ atmos terraform apply vpc -s org2-plat-ue2-prod
 atmos terraform apply vpc-flow-logs-bucket -s org2-plat-uw2-prod
 atmos terraform apply vpc -s org2-plat-uw2-prod
 ```
-
-## Benefits
-
-The **Organizational Structure Configuration** pattern provides the following benefits:
-
-- The defaults for the components, organizations, tenants/OUs, regions, account/stages are defined in just one place (and then imported) making the
-  entire configuration extremely [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself), reusable, and easy to understand and manage
-
-- New Organizations can be easily added and configured without affecting the configurations for the existing organizations
-
-- New tenants/OUs can be easily added to an organization without affecting the configurations for the existing tenants/OUs
-
-- New stages/accounts can be easily added to a tenant/OU without affecting the configurations for the existing stages/accounts
-
-- New regions can be added to the infrastructure, configured with Atmos, and components provisioned into the regions. New regions can be used for
-  te general infrastructure, or for disaster recovery (DR), or for compliance and audit
-
-- After adding new organizations, tenants, accounts or regions, the entire configuration will still remain DRY, reusable and easy to manage thanks to
-  using the described folder structure, catalogs, mixins, and hierarchical [imports](/core-concepts/stacks/imports)
 
 ## Limitations
 

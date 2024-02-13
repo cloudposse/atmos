@@ -21,6 +21,14 @@ Use the **Inline Component Configuration** pattern when:
 
 - For testing or development purposes
 
+## Benefits
+
+The **Inline Component Configuration** pattern provides the following benefits:
+
+- Very simple stack and component configurations
+
+- Define all components in just one place (in one stack manifest) so it's easier to see what and where everything is provisioned
+
 ## Example
 
 Suppose you need a simple setup with only `dev`, `staging` and `prod` stages (accounts). Here's how you might organize the stacks and
@@ -123,14 +131,6 @@ To provision the components, execute the following commands:
 atmos terraform apply vpc-flow-logs-bucket -s dev
 atmos terraform apply vpc -s dev
 ```
-
-## Benefits
-
-The **Inline Component Configuration** pattern provides the following benefits:
-
-- Very simple stack and component configurations
-
-- All components are defined in just one place (in one stack manifest) - easier to see what is provisioned and where
 
 ## Limitations
 

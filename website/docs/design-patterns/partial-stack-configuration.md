@@ -25,6 +25,17 @@ Use the **Partial Stack Configuration** pattern when:
 
 - You want to keep the configuration easy to manage and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
+## Benefits
+
+The **Partial Stack Configuration** pattern provides the following benefits:
+
+- Allows defining Atmos stacks with complex configurations by splitting the configurations into smaller manifests and by grouping the components by
+  category or function
+
+- Makes the configurations easier to understand
+
+- Allows creating and modifying the partial stack manifests independently, possibly by different teams
+- 
 ## Example
 
 In the following structure, we have many Terraform components (Terraform root modules) in the `components/terraform` folder.
@@ -257,17 +268,6 @@ import:
   # Import the related component manifests into this partial stack manifest
   - catalog/eks/defaults
 ```
-
-## Benefits
-
-The **Partial Stack Configuration** pattern provides the following benefits:
-
-- Allows defining Atmos stacks with complex configurations by splitting the configurations into smaller manifests and by grouping the components by
-  category or function
-
-- Makes the configurations easier to understand
-
-- Allows creating and modifying the partial stack manifests independently, possibly by different teams
 
 ## Limitations
 

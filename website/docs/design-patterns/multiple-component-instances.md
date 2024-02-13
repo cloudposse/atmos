@@ -22,6 +22,17 @@ Use the **Multiple Component Instances** pattern when:
 
 - You need to provision multiple instances of a Terraform component in the same environment (organization, OU, account, region)
 
+## Benefits
+
+The **Multiple Component Instances** pattern provides the following benefits:
+
+- Separation of the code (Terraform component) from the configuration (Atmos components)
+
+- The same Terraform code is reused by multiple Atmos component instances with different configurations
+
+- The defaults for the components are defined in just one place making the entire
+  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+  
 ## Example
 
 The following example shows the Atmos stack and component configurations to provision two Atmos components (`vpc/1` and `vpc/2`) that use the
@@ -193,17 +204,6 @@ The names are generated from the context using the following template:
 ```console
 {namespace}-{tenant}-{environment}-{stage}-{name}
 ```
-
-## Benefits
-
-The **Multiple Component Instances** pattern provides the following benefits:
-
-- Separation of the code (Terraform component) from the configuration (Atmos components)
-
-- The same Terraform code is reused by multiple Atmos component instances with different configurations
-
-- The defaults for the components are defined in just one place making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Related Patterns
 

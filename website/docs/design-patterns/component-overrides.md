@@ -22,11 +22,20 @@ Refer to [Component Overrides](/core-concepts/components/overrides) for more inf
 
 Use the **Component Overrides** pattern when:
 
-- You need to modify or override the configuration and behavior of groups of Atmos components. It is especially useful to "override" settings when dealing with multiple levels of inheritance.
+- You need to modify or override the configuration and behavior of groups of Atmos components. It is handy to "override" settings when dealing with multiple levels of inheritance.
 
-- The groups of Atmos components can be managed by different people or teams
+- Different people or teams need to manage groups of Atmos components
 
 - You want to keep the configurations of the groups of Atmos components [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+# Benefits
+
+The **Component Overrides** pattern provides the following benefits:
+
+- Allows to modify or override the configuration and behavior of groups of Atmos components without affecting other groups of Atmos components
+
+- Makes the configurations of groups of Atmos components more straightforward to understand and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
 
 ## Example
 
@@ -390,14 +399,6 @@ Make sure to import only the layers that define the component that need to be pr
 
 After the Atmos components are provisioned in the top-level stacks, all Terraform components will get the `Layer` and `Team` tags from the
 corresponding layers.
-
-## Benefits
-
-The **Component Overrides** pattern provides the following benefits:
-
-- Allows to modify or override the configuration and behavior of groups of Atmos components without affecting other groups of Atmos components
-
-- Makes the configurations of groups of Atmos components easier to understand and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
 ## Related Patterns
 
