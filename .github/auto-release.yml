@@ -1,5 +1,5 @@
 name-template: 'v$RESOLVED_VERSION'
-tag-template: '$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
 version-template: '$MAJOR.$MINOR.$PATCH'
 version-resolver:
   major:
