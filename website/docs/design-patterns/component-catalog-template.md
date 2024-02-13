@@ -26,6 +26,18 @@ Use the **Component Catalog Template** pattern when:
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
+## Benefits
+
+The **Component Catalog Template** pattern provides the following benefits:
+
+- All settings for a component are defined in just one place (in the component's template) making the entire
+  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+- Many instances of the component can be provisioned without repeating all the configuration values
+
+- New Atmos components are generated dynamically
+
+
 ## Design Pattern
 
 The **Component Catalog Template** pattern recommends the following:
@@ -154,17 +166,6 @@ atmos terraform apply eks/iam-role/admin-ui --stack plat-ue2-prod
 atmos terraform apply eks/iam-role/auth --stack plat-ue2-prod
 atmos terraform apply eks/iam-role/payment-processing --stack plat-ue2-prod
 ```
-
-## Benefits
-
-The **Component Catalog Template** pattern provides the following benefits:
-
-- All settings for a component are defined in just one place (in the component's template) making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-- Many instances of the component can be provisioned without repeating all the configuration values
-
-- New Atmos components are generated dynamically
 
 ## Limitations
 

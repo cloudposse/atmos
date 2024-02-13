@@ -37,6 +37,16 @@ Use the **Abstract Component** pattern when:
 
 - You need to keep the configuration of all components [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
+## Benefits
+
+The **Abstract Component** pattern provides the following benefits:
+
+- Allows creating very DRY and reusable configurations that are built upon existing abstract base components (blueprints)
+
+- Prevents the abstract base components from being provisioned
+
+- The `metadata.type: abstract` attribute serves as a guard against accidentally deploying the components that are not meant to be deployed
+
 ## Example
 
 The following example shows the Atmos stack and component configurations to provision the `vpc` component into
@@ -203,16 +213,6 @@ the following error will be thrown:
 abstract component 'vpc/defaults' cannot be provisioned since it's explicitly prohibited from 
 being deployed by 'metadata.type: abstract' attribute
 ```
-
-## Benefits
-
-The **Abstract Component** pattern provides the following benefits:
-
-- Allows creating very DRY and reusable configurations that are built upon existing abstract base components (blueprints)
-
-- Prevents the abstract base components from being provisioned
-
-- The `metadata.type: abstract` attribute serves as a guard against accidentally deploying the components that are not meant to be deployed
 
 ## Related Patterns
 

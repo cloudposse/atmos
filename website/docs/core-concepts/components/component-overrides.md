@@ -64,7 +64,9 @@ Refer to [Atmos Component Inheritance](/core-concepts/components/inheritance) fo
 supported by Atmos
 :::
 
-## Use-case: Overrides for Teams
+## Use-cases
+
+### Overrides for Teams
 
 The **overrides** pattern is used to override the components only in a particular Atmos stack manifest and all the imported
 manifests. This is different from the other configuration sections (e.g. `vars`, `settings`, `env`). If we define a `vars`, `settings` or `env`

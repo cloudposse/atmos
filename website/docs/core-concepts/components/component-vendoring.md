@@ -41,7 +41,9 @@ Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
 The `component.yaml` vendoring manifest is used to vendor components from remote repositories.
 A `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
 
-## Vendoring using `component.yaml` manifest
+## Examples
+
+### Vendoring using `component.yaml` manifest
 
 After defining the `component.yaml` vendoring manifest, the remote component can be downloaded by running the following command:
 
@@ -53,7 +55,7 @@ atmos vendor pull -c components/terraform/vpc
 Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more details
 :::
 
-## Vendoring Components from a Monorepo
+### Vendoring Components from a Monorepo
 
 To vendor a component, create a `component.yaml` file stored inside the `components/_type_/_name_/` folder (e.g. `components/terraform/vpc/`).
 
@@ -124,7 +126,7 @@ spec:
 
 <br/>
 
-## Vendoring Modules as Components
+### Vendoring Modules as Components
 
 Any terraform module can also be used as a component, provided that Atmos backend
 generation ([`auto_generate_backend_file` is `true`](/cli/configuration/#components)) is enabled. Use this strategy when you want to use the module
@@ -157,7 +159,7 @@ spec:
       - "**/*.md"
 ```
 
-## Vendoring Components from OCI Registries
+### Vendoring Components from OCI Registries
 
 Atmos supports vendoring components from [OCI registries](https://opencontainers.org).
 

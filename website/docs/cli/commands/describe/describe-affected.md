@@ -15,7 +15,7 @@ Use this command to show a list of the affected Atmos components and stacks give
 The command uses two different Git commits to produce a list of affected Atmos components and stacks.
 
 For the first commit, the command assumes that the current repo root is a Git checkout. An error will be thrown if the current repo is not a Git
-repository (the `.git` folder does not exist or is configured incorrectly).
+repository (the `.git/` folder does not exist or is configured incorrectly).
 
 The second commit can be specified on the command line by using
 the `--ref` ([Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References)) or `--sha` (commit SHA) flags.
@@ -23,15 +23,19 @@ the `--ref` ([Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-R
 Either `--ref` or `--sha` should be used. If both flags are provided at the same time, the command will first clone the remote branch pointed to by
 the `--ref` flag and then checkout the Git commit pointed to by the `--sha` flag (`--sha` flag overrides `--ref` flag).
 
-__NOTE:__ If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA
+:::tip
+If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA
 will point to the `HEAD` of the branch.
+:::
 
 If you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
 repository, but instead will use the already cloned one to compare the current branch with. In this case, the `--ref`, `--sha`, `--ssh-key`
 and `--ssh-key-password` flags are not used, and an error will be thrown if the `--repo-path` flag and any of the `--ref`, `--sha`, `--ssh-key`
 or `--ssh-key-password` flags are provided at the same time.
 
-The command works by:
+## How does it work?
+
+The command performs the following:
 
 - Cloning the target branch (`--ref`) or checking out the commit (`--sha`) of the remote target branch, or using the already cloned target repository
   specified by the `--repo-path` flag
@@ -48,6 +52,11 @@ Since Atmos first checks the component folders for changes, if it finds any affe
 affected. Atmos will then skip evaluating those stacks for differences since we already know that they are affected.
 
 <br/>
+:::tip Use our GitHub Action
+Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run `describe affected` and produce a GitHub matrix.
+:::
+
+## Example Output
 
 ```shell
 > atmos describe affected --verbose=true

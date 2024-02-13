@@ -23,6 +23,18 @@ Use the **Component Catalog** pattern when:
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
+## Benefits
+
+The **Component Catalog with Mixins** pattern provides the following benefits:
+
+- Easy to see where the configuration for each environment is defined
+
+- Easy to manage different variations of the configurations
+
+- The defaults for the components are defined in just one place (in the catalog) making the entire
+  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
 
 ## Design Pattern
 
@@ -389,19 +401,6 @@ import:
 ```
 
 Similarly, import the other environment mixins into the corresponding top-level stacks.
-
-## Benefits
-
-The **Component Catalog with Mixins** pattern provides the following benefits:
-
-- Easy to see where the configuration for each environment is defined
-
-- Easy to manage different variations of the configurations
-
-- The defaults for the components are defined in just one place (in the catalog) making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
 
 ## Limitations
 

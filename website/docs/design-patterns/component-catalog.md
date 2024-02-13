@@ -20,13 +20,18 @@ Use the **Component Catalog** pattern when:
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-<br/>
 
-:::note
-Having the `dev`, `staging`, `prod`, `ue2` and `uw2` manifests in the component's catalog makes the most sense for multi-org, multi-OU and/or
-multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
-top-level stack manifests.
-:::
+## Benefits
+
+The **Component Catalog** pattern provides the following benefits:
+
+- The defaults for the components are defined in just one place (in the catalog) making the entire
+  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
+
+- It's easy to add a new manifest in the component's catalog to enable a new component's feature, then import the manifest into the corresponding
+  stacks where the feature is required
 
 ## Design Pattern
 
@@ -49,6 +54,12 @@ The **Component Catalog** pattern prescribes the following:
   - `stacks/catalog/vpc/ue2.yaml` - component manifest with the settings for `us-east-2` region
   - `stacks/catalog/vpc/uw2.yaml` - component manifest with the settings for `us-west-2` region
   - `stacks/catalog/vpc/feature-1.yaml` - component manifest with `feature-1` setting enabled
+
+:::note
+Having the `dev`, `staging`, `prod`, `ue2` and `uw2` manifests in the component's catalog makes the most sense for multi-org, multi-OU and/or
+multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
+top-level stack manifests.
+:::
 
 - After we have defined the manifests for different use-cases, we import them into different top-level stacks depending on a particular use-case.
   For example:
@@ -332,18 +343,6 @@ import:
   # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
   - catalog/vpc/prod
 ```
-
-## Benefits
-
-The **Component Catalog** pattern provides the following benefits:
-
-- The defaults for the components are defined in just one place (in the catalog) making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
-
-- It's easy to add a new manifest in the component's catalog to enable a new component's feature, then import the manifest into the corresponding
-  stacks where the feature is required
 
 ## Limitations
 

@@ -43,6 +43,8 @@ state for the component in the stack.
 
 <br/>
 
+## Example
+
 Here is an example.
 
 Suppose that we need to provision two Terraform components:
@@ -58,7 +60,7 @@ the `us-east-2` region by setting `environment = "ue2"`).
 
 <br/>
 
-## Configure and Provision the `vpc-flow-logs-bucket` Component
+### Configure and Provision the `vpc-flow-logs-bucket` Component
 
 In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
 component:
@@ -123,7 +125,7 @@ atmos terraform apply vpc-flow-logs-bucket-1 -s ue2-dev
 
 <br/>
 
-## Configure and Provision the `vpc` Component
+### Configure and Provision the `vpc` Component
 
 Having the `vpc-flow-logs-bucket` Terraform component provisioned into the `ue2-dev` stack, we can now configure the `vpc` Terraform component
 to obtain the outputs from the remote state of the `vpc-flow-logs-bucket-1` Atmos component.
@@ -263,7 +265,7 @@ atmos terraform apply vpc/1 -s ue2-dev
 
 ## Caveats
 
-Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
+Both the `atmos` [CLI](/cli) and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
 which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
 
 This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.

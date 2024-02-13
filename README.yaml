@@ -78,7 +78,7 @@ introduction: |-
   indispensable asset for managing complex infrastructures with confidence.
 
   - [**Terminal UI**](https://atmos.tools/cli) Polished interface for easier interaction with Terraform, workflows, and commands.
-  - [**Native Terraform Support:**](https://atmos.tools/cli/commands/terraform) Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
+  - [**Native Terraform Support:**](https://atmos.tools/cli/commands/terraform/usage) Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
   - [**Stacks:**](https://atmos.tools/core-concepts/stacks) Powerful abstraction layer defined in YAML for orchestrating and deploying components.
   - [**Components:**](https://atmos.tools/core-concepts/components) A generic abstraction for deployable units, such as Terraform "root" modules.
   - [**Vendoring:**](https://atmos.tools/core-concepts/vendoring) Pulls dependencies from remote sources, supporting immutable infrastructure practices.
@@ -94,13 +94,19 @@ introduction: |-
 
   - **Managing Large Multi-Account Cloud Environments:** Suitable for organizations using multiple cloud accounts to separate different
     projects or stages of development.
-  - **Cross-Platform Cloud Architectures:** Ideal for businesses that use services across AWS, GCP, Azure, etc., to build a cohesive system.
-  - **Multi-Tenant Systems for SaaS:** Perfect for SaaS companies that need to securely host multiple customers within the same infrastructure.
-  - **Stable Multi-Region Deployments:** Ensures high availability and disaster recovery by spanning cloud services across different
-    geographical regions.
-  - **Compliant Infrastructure for Regulated Industries:** Provides a robust base for developing vetted, compliant configurations that
-    align with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations, accessible through the service catalog,
-    empower anyone constructing services on this foundation to achieve and maintain strict compliance with ease.
+  - **Cross-Platform Cloud Architectures:** Ideal for businesses that need to manage configuration of services across AWS, GCP, Azure, etc., to
+    build a cohesive system.
+  - **Multi-Tenant Systems for SaaS:** Perfect for SaaS companies looking to host multiple customers within a unified infrastructure.
+    Simply define a baseline tenant configuration once, and then seamlessly onboard new tenants by reusing this baseline through pure
+    configuration, bypassing the need for further code development.
+  - **Efficient Multi-Region Deployments:** Atmos facilitates streamlined multi-region deployments by enabling businesses to define baseline
+    configurations with [stacks](https://atmos.tools/core-concepts/stacks/) and extend them across regions with DRY principles through
+    [imports](https://atmos.tools/core-concepts/stacks/imports) and [inheritance](https://atmos.tools/core-concepts/components/inheritance).
+  - **Compliant Infrastructure for Regulated Industries:** Atmos empowers DevOps and SecOps teams to create vetted configurations that comply
+    with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations can then be efficiently shared and reused across the
+    organization via [service catalogs](https://atmos.tools/core-concepts/stacks/catalogs), [component libraries](https://atmos.tools/core-concepts/components/library),
+    [vendoring](https://atmos.tools/core-concepts/vendoring), and [OPA policies](https://atmos.tools/core-concepts/components/validation),
+    simplifying the process of achieving and maintaining rigorous compliance.
   - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using
     predefined templates and policies.
   - **Streamlining Deployment with Service Catalogs, Landing Zones, and Blueprints:** Provides ready-to-use templates and guidelines for

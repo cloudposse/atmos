@@ -57,7 +57,12 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
     background-color: yellow;
 }
 
+html[data-theme='dark'] body {
+  background-image: url("/static/img/cloudposse-opaque.svg");
+}
+
 body {
+    background-color: var(--ifm-background-color);
     background-image: url("/static/img/cloudposse-light.svg");
     background-position: 98% 98%;
     background-repeat: no-repeat;
@@ -92,7 +97,7 @@ li > ul.menu__list {
 }
 
 html[data-theme='dark'] article ul strong, html[data-theme='dark'] article ol strong {
-    color: rgb(173, 219, 103)
+    color: #7f87cd;
 }
 
 article ul strong, article ol strong {
@@ -101,6 +106,10 @@ article ul strong, article ol strong {
 
 article .theme-admonition-danger ul li strong, article .theme-admonition-danger ol li strong {
     color: #ff8a8a
+}
+
+article ul >li, article ol > li {
+    margin-bottom: 1em;
 }
 
 /* You can override the default Infima variables here. */
@@ -170,10 +179,10 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
 }
 
 html[data-theme='dark'] {
-    --ifm-background-color: #0a1922;
     --ifm-background-surface-color: #0a1922;
     --ifm-navbar-background-color: #0a1922;
     --ifm-background-color: #0a1922;
+    background: transparent;
 }
 
 table tr td {

@@ -22,7 +22,12 @@ Get a head start by utilizing Cloud Posse's free [Terraform components for AWS](
 - **Rapid Prototyping and Scalability:** Utilize a component library to quickly prototype and scale applications. Pre-built modules for common
   infrastructure patterns allow teams to focus on application development rather than infrastructure setup, accelerating time-to-market and ensuring scalability from the outset.
 
-## Component Filesystem Layout
+
+## Filesystem Layouts
+
+There's no "one way" to organize your components, since it's configurable based on your needs in the [CLI Configuration](/cli/configuration). However, here are some popular ways we've seen components organized.
+
+### Simple Filesystem Layout by Toolchain
 
 By convention, we recommend placing components in a folder organized by the tool, within the `components/` folder. 
 In the following example, our toolchain consists of `docker`, `helmfile` and `terraform`, so a folder is created for each one, with the code
@@ -55,7 +60,7 @@ Organizing the components on the filesystem is configurable in the [Atmos CLI co
 :::
 
 
-## Multi-Cloud Filesystem Layout
+### Multi-Cloud Filesystem Layout
 
 One good way to organize components is by the cloud provider for multi-cloud architectures.
 
