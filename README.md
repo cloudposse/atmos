@@ -71,7 +71,7 @@ You can even access the configurations natively from within terraform using our 
 > ### Did you know?
 >
 > By leveraging Atmos in conjunction with Cloud Posse's [*expertise in AWS*](https://cloudposse.com),
-> [*terraform blueprints*](https://cloudposse.com/services/), and our [*knowledgable community*](https://slack.cloudposse.com), teams can achieve
+> [*terraform blueprints*](https://cloudposse.com/services/), and our [*knowledgeable community*](https://slack.cloudposse.com), teams can achieve
 > operational mastery and innovation faster, transforming their infrastructure management practices into a competitive advantage.
 
 ## Core Features
@@ -224,7 +224,9 @@ Ensure that your team succeeds by using our proven process and turnkey blueprint
 <summary>Preamble to the Apache License, Version 2.0</summary>
 <br/>
 <br/>
+
 Complete license is available in the [`LICENSE`](LICENSE) file.
+
 ```text
 Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
