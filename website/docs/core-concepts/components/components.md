@@ -50,7 +50,7 @@ scalable, and reliable systems, ensuring a smooth and effective infrastructure m
 
 ## Component Schema
 
-To configure a Component inside of a [Stack](/core-concepts/stacks), A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
+To configure a Component in a [Stack](/core-concepts/stacks), A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
 component. The configuration of a component is stored in a Stack configuration.
 
 <br/>
@@ -81,7 +81,7 @@ components:
         # Components can be of type "real" (default) or "abstract"
         type: real
         # This is the directory path of the component. 
-        # In this example, we're referencing a component in the `componentns/terraform/stable/example` folder.
+        # In this example, we're referencing a component in the `components/terraform/stable/example` folder.
         component: stable/example
 
         # We can leverage multiple inheritance to sequentially deep merge multiple configurations
@@ -124,7 +124,7 @@ vars:
 This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
 In a multi-tenant configuration, the tenant represents a single `tenant`. By convention, we typically
-recommend that every tenant have it's own Organizational Unit (OU).
+recommend that every tenant have its own Organizational Unit (OU).
 
 Example:
 
@@ -137,7 +137,7 @@ vars:
 
 This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
-The `stage` is where workloads run. See our [glossary](/terms) for disamgiguation.
+The `stage` is where workloads run. See our [glossary](/terms) for disambiguation.
 
 Example:
 
@@ -151,7 +151,7 @@ vars:
 
 This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
-The `environment` is used for location where things run. See our [glossary](/terms) for disamgiguation.
+The `environment` is used for location where things run. See our [glossary](/terms) for disambiguation.
 
 Example:
 
@@ -172,7 +172,7 @@ The `settings` block is a free-form map used to pass configuration information t
 
 ### Types of Components
 
-The type of a component is expressed in the `metadata.type` parameter of a given component configuration.
+The type of component is expressed in the `metadata.type` parameter of a given component configuration.
 
 There are two types of components:
 
