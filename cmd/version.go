@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -25,14 +26,16 @@ var versionCmd = &cobra.Command{
 			u.LogErrorAndExit(err)
 		}
 
-		u.PrintMessage(fmt.Sprintf("Atmos %s on %s/%s", Version, runtime.GOOS, runtime.GOARCH))
+		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", Version, runtime.GOOS, runtime.GOARCH))
 		fmt.Println()
 
 		// Check for the latest Atmos release on GitHub
 		latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 		if err == nil && latestReleaseTag != "" {
-			if latestReleaseTag != Version {
-				printMessageToUpgradeToAtmosLatestRelease(latestReleaseTag)
+			latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
+			currentRelease := strings.TrimPrefix(Version, "v")
+			if latestRelease != currentRelease {
+				printMessageToUpgradeToAtmosLatestRelease(latestRelease)
 			}
 		}
 	},

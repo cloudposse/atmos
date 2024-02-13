@@ -21,7 +21,7 @@ orchestrating tools, but it has trouble scaling up to support large projects. We
 3+ years. The problems we ran into is that `make` targets do not support "natural" parameterization, which leads to a proliferation of environment
 variables that are difficult to validate or hacks like overloading make-targets and parsing them (e.g. `make apply/prod`). Makefiles are unintuitive
 for newcomers because they are first evaluated as a template, and then executed as a script where each line of a target runs in a separate process
-space. Spaces matter too and it's made worse with inconsistent rules using tabs in some places and spaces in others.
+space. Spaces matter too, and it's made worse with inconsistent rules using tabs in some places and spaces in others.
 
 ### Mage (Magefile)
 
@@ -72,7 +72,7 @@ The following is a list of tools that only support Terraform.
 
 :::tip Atmos Differentiators
 Atmos not only supports Terraform, but can be used to manage any CLI. For example, by combining [Custom commands](/core-concepts/custom-commands)
-and [workflows](/core-concepts/workflows) it's possible support any CLI tool (even the ones listed below) or even reimplement core functionality of
+and [workflows](/core-concepts/workflows), it's possible to support any CLI tool (even the ones listed below) or even reimplement core functionality of
 atmos. That's how extensible it is.
 :::
 

@@ -7,7 +7,7 @@ description: Use this command to show the final (deep-merged) CLI configuration 
 ---
 
 :::note Purpose
-Use this command to show the final (deep-merged) CLI configuration of all `atmos.yaml` file(s).
+Use this command to show the final (deep-merged) [CLI configuration](/cli/configuration) of all `atmos.yaml` file(s).
 :::
 
 ## Usage 
@@ -18,7 +18,7 @@ Execute the `describe config` command like this:
 atmos describe config [options]
 ```
 
-This command shows the final (deep-merged) CLI configuration (from `atmos.yaml` file(s)).
+This command shows the final (deep-merged) [CLI configuration](/cli/configuration) (from `atmos.yaml` file(s)).
 
 :::tip
 Run `atmos describe config --help` to see all the available options

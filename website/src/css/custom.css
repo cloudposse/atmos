@@ -57,7 +57,12 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
     background-color: yellow;
 }
 
+html[data-theme='dark'] body {
+  background-image: url("/static/img/cloudposse-opaque.svg");
+}
+
 body {
+    background-color: var(--ifm-background-color);
     background-image: url("/static/img/cloudposse-light.svg");
     background-position: 98% 98%;
     background-repeat: no-repeat;
@@ -77,9 +82,11 @@ nav.navbar {
 }
 */
 
+/* Uncomment to shift carets to the left 
 .menu__link {
     order: 1;
 }
+*/
 
 .menu__caret:before {
     background: var(--ifm-menu-link-sublist-icon) 50% / 2rem 1.5rem;
@@ -90,7 +97,7 @@ li > ul.menu__list {
 }
 
 html[data-theme='dark'] article ul strong, html[data-theme='dark'] article ol strong {
-    color: rgb(173, 219, 103)
+    color: #7f87cd;
 }
 
 article ul strong, article ol strong {
@@ -99,6 +106,10 @@ article ul strong, article ol strong {
 
 article .theme-admonition-danger ul li strong, article .theme-admonition-danger ol li strong {
     color: #ff8a8a
+}
+
+article ul >li, article ol > li {
+    margin-bottom: 1em;
 }
 
 /* You can override the default Infima variables here. */
@@ -132,6 +143,7 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
     --ifm-color-primary-lighter: #72a1ed;
     --ifm-color-primary-lightest: #9abcf2;
     --ifm-card-background-color: #eeeeee14;
+    --ifm-button-color: #ccc;
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
 
@@ -167,8 +179,10 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
 }
 
 html[data-theme='dark'] {
-    --ifm-background-color: #1e2125;
-    --ifm-background-surface-color: #1b1e22;
+    --ifm-background-surface-color: #0a1922;
+    --ifm-navbar-background-color: #0a1922;
+    --ifm-background-color: #0a1922;
+    background: transparent;
 }
 
 table tr td {
@@ -202,6 +216,10 @@ li.menu__list-item.command {
     font-family: var(--ifm-font-family-monospace);
 }
 
+li.menu__list-item.hidden {
+    display: none;
+}
+
 .aa-Autocomplete > .aa-DetachedSearchButton {
     border-radius: 32px;
 }
@@ -221,6 +239,70 @@ li.menu__list-item.command {
 
 .navbar-cta-button:hover {
     color: var(--ifm-button-color);
+}
+
+q {
+    quotes: "“" "”" "‘" "’";
+    margin-left: 0.5em;
+    display: block;
+    font-style: italic;
+    color: var(--ifm-color-gray-600);
+    font-weight: 100;
+}
+
+q::before {
+    content: open-quote;
+    font-size: 2.3em;
+    line-height: 0.5em;
+    position: relative;
+    right: 15px;
+    top: 10px;
+    padding-right: 0.1em;
+    width: 0;
+    display: inline-block;
+}
+q::after {
+    content: close-quote;
+    display: none;
+    font-size: 2.3em;
+    line-height: 0.5em;
+    position: relative;
+    top: 10px;
+    padding-left: 0.1em;
+}
+
+q .author {
+    display: inline-block;
+    float: right;
+}
+
+dl dt {
+  font-weight: bold;
+}
+
+dl dd {
+    font-style: italic
+}
+
+dd p {
+    margin: 0;
+}
+
+dd.disambiguation label {
+    font-weight: bold;
+}
+
+dd.disambiguation {
+    font-style: normal;
+    display: inline-block;
+    float: right;
+}
+dd.disambiguation > a:not(:last-child)::after {
+    content: ",";
+}
+
+dd.disambiguation a {
+     margin-left: 0.5em;
 }
 
 @keyframes gradient {

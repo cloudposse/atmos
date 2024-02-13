@@ -10,7 +10,7 @@ description: Inline Component Configuration Atmos Design Pattern
 The **Inline Component Configuration** pattern is used when the [components](/core-concepts/components) in a [stack](/core-concepts/stacks) 
 are configured inline in the stack manifest without [importing](/core-concepts/stacks/imports) and reusing default/base configurations. If you're starting with Atmos, this will be the easiest to understand until you need the more advanced features.
 
-## Applicability
+## Use-cases
 
 Use the **Inline Component Configuration** pattern when:
 
@@ -20,6 +20,14 @@ Use the **Inline Component Configuration** pattern when:
   stack manifest and is not used in other stacks
 
 - For testing or development purposes
+
+## Benefits
+
+The **Inline Component Configuration** pattern provides the following benefits:
+
+- Very simple stack and component configurations
+
+- Define all components in just one place (in one stack manifest) so it's easier to see what and where everything is provisioned
 
 ## Example
 
@@ -123,14 +131,6 @@ To provision the components, execute the following commands:
 atmos terraform apply vpc-flow-logs-bucket -s dev
 atmos terraform apply vpc -s dev
 ```
-
-## Benefits
-
-The **Inline Component Configuration** pattern provides the following benefits:
-
-- Very simple stack and component configurations
-
-- All components are defined in just one place (in one stack manifest) - easier to see what is provisioned and where
 
 ## Limitations
 

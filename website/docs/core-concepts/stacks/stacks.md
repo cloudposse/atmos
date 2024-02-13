@@ -6,29 +6,52 @@ description: Stacks are a way to express the complete infrastructure needed for 
 id: stacks
 ---
 
-Stacks are a way to express the complete infrastructure needed for an environment. Think of a Stack as an architectural "Blueprint" composed
-of one or more [Components](/core-concepts/components) and defined using a
-[standardized YAML configuration](#schema).
+Stacks are a way to express the complete infrastructure needed for an environment. Think of a Stack like an architectural "Blueprint" composed
+of one or more [Components](/core-concepts/components) and defined using a [standardized YAML configuration](#schema).
 
-Stacks are an abstraction layer that is used to instantiate Components (e.g. Terraform "root" modules). Stacks consist of a set of YAML files that follow a standard schema to enable a fully declarative description of your various environments. This empowers you to separate your infrastructure’s environment configuration settings from the code itself (e.g. Terraform components).
+This abstraction layer helps to automate the orchestration and deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. They enable scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks)
+by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., Terraform components).
 
-Atmos utilizes a custom YAML configuration format for stacks because it’s an easy-to-work-with format that is nicely portable across multiple tools. The stack YAML format is natively supported today via Atmos,
-the [terraform-yaml-stack-config](https://github.com/cloudposse/terraform-yaml-stack-config) module, and Spacelift via the
-[terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module.
+By facilitating the infrastructure configurations this way, developers achieve DRY (Don't Repeat Yourself) architectures with minimal configuration. Stacks make infrastructure more streamlined and consistent, significantly enhancing productivity. Best of all, Stacks can deploy 
+vanilla Terraform "root" modules *without* any code generation, custom vendor extensions, or changes to the HCL code.
+
+Atmos utilizes a custom YAML configuration format for stacks. YAML is ideal because it's portable across multiple toolchains and languages; every developer understands it. The Atmos [CLI](/cli), the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-utils) provider, and Spacelift via the [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module all support stacks. Utilizing the Terraform provider enables native access to the entire infrastructure configuration directly from Terraform.
+
+## Use-cases
+
+- **Rapid Environment Provisioning:** Leverage stacks to swiftly set up and replicate development, testing, and production environments, ensuring consistency and reducing manual setup errors. This accelerates the development cycle and enables businesses to respond quickly to market demands or development needs.
+- **Multi-Tenant Infrastructure Management:** Utilize stacks to manage and isolate resources for different clients or projects within a single cloud infrastructure. This approach supports SaaS companies in providing secure, isolated environments for each tenant, optimizing resource utilization and simplifying the management of complex, multi-tenant architectures.
+- **Compliance and Governance:** Implement stacks to enforce compliance and governance policies across all environments systematically. By defining standard configurations that meet regulatory requirements, businesses can ensure that every deployment is compliant, reducing the risk of violations and enhancing security posture.
+
+## Best Practices
+
+:::tip
+Remember to adhere to the laws physics. All other laws are meant broken.
+:::
+
+- **Treat Stack Templates like an Escape Hatch** Apply it carefully and only when necessary. Using templates instead of inheritance can make stack configurations complex and hard to manage. Be careful using stack templates together with the component factory pattern.
+- **Avoid Too Many Levels of Imports** It's very difficult for others to follow relationships when there are too many nested levels and overrides.
+- **Balance DRY Principles with Configuration Clarity** Avoid overly DRY configuration as it leads to complexity rashes. Sometimes repeating configuration is beneficial for maintenance and clarity.
+- **Reserve Code Generation for Stack Configuration** While we generally advise against using code generation for application logic (components), it's beneficial for creating configurations where appropriate, such as developer environments and SaaS tenants. These configurations ought to be committed.
+- **Use Mixin Pattern for Snippets of Stack Configuration** Employ the mixin pattern for clarity when there there is brief configuration snippets that are reusable. Steer clear of minimal stack configurations simply for the sake of DRYness as it frequently leads to too many levels of imports.
 
 ## Conventions
 
+The differentiation between the following two types of stacks is crucial for understanding how to organize stacks and the basis for the
+various [design patterns](/design-patterns/).
+
 ### Parent Stacks
 
-*Parent Stacks* are the top-level Stacks that are responsible for importing Child Stacks. Parent stacks are deployable, unlike Child stacks.
+*Parent Stacks* are the top-level stacks that are responsible for importing Child stacks. Components inside of Parent stacks are deployable, unlike in Child stacks.
 
 ### Child Stacks
 
-*Child Stacks* are any stacks that cannot be deployed by themselves without getting imported by a Parent Stack.
+*Child Stacks* are any stacks whose components cannot be deployed independently without being imported by a Parent Stack.
+[Catalogs](/core-concepts/stacks/catalogs) are typically where we keep our Child stacks.
 
 ## Schema
 
-A Stack file contains a manifest that is defined in YAML and follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema; however, every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and implement [inheritance](/core-concepts/components/inheritance).
+A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and use [inheritance](/core-concepts/components/inheritance) to achieve DRY configuration.
 
 ```yaml
 # Configurations that should get deep-merged into this one

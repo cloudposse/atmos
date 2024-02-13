@@ -8,10 +8,19 @@ description: Catalogs are how to organize all Stack configurations for easy impo
 
 # Catalogs
 
-Catalogs are how to logically organize all the [Stack](/core-concepts/stacks) configurations for use by [imports](/core-concepts/stacks/imports). 
-There's no "right or wrong" way to do it, and Atmos does not enforce any one convention.  
-What we've come to realize is there's no "one way" to organize Stack configurations. 
-The best way to organize them will come down to the way an organization wants to model infrastructure.
+Catalogs are how to logically organize all the child [Stack](/core-concepts/stacks) configurations on the filesystem for use by 
+[imports](/core-concepts/stacks/imports). There's no "right or wrong" way to do it, and Atmos does not enforce any one convention. 
+What we've come to realize is there's no "one way" to organize Stack configurations. The best way to organize them will come down to
+how an organization wants to model its infrastructure.
+
+:::tip See Design Patterns
+
+We go into greater depth on this convention in our [design patterns](/design-patterns/):
+
+- [Component Catalogs](/design-patterns/component-catalog)
+- [Component Catalogs with Mixins](/design-patterns/component-catalog-with-mixins)
+- [Component Catalogs with Templates](/design-patterns/component-catalog-template)
+:::
 
 Below is how we implement them at [Cloud Posse](https://cloudposse.com).
 
@@ -120,7 +129,8 @@ In sticking with this theme, a good filesystem layout for infrastructure looks l
 ```
 
 :::info
-Cloud Posse uses the "Organizations" layout for all the "parent stacks". Parent stacks are the top-level stacks which are responsible for importing the other stacks (E.g. teams, mixins, etc)
+Cloud Posse uses the "Organizations" layout for all the "parent stacks". Parent stacks are the top-level stacks which are responsible for importing
+the other child stacks (e.g. teams, mixins, etc.)
 :::
 
 What's important to point out is that all these conventions are not mutually exclusive. In fact, we like to combine them.

@@ -6,12 +6,34 @@ description: "A component library is a collection of reusable building blocks."
 id: library
 ---
 
-A component library is a collection of reusable building blocks (aka "components") that can be instantiated any number of times from [Stacks](/core-concepts/stacks).
+A component library is a collection of reusable "components" that are reused any number of times from within [Stacks](/core-concepts/stacks). 
+It's helpful to think of these as the essential "building blocks" of infrastructure, like VPCs, clusters or databases.
+
+:::tip
+Get a head start by utilizing Cloud Posse's free [Terraform components for AWS](https://github.com/cloudposse/terraform-aws-components), available on GitHub.
+:::
+
+## Use-cases
+
+- **Developer Productivity** Create a component library of vetted terraform root modules that should be used by teams anytime they need to spin
+  up infrastructure for VPCs, clusters, and databases.
+- **Compliance and Governance:** Establish a component library to enforce infrastructure standards, security policies, and compliance requirements.
+  By using pre-approved modules, organizations can maintain control over their infrastructure's configuration, reducing the risk of non-compliance.
+- **Rapid Prototyping and Scalability:** Utilize a component library to quickly prototype and scale applications. Pre-built modules for common
+  infrastructure patterns allow teams to focus on application development rather than infrastructure setup, accelerating time-to-market and ensuring scalability from the outset.
 
 
-## Filesystem Layout
+## Filesystem Layouts
 
-By convention, we recommend placing components in a folder organized by the tool (e.g. `components/terraform` or `components/docker`).
+There's no "one way" to organize your components, since it's configurable based on your needs in the [CLI Configuration](/cli/configuration). However, here are some popular ways we've seen components organized.
+
+### Simple Filesystem Layout by Toolchain
+
+By convention, we recommend placing components in a folder organized by the tool, within the `components/` folder. 
+In the following example, our toolchain consists of `docker`, `helmfile` and `terraform`, so a folder is created for each one, with the code
+for that component inside of it.
+
+If using `terraform` with multiple clouds, use the [multi-cloud filesytem layout](#multi-cloud-filesystem-layout).
 
 ```console
 └── components/
@@ -21,16 +43,47 @@ By convention, we recommend placing components in a folder organized by the tool
     │   └── example-app
     │       └── helmfile.yaml
     └── terraform/
-        └── example/
+        └── example/                  # This is a terraform "root" module
             ├── main.tf
             ├── outputs.tf
-            ├── modules/
-            │   ├── bar/
-            │   └── foo/
-            │       ├── main.tf
-            │       ├── outputs.tf
-            │       └── variables.tf
-            └── variables.tf
+            ├── modules/              # You can include submodules inside the component folder,
+            │   ├── bar/              # and then reference them inside the of your root module.
+            │   └── foo/              # e.g.
+            │       ├── main.tf       # module "foo" {
+            │       ├── outputs.tf    #   source = "./modules/foo"
+            │       └── variables.tf  #   ...
+            └── variables.tf          # }
+```
+
+:::tip
+Organizing the components on the filesystem is configurable in the [Atmos CLI configuration](/cli/configuration#configuration-file-atmosyaml).
+:::
+
+
+### Multi-Cloud Filesystem Layout
+
+One good way to organize components is by the cloud provider for multi-cloud architectures.
+
+For example, if an architecture consists of infrastructure in AWS, GCP, and Azure, it would look like this:
+
+```console
+└── components/
+    └── terraform/
+        ├── aws/                   # Components for Amazon Web Services (AWS)
+        │   └── example/
+        │       ├── main.tf
+        │       ├── outputs.tf
+        │       └── variables.tf
+        ├── gcp/                   # Components for Google Cloud (GCP)
+        │   └── example/
+        │       ├── main.tf
+        │       ├── outputs.tf
+        │       └── variables.tf
+        └── azure/                 # Components for Microsoft Azure (Azure)
+            └── example/
+                ├── main.tf
+                ├── outputs.tf
+                └── variables.tf
 ```
 
 ## Terraform Conventions

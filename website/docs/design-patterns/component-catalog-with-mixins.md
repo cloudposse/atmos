@@ -13,51 +13,7 @@ assemble environment-specific manifests from the parts, and then import the envi
 
 It's similar to how [Helm](https://helm.sh/) and [helmfile](https://helmfile.readthedocs.io/en/latest/#environment) handle environments.
 
-The **Component Catalog with Mixins** Design Pattern prescribes the following:
-
-- For a Terraform component, create a folder with the same name in `stacks/catalog` to make it symmetrical and easy to find.
-  For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
-
-- In the component's catalog folder, in the `mixins` sub-folder, add manifests with component configurations for specific environments (organizations,
-  tenants, regions, accounts). For example:
-
-  - `stacks/catalog/vpc/mixins/defaults.yaml` - component manifest with all the default values for the component (the defaults that can be reused
-    across multiple environments)
-  - `stacks/catalog/vpc/mixins/dev.yaml` - component manifest with the settings related to the `dev` account
-  - `stacks/catalog/vpc/mixins/prod.yaml` - component manifest with the settings related to the `prod` account
-  - `stacks/catalog/vpc/mixins/staging.yaml` - component manifest with the settings related to the `staging` account
-  - `stacks/catalog/vpc/mixins/ue2.yaml` - component manifest with the settings for `us-east-2` region
-  - `stacks/catalog/vpc/mixins/uw2.yaml` - component manifest with the settings for `us-west-2` region
-  - `stacks/catalog/vpc/mixins/core.yaml` - component manifest with the settings related to the `core` tenant
-  - `stacks/catalog/vpc/mixins/plat.yaml` - component manifest with the settings related to the `plat` tenant
-  - `stacks/catalog/vpc/mixins/org1.yaml` - component manifest with the settings related to the `org1` organization
-  - `stacks/catalog/vpc/mixins/org2.yaml` - component manifest with the settings related to the `org2` organization
-
-- In the component's catalog folder, add manifests for specific environments by assembling the corresponding mixins together (using imports). For
-  example:
-
-  - `stacks/catalog/vpc/org1-plat-ue2-dev.yaml` - manifest for the `org1` organization, `plat` tenant, `ue2` region, `dev` account
-  - `stacks/catalog/vpc/org1-plat-ue2-prod.yaml` - manifest for the `org1` organization, `plat` tenant, `ue2` region, `prod` account
-  - `stacks/catalog/vpc/org1-plat-ue2-staging.yaml` - manifest for the `org1` organization, `plat` tenant, `ue2` region, `staging` account
-  - `stacks/catalog/vpc/org1-plat-uw2-dev.yaml` - manifest for the `org1` organization, `plat` tenant, `uw2` region, `dev` account
-  - `stacks/catalog/vpc/org1-plat-uw2-prod.yaml` - manifest for the `org1` organization, `plat` tenant, `uw2` region, `prod` account
-  - `stacks/catalog/vpc/org1-plat-uw2-staging.yaml` - manifest for the `org1` organization, `plat` tenant, `uw2` region, `staging` account
-  - `stacks/catalog/vpc/org2-plat-ue2-dev.yaml` - manifest for the `org2` organization, `plat` tenant, `ue2` region, `dev` account
-  - `stacks/catalog/vpc/org2-plat-ue2-prod.yaml` - manifest for the `org2` organization, `plat` tenant, `ue2` region, `prod` account
-  - `stacks/catalog/vpc/org2-plat-ue2-staging.yaml` - manifest for the `org2` organization, `plat` tenant, `ue2` region, `staging` account
-  - `stacks/catalog/vpc/org2-plat-uw2-dev.yaml` - manifest for the `org2` organization, `plat` tenant, `uw2` region, `dev` account
-  - `stacks/catalog/vpc/org2-plat-uw2-prod.yaml` - manifest for the `org2` organization, `plat` tenant, `uw2` region, `prod` account
-  - `stacks/catalog/vpc/org2-plat-uw2-staging.yaml` - manifest for the `org2` organization, `plat` tenant, `uw2` region, `staging` account
-
-- Import the environment manifests into the top-level stacks. For example:
-
-  - import the `stacks/catalog/vpc/org1-plat-ue2-dev.yaml` manifest into the `stacks/orgs/org1/plat/dev/us-east-2.yaml` top-level stack
-  - import the `stacks/catalog/vpc/org1-plat-ue2-prod.yaml` manifest into the `stacks/orgs/org1/plat/prod/us-east-2.yaml` top-level stack
-  - import the `stacks/catalog/vpc/org1-plat-uw2-staging.yaml` manifest into the `stacks/orgs/org1/plat/staging/us-west-2.yaml` top-level stack
-  - import the `stacks/catalog/vpc/org2-plat-ue2-dev.yaml` manifest into the `stacks/orgs/org2/plat/dev/us-east-2.yaml` top-level stack
-  - etc.
-
-## Applicability
+## Use-cases
 
 Use the **Component Catalog** pattern when:
 
@@ -67,11 +23,83 @@ Use the **Component Catalog** pattern when:
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-:::note
-Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
-multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported into multiple Org/OU
-top-level stack manifests.
-:::
+## Benefits
+
+The **Component Catalog with Mixins** pattern provides the following benefits:
+
+- Easy to see where the configuration for each environment is defined
+
+- Easy to manage different variations of the configurations
+
+- The defaults for the components are defined in just one place (in the catalog) making the entire
+  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
+
+## Design Pattern
+
+The **Component Catalog with Mixins** Design Pattern prescribes the following:
+
+- For a Terraform component, create a folder with the same name in `stacks/catalog` to make it symmetrical and easy to find.
+  For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
+
+- In the component's catalog folder, in the `mixins` sub-folder, add manifests with component configurations for specific environments (organizations,
+  tenants, regions, accounts). For example:
+
+
+  | File Path                                      | Description                                                |
+  | ----------------------------------------------| ----------------------------------------------------------- |
+  | `stacks/catalog/vpc/mixins/defaults.yaml`      | Component manifest with default values                     |
+  | `stacks/catalog/vpc/mixins/dev.yaml`           | Component manifest with settings for `dev` account         |
+  | `stacks/catalog/vpc/mixins/prod.yaml`          | Component manifest with settings for `prod` account        |
+  | `stacks/catalog/vpc/mixins/staging.yaml`       | Component manifest with settings for `staging` account     |
+  | `stacks/catalog/vpc/mixins/ue2.yaml`           | Component manifest with settings for `us-east-2` region    |
+  | `stacks/catalog/vpc/mixins/uw2.yaml`           | Component manifest with settings for `us-west-2` region    |
+  | `stacks/catalog/vpc/mixins/core.yaml`          | Component manifest with settings for `core` tenant         |
+  | `stacks/catalog/vpc/mixins/plat.yaml`          | Component manifest with settings for `plat` tenant         |
+  | `stacks/catalog/vpc/mixins/org1.yaml`          | Component manifest with settings for `org1` organization   |
+  | `stacks/catalog/vpc/mixins/org2.yaml`          | Component manifest with settings for `org2` organization   |
+
+  <br/>
+
+  :::note
+  Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
+  multi-region architectures, such that there will be multiple dev/staging/prod or region configurations, which get imported
+  into multiple Org/OU top-level stack manifests.
+  :::
+
+  <br/>
+
+- In the component's catalog folder, add manifests for specific environments by assembling the corresponding mixins together (using imports). For
+  example:
+
+  | File Path                                       | Description                                                                          |
+  | ----------------------------------------------- | ------------------------------------------------------------------------------------ |
+  | `stacks/catalog/vpc/org1-plat-ue2-dev.yaml`     | Manifest for the `org1` organization, `plat` tenant, `ue2` region, `dev` account     |
+  | `stacks/catalog/vpc/org1-plat-ue2-prod.yaml`    | Manifest for the `org1` organization, `plat` tenant, `ue2` region, `prod` account    |
+  | `stacks/catalog/vpc/org1-plat-ue2-staging.yaml` | Manifest for the `org1` organization, `plat` tenant, `ue2` region, `staging` account |
+  | `stacks/catalog/vpc/org1-plat-uw2-dev.yaml`     | Manifest for the `org1` organization, `plat` tenant, `uw2` region, `dev` account     |
+  | `stacks/catalog/vpc/org1-plat-uw2-prod.yaml`    | Manifest for the `org1` organization, `plat` tenant, `uw2` region, `prod` account    |
+  | `stacks/catalog/vpc/org1-plat-uw2-staging.yaml` | Manifest for the `org1` organization, `plat` tenant, `uw2` region, `staging` account |
+  | `stacks/catalog/vpc/org2-plat-ue2-dev.yaml`     | Manifest for the `org2` organization, `plat` tenant, `ue2` region, `dev` account     |
+  | `stacks/catalog/vpc/org2-plat-ue2-prod.yaml`    | Manifest for the `org2` organization, `plat` tenant, `ue2` region, `prod` account    |
+  | `stacks/catalog/vpc/org2-plat-ue2-staging.yaml` | Manifest for the `org2` organization, `plat` tenant, `ue2` region, `staging` account |
+  | `stacks/catalog/vpc/org2-plat-uw2-dev.yaml`     | Manifest for the `org2` organization, `plat` tenant, `uw2` region, `dev` account     |
+  | `stacks/catalog/vpc/org2-plat-uw2-prod.yaml`    | Manifest for the `org2` organization, `plat` tenant, `uw2` region, `prod` account    |
+  | `stacks/catalog/vpc/org2-plat-uw2-staging.yaml` | Manifest for the `org2` organization, `plat` tenant, `uw2` region, `staging` account |
+
+  <br/>
+
+- Import the environment manifests into the top-level stacks. For example:
+
+  | Action                                                               | Top-Level Stack                                     |
+  | -------------------------------------------------------------------- | --------------------------------------------------- |
+  | Import the `stacks/catalog/vpc/org1-plat-ue2-dev.yaml` manifest      | `stacks/orgs/org1/plat/dev/us-east-2.yaml`          |
+  | Import the `stacks/catalog/vpc/org1-plat-ue2-prod.yaml` manifest     | `stacks/orgs/org1/plat/prod/us-east-2.yaml`         |
+  | Import the `stacks/catalog/vpc/org1-plat-uw2-staging.yaml` manifest  | `stacks/orgs/org1/plat/staging/us-west-2.yaml`      |
+  | Import the `stacks/catalog/vpc/org2-plat-ue2-dev.yaml` manifest      | `stacks/orgs/org2/plat/dev/us-east-2.yaml`          |
+  | etc.                                                                 |                                                     |
+
 
 ## Example
 
@@ -378,19 +406,6 @@ import:
 ```
 
 Similarly, import the other environment mixins into the corresponding top-level stacks.
-
-## Benefits
-
-The **Component Catalog with Mixins** pattern provides the following benefits:
-
-- Easy to see where the configuration for each environment is defined
-
-- Easy to manage different variations of the configurations
-
-- The defaults for the components are defined in just one place (in the catalog) making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
 
 ## Limitations
 

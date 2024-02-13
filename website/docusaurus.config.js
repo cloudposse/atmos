@@ -36,7 +36,25 @@ const config = {
     plugins: [
         [
             'docusaurus-plugin-image-zoom', {},
-        ]
+        ],
+        [
+            '@docusaurus/plugin-client-redirects', {
+                redirects: [
+                    /*
+                    {
+                        from: '/cli',
+                        to: '/cli/configuration'
+                    }*/
+                ],
+            },
+        ],
+        [
+            '@grnet/docusaurus-terminology', {
+                docsDir: './docs/',
+                termsDir: './reference/glossary/',
+                glossaryFilepath: './docs/reference/glossary/index.mdx',
+                glossaryComponentPath: '../../../src/components/glossary/Glossary.tsx'
+        }],
     ],
 
     presets: [
@@ -87,12 +105,12 @@ const config = {
                 items: [
                     {
                         type: 'doc',
-                        docId: 'introduction',
+                        docId: 'introduction/index',
                         position: 'left',
                         label: 'Docs',
                     },
                     {
-                        to: '/cli/configuration',
+                        to: '/cli',
                         position: 'left',
                         label: 'CLI'
                     },

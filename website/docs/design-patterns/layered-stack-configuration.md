@@ -16,13 +16,15 @@ Each layer can be managed separately, possibly by different teams.
 <br/>
 
 :::note
+
 The **Layered Stack Configuration** Design Pattern works around the limitations of
 the [Partial Stack Configuration](/design-patterns/partial-stack-configuration) pattern. Instead of splitting the top-level Atmos stacks into parts,
 the **Layered Stack Configuration** pattern adds separate layers to group the related Atmos components by category, and then import the layer
 manifests into the top-level Atmos stacks.
+
 :::
 
-## Applicability
+## Use-cases
 
 Use the **Layered Stack Configuration** pattern when:
 
@@ -32,6 +34,20 @@ Use the **Layered Stack Configuration** pattern when:
   people or teams
 
 - You want to keep the configuration easy to manage and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+## Benefits
+
+The **Layered Stack Configuration** pattern provides the following benefits:
+
+- Allows to group Atmos components by category or function
+
+  people or teams. Furthermore, controls like
+  GitHub's [`CODEOWNERS`](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)
+  can be leveraged so that specific teams or individuals must review changes to these files.
+
+- Allows importing only the required layers into the top-level stacks (only the groups of components that need to be provisioned in the stacks)
+
+- Makes the configurations easier to understand
 
 ## Example
 
@@ -303,20 +319,6 @@ import:
 
 Similarly, import the required layers into the other top-level stacks for the other organizations, OUs/tenants, accounts and regions.
 Make sure to import only the layers that define the component that need to be provisioned in the stacks.
-
-## Benefits
-
-The **Layered Stack Configuration** pattern provides the following benefits:
-
-- Allows to group Atmos components by category or function
-
-  people or teams. Furthermore, controls like
-  GitHub's [`CODEOWNERS`](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)
-  can be leveraged so that specific teams or individuals must review changes to these files.
-
-- Allows importing only the required layers into the top-level stacks (only the groups of components that need to be provisioned in the stacks)
-
-- Makes the configurations easier to understand
 
 ## Related Patterns
 

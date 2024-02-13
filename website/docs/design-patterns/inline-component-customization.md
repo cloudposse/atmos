@@ -12,7 +12,7 @@ a [stack](/core-concepts/stacks)
 are configured in default manifests, the manifests are [imported](/core-concepts/stacks/imports) into the top-level stacks, and the components
 are customized inline in each top-level stack overriding the configuration for each environment (OU, account, region).
 
-## Applicability
+## Use-cases
 
 Use the **Inline Component Customization** pattern when:
 
@@ -21,6 +21,17 @@ Use the **Inline Component Customization** pattern when:
 - You need to make the components' default/baseline configurations reusable across different stacks
 
 - You want to keep the configurations [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+## Benefits
+
+The **Inline Component Customization** pattern provides the following benefits:
+
+- The defaults for the components are defined in just one place making the entire
+  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
+
+- The defaults for the components are reusable across many stacks
+
+- Simple stack and component configurations
 
 ## Example
 
@@ -201,17 +212,6 @@ atmos terraform apply vpc -s staging
 atmos terraform apply vpc-flow-logs-bucket -s prod
 atmos terraform apply vpc -s prod
 ```
-
-## Benefits
-
-The **Inline Component Customization** pattern provides the following benefits:
-
-- The defaults for the components are defined in just one place making the entire
-  configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-- The defaults for the components are reusable across many stacks
-
-- Simple stack and component configurations
 
 ## Limitations
 

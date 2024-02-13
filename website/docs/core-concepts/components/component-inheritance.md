@@ -33,7 +33,7 @@ and `metadata` component's configuration section.
 :::info Definitions
 
 - **Base Component** is an Atmos component from which other Atmos components inherit all the configuration properties
-- **Derived Component** is an Atmos component which derives the configuration properties from other Atmos components
+- **Derived Component** is an Atmos component that derives the configuration properties from other Atmos components
 
 :::
 
@@ -76,7 +76,7 @@ classDiagram
 
 <br/>
 
-## Single Inheritance Example
+### Single Inheritance Example
 
 Let's say we want to provision two VPCs with different settings into the same AWS account.
 
@@ -265,7 +265,7 @@ statement or by explicitly defining them in the Stack configuration. The `metada
 
 <br/>
 
-## Multiple Inheritance Example
+### Multiple Inheritance Example
 
 Here is a concrete example:
 
@@ -509,7 +509,7 @@ For `ComponentG`:
 
 - And finally, `ComponentG` is processed, and it overrides `ComponentC`, `ComponentA` and `ComponentI`
 
-## Hierarchical Inheritance Example
+### Hierarchical Inheritance Example
 
 Let's consider the following configuration for Atmos components `base-component-1`, `base-component-2`, `derived-component-1`
 and `derived-component-2`:
