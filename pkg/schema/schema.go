@@ -283,7 +283,7 @@ type CommandComponentConfig struct {
 
 type Integrations struct {
 	Atlantis Atlantis       `yaml:"atlantis,omitempty" json:"atlantis,omitempty" mapstructure:"atlantis"`
-	GitOps   map[string]any `yaml:"gitops,omitempty" json:"gitops,omitempty" mapstructure:"gitops"`
+	GitHub   map[string]any `yaml:"github,omitempty" json:"github,omitempty" mapstructure:"github"`
 }
 
 // Atlantis integration
