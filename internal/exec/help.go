@@ -11,29 +11,29 @@ import (
 // processHelp processes help commands
 func processHelp(componentType string, command string) error {
 	cliConfig := schema.CliConfiguration{}
-
-	const content = `
-# Help
-
-## 1
-
-`
-
-	// Start the help UI
-	_, err := tui.Execute(content)
-	fmt.Println()
-	if err != nil {
-		return err
-	}
+	var content string
 
 	if len(command) == 0 {
+
 		u.PrintMessage(fmt.Sprintf("'atmos' supports all native '%s' commands.\n", componentType))
 		u.PrintMessage("In addition, the 'component' argument and 'stack' flag are required to generate the variables and backend config for the component in the stack.\n")
 		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> -s <stack> [options]", componentType))
 		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> --stack <stack> [options]", componentType))
 
 		if componentType == "terraform" {
-			u.PrintMessage("\nAdditions and differences from native terraform:")
+			content = `
+# Atmos Terraform Help
+
+Atmos supports all Terraform commands.
+
+__NOTE:__ Execute '**terraform --help**' to see help on the Terraform CLI commands.
+
+In addition, the '**component**' argument and '**stack**' flag are required to generate the variables and backend config for the component in the stack.
+
+## Additions and differences from native Terraform
+
+`
+			u.PrintMessage("\nAdditions and differences from native Terraform:")
 			u.PrintMessage(" - before executing other 'terraform' commands, 'atmos' runs 'terraform init'")
 			u.PrintMessage(" - you can skip over atmos calling 'terraform init' if you know your project is already in a good working state by using " +
 				"the '--skip-init' flag like so 'atmos terraform <command> <component> -s <stack> --skip-init")
@@ -125,6 +125,13 @@ func processHelp(componentType string, command string) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// Start the help UI
+	_, err := tui.Execute(content)
+	fmt.Println()
+	if err != nil {
+		return err
 	}
 
 	return nil

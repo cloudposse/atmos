@@ -14,9 +14,10 @@ type App struct {
 }
 
 func NewApp(content string) (*App, error) {
-	const width = 78
+	const width = 100
+	const height = 40
 
-	vp := viewport.New(width, 20)
+	vp := viewport.New(width, height)
 	vp.Style = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("62")).
