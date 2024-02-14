@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 
+	tui "github.com/cloudposse/atmos/internal/tui/help"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -10,6 +11,20 @@ import (
 // processHelp processes help commands
 func processHelp(componentType string, command string) error {
 	cliConfig := schema.CliConfiguration{}
+
+	const content = `
+# Help
+
+## 1
+
+`
+
+	// Start the help UI
+	_, err := tui.Execute(content)
+	fmt.Println()
+	if err != nil {
+		return err
+	}
 
 	if len(command) == 0 {
 		u.PrintMessage(fmt.Sprintf("'atmos' supports all native '%s' commands.\n", componentType))
