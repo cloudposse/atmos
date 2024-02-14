@@ -20,7 +20,7 @@ import (
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
-	Short: "Universal Tool for DevOps and Cloud Automation",
+	Short: "Automated Terraform Management & Orchestration Software",
 	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	PreRun: func(cmd *cobra.Command, args []string) {
 	},
@@ -95,6 +95,11 @@ func init() {
 
 func initConfig() {
 	styles := boa.DefaultStyles()
+	styles.Border.BorderTop(false)
+	styles.Border.BorderBottom(false)
+	styles.Border.BorderLeft(false)
+	styles.Border.BorderRight(false)
+
 	b := boa.New(boa.WithStyles(styles))
 
 	RootCmd.SetUsageFunc(b.UsageFunc)
