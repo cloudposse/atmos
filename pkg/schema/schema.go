@@ -282,16 +282,17 @@ type CommandComponentConfig struct {
 // Integrations
 
 type Integrations struct {
-	Atlantis Atlantis `yaml:"atlantis" json:"atlantis" mapstructure:"atlantis"`
+	Atlantis Atlantis       `yaml:"atlantis,omitempty" json:"atlantis,omitempty" mapstructure:"atlantis"`
+	GitHub   map[string]any `yaml:"github,omitempty" json:"github,omitempty" mapstructure:"github"`
 }
 
 // Atlantis integration
 
 type Atlantis struct {
-	Path              string                           `yaml:"path" json:"path" mapstructure:"path"`
-	ConfigTemplates   map[string]AtlantisRepoConfig    `yaml:"config_templates" json:"config_templates" mapstructure:"config_templates"`
-	ProjectTemplates  map[string]AtlantisProjectConfig `yaml:"project_templates" json:"project_templates" mapstructure:"project_templates"`
-	WorkflowTemplates map[string]any                   `yaml:"workflow_templates" json:"workflow_templates" mapstructure:"workflow_templates"`
+	Path              string                           `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
+	ConfigTemplates   map[string]AtlantisRepoConfig    `yaml:"config_templates,omitempty" json:"config_templates,omitempty" mapstructure:"config_templates"`
+	ProjectTemplates  map[string]AtlantisProjectConfig `yaml:"project_templates,omitempty" json:"project_templates,omitempty" mapstructure:"project_templates"`
+	WorkflowTemplates map[string]any                   `yaml:"workflow_templates,omitempty" json:"workflow_templates,omitempty" mapstructure:"workflow_templates"`
 }
 
 type AtlantisRepoConfig struct {
