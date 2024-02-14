@@ -14,8 +14,8 @@ type App struct {
 }
 
 func NewApp(content string) (*App, error) {
-	const width = 100
-	const height = 40
+	const width = 80
+	const height = 30
 
 	vp := viewport.New(width, height)
 	vp.Style = lipgloss.NewStyle().
@@ -26,6 +26,7 @@ func NewApp(content string) (*App, error) {
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(width),
+		glamour.WithEmoji(),
 	)
 	if err != nil {
 		return nil, err

@@ -26,11 +26,17 @@ func processHelp(componentType string, command string) error {
 
 Atmos supports all Terraform commands.
 
-__NOTE:__ Execute '**terraform --help**' to see help on the Terraform CLI commands.
+__NOTE:__ Execute '**terraform --help**' to see help for the Terraform CLI commands.
 
 In addition, the '**component**' argument and '**stack**' flag are required to generate the variables and backend config for the component in the stack.
 
 ## Additions and differences from native Terraform
+
+- Before executing other 'terraform' commands, Atmos runs 'terraform init'
+
+<br/>
+
+- You can skip over Atmos calling 'terraform init' if you know your project is already in a good working state by using the '**--skip-init**' flag like so: '**atmos terraform <command> <component> -s <stack> --skip-init**'
 
 `
 			u.PrintMessage("\nAdditions and differences from native Terraform:")
