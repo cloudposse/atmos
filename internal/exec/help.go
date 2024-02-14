@@ -59,12 +59,7 @@ func processHelp(componentType string, command string) error {
 				"native arguments and flags for the 'helmfile' commands")
 		}
 
-		fmt.Println()
-		err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, "")
-		if err != nil {
-			return err
-		}
-
+		u.PrintMessage(fmt.Sprintf("\nFor '%s' help, execute '%s --help'\n", componentType, componentType))
 	} else if componentType == "terraform" && command == "clean" {
 		u.PrintMessage("\n'atmos terraform clean' command deletes the following folders and files from the component's directory:\n\n" +
 			" - '.terraform' folder\n" +
