@@ -99,6 +99,10 @@ func initConfig() {
 	styles.Border.BorderBottom(false)
 	styles.Border.BorderLeft(false)
 	styles.Border.BorderRight(false)
+	styles.Title.BorderTop(false)
+	styles.Title.BorderBottom(false)
+	styles.Title.BorderLeft(false)
+	styles.Title.BorderRight(false)
 
 	b := boa.New(boa.WithStyles(styles))
 
