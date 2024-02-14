@@ -26,6 +26,7 @@ var (
 		"aws":        awsCmd,
 		"completion": completionCmd,
 		"describe":   describeCmd,
+		"docs":       docsCmd,
 		"helmfile":   helmfileCmd,
 		"terraform":  terraformCmd,
 		"validate":   validateCmd,
