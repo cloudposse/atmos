@@ -3,12 +3,14 @@ title: atmos terraform shell
 sidebar_label: shell
 sidebar_class_name: command
 id: shell
-description: This command starts a new `SHELL` configured with the environment for an Atmos component in a stack to allow execution of all native terraform commands inside the shell without using any atmos-specific arguments and flags. This may by helpful to debug a component without going through Atmos.
+description: This command starts a new `SHELL` configured with the environment for an Atmos component in a stack to allow execution of all native Terraform commands inside the shell without using any Atmos-specific arguments and flags. This may be helpful to debug a component without going through Atmos.
 ---
 
 :::note Purpose
-This command starts a new `SHELL` configured with the environment for an Atmos component in a Stack to allow executing all native terraform commands
-inside the shell without using any atmos-specific arguments and flags.
+This command starts a new `SHELL` configured with the environment for an Atmos component in a stack to allow executing all native Terraform commands
+inside the shell without using any Atmos-specific arguments and flags.
+
+This may be helpful to debug a component without going through Atmos.
 :::
 
 ## Usage
@@ -41,6 +43,12 @@ The command does the following:
 :::tip
 Run `atmos terraform shell --help` to see all the available options
 :::
+
+<br />
+
+![`atmos terraform shell --help` command](/img/cli/help/atmos-terraform-shell-help-command.png)
+
+<br />
 
 ## Examples
 
