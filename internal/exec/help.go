@@ -15,11 +15,6 @@ func processHelp(componentType string, command string) error {
 
 	if len(command) == 0 {
 
-		u.PrintMessage(fmt.Sprintf("'atmos' supports all native '%s' commands.\n", componentType))
-		u.PrintMessage("In addition, the 'component' argument and 'stack' flag are required to generate the variables and backend config for the component in the stack.\n")
-		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> -s <stack> [options]", componentType))
-		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> --stack <stack> [options]", componentType))
-
 		if componentType == "terraform" {
 			content = `
 # Atmos Terraform Help
@@ -56,22 +51,22 @@ Use the '**--skip-lock-file**'' flag to skip deleting the lock file
 <br/>
 - '**atmos terraform workspace**' command first runs '**terraform init -reconfigure**', then '**terraform workspace select**', and if the workspace was not created before, it then runs '**terraform workspace new**'
 <br/>
+- '**atmos terraform import**' command searches for the '**region**' in the variables for the specified component and stack, and if it finds it, sets '**AWS_REGION**' ENV var before executing the command
 <br/>
+- '**atmos terraform generate backend**' command generates a backend config file for a component in a stack
 <br/>
+- '**atmos terraform generate backends**' command generates backend config files for all Atmos components in all stacks
 <br/>
-
+- '**atmos terraform generate varfile**' command generates a varfile for a component in a stack
+<br/>
+- '**atmos terraform generate varfiles**' command generates varfiles for all Atmos components in all stacks
+<br/>
+- '**atmos terraform shell**' command configures an environment for a component in a stack and starts a new shell, allowing executing all native terraform commands inside the shell without using Atmos-specific arguments and flags
+<br/>
+- double-dash '**--**' can be used to signify the end of the options for Atmos and the start of the additional native arguments and flags for the Terraform commands.
+For example: **atmos terraform plan vpc -s plat-ue2-prod -- -refresh=false -lock=false**
+<br/>
 `
-			u.PrintMessage(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, " +
-				"and if it finds it, sets 'AWS_REGION=<region>' ENV var before executing the command")
-			u.PrintMessage(" - 'atmos terraform generate backend' command generates a backend config file for an 'atmos' component in a stack")
-			u.PrintMessage(" - 'atmos terraform generate backends' command generates backend config files for all 'atmos' components in all stacks")
-			u.PrintMessage(" - 'atmos terraform generate varfile' command generates a varfile for an 'atmos' component in a stack")
-			u.PrintMessage(" - 'atmos terraform generate varfiles' command generates varfiles for all 'atmos' components in all stacks")
-			u.PrintMessage(" - 'atmos terraform shell' command configures an environment for an 'atmos' component in a stack and starts a new shell " +
-				"allowing executing all native terraform commands inside the shell without using atmos-specific arguments and flags")
-			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
-				"native arguments and flags for the 'terraform' commands. " +
-				"For example: atmos terraform plan <component> -s <stack> -- -refresh=false -lock=false")
 		}
 
 		if componentType == "helmfile" {
@@ -85,8 +80,6 @@ Use the '**--skip-lock-file**'' flag to skip deleting the lock file
 			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
 				"native arguments and flags for the 'helmfile' commands")
 		}
-
-		u.PrintMessage(fmt.Sprintf("\nFor '%s' help, execute '%s --help'\n", componentType, componentType))
 	} else if componentType == "terraform" && command == "clean" {
 		u.PrintMessage("\n'atmos terraform clean' command deletes the following folders and files from the component's directory:\n\n" +
 			" - '.terraform' folder\n" +
