@@ -14,7 +14,7 @@ type App struct {
 }
 
 func NewApp(content string) (*App, error) {
-	const width = 80
+	const width = 90
 	const height = 30
 
 	vp := viewport.New(width, height)
@@ -25,7 +25,7 @@ func NewApp(content string) (*App, error) {
 
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
+		glamour.WithWordWrap(width-4),
 		glamour.WithEmoji(),
 	)
 	if err != nil {
@@ -44,30 +44,38 @@ func NewApp(content string) (*App, error) {
 	}, nil
 }
 
-func (e App) Init() tea.Cmd {
+func (app App) Init() tea.Cmd {
 	return nil
 }
 
-func (e App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
-			return e, tea.Quit
+			return app, tea.Quit
 		default:
 			var cmd tea.Cmd
-			e.viewport, cmd = e.viewport.Update(msg)
-			return e, cmd
+			app.viewport, cmd = app.viewport.Update(msg)
+			return app, cmd
 		}
+	case tea.MouseMsg:
+		if msg.Button == tea.MouseButtonWheelUp {
+			app.viewport.LineUp(1)
+		}
+		if msg.Button == tea.MouseButtonWheelDown {
+			app.viewport.LineDown(1)
+		}
+		return app, nil
 	default:
-		return e, nil
+		return app, nil
 	}
 }
 
-func (e App) View() string {
-	return e.viewport.View() + e.helpView()
+func (app App) View() string {
+	return app.viewport.View() + app.helpView()
 }
 
-func (e App) helpView() string {
-	return helpStyle("\n  ↑/↓ navigate   esc/q/ctrl+c quit\n")
+func (app App) helpView() string {
+	return helpStyle("\n  ↑/↓/mouse wheel - navigate     esc/q/ctrl+c - quit\n")
 }
