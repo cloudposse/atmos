@@ -23,6 +23,12 @@ atmos terraform clean <component> -s <stack> [--skip-lock-file]
 Run `atmos terraform clean --help` to see all the available options
 :::
 
+<br />
+
+![`atmos terraform clean --help` command](/img/cli/help/atmos-terraform-clean-help-command.png)
+
+<br />
+
 ## Examples
 
 ```shell

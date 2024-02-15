@@ -99,16 +99,34 @@ This can be disabled in '**atmos.yaml**' CLI config by setting '**components.hel
 `
 		}
 	} else if componentType == "terraform" && command == "clean" {
-		u.PrintMessage("\n'atmos terraform clean' command deletes the following folders and files from the component's directory:\n\n" +
-			" - '.terraform' folder\n" +
-			" - folder that the 'TF_DATA_DIR' ENV var points to\n" +
-			" - '.terraform.lock.hcl' file\n" +
-			" - generated varfile for the component in the stack\n" +
-			" - generated planfile for the component in the stack\n" +
-			" - generated 'backend.tf.json' file\n\n" +
-			"Usage: atmos terraform clean <component> -s <stack> <flags>\n\n" +
-			"Use '--skip-lock-file' flag to skip deleting the lock file.\n\n" +
-			"For more details refer to https://atmos.tools/cli/commands/terraform/clean\n")
+		content = `
+# atmos terraform clean
+
+Check out the ['atmos terraform clean' documentation](https://atmos.tools/cli/commands/terraform/clean).
+
+## Description
+
+'**atmos terraform clean**' command deletes the following folders and files from the component's directory:
+
+- '**.terraform**' folder
+<br/>
+- folder that the '**TF_DATA_DIR**' ENV var points to
+<br/>
+- generated **varfile** for the component in the stack
+<br/>
+- generated **planfile** for the component in the stack
+<br/>
+- generated '**backend.tf.json**' file
+
+Use the '**--skip-lock-file**' flag to skip deleting the lock file.
+
+## Examples
+
+**atmos terraform clean vpc --stack plat-ue2-dev**
+
+**atmos terraform clean vpc -s plat-ue2-prod --skip-lock-file**
+<br/>
+`
 	} else if componentType == "terraform" && command == "deploy" {
 		u.PrintMessage("\n'atmos terraform deploy' command executes 'terraform apply -auto-approve' on an Atmos component in an Atmos stack.\n\n" +
 			"Usage: atmos terraform deploy <component> -s <stack> <flags>\n\n" +
