@@ -5,7 +5,6 @@ import (
 
 	tui "github.com/cloudposse/atmos/internal/tui/help"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // processHelp processes help commands
@@ -194,12 +193,27 @@ The command does the following:
 <br/>
 `
 	} else if componentType == "terraform" && command == "workspace" {
-		u.PrintMessage("\n'atmos terraform workspace' command calculates the Terraform workspace for an Atmos component,\n" +
-			"and then executes 'terraform init -reconfigure' and selects the Terraform workspace by executing the 'terraform workspace select' command.\n" +
-			"If the workspace does not exist, the command creates it by executing the 'terraform workspace new' command.\n\n" +
-			"Usage: atmos terraform workspace <component> -s <stack>\n\n" +
-			"For more details refer to https://atmos.tools/cli/commands/terraform/workspace\n")
+		content = `
+# atmos terraform workspace
+
+Check out the ['atmos terraform workspace' documentation](https://atmos.tools/cli/commands/terraform/workspace).
+
+## Description
+
+'**atmos terraform workspace**' command calculates the Terraform workspace for an Atmos component in a stack, then executes '**terraform init -reconfigure**' and selects the Terraform workspace by executing the '**terraform workspace select**' command.
+
+If the workspace does not exist, the command creates it by executing the '**terraform workspace new**' command.
+
+## Examples
+
+**atmos terraform workspace vpc-flow-logs-bucket --stack plat-ue2-prod**
+
+**atmos terraform workspace vpc -s plat-ue2-dev**
+
+<br/>
+`
 	} else {
+		// Execute `--help` on the native terraform and Helmfile commands
 		err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, "")
 		if err != nil {
 			return err
