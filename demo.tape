@@ -110,7 +110,21 @@ Sleep 3s
 
 Type "# Atmos has native workflows for Terraform" Sleep 500ms Enter
 Type "atmos terraform --help" Sleep 500ms Enter
-Sleep 5s
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
+Sleep 3s
+Esc
+Sleep 1s
 
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
 Sleep 2s
