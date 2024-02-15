@@ -24,7 +24,9 @@ func processHelp(componentType string, command string) error {
 			content = `
 # Atmos Terraform Help
 
-Atmos supports all native Terraform commands.
+Check out the [Atmos Terraform CLI documentation](https://atmos.tools/cli/commands/terraform/usage).
+
+Atmos supports all Terraform commands and options described in the [Terraform CLI docs](https://www.terraform.io/cli/commands).
 
 __NOTE:__ Execute '**terraform --help**' to see help for the Terraform CLI commands.
 
@@ -52,14 +54,13 @@ The '**--planfile**' flag should be used instead of the **planfile** argument in
 - '**atmos terraform clean**' command deletes the '**.terraform**' folder, '**.terraform.lock.hcl**' lock file, and the previously generated '**planfile**', '**varfile**' and '**backend.tf.json**' file for the specified component and stack.
 Use the '**--skip-lock-file**'' flag to skip deleting the lock file
 <br/>
+- '**atmos terraform workspace**' command first runs '**terraform init -reconfigure**', then '**terraform workspace select**', and if the workspace was not created before, it then runs '**terraform workspace new**'
 <br/>
 <br/>
 <br/>
 <br/>
 
 `
-			u.PrintMessage(" - 'atmos terraform workspace' command first runs 'terraform init -reconfigure', then 'terraform workspace select', " +
-				"and if the workspace was not created before, it then runs 'terraform workspace new'")
 			u.PrintMessage(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, " +
 				"and if it finds it, sets 'AWS_REGION=<region>' ENV var before executing the command")
 			u.PrintMessage(" - 'atmos terraform generate backend' command generates a backend config file for an 'atmos' component in a stack")
