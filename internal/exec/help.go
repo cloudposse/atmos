@@ -70,15 +70,33 @@ For example: **atmos terraform plan vpc -s plat-ue2-prod -- -refresh=false -lock
 		}
 
 		if componentType == "helmfile" {
-			u.PrintMessage("\nAdditions and differences from native helmfile:")
-			u.PrintMessage(" - 'atmos helmfile generate varfile' command generates a varfile for the component in the stack")
-			u.PrintMessage(" - 'atmos helmfile' commands support '[global options]' using the command-line flag '--global-options'. " +
-				"Usage: atmos helmfile <command> <component> -s <stack> [command options] [arguments] --global-options=\"--no-color --namespace=test\"")
-			u.PrintMessage(" - before executing the 'helmfile' commands, 'atmos' runs 'aws eks update-kubeconfig' to read kubeconfig from " +
-				"the EKS cluster and use it to authenticate with the cluster. This can be disabled in 'atmos.yaml' CLI config " +
-				"by setting 'components.helmfile.use_eks' to 'false'")
-			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
-				"native arguments and flags for the 'helmfile' commands")
+			content = `
+# Atmos Helmfile Help
+
+Check out the [Atmos Helmfile CLI documentation](https://atmos.tools/cli/commands/helmfile/usage).
+
+Atmos supports all Helmfile commands and options described in the [Helmfile docs](https://helmfile.readthedocs.io/en/latest).
+
+__NOTE:__ Execute '**helmfile --help**' to see help for the Helmfile CLI commands.
+
+In addition, the '**component**' argument and '**stack**' flag are required to generate the variables and backend config for the component in the stack.
+For example: **atmos helmfile diff eks/echo-server --stack plat-ue2-prod**
+
+<br/>
+
+## Additions and differences from native Helmfile
+
+- '**atmos helmfile generate varfile**' command generates a varfile for the component in the stack
+<br/>
+- '**atmos helmfile**' commands support '**[global options]**' using the command-line flag '**--global-options**'. 
+Usage: **atmos helmfile [command] [component] -s [stack] [command options] [arguments] --global-options="--no-color --namespace=test"**
+<br/>
+- before executing the '**helmfile**' commands, Atmos runs the '**aws eks update-kubeconfig**' command to read kubeconfig from the EKS cluster and use it to authenticate with the cluster. 
+This can be disabled in '**atmos.yaml**' CLI config by setting '**components.helmfile.use_eks**' to '**false**'
+<br/>
+- double-dash '**--**' can be used to signify the end of the options for Atmos and the start of the additional native arguments and flags for the Helmfile commands
+<br/>
+`
 		}
 	} else if componentType == "terraform" && command == "clean" {
 		u.PrintMessage("\n'atmos terraform clean' command deletes the following folders and files from the component's directory:\n\n" +
@@ -120,12 +138,6 @@ For example: **atmos terraform plan vpc -s plat-ue2-prod -- -refresh=false -lock
 			"Usage: atmos terraform workspace <component> -s <stack>\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/workspace\n")
 	} else {
-		u.PrintMessage(fmt.Sprintf("'atmos' supports native '%s %s' command with all the options, arguments and flags.\n", componentType, command))
-		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
-		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
-		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
-
-		fmt.Println()
 		err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, "")
 		if err != nil {
 			return err
@@ -133,10 +145,12 @@ For example: **atmos terraform plan vpc -s plat-ue2-prod -- -refresh=false -lock
 	}
 
 	// Start the help UI
-	_, err := tui.Execute(content)
-	fmt.Println()
-	if err != nil {
-		return err
+	if content != "" {
+		_, err := tui.Execute(content)
+		fmt.Println()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

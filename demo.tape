@@ -122,6 +122,8 @@ Down Sleep 500ms
 Down Sleep 500ms
 Down Sleep 500ms
 Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 500ms
 Sleep 3s
 Esc
 Sleep 1s
