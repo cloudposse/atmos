@@ -125,8 +125,7 @@ Down Sleep 500ms
 Down Sleep 500ms
 Down Sleep 500ms
 Sleep 3s
-Esc
-Sleep 1s
+Type "q" Sleep 1s
 
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
 Sleep 2s
