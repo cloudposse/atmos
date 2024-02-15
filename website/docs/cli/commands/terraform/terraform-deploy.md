@@ -39,6 +39,12 @@ See [all flags](#flags).
 Run `atmos terraform deploy --help` to see all the available options
 :::
 
+<br />
+
+![`atmos terraform deploy --help` command](/img/cli/help/atmos-terraform-deploy-help-command.png)
+
+<br />
+
 ## Examples
 
 ### Simple Example
@@ -95,7 +101,7 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
 :::note
 
 The `atmos terraform deploy` command supports all native `terraform apply` options described
-in [Terraform apply options](https://developer.hashicorp.com/terraform/cli/commands/apply#apply-options), with the exception that a planfile argument
+in [Terraform apply options](https://developer.hashicorp.com/terraform/cli/commands/apply#apply-options), with the exception that the `PLAN` argument
 can't be provided on the command line. To use a previously generated planfile, use the `--from-plan` or `--planfile` command-line flags
 
 :::
