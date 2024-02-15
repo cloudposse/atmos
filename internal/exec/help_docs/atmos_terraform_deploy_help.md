@@ -26,5 +26,3 @@ Check out the ['atmos terraform deploy' documentation](https://atmos.tools/cli/c
 `atmos terraform deploy vpc -s plat-ue2-prod --planfile [PLAN]`
 
 `atmos terraform deploy vpc -s plat-ue2-staging --deploy-run-init=false`
-
-<br/>

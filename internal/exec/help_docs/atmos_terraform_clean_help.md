@@ -23,4 +23,3 @@ Use the `--skip-lock-file` flag to skip deleting the lock file.
 `atmos terraform clean vpc --stack plat-ue2-dev`
 
 `atmos terraform clean vpc -s plat-ue2-prod --skip-lock-file`
-<br/>

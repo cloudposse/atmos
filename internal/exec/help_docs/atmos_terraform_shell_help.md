@@ -25,5 +25,3 @@ The command does the following:
 `atmos terraform shell vpc-flow-logs-bucket --stack plat-ue2-prod`
 
 `atmos terraform shell vpc -s plat-ue2-dev`
-
-<br/>

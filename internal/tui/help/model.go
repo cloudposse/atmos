@@ -27,6 +27,7 @@ func NewApp(content string) (*App, error) {
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(width-4),
 		glamour.WithEmoji(),
+		glamour.WithStyles(atmosHelpStyleConfig),
 	)
 	if err != nil {
 		return nil, err

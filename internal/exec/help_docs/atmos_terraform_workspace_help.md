@@ -15,5 +15,3 @@ If the workspace does not exist, the command creates it by executing the `terraf
 `atmos terraform workspace vpc-flow-logs-bucket --stack plat-ue2-prod`
 
 `atmos terraform workspace vpc -s plat-ue2-dev`
-
-<br/>
