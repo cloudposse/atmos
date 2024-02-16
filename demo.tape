@@ -30,7 +30,7 @@ Set PlaybackSpeed 1
 
 Set Shell "bash -eo pipefail"
 Hide
-Type "alias ls="ls --color=force" Enter
+Type "alias ls='ls --color=force'" Enter
 Show
 
 Type "# First check you have Atmos installed" Sleep 500ms Enter
