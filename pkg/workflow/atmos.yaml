@@ -116,24 +116,6 @@ commands:
         steps:
           - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
           - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
-  - name: play
-    description: This command plays games
-    steps:
-      - echo Playing...
-    # subcommands
-    commands:
-      - name: hello
-        description: This command says Hello world
-        steps:
-          - echo Hello world
-      - name: ping
-        description: This command plays ping-pong
-        # If 'verbose' is set to 'true', atmos will output some info messages to the console before executing the command's steps
-        # If 'verbose' is not defined, it implicitly defaults to 'false'
-        verbose: true
-        steps:
-          - echo Playing ping-pong...
-          - echo pong
   - name: show
     description: Execute 'show' commands
     # subcommands
