@@ -62,7 +62,7 @@ jobs:
        
   vhs:
     needs: [prepare]
-    if: steps.prepare.outputs.labeled == 'true'
+    if: meeds.prepare.outputs.labeled == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
