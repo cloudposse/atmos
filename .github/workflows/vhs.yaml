@@ -1,11 +1,9 @@
 name: vhs
 on:
   pull_request:
-    types: [ labeled ]
+    types: [labeled, opened, synchronize]
     paths:
       - '*.tape'
-    name:
-      - vhs
 env:
   TERM: "xterm-256color"
   COLORTERM: "truecolor"
@@ -13,7 +11,8 @@ env:
   ATMOS_LOGS_LEVEL: "Info"
 
 jobs:
-  vhs:
+  prepare:
+    if: github.event.label.name == 'vhs'
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -21,6 +20,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+
+      - name: Get modified .tape files
+        id: getfiles
+        run: |
+          if [[ "${{ github.event.label.name }}" == "vhs" ]]; then
+            echo "::set-output name=files::$(ls *.tape)"
+          else
+            echo "::set-output name=files::$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep .tape)"
+          fi
+
+      - name: Set up matrix
+        id: setupmatrix
+        run: |
+          echo "::set-output name=matrix::$(echo ${{ steps.getfiles.outputs.files }} | jq -R -s 'split(" ")')"
 
       - name: Install atmos
         uses: jaxxstorm/action-install-gh-release@v1.11.0
@@ -32,12 +45,22 @@ jobs:
 
       - name: Setup shell rc
         run: |
-          echo "alias ls='ls --color=always'" >> ~/.bashrc
+          echo "alias ls='ls --color=always'" > ~/.bashrc
+    outputs:
+      matrix: ${{ steps.setupmatrix.outputs.matrix }}
+       
+  vhs:
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        file: ${{fromJson(needs.prepare.outputs.matrix)}}
 
+    steps:
       - uses: charmbracelet/vhs-action@v1
         with: 
           token: ${{ secrets.GITHUB_TOKEN }}
-          path: demo.tape
+          path: ${{ matrix.file }}
           install-fonts: true
 
       - uses: stefanzweifel/git-auto-commit-action@v4
@@ -61,4 +84,3 @@ jobs:
         if: steps.auto-commit.outputs.changes_detected == 'false'
         run: |
           echo "No changes to demo" >> $GITHUB_STEP_SUMMARY
-
