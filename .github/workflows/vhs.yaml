@@ -2,8 +2,7 @@ name: vhs
 on:
   pull_request:
     types: [labeled, opened, synchronize]
-    paths:
-      - '*.tape'
+
 env:
   TERM: "xterm-256color"
   COLORTERM: "truecolor"
@@ -12,7 +11,6 @@ env:
 
 jobs:
   prepare:
-    if: github.event.label.name == 'vhs'
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -21,21 +19,32 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Check for vhs label
+        uses: actions-ecosystem/action-check-labels@v1
+        id: labeled
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: 'vhs'
+          condition: 'and' 
+
       - name: Get modified .tape files
-        id: getfiles
+        if: steps.labeled.outputs.labeled == 'true'
+        id: tapes
         run: |
           if [[ "${{ github.event.label.name }}" == "vhs" ]]; then
-            echo "::set-output name=files::$(ls *.tape)"
+            echo "files=$(find . -type f -name '*.tape')" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=files::$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep .tape)"
+            echo "files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep '\.tape$')" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up matrix
-        id: setupmatrix
+        if: steps.labeled.outputs.labeled == 'true'
+        id: create-matrix
         run: |
-          echo "::set-output name=matrix::$(echo ${{ steps.getfiles.outputs.files }} | jq -R -s 'split(" ")')"
+          echo "matrix=$(echo ${{ steps.tapes.outputs.files }} | jq -R -s 'split(" ")')" >> $GITHUB_OUTPUT
 
       - name: Install atmos
+        if: steps.labeled.outputs.labeled == 'true'
         uses: jaxxstorm/action-install-gh-release@v1.11.0
         with: # Grab the latest version
           repo: cloudposse/atmos
@@ -44,13 +53,16 @@ jobs:
           rename-to: atmos
 
       - name: Setup shell rc
+        if: steps.labeled.outputs.labeled == 'true'
         run: |
           echo "alias ls='ls --color=always'" > ~/.bashrc
     outputs:
-      matrix: ${{ steps.setupmatrix.outputs.matrix }}
+      matrix: ${{ steps.create-matrix.outputs.matrix }}
+      labeled: ${{ steps.labeled.outputs.labeled }}
        
   vhs:
     needs: [prepare]
+    if: steps.prepare.outputs.labeled == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
