@@ -20,12 +20,14 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Check for vhs label
-        uses: actions-ecosystem/action-check-labels@v1
         id: labeled
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          labels: 'vhs'
-          condition: 'and' 
+        run: |
+          labels=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels | jq -r '.[].name')
+          if [[ $labels =~ "vhs" ]]; then
+            echo "labeled=true" >> $GITHUB_OUTPUT
+          else
+            echo "labeled=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Get modified .tape files
         if: steps.labeled.outputs.labeled == 'true'
