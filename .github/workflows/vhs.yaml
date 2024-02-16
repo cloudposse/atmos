@@ -49,19 +49,6 @@ jobs:
         run: |
           echo "matrix=$(echo -n ${{ steps.tapes.outputs.files }} | jq -R -s -c 'split(" ")')" >> $GITHUB_OUTPUT
 
-      - name: Install atmos
-        if: steps.labeled.outputs.labeled == 'true'
-        uses: jaxxstorm/action-install-gh-release@v1.11.0
-        with: # Grab the latest version
-          repo: cloudposse/atmos
-          chmod: 0755
-          extension-matching: disable 
-          rename-to: atmos
-
-      - name: Setup shell rc
-        if: steps.labeled.outputs.labeled == 'true'
-        run: |
-          echo "alias ls='ls --color=always'" > ~/.bashrc
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
       labeled: ${{ steps.labeled.outputs.labeled }}
@@ -75,7 +62,22 @@ jobs:
         file: ${{fromJson(needs.prepare.outputs.matrix)}}
 
     steps:
-      - uses: actions/checkout@v4      
+      - uses: actions/checkout@v4  
+
+      - name: Install atmos
+        if: steps.labeled.outputs.labeled == 'true'
+        uses: jaxxstorm/action-install-gh-release@v1.11.0
+        with: # Grab the latest version
+          repo: cloudposse/atmos
+          chmod: 0755
+          extension-matching: disable 
+          rename-to: atmos
+
+      - name: Setup shell rc
+        if: steps.labeled.outputs.labeled == 'true'
+        run: |
+          echo "alias ls='ls --color=always'" > ~/.bashrc   
+                 
       - uses: charmbracelet/vhs-action@v1
         with: 
           token: ${{ secrets.GITHUB_TOKEN }}
