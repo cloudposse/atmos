@@ -521,6 +521,13 @@ strong.underline::after {
     margin-bottom: 0.2em;
 }
 
+.cheatsheet .theme-code-block .codeBlockTitle_node_modules-\@docusaurus-theme-classic-lib-theme-CodeBlock-Content-styles-module {
+    padding: 0.1em;
+    padding-left: 1.5em;
+    color: #666;
+    font-family: monospace;
+}
+
 .cheatsheet h2 {
   font-size: 1.2em;
   margin-bottom: 0.2em;
@@ -533,9 +540,16 @@ strong.underline::after {
     font-size: 2em;
 }
 
+.cheatsheet .card p {
+    flex-basis: 100%;
+    margin-top: 0.2em;
+    margin-bottom: 0;
+}
+
 .cheatsheet .card .card-body {
     padding: 0;
     display: flex;
+    flex-wrap: wrap;
 }
 .cheatsheet .card-group {
     display: flex;
