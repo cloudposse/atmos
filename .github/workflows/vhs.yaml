@@ -37,7 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}        
         run: |
           if [[ "${{ steps.labeled.outputs.labeled }}" == "true" ]]; then
-            echo "files=$(find . -type f -name '*.tape')" >> $GITHUB_OUTPUT
+            echo "files=$(find . -type f -name '*.tape' | cut -d/ -f2-)" >> $GITHUB_OUTPUT
           else
             files=$(gh pr diff --name-only ${{ github.event.pull_request.number }} | grep '\.tape$')
             echo "files=$files" >> $GITHUB_OUTPUT
@@ -75,6 +75,7 @@ jobs:
         file: ${{fromJson(needs.prepare.outputs.matrix)}}
 
     steps:
+      - uses: actions/checkout@v4      
       - uses: charmbracelet/vhs-action@v1
         with: 
           token: ${{ secrets.GITHUB_TOKEN }}
