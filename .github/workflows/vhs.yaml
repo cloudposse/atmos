@@ -47,7 +47,7 @@ jobs:
         if: steps.labeled.outputs.labeled == 'true'
         id: create-matrix
         run: |
-          echo "matrix=$(echo -n ${{ steps.tapes.outputs.files }} | jq -R -s 'split(" ")')" >> $GITHUB_OUTPUT
+          echo "matrix=$(echo -n ${{ steps.tapes.outputs.files }} | jq -R -s -c 'split(" ")')" >> $GITHUB_OUTPUT
 
       - name: Install atmos
         if: steps.labeled.outputs.labeled == 'true'
