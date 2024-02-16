@@ -1,13 +1,9 @@
 name: vhs
 on:
   pull_request:
-    types:
-      - labeled
+    types: [ labeled ]
     paths:
       - '*.tape'
-  label:
-    types:
-      - created
     name:
       - vhs
 env:
@@ -26,20 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Get modified .tape files
-        id: getfiles
-        run: |
-          if [[ "${{ github.event.label.name }}" == "vhs" ]]; then
-            echo "::set-output name=files::$(ls *.tape)"
-          else
-            echo "::set-output name=files::$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep .tape)"
-          fi
-
-      - name: Set up matrix
-        id: setupmatrix
-        run: |
-          echo "::set-output name=matrix::$(echo ${{ steps.getfiles.outputs.files }} | jq -R -s 'split(" ")')"
-
       - name: Install atmos
         uses: jaxxstorm/action-install-gh-release@v1.11.0
         with: # Grab the latest version
@@ -50,17 +32,12 @@ jobs:
 
       - name: Setup shell rc
         run: |
-          echo "alias ls='ls --color=always'" > ~/.bashrc
+          echo "alias ls='ls --color=always'" >> ~/.bashrc
 
-    strategy:
-      matrix:
-        file: ${{fromJson(steps.setupmatrix.outputs.matrix)}}
-
-    steps:
       - uses: charmbracelet/vhs-action@v1
         with: 
           token: ${{ secrets.GITHUB_TOKEN }}
-          path: ${{ matrix.file }}
+          path: demo.tape
           install-fonts: true
 
       - uses: stefanzweifel/git-auto-commit-action@v4
@@ -84,3 +61,4 @@ jobs:
         if: steps.auto-commit.outputs.changes_detected == 'false'
         run: |
           echo "No changes to demo" >> $GITHUB_STEP_SUMMARY
+
