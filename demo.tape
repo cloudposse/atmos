@@ -29,6 +29,9 @@ Set Height 800
 Set PlaybackSpeed 1
 
 Set Shell "bash -eo pipefail"
+Hide
+Type "alias ls="ls --color=force" Enter
+Show
 
 Type "# First check you have Atmos installed" Sleep 500ms Enter
 Type "atmos version" Sleep 500ms Enter
@@ -37,7 +40,7 @@ Sleep 1s
 Type "# Now let's explore the Quick Start example" Sleep 500ms Enter
 Type "cd examples/quick-start" Sleep 500ms Enter
 
-Type "ls -al --color=force" Sleep 500ms Enter
+Type "ls -al" Sleep 500ms Enter
 Sleep 1s
 
 Type "# We will start by installing some 3rd-party components and other artifacts..." Sleep 500ms Enter

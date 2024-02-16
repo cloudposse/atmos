@@ -71,13 +71,8 @@ jobs:
           repo: cloudposse/atmos
           chmod: 0755
           extension-matching: disable 
-          rename-to: atmos
+          rename-to: atmos 
 
-      - name: Setup shell rc
-        if: steps.labeled.outputs.labeled == 'true'
-        run: |
-          echo "alias ls='ls --color=always'" > ~/.bashrc   
-                 
       - uses: charmbracelet/vhs-action@v1
         with: 
           token: ${{ secrets.GITHUB_TOKEN }}
