@@ -32,10 +32,9 @@ jobs:
           fi
 
       - name: Get modified .tape files
-        if: steps.labeled.outputs.labeled == 'true'
         id: tapes
         run: |
-          if [[ "${{ github.event.label.name }}" == "vhs" ]]; then
+          if [[ "${{ steps.labeled.outputs.labeled }}" == "vhs" ]]; then
             echo "files=$(find . -type f -name '*.tape')" >> $GITHUB_OUTPUT
           else
             echo "files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep '\.tape$')" >> $GITHUB_OUTPUT
@@ -45,7 +44,7 @@ jobs:
         if: steps.labeled.outputs.labeled == 'true'
         id: create-matrix
         run: |
-          echo "matrix=$(echo ${{ steps.tapes.outputs.files }} | jq -R -s 'split(" ")')" >> $GITHUB_OUTPUT
+          echo "matrix=$(echo -n ${{ steps.tapes.outputs.files }} | jq -R -s 'split(" ")')" >> $GITHUB_OUTPUT
 
       - name: Install atmos
         if: steps.labeled.outputs.labeled == 'true'
@@ -66,7 +65,7 @@ jobs:
        
   vhs:
     needs: [prepare]
-    if: needs.prepare.outputs.labeled == 'true'
+    if: needs.prepare.outputs.matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
       matrix:
