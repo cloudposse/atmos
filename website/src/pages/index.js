@@ -10,10 +10,7 @@ function Home() {
 
   return (
     <div class="landing-page">
-      <Layout
-        title={`Hello from ${siteConfig.title}`}
-        description="Description will go into a meta tag in <head />">
-        
+      <Layout title={`Hello from ${siteConfig.title}`} description="Manage Environments Easily in Terraform using Atmos">
         <header class="hero hero--full-height">
           <div class="intro">
             <h1>Manage Environments Easily in Terraform</h1>
@@ -32,16 +29,16 @@ function Home() {
             <div class="section__description">
               <h2>Start Your Project</h2>
               <p>Create a solid foundation with a well-structured folder layout, embracing best practices and conventions for a consistently organized project.</p>
-              <Link to="/" class="button button--lg button--outline button--primary ml20"><p>Read Related Docs</p></Link>
+              <Link to="/core-concepts/stacks/catalogs" class="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section class="alternate-section section--image-left">
             <img src={useBaseUrl('/img/cli/atmos/atmos-cli-command-1.png')} alt="Screenshot 2" class="screenshot" />
             <div class="section__description">
               <h2>Write your Components</h2>
-              <p>Craft vanilla Terraform root modules with clear variable inputs and outputs, making it easy to build and share reusable infrastructure components.
+              <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy.
 </p>
-              <Link to="/" class="button button--lg button--outline button--primary ml20"><p>Read Related Docs</p></Link>
+              <Link to="/core-concepts/components" class="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section class="alternate-section section--image-right">
@@ -50,7 +47,7 @@ function Home() {
               <h2>Define your Stacks</h2>
               <p>Configure your environments—development, staging, production—each tailored to different stages of the lifecycle, ensuring smooth transitions and robust deployment strategies.
 </p>
-              <Link to="/" class="button button--lg button--outline button--primary ml20"><p>Read Related Docs</p></Link>
+              <Link to="/core-concepts/stacks" class="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section class="alternate-section section--image-left">
@@ -58,7 +55,7 @@ function Home() {
             <div class="section__description">
               <h2>Deploy 🚀</h2>
               <p>Execute deployments with precision using Terraform's plan and apply commands, fully integrated with native GitOps workflows through GitHub Actions for seamless automation.</p>
-              <Link to="/" class="button button--lg button--outline button--primary ml20"><p>Read Related Docs</p></Link>
+              <Link to="/cli/commands/terraform/usage" class="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <footer>

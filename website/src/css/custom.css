@@ -97,7 +97,7 @@ li > ul.menu__list {
 }
 
 html[data-theme='dark'] article ul strong, html[data-theme='dark'] article ol strong {
-    color: #7f87cd;
+    color: #654dfe;
 }
 
 article ul strong, article ol strong {
@@ -400,11 +400,11 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
   font-size: 1.5em;
 }  
 
-.landing-page header h1, h3 {
+.landing-page header h1, .landing-page header h3 {
   text-align: center;
 }
 
-.landing-page .hero img {
+.landing-page .hero img {   
     min-width: 50%;
     width: 100%;
     height: auto;
