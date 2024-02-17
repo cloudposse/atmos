@@ -400,6 +400,10 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
   font-size: 1.5em;
 }  
 
+.landing-page header h1, h3 {
+  text-align: center;
+}
+
 .landing-page .hero img {
     min-width: 50%;
     width: 100%;
@@ -417,6 +421,8 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
 .hero__cta {
   gap: 1rem;
   align-items: center;  
+  display: flex;
+
 }
 .landing-page main h2 {
     text-align: center;
@@ -449,6 +455,10 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
   .alternate-section {
     flex-wrap: wrap;
   }
+  .landing-page img.screenshot {
+    max-width: 100%;
+  }
+
 }
 
 .section--image-left {
