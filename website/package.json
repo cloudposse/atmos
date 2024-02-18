@@ -22,7 +22,7 @@
     "@grnet/docusaurus-glossary-view": "^2.0.0-rc",
     "@grnet/docusaurus-term-preview": "^2.0.0-rc",
     "@grnet/docusaurus-terminology": "^2.0.0-rc",
-    "@mdx-js/react": "^3.0.0",
+    "@mdx-js/react": "^3.0.1",
     "clsx": "^2.1.0",
     "docusaurus-plugin-image-zoom": "^2.0.0",
     "marked": "^12.0.0",
