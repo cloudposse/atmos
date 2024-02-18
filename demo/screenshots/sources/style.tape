@@ -15,8 +15,8 @@ Set WindowBar Colorful
 
 Set BorderRadius 8
 
-#Set Margin 0
-#Set Padding 10
+Set Margin 0
+Set Padding 10
 
 Set Width 1400
 Set Height 800
@@ -30,4 +30,3 @@ Set Framerate 20
 Set CursorBlink false
 Set Width 1400
 Set Height 800
-#Set LoopOffset 5

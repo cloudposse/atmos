@@ -23,7 +23,7 @@ install: $(SCREENSHOTS)
 atmos-%.png: atmos-%.tape
 	@echo "Screenshotting $< to $@"
 	@#vhs $<
-	docker run --rm -v $(PWD)/../../examples:/vhs/examples -v $(PWD):/vhs vhs $<
+	docker run --rm --name $< --env-file=.dockerenv -it -v $(PWD)/../../examples:/vhs/examples -v $(PWD):/vhs -w /vhs vhs $<
 	@rm -f out.gif
 
 clean:
@@ -31,6 +31,13 @@ clean:
 
 realclean: clean
 	rm -f *.tape
+
+%.ansi:
+	ls -al --color=force > $@
+
+%.svg: %.ansi
+	@echo "Converting $< to $@"
+	aha --css "file://./term.css" < $< | sed '/<body>/r term.html' | wkhtmltoimage --allow './' --enable-local-file-access - $@
 
 %.tape: commands.txt
 	@while read -r line; do \
