@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -39,6 +40,8 @@ var docsCmd = &cobra.Command{
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
+
+		u.PrintMessageInColor("Opened browser window with Atmos documentation\n", color.New(color.FgGreen))
 	},
 }
 

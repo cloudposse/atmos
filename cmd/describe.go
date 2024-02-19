@@ -13,5 +13,8 @@ var describeCmd = &cobra.Command{
 }
 
 func init() {
+	describeCmd.PersistentFlags().String("json-path", "", "JSONPath query to filter and query the 'atmos describe <subcommand>' output. https://goessner.net/articles/JsonPath")
+	describeCmd.PersistentFlags().String("jmes-path", "", "JMESPath query to filter and query the 'atmos describe <subcommand>' output. https://jmespath.org")
+
 	RootCmd.AddCommand(describeCmd)
 }
