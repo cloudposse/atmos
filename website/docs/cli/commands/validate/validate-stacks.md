@@ -5,6 +5,7 @@ sidebar_class_name: command
 id: stacks
 description: Use this command to validate all Stack configurations.
 ---
+import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
 Use this command to validate Atmos stack manifest configurations.
@@ -86,6 +87,7 @@ For this to work, configure the following:
 In case of any validation errors (invalid YAML syntax, Atmos manifest JSON Schema errors, invalid imports, etc.), you'll get an output from the
 command similar to the following:
 
+<Terminal title="atmos validate stacks">
 ```console
 no matches found for the import 'globals/tenant1-globals-does-not-exist' in the 
 file 'catalog/invalid-yaml-and-schema/invalid-import-1.yaml'
@@ -160,3 +162,4 @@ file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
   ]
 }
 ```
+</Terminal>

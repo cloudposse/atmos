@@ -5,6 +5,7 @@ sidebar_class_name: command
 id: affected
 description: This command produces a list of the affected Atmos components and stacks given two Git commits.
 ---
+import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
 Use this command to show a list of the affected Atmos components and stacks given two Git commits.
@@ -58,6 +59,7 @@ Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Actio
 
 ## Example Output
 
+<Terminal title="atmos describe affected --verbose=true">
 ```shell
 > atmos describe affected --verbose=true
 
@@ -136,6 +138,7 @@ Affected components and stacks:
   }
 ]
 ```
+</Terminal>
 
 <br/>
 
