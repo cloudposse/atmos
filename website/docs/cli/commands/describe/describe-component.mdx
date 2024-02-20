@@ -5,6 +5,7 @@ sidebar_class_name: command
 id: component
 description: Use this command to describe the complete configuration for an Atmos component in an Atmos stack.
 ---
+import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
 Use this command to describe the complete configuration for an [Atmos component](/core-concepts/components) in
@@ -170,10 +171,7 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
 
 ## Command example
 
-```shell
-atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
-```
-
+<Terminal title="atmos describe component test/test-component-override-3 -s tenant1-ue2-dev">
 ```yaml
 atlantis_project: tenant1-ue2-dev-test-test-component-override-3
 atmos_cli_config:
@@ -466,6 +464,7 @@ vars:
   tenant: tenant1
 workspace: test-component-override-3-workspace
 ```
+</Terminal>
 
 ## Sources of Component Variables
 
@@ -488,10 +487,7 @@ Each variable descriptor has the following schema:
 
 For example:
 
-```shell
-atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
-```
-
+<Terminal title="atmos describe component test/test-component-override-3 -s tenant1-ue2-dev">
 ```yaml
 sources:
   vars:
@@ -594,6 +590,7 @@ sources:
           stack_file_section: vars
           variable_value: dev
 ```
+</Terminal>
 
 <br/>
 
@@ -666,10 +663,7 @@ Each variable descriptor has the following schema:
 
 For example:
 
-```shell
-atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
-```
-
+<Terminal title="atmos describe component test/test-component-override-3 -s tenant1-ue2-dev">
 ```yaml
 sources:
   env:
@@ -726,6 +720,7 @@ sources:
           stack_file_section: components.terraform.env
           variable_value: val3
 ```
+</Terminal>
 
 <br/>
 
@@ -804,10 +799,7 @@ Each setting descriptor has the following schema:
 
 For example:
 
-```shell
-atmos describe component test/test-component-override-3 -s tenant1-ue2-dev
-```
-
+<Terminal title="atmos describe component test/test-component-override-3 -s tenant1-ue2-dev">
 ```yaml
 sources:
   settings:
@@ -843,6 +835,7 @@ sources:
             stack_destructor_enabled: false
             workspace_enabled: true
 ```
+</Terminal>
 
 <br/>
 

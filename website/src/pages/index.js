@@ -61,7 +61,7 @@ function Home() {
           </section>
           <footer>
             <h2>What are you waiting for?</h2>
-            <h3>Your team can succeed with Terraform today.</h3>
+            <h3><strong class="underline">Your team can succeed</strong> with Terraform today.</h3>
             <section class="cta-section">
               <Link to="/" class="button button--lg button--primary"><p>Try the Quick Start</p></Link>
             </section>

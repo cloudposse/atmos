@@ -5,6 +5,7 @@ sidebar_class_name: command
 id: dependents
 description: This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 ---
+import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
 Use this command to show a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
@@ -142,10 +143,7 @@ components:
 Having the `top-level-component` and `top-level-component2` components configured as shown above, we can now execute the following Atmos command
 to show all the components that depend on the `test/test-component` component in the `tenant1-ue2-dev` stack:
 
-```shell
-atmos describe dependents test/test-component -s tenant1-ue2-dev
-```
-
+<Terminal title="atmos describe dependents test/test-component -s tenant1-ue2-dev">
 ```json
 [
   {
@@ -163,14 +161,13 @@ atmos describe dependents test/test-component -s tenant1-ue2-dev
   }
 ]
 ```
+</Terminal>
 
 Similarly, the following Atmos command shows all the components that depend on the `test/test-component` component in
 the `tenant1-ue2-test-1` stack:
 
-```shell
-atmos describe dependents test/test-component -s tenant1-ue2-test-1
-```
 
+<Terminal command="atmos describe dependents test/test-component -s tenant1-ue2-test-1">
 ```json
 [
   {
@@ -200,6 +197,7 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1
   }
 ]
 ```
+</Terminal>
 
 <br/>
 
@@ -311,10 +309,7 @@ Atmos components and are not meant to be provisioned.
 
 ## Output Example
 
-```shell
-atmos describe dependents test/test-component -s tenant1-ue2-test-1
-```
-
+<Terminal command="atmos describe dependents test/test-component -s tenant1-ue2-test-1">
 ```json
 [
   {
@@ -344,3 +339,4 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1
   }
 ]
 ```
+</Terminal>

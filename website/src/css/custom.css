@@ -478,10 +478,11 @@ strong.underline {
 strong.underline::after {
   content: "";
   position: absolute;
-  bottom: -0.125rem;
+  bottom: -0.855rem;
   left: -0.5rem;
   right: -0.5rem;
-  height: 0.75rem;
+  height: 1rem;
+
   z-index: 1;
   background-image: url("/img/underline.svg");
   background-repeat: no-repeat;
@@ -493,10 +494,7 @@ strong.underline {
 }
 
 strong.underline::after {
-  bottom: -0.35rem;
-  height: 0.5rem;
-  left: -0.25rem;
-  right: -0.25rem;
+
 }
 
 
@@ -568,7 +566,8 @@ strong.underline::after {
 .terminal {
     min-width: 50vw;
     color: #ccc;
-    background: #171717;
+    /*background: #171717; */
+    background: #00000073;
     margin-top: 10px;
     margin-left: 20px;
     line-height: 0.8em;
@@ -618,8 +617,32 @@ strong.underline::after {
     background: transparent !important;
 }
 
+.terminal .language-yaml.theme-code-block {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal .language-json.theme-code-block {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
 .terminal .language-console.theme-code-block
 {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal pre.prism-code.language-json {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal pre.prism-code.language-yaml {
     --prism-background-color: transparent !important;
     background-color: transparent !important;
     background: transparent !important;
@@ -677,7 +700,7 @@ strong.underline::after {
 .typewriter > tt {
     display: flex;
     width: auto;
-    margin: 0.4em;
+    margin: 0.5em;
     border-right: 6px solid rgba(2, 181, 9,1);
     flex-basis: content;
     white-space: nowrap;
