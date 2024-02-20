@@ -3,6 +3,7 @@ import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Link from '@docusaurus/Link';
 import useBaseUrl from '@docusaurus/useBaseUrl'
+import Screengrab from '@site/src/components/Screengrab'
 
 function Home() {
   const context = useDocusaurusContext();
@@ -25,7 +26,7 @@ function Home() {
         <main>
           <h2>Simplify complex architectures with <strong>DRY configuration</strong></h2>
           <section class="alternate-section section--image-right">
-            <img src={useBaseUrl('/img/cli/atmos/atmos-cli-command-1.png')} alt="Screenshot 1" class="screenshot" />
+            <Screengrab title="Atmos Stacks" command="# here's an example of what your folder structure will like..." slug="tree" />
             <div class="section__description">
               <h2>Start Your Project</h2>
               <p>Create a solid foundation with a well-structured folder layout, embracing best practices and conventions for a consistently organized project.</p>
@@ -33,7 +34,7 @@ function Home() {
             </div>
           </section>
           <section class="alternate-section section--image-left">
-            <img src={useBaseUrl('/img/cli/atmos/atmos-cli-command-1.png')} alt="Screenshot 2" class="screenshot" />
+            <Screengrab title="Atmos Stacks" command="# Then write your terraform root modules..." slug="atmos-version" />
             <div class="section__description">
               <h2>Write your Components</h2>
               <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy.
@@ -42,7 +43,7 @@ function Home() {
             </div>
           </section>
           <section class="alternate-section section--image-right">
-            <img src={useBaseUrl('/img/cli/atmos/atmos-cli-command-1.png')} alt="Screenshot 3" class="screenshot" />
+            <Screengrab title="Atmos Stacks" command="# Configure your stacks using YAML... easily import and inherit settings" slug="atmos-version" />
             <div class="section__description">
               <h2>Define your Stacks</h2>
               <p>Configure your environments—development, staging, production—each tailored to different stages of the lifecycle, ensuring smooth transitions and robust deployment strategies.
@@ -51,7 +52,7 @@ function Home() {
             </div>
           </section>
           <section class="alternate-section section--image-left">
-            <img src={useBaseUrl('/img/cli/atmos/atmos-cli-command-1.png')} alt="Screenshot 4" class="screenshot" />
+            <Screengrab title="Atmos Stacks" command="# Deploy your stacks with the console UI or using GitHub Actions" slug="atmos-version" />
             <div class="section__description">
               <h2>Deploy 🚀</h2>
               <p>Execute deployments with precision using Terraform's plan and apply commands, fully integrated with native GitOps workflows through GitHub Actions for seamless automation.</p>

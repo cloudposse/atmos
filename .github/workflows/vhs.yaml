@@ -60,7 +60,9 @@ jobs:
     strategy:
       matrix:
         file: ${{fromJson(needs.prepare.outputs.matrix)}}
-
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.file }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4  
 

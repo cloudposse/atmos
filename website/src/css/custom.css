@@ -324,10 +324,6 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
     background-image: none;
 }
 
-.landing-page {
-  margin: 2rem;
-}
-
 .landing-page .section__description {
     font-size: 1em;
     margin-left: 3em;
@@ -376,7 +372,7 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
 
 .landing-page header {
   display: flex;
-  max-height: 84vh;
+  max-height: 90vh;
   height: 100vh;
   justify-content: center;
   margin-top: 2em; 
@@ -570,6 +566,7 @@ strong.underline::after {
 
 /* Terminal Styling */
 .terminal {
+    min-width: 50vw;
     color: #ccc;
     background: #171717;
     margin-top: 10px;
@@ -578,6 +575,7 @@ strong.underline::after {
     border-radius: 10px;
     padding: 0.5em;
     border: 1px solid #cccccc36;
+    box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
 }
 
 .terminal h1 {
@@ -587,11 +585,19 @@ strong.underline::after {
     flex-grow: 1;
 
     align-items: center;
-    width: 100vw;
+    width: 100%;
+    min-width: 100%;    
     position: relative;
-    left: -30px;
+    left: -60px;
     color: #fff;
     font-weight: bold;
+    padding-right: 80px;
+    padding-left: 80px;
+
+    white-space: nowrap;
+    overflow: hidden;
+    max-width: 60%;
+    text-overflow: ellipsis;
 }
 
 /* The container for the dots, representing a window control bar */
@@ -630,30 +636,67 @@ strong.underline::after {
     overflow: auto;
 }
 .terminal .window-controls {
-  display: flex;
-  width: 30px;
-  align-items: flex-start;
-  justify-content: space-between;
-  width: 60px; /* Adjust the width as needed */
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    width: 60px; /* Adjust the width as needed */
 }
 
 /* General styles for each dot */
 .terminal .control-dot {
-  width: 12px; /* Dot size */
-  height: 12px; /* Dot size */
-  border-radius: 50%; /* Makes the dot circular */
-  margin: 0 4px; /* Spacing between dots */
+    width: 12px; /* Dot size */
+    height: 12px; /* Dot size */
+    border-radius: 50%; /* Makes the dot circular */
+    margin: 0 4px; /* Spacing between dots */
 }
 
 /* Specific color for each dot */
 .terminal .close-dot {
-  background-color: #ff605c; /* Red color */
+    background-color: #ff605c; /* Red color */
 }
 
 .terminal .minimize-dot {
-  background-color: #ffbd44; /* Yellow color */
+    background-color: #ffbd44; /* Yellow color */
 }
 
 .terminal .maximize-dot {
-  background-color: #00ca56; /* Green color */
+    background-color: #00ca56; /* Green color */
+}
+
+.terminal pre.screengrab {
+    line-height: 0.95em;
+    padding: 0.3em;
+    background: transparent;
+}
+
+.typewriter {
+  display: flex;
+  flex: 0 1 auto;
+}
+
+.typewriter > tt {
+    display: flex;
+    width: auto;
+    margin: 0.4em;
+    border-right: 6px solid rgba(2, 181, 9,1);
+    flex-basis: content;
+    white-space: nowrap;
+    overflow: hidden;
+    transform: translateY(-50%);
+}
+
+/* Animation */
+.animate .typing {
+  animation: typing 3s steps(18) 1s 1 normal both,
+             blinkTextCursor 500ms steps(44) infinite normal;
+}
+
+@keyframes typing {
+  from{max-width: 0; }
+  to{max-width: 100vw; padding-right: 0.3em;}
+}
+
+@keyframes blinkTextCursor{
+  from{border-right-color: rgba(2, 181, 9,.75);}
+  to{border-right-color: transparent;}
 }
