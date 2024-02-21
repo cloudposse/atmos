@@ -1,17 +1,24 @@
 .
 ├── atmos.yaml
 ├── components
-│   └── myapp
-│       ├── main.tf
-│       ├── outputs.tf
-│       └── variables.tf
-├── stacks
-│   ├── catalog
-│   │   └── myapp.yaml
-│   └── deploy
-│       ├── dev.yaml
-│       ├── prod.yaml
-│       └── staging.yaml
-└── test.ansi
+│   └── terraform
+│       └── myapp
+│           ├── README.md
+│           ├── cache.txt
+│           ├── dev-myapp.terraform.tfvars.json
+│           ├── main.tf
+│           ├── outputs.tf
+│           ├── prod-myapp.terraform.tfvars.json
+│           ├── terraform.tfstate.d
+│           │   └── dev
+│           ├── variables.tf
+│           └── versions.tf
+└── stacks
+    ├── catalog
+    │   └── myapp.yaml
+    └── deploy
+        ├── dev.yaml
+        ├── prod.yaml
+        └── staging.yaml
 
-5 directories, 9 files
+8 directories, 13 files

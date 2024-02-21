@@ -5,18 +5,19 @@ sidebar_class_name: command
 order: 10
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Screengrab title="atmos help" slug="atmos--help" />
 
 ## Usage
+
+The `atmos --help` and `atmos -h` commands show help for all Atmos CLI commands.
 
 ```shell
 atmos help
 atmos --help
 atmos -h
 ```
-
-The `atmos --help` and `atmos -h` commands show help for all Atmos CLI commands.
-
-<Screengrab title="atmos help" slug="atmos--help" />
 
 ## Examples
 
@@ -39,6 +40,7 @@ atmos workflow --help    # Executes 'workflow' commands
 
 The `atmos help` starts an interactive help UI in the terminal:
 
+<Terminal title="atmos help (interactive)">
 ![`atmos help` command](/img/cli/help/atmos-help-command.png)
+</Terminal>
 
-<br/>

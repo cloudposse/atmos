@@ -1,0 +1,212 @@
+#compdef atmos
+compdef _atmos atmos
+
+# zsh completion for atmos                                -*- shell-script -*-
+
+__atmos_debug()
+{
+    local file=&quot;$BASH_COMP_DEBUG_FILE&quot;
+    if [[ -n ${file} ]]; then
+        echo &quot;$*&quot; &gt;&gt; &quot;${file}&quot;
+    fi
+}
+
+_atmos()
+{
+    local shellCompDirectiveError=1
+    local shellCompDirectiveNoSpace=2
+    local shellCompDirectiveNoFileComp=4
+    local shellCompDirectiveFilterFileExt=8
+    local shellCompDirectiveFilterDirs=16
+    local shellCompDirectiveKeepOrder=32
+
+    local lastParam lastChar flagPrefix requestComp out directive comp lastComp noSpace keepOrder
+    local -a completions
+
+    __atmos_debug &quot;\n========= starting completion logic ==========&quot;
+    __atmos_debug &quot;CURRENT: ${CURRENT}, words[*]: ${words[*]}&quot;
+
+    # The user could have moved the cursor backwards on the command-line.
+    # We need to trigger completion from the $CURRENT location, so we need
+    # to truncate the command-line ($words) up to the $CURRENT location.
+    # (We cannot use $CURSOR as its value does not work when a command is an alias.)
+    words=(&quot;${=words[1,CURRENT]}&quot;)
+    __atmos_debug &quot;Truncated words[*]: ${words[*]},&quot;
+
+    lastParam=${words[-1]}
+    lastChar=${lastParam[-1]}
+    __atmos_debug &quot;lastParam: ${lastParam}, lastChar: ${lastChar}&quot;
+
+    # For zsh, when completing a flag with an = (e.g., atmos -n=&lt;TAB&gt;)
+    # completions must be prefixed with the flag
+    setopt local_options BASH_REMATCH
+    if [[ &quot;${lastParam}&quot; =~ '-.*=' ]]; then
+        # We are dealing with a flag with an =
+        flagPrefix=&quot;-P ${BASH_REMATCH}&quot;
+    fi
+
+    # Prepare the command to obtain completions
+    requestComp=&quot;${words[1]} __complete ${words[2,-1]}&quot;
+    if [ &quot;${lastChar}&quot; = &quot;&quot; ]; then
+        # If the last parameter is complete (there is a space following it)
+        # We add an extra empty parameter so we can indicate this to the go completion code.
+        __atmos_debug &quot;Adding extra empty parameter&quot;
+        requestComp=&quot;${requestComp} \&quot;\&quot;&quot;
+    fi
+
+    __atmos_debug &quot;About to call: eval ${requestComp}&quot;
+
+    # Use eval to handle any environment variables and such
+    out=$(eval ${requestComp} 2&gt;/dev/null)
+    __atmos_debug &quot;completion output: ${out}&quot;
+
+    # Extract the directive integer following a : from the last line
+    local lastLine
+    while IFS='\n' read -r line; do
+        lastLine=${line}
+    done &lt; &lt;(printf &quot;%s\n&quot; &quot;${out[@]}&quot;)
+    __atmos_debug &quot;last line: ${lastLine}&quot;
+
+    if [ &quot;${lastLine[1]}&quot; = : ]; then
+        directive=${lastLine[2,-1]}
+        # Remove the directive including the : and the newline
+        local suffix
+        (( suffix=${#lastLine}+2))
+        out=${out[1,-$suffix]}
+    else
+        # There is no directive specified.  Leave $out as is.
+        __atmos_debug &quot;No directive found.  Setting do default&quot;
+        directive=0
+    fi
+
+    __atmos_debug &quot;directive: ${directive}&quot;
+    __atmos_debug &quot;completions: ${out}&quot;
+    __atmos_debug &quot;flagPrefix: ${flagPrefix}&quot;
+
+    if [ $((directive &amp; shellCompDirectiveError)) -ne 0 ]; then
+        __atmos_debug &quot;Completion received error. Ignoring completions.&quot;
+        return
+    fi
+
+    local activeHelpMarker=&quot;_activeHelp_ &quot;
+    local endIndex=${#activeHelpMarker}
+    local startIndex=$((${#activeHelpMarker}+1))
+    local hasActiveHelp=0
+    while IFS='\n' read -r comp; do
+        # Check if this is an activeHelp statement (i.e., prefixed with $activeHelpMarker)
+        if [ &quot;${comp[1,$endIndex]}&quot; = &quot;$activeHelpMarker&quot; ];then
+            __atmos_debug &quot;ActiveHelp found: $comp&quot;
+            comp=&quot;${comp[$startIndex,-1]}&quot;
+            if [ -n &quot;$comp&quot; ]; then
+                compadd -x &quot;${comp}&quot;
+                __atmos_debug &quot;ActiveHelp will need delimiter&quot;
+                hasActiveHelp=1
+            fi
+
+            continue
+        fi
+
+        if [ -n &quot;$comp&quot; ]; then
+            # If requested, completions are returned with a description.
+            # The description is preceded by a TAB character.
+            # For zsh's _describe, we need to use a : instead of a TAB.
+            # We first need to escape any : as part of the completion itself.
+            comp=${comp//:/\\:}
+
+            local tab=&quot;$(printf '\t')&quot;
+            comp=${comp//$tab/:}
+
+            __atmos_debug &quot;Adding completion: ${comp}&quot;
+            completions+=${comp}
+            lastComp=$comp
+        fi
+    done &lt; &lt;(printf &quot;%s\n&quot; &quot;${out[@]}&quot;)
+
+    # Add a delimiter after the activeHelp statements, but only if:
+    # - there are completions following the activeHelp statements, or
+    # - file completion will be performed (so there will be choices after the activeHelp)
+    if [ $hasActiveHelp -eq 1 ]; then
+        if [ ${#completions} -ne 0 ] || [ $((directive &amp; shellCompDirectiveNoFileComp)) -eq 0 ]; then
+            __atmos_debug &quot;Adding activeHelp delimiter&quot;
+            compadd -x &quot;--&quot;
+            hasActiveHelp=0
+        fi
+    fi
+
+    if [ $((directive &amp; shellCompDirectiveNoSpace)) -ne 0 ]; then
+        __atmos_debug &quot;Activating nospace.&quot;
+        noSpace=&quot;-S ''&quot;
+    fi
+
+    if [ $((directive &amp; shellCompDirectiveKeepOrder)) -ne 0 ]; then
+        __atmos_debug &quot;Activating keep order.&quot;
+        keepOrder=&quot;-V&quot;
+    fi
+
+    if [ $((directive &amp; shellCompDirectiveFilterFileExt)) -ne 0 ]; then
+        # File extension filtering
+        local filteringCmd
+        filteringCmd='_files'
+        for filter in ${completions[@]}; do
+            if [ ${filter[1]} != '*' ]; then
+                # zsh requires a glob pattern to do file filtering
+                filter=&quot;\*.$filter&quot;
+            fi
+            filteringCmd+=&quot; -g $filter&quot;
+        done
+        filteringCmd+=&quot; ${flagPrefix}&quot;
+
+        __atmos_debug &quot;File filtering command: $filteringCmd&quot;
+        _arguments '*:filename:'&quot;$filteringCmd&quot;
+    elif [ $((directive &amp; shellCompDirectiveFilterDirs)) -ne 0 ]; then
+        # File completion for directories only
+        local subdir
+        subdir=&quot;${completions[1]}&quot;
+        if [ -n &quot;$subdir&quot; ]; then
+            __atmos_debug &quot;Listing directories in $subdir&quot;
+            pushd &quot;${subdir}&quot; &gt;/dev/null 2&gt;&amp;1
+        else
+            __atmos_debug &quot;Listing directories in .&quot;
+        fi
+
+        local result
+        _arguments '*:dirname:_files -/'&quot; ${flagPrefix}&quot;
+        result=$?
+        if [ -n &quot;$subdir&quot; ]; then
+            popd &gt;/dev/null 2&gt;&amp;1
+        fi
+        return $result
+    else
+        __atmos_debug &quot;Calling _describe&quot;
+        if eval _describe $keepOrder &quot;completions&quot; completions $flagPrefix $noSpace; then
+            __atmos_debug &quot;_describe found some completions&quot;
+
+            # Return the success of having called _describe
+            return 0
+        else
+            __atmos_debug &quot;_describe did not find completions.&quot;
+            __atmos_debug &quot;Checking if we should do file completion.&quot;
+            if [ $((directive &amp; shellCompDirectiveNoFileComp)) -ne 0 ]; then
+                __atmos_debug &quot;deactivating file completion&quot;
+
+                # We must return an error code here to let zsh know that there were no
+                # completions found by _describe; this is what will trigger other
+                # matching algorithms to attempt to find completions.
+                # For example zsh can match letters in the middle of words.
+                return 1
+            else
+                # Perform file completion
+                __atmos_debug &quot;Activating file completion&quot;
+
+                # We must return the result of this command, so it must be the
+                # last command, or else we must store its result to return it.
+                _arguments '*:filename:_files'&quot; ${flagPrefix}&quot;
+            fi
+        fi
+    fi
+}
+
+# don't run the completion function when being source-ed or eval-ed
+if [ &quot;$funcstack[1]&quot; = &quot;_atmos&quot; ]; then
+    _atmos
+fi

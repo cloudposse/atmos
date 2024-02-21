@@ -24,7 +24,7 @@ function Home() {
           <h3>Frustrated using Terraform the <i>old fashion way</i>? <strong class="underline">There's a smarter option.</strong></h3>
         </header>
         <main>
-          <h2>Simplify complex architectures with <strong>DRY configuration</strong></h2>
+          <h2 class="section">Simplify complex architectures with <strong>DRY configuration</strong></h2>
           <section class="alternate-section section--image-right">
             <Screengrab title="Atmos Stacks" command="# here's an example of what your folder structure will like..." slug="tree" />
             <div class="section__description">
@@ -60,7 +60,7 @@ function Home() {
             </div>
           </section>
           <footer>
-            <h2>What are you waiting for?</h2>
+            <h2>What are you waiting for? It's FREE and Open Source</h2>
             <h3><strong class="underline">Your team can succeed</strong> with Terraform today.</h3>
             <section class="cta-section">
               <Link to="/" class="button button--lg button--primary"><p>Try the Quick Start</p></Link>

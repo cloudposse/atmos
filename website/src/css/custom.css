@@ -333,12 +333,18 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
 
 .landing-page .section__description > p {
     font-size: 1.5em;
+}
+
+html[data-theme='dark'] .landing-page .section__description > p {
     color: #ccc;
 }
 
 .landing-page .section__description > h2 {
     font-size: 2.5rem;
     margin-bottom: 0.5em;
+}
+
+html[data-theme='dark'] .landing-page .section__description > h2 {
     color: #fff;
 }
 
@@ -347,8 +353,14 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
     margin-right: auto;
 }
 
-.landing-page main {
+.landing-page main section {
   max-width: 1600px;
+}
+
+.landing-page main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .landing-page .main-wrapper {
@@ -374,6 +386,7 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
   display: flex;
   max-height: 90vh;
   height: 100vh;
+  width: 100vw;
   justify-content: center;
   margin-top: 2em; 
   margin-bottom: 2em;
@@ -425,6 +438,23 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
     font-size: 2.5em;
     margin-bottom: 2em;
     color: #ccc;
+}
+
+.landing-page main h2.section {
+    background: var(--ifm-color-primary);
+    min-height: 4em;
+    justify-content: center;
+    flex-direction: column;
+    display: flex;
+    flex-grow: 1;
+    flex-basis: 100%;
+    width: 100vw;
+    vertical-align: middle;
+    align-items: center;
+
+}
+html[data-theme='dark'] .landing-page main h2.section {
+    background: rgb(16, 36, 69);
 }
 
 .landing-page main h3 {
@@ -567,9 +597,9 @@ strong.underline::after {
     min-width: 50vw;
     color: #ccc;
     /*background: #171717; */
-    background: #00000073;
+    background: #070e12;
     margin-top: 10px;
-    margin-left: 20px;
+    margin-left: 20px;  
     line-height: 0.8em;
     border-radius: 10px;
     padding: 0.5em;

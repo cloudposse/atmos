@@ -6,10 +6,13 @@ id: affected
 description: This command produces a list of the affected Atmos components and stacks given two Git commits.
 ---
 import Terminal from '@site/src/components/Terminal'
+import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
 Use this command to show a list of the affected Atmos components and stacks given two Git commits.
 :::
+
+<Screengrab title="atmos describe affected --help" slug="atmos-describe-affected--help" />
 
 ## Description
 
@@ -57,7 +60,41 @@ affected. Atmos will then skip evaluating those stacks for differences since we 
 Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run `describe affected` and produce a GitHub matrix.
 :::
 
-## Example Output
+#
+
+<br/>
+
+## Usage
+
+```shell
+atmos describe affected [options]
+```
+
+<br/>
+
+:::tip
+Run `atmos describe affected --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos describe affected
+atmos describe affected --verbose=true
+atmos describe affected --ref refs/heads/main
+atmos describe affected --ref refs/heads/my-new-branch --verbose=true
+atmos describe affected --ref refs/heads/main --format json
+atmos describe affected --ref refs/tags/v1.16.0 --file affected.yaml --format yaml
+atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
+atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+atmos describe affected --ssh-key <path_to_ssh_key>
+atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>
+atmos describe affected --repo-path <path_to_already_cloned_repo>
+atmos describe affected --include-spacelift-admin-stacks=true
+```
+
+
+# Example Output
 
 <Terminal title="atmos describe affected --verbose=true">
 ```shell
@@ -140,37 +177,6 @@ Affected components and stacks:
 ```
 </Terminal>
 
-<br/>
-
-## Usage
-
-```shell
-atmos describe affected [options]
-```
-
-<br/>
-
-:::tip
-Run `atmos describe affected --help` to see all the available options
-:::
-
-## Examples
-
-```shell
-atmos describe affected
-atmos describe affected --verbose=true
-atmos describe affected --ref refs/heads/main
-atmos describe affected --ref refs/heads/my-new-branch --verbose=true
-atmos describe affected --ref refs/heads/main --format json
-atmos describe affected --ref refs/tags/v1.16.0 --file affected.yaml --format yaml
-atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
-atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
-atmos describe affected --ssh-key <path_to_ssh_key>
-atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>
-atmos describe affected --repo-path <path_to_already_cloned_repo>
-atmos describe affected --include-spacelift-admin-stacks=true
-```
-
 ## Flags
 
 | Flag                               | Description                                                                                                                                                      | Required |
@@ -223,7 +229,7 @@ where:
   or via inheritance)
 
 - `atlantis_project` - the affected Atlantis project name. It will be included only if the Atlantis integration is configured in
-  the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
+  the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis) for more details
 
 - `file` - if the Atmos component depends on an external file, and the file was changed (see `affected.file` below),
   the `file` attributes shows the modified file

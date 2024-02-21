@@ -1,0 +1,9 @@
+components:
+  terraform:
+    myapp:
+      vars:
+        location: Los Angeles
+        lang: en
+        format: v1
+        options: '0T'
+        units: m

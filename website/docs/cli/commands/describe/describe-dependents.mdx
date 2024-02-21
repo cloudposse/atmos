@@ -6,10 +6,13 @@ id: dependents
 description: This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 ---
 import Terminal from '@site/src/components/Terminal'
+import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
 Use this command to show a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 :::
+
+<Screengrab title="atmos describe dependents --help" slug="atmos-describe-dependents--help" />
 
 ## Description
 
@@ -296,7 +299,7 @@ where:
   section or via inheritance)
 
 - `atlantis_project` - the dependent Atlantis project name. It will be included only if the Atlantis integration is configured in
-  the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integration](/integrations/atlantis.md) for more details
+  the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integration](/integrations/atlantis) for more details
 
 <br/>
 

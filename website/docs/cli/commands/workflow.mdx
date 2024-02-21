@@ -4,10 +4,14 @@ sidebar_label: workflow
 sidebar_class_name: command
 description: Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
 ---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
 Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
 :::
+
+<Screengrab title="atmos workflow --help" slug="atmos-workflow--help" />
 
 <br/>
 
@@ -52,11 +56,15 @@ atmos workflow
 
 - Press `Enter` to execute the selected workflow from the selected workflow manifest starting with the selected step
 
+<Terminal title="atmos workflow (interactive)">
 ![`atmos workflow` CLI command 4](/img/cli/workflow/atmos-workflow-command-4.png)
+</Terminal>
 
 ### Execute a Workflow
 
+<Terminal title="atmos workflow (interactive)">
 ![`atmos workflow` CLI command 2](/img/cli/workflow/atmos-workflow-command-2.png)
+</Terminal>
 
 ### Run Any Workflow Step
 
@@ -64,8 +72,9 @@ Use the `Tab` key to flip the 3rd column view between the selected workflow step
 For example:
 
 <br/>
-
+<Terminal title="atmos workflow (interactive)">
 ![`atmos workflow` CLI command 3](/img/cli/workflow/atmos-workflow-command-3.png)
+</Terminal>
 
 ## Examples
 
@@ -83,10 +92,6 @@ Run `atmos workflow --help` to see all the available options
 :::
 
 <br/>
-
-
-
-
 <br/>
 
 ## Arguments
