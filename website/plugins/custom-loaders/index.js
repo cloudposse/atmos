@@ -18,10 +18,16 @@ module.exports = function (context, options) {
           module: {
             rules: [
               // { test: /\.txt$/, use: 'raw-loader' },
+              // https://webpack.js.org/loaders/html-loader/
               {
                 test: /\.(html|htm|txt)$/i,
                 loader: "html-loader",
-                options: {},
+                options: {
+                  minimize: {
+                    removeComments: false,
+                    collapseWhitespace: false,
+                  },
+                },
               },
             ],
           },
