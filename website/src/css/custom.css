@@ -476,6 +476,10 @@ html[data-theme='dark'] .landing-page main h2.section {
   flex-wrap: nowrap;
 }
 
+.landing-page .alternate-section .terminal {
+  max-width: 60%;
+}
+
 @media screen and (max-width: 996px)
 {
   .alternate-section {

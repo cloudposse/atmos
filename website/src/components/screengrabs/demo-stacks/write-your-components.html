@@ -1,0 +1,126 @@
+# Here's an example of how to organize components
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> tree components
+
+<span style="font-weight:bold;color:blue;">components</span>/
+└── <span style="font-weight:bold;color:blue;">terraform</span>/
+    └── <span style="font-weight:bold;color:blue;">myapp</span>/
+        ├── README.md
+        ├── main.tf
+        ├── outputs.tf
+        ├── variables.tf
+        └── versions.tf
+
+2 directories, 5 files
+
+
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Let's take a look at myapp terraform 'root' module...
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # This is a simple example of retrieving the weather.
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Taking a closer look at the main.tf, you'll notice it accepts a lot of parameters.
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # This is a best practice for writing reusable components.
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat components/terraform/myapp/main.tf
+
+     File: <span style="font-weight:bold;">components/terraform/myapp/main.tf</span>
+<span style="color:#404040;">   1</span> 
+<span style="color:#404040;">   2</span> 
+<span style="color:#404040;">   3</span> <span style="color:#d787d7;">locals</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">   4</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">url</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">https://wttr.in/</span><span style="color:#d787d7;">${</span><span style="color:#5fafaf;">urlencode</span><span style="color:#b5b5b5;">(</span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">location</span><span style="color:#b5b5b5;">)</span><span style="color:#d787d7;">}</span><span style="color:#87d787;">?</span><span style="color:#d787d7;">${</span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">options</span><span style="color:#d787d7;">}</span><span style="color:#87d787;">&amp;format=</span><span style="color:#d787d7;">${</span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">format</span><span style="color:#d787d7;">}</span><span style="color:#87d787;">&amp;lang=</span><span style="color:#d787d7;">${</span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">lang</span><span style="color:#d787d7;">}</span><span style="color:#87d787;">&amp;u=</span><span style="color:#d787d7;">${</span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">units</span><span style="color:#d787d7;">}</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">   5</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">   6</span> 
+<span style="color:#404040;">   7</span> <span style="color:#d787d7;">data</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">http</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">weather</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">   8</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">url</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">local</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">url</span>
+<span style="color:#404040;">   9</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">request_headers</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  10</span> <span style="color:#b5b5b5;">    </span><span style="color:#87d787;">User-Agent</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">=</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">curl</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  11</span> <span style="color:#b5b5b5;">  </span><span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  12</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  13</span> 
+<span style="color:#404040;">  14</span> <span style="color:#606060;">#</span><span style="color:#606060;"> Now write this to a file (as an example of a resource)</span>
+<span style="color:#404040;">  15</span> <span style="color:#d787d7;">resource</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">local_file</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">cache</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  16</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">filename</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">cache.txt</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  17</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">content</span><span style="color:#d75f87;">  </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">data</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">http</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">weather</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">body</span>
+<span style="color:#404040;">  18</span> <span style="color:#b5b5b5;">}</span>
+
+
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Then we define all the variables we plan to accept.
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Generally, we recommend avoiding defaults here and using baseline stack configurations.
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat components/terraform/myapp/variables.tf
+
+     File: <span style="font-weight:bold;">components/terraform/myapp/variables.tf</span>
+<span style="color:#404040;">   1</span> <span style="color:#d787d7;">variable</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">stage</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">   2</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Stage where it will be deployed</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">   3</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">type</span><span style="color:#d75f87;">        </span><span style="color:#b5b5b5;">= </span><span style="color:#d787d7;">string</span>
+<span style="color:#404040;">   4</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">   5</span> 
+<span style="color:#404040;">   6</span> <span style="color:#d787d7;">variable</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">location</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">   7</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Location for which the weather. Supports city name, 3-letter airport code, area code, or GPS coordinates.</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">   8</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">type</span><span style="color:#d75f87;">        </span><span style="color:#b5b5b5;">= </span><span style="color:#d787d7;">string</span>
+<span style="color:#404040;">   9</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">default</span><span style="color:#d75f87;">     </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Los Angeles</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  10</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  11</span> 
+<span style="color:#404040;">  12</span> <span style="color:#d787d7;">variable</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">options</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  13</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Options to customize the output. '0' for no colors, 'T' for terminal output.</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  14</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">type</span><span style="color:#d75f87;">        </span><span style="color:#b5b5b5;">= </span><span style="color:#d787d7;">string</span>
+<span style="color:#404040;">  15</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">default</span><span style="color:#d75f87;">     </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">0T</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  16</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  17</span> 
+<span style="color:#404040;">  18</span> <span style="color:#d787d7;">variable</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">format</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  19</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Format of the output. 'v2' for the new version of the output format.</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  20</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">type</span><span style="color:#d75f87;">        </span><span style="color:#b5b5b5;">= </span><span style="color:#d787d7;">string</span>
+<span style="color:#404040;">  21</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">default</span><span style="color:#d75f87;">     </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">v2</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  22</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  23</span> 
+<span style="color:#404040;">  24</span> <span style="color:#d787d7;">variable</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">lang</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  25</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Language in which the weather is displayed. 'en' for English.</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  26</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">type</span><span style="color:#d75f87;">        </span><span style="color:#b5b5b5;">= </span><span style="color:#d787d7;">string</span>
+<span style="color:#404040;">  27</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">default</span><span style="color:#d75f87;">     </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">en</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  28</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  29</span> 
+<span style="color:#404040;">  30</span> <span style="color:#d787d7;">variable</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">units</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  31</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Units in which the weather is displayed. 'm' for metric units.</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  32</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">type</span><span style="color:#d75f87;">        </span><span style="color:#b5b5b5;">= </span><span style="color:#d787d7;">string</span>
+<span style="color:#404040;">  33</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">default</span><span style="color:#d75f87;">     </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">m</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  34</span> <span style="color:#b5b5b5;">}</span>
+
+
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Then let's provide some outputs that can be used by other components.
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat components/terraform/myapp/outputs.tf
+
+     File: <span style="font-weight:bold;">components/terraform/myapp/outputs.tf</span>
+<span style="color:#404040;">   1</span> <span style="color:#d787d7;">output</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">weather</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">   2</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">value</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">data</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">http</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">weather</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">body</span>
+<span style="color:#404040;">   3</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">   4</span> 
+<span style="color:#404040;">   5</span> <span style="color:#d787d7;">output</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">url</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">   6</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">value</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">local</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">url</span>
+<span style="color:#404040;">   7</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">   8</span> 
+<span style="color:#404040;">   9</span> <span style="color:#d787d7;">output</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">stage</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  10</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">value</span><span style="color:#d75f87;">       </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">stage</span>
+<span style="color:#404040;">  11</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Stage where it was deployed</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  12</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  13</span> 
+<span style="color:#404040;">  14</span> <span style="color:#d787d7;">output</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">location</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  15</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">value</span><span style="color:#d75f87;">       </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">location</span>
+<span style="color:#404040;">  16</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Location of the weather report.</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  17</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  18</span> 
+<span style="color:#404040;">  19</span> <span style="color:#d787d7;">output</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">lang</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  20</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">value</span><span style="color:#d75f87;">       </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">lang</span>
+<span style="color:#404040;">  21</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Language which the weather is displayed.</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  22</span> <span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">  23</span> 
+<span style="color:#404040;">  24</span> <span style="color:#d787d7;">output</span><span style="color:#b5b5b5;"> </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">units</span><span style="color:#87d787;">&quot;</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">  25</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">value</span><span style="color:#d75f87;">       </span><span style="color:#b5b5b5;">= </span><span style="color:#b5b5b5;">var</span><span style="color:#b5b5b5;">.</span><span style="color:#d75f87;">units</span>
+<span style="color:#404040;">  26</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">description</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">Units the weather is displayed.</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">  27</span> <span style="color:#b5b5b5;">}</span>
+
+
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # It's a best practice to pin verions, so let's do that.
+<span style="color:green;">demo-stacks/ </span><span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat components/terraform/myapp/versions.tf
+
+     File: <span style="font-weight:bold;">components/terraform/myapp/versions.tf</span>
+<span style="color:#404040;">   1</span> <span style="color:#d787d7;">terraform</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span>
+<span style="color:#404040;">   2</span> <span style="color:#b5b5b5;">  </span><span style="color:#d75f87;">required_version</span><span style="color:#d75f87;"> </span><span style="color:#b5b5b5;">= </span><span style="color:#87d787;">&quot;</span><span style="color:#87d787;">&gt;= 1.0.0</span><span style="color:#87d787;">&quot;</span>
+<span style="color:#404040;">   3</span> 
+<span style="color:#404040;">   4</span> <span style="color:#b5b5b5;">  </span><span style="color:#b5b5b5;">required_providers</span><span style="color:#b5b5b5;"> </span><span style="color:#b5b5b5;">{</span><span style="color:#b5b5b5;">}</span>
+<span style="color:#404040;">   5</span> <span style="color:#b5b5b5;">}</span>
+

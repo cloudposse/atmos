@@ -5,7 +5,7 @@ all: build-all install
 install: 
 	@echo "Installing screengrabs to $(INSTALL_PATH)"
 	@mkdir -p $(INSTALL_PATH)
-	@mv -f artifacts/* $(INSTALL_PATH)
+	@cp -a artifacts/* $(INSTALL_PATH)
 
 build-all:
 	@./build-all.sh demo-stacks.txt

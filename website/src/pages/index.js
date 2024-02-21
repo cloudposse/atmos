@@ -26,7 +26,7 @@ function Home() {
         <main>
           <h2 class="section">Simplify complex architectures with <strong>DRY configuration</strong></h2>
           <section class="alternate-section section--image-right">
-            <Screengrab title="Atmos Stacks" command="# here's an example of what your folder structure will like..." slug="tree" />
+            <Screengrab title="Start your Project" command="# here's an example of what your folder structure will like..." slug="demo-stacks/start-your-project" />
             <div class="section__description">
               <h2>Start Your Project</h2>
               <p>Create a solid foundation with a well-structured folder layout, embracing best practices and conventions for a consistently organized project.</p>
@@ -34,7 +34,7 @@ function Home() {
             </div>
           </section>
           <section class="alternate-section section--image-left">
-            <Screengrab title="Atmos Stacks" command="# Then write your terraform root modules..." slug="atmos-version" />
+            <Screengrab title="Write your Components" command="# Then write your terraform root modules..." slug="demo-stacks/write-your-components" />
             <div class="section__description">
               <h2>Write your Components</h2>
               <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy.
@@ -43,7 +43,7 @@ function Home() {
             </div>
           </section>
           <section class="alternate-section section--image-right">
-            <Screengrab title="Atmos Stacks" command="# Configure your stacks using YAML... easily import and inherit settings" slug="atmos-version" />
+            <Screengrab title="Define your Stacks" command="# Configure your stacks using YAML... easily import and inherit settings" slug="demo-stacks/define-your-stacks" />
             <div class="section__description">
               <h2>Define your Stacks</h2>
               <p>Configure your environments—development, staging, production—each tailored to different stages of the lifecycle, ensuring smooth transitions and robust deployment strategies.

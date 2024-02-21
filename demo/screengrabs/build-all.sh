@@ -5,7 +5,7 @@ export TERM=xterm-256color
 function record() {
 		demo=$1
     command=$2
-		
+		extension="${command##*.}" # if any...
 		demo_path=../../examples/$demo
     output_base_file=artifacts/$(echo "$command" | sed -E 's/ -/-/g' | sed -E 's/ +/-/g' | sed 's/---/--/g' | sed 's/scripts\///' | sed 's/\.sh$//')
 		output_html=${output_base_file}.html
@@ -14,7 +14,11 @@ function record() {
     echo "Screengrabbing $command → $output_html"
 		mkdir -p "$output_dir"
 		rm -f $output_ansi
-    script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
+		if [ "${extension}" == "sh" ]; then
+			script -q $output_ansi command $command > /dev/null
+		else
+   		script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
+		fi
 		aha --no-header < $output_ansi > $output_html
 		rm -f $output_ansi
     if [ -n "$CI" ]; then

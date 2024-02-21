@@ -1,3 +1,5 @@
+#!/bin/bash
+
 relative_path=$(dirname `realpath "$0"`)
 source $relative_path/.demo.rc
 
