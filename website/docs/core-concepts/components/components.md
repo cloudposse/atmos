@@ -11,6 +11,10 @@ Those Components are then configured inside of one or more [Stacks](/core-concep
 Atmos was designed to be tool-agnostic, but also supports several native integrations with tools like [`terraform`](/cli/commands/terraform/usage) and [`helmfile`](/cli/commands/helmfile/usage). 
 A common use-case for Atmos is implementing components for [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module).
 
+:::tip
+Components are things like [Terraform "root" modules](https://developer.hashicorp.com/terraform/language/modules#the-root-module), Helm Charts, Dockerfiles, or any fundamental building block of infrastructure.
+:::
+
 ## Use-cases
 
 Components offer a multitude of applications across various business scenarios. Cloud Posse publishes its AWS components for free, so you can see
