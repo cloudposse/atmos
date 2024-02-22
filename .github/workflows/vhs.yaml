@@ -37,7 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}        
         run: |
           if [[ "${{ steps.labeled.outputs.labeled }}" == "true" ]]; then
-            echo "files=$(find . -type f -name '*.tape' | cut -d/ -f2-)" >> $GITHUB_OUTPUT
+            echo "files=$(find . -path './build-harness' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)" >> $GITHUB_OUTPUT
           else
             files=$(gh pr diff --name-only ${{ github.event.pull_request.number }} | grep '\.tape$')
             echo "files=$files" >> $GITHUB_OUTPUT

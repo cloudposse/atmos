@@ -759,6 +759,7 @@ strong.underline::after {
 
 .terminal pre.screengrab {
     line-height: 0.95em;
+    letter-spacing: -0.009em;
     padding: 0.3em;
     background: transparent;
 }
