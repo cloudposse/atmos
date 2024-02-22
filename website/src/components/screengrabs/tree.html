@@ -4,13 +4,15 @@
 │   └── terraform
 │       └── myapp
 │           ├── README.md
+│           ├── cache.dev.txt
+│           ├── cache.prod.txt
+│           ├── cache.staging.txt
 │           ├── cache.txt
-│           ├── dev-myapp.terraform.tfvars.json
 │           ├── main.tf
 │           ├── outputs.tf
-│           ├── prod-myapp.terraform.tfvars.json
 │           ├── terraform.tfstate.d
-│           │   └── dev
+│           │   └── prod
+│           │       └── terraform.tfstate
 │           ├── variables.tf
 │           └── versions.tf
 └── stacks
@@ -21,4 +23,4 @@
         ├── prod.yaml
         └── staging.yaml
 
-8 directories, 13 files
+8 directories, 15 files

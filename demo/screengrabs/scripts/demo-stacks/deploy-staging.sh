@@ -5,4 +5,5 @@ source $relative_path/.demo.rc
 clean
 
 comment "Deploy your component to the staging environment 🚀"
+prompt
 run atmos terraform deploy myapp --stack staging

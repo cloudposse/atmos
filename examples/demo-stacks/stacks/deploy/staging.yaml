@@ -9,4 +9,4 @@ components:
     myapp:
       vars:
         location: Los Angeles
-        format: v1
+        lang: en

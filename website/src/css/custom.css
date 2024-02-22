@@ -6,6 +6,7 @@
 
 .navbar__title {
     font-size: 2em;
+        backdrop-filter: blur(6px) saturate(180%);
 }
 
 .navbar__title {
@@ -441,7 +442,7 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
 }
 
 .landing-page main h2.section {
-    background: var(--ifm-color-primary);
+    background: #0a1922;
     min-height: 4em;
     justify-content: center;
     flex-direction: column;
@@ -454,7 +455,7 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
 
 }
 html[data-theme='dark'] .landing-page main h2.section {
-    background: rgb(16, 36, 69);
+    background: rgb(0 0 0 / 21%);
 }
 
 .landing-page main h3 {
@@ -465,30 +466,66 @@ html[data-theme='dark'] .landing-page main h2.section {
   font-size: 2em;
 }
 
+.landing-page main footer {
+    background: #0a1922;
+    min-width: 100vw;
+    padding: 3em;
+}
+
+.landing-page main footer h3 {
+    color: #7c7b7b;
+}
+
+html[data-theme='dark'] .landing-page main footer {
+    background: rgb(0 0 0 / 21%);
+}
+
 .landing-page main h2 strong {
-  color: #fff;
+    color: #fff;
 }
 
 .alternate-section {
-  display: flex;
-  gap: 2rem;
-  margin-bottom: 10rem;
-  flex-wrap: nowrap;
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 10rem;
+    flex-wrap: nowrap;
+    padding: 2rem;
 }
 
 .landing-page .alternate-section .terminal {
-  max-width: 60%;
+    max-width: 52vw;
+}
+
+.landing-page .terminal pre.screengrab {
+    /* for the atmos logo, it's best to have 0.95em, but no logos on this page */
+    line-height: 1.1em;
 }
 
 @media screen and (max-width: 996px)
 {
-  .alternate-section {
-    flex-wrap: wrap;
-  }
-  .landing-page img.screenshot {
-    max-width: 100%;
-  }
+    .alternate-section {
+        flex-wrap: wrap;
+    }
+    .landing-page main {
+        max-width: 100vw;
+        overflow: hidden;
+    }
+    .landing-page img.screenshot {
+        max-width: 98%;
+    }
 
+    .landing-page .alternate-section .terminal {
+        max-width: 98vw;
+    }
+
+    .landing-page .alternate-section  {
+        margin-bottom: 0;
+    }
+
+    .landing-page main footer h2 {
+        display: flex;
+        flex-direction: column;
+    }
 }
 
 .section--image-left {
@@ -734,6 +771,8 @@ strong.underline::after {
 .typewriter > tt {
     display: flex;
     width: auto;
+    font-size: 1.15em;
+    line-height: 1.2em;
     margin: 0.5em;
     border-right: 6px solid rgba(2, 181, 9,1);
     flex-basis: content;

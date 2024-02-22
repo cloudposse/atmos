@@ -3,16 +3,16 @@
 relative_path=$(dirname `realpath "$0"`)
 source $relative_path/.demo.rc
 
-comment ""
+prompt
 comment "Here's a simple way to organize environemnts."
-comment ""
+prompt
 run tree -I '*.tf' .
 
 newline 2
-comment ""
-comment "Customize how to organize environments in the atmos.yml file."
+prompt
+comment "Customize how to organize environments in the atmos.yaml file."
 comment "Pay special attention to the name_pattern, which is how atmos where to"
 comment "find the stacks."
-comment ""
+prompt
 run cat atmos.yaml
 newline 2

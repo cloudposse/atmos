@@ -24,7 +24,7 @@ function Home() {
           <h3>Frustrated using Terraform the <i>old fashion way</i>? <strong class="underline">There's a smarter option.</strong></h3>
         </header>
         <main>
-          <h2 class="section">Simplify complex architectures with <strong>DRY configuration</strong></h2>
+          <h2 class="section">Simplify complex architectures with <strong class="atmos__text">DRY configuration</strong></h2>
           <section class="alternate-section section--image-right">
             <Screengrab title="Start your Project" command="# here's an example of what your folder structure will like..." slug="demo-stacks/start-your-project" />
             <div class="section__description">
@@ -37,8 +37,8 @@ function Home() {
             <Screengrab title="Write your Components" command="# Then write your terraform root modules..." slug="demo-stacks/write-your-components" />
             <div class="section__description">
               <h2>Write your Components</h2>
-              <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy.
-</p>
+              <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy. 
+                 Use vendoring to pull down remote dependencies.</p>
               <Link to="/core-concepts/components" class="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
@@ -47,12 +47,12 @@ function Home() {
             <div class="section__description">
               <h2>Define your Stacks</h2>
               <p>Configure your environments—development, staging, production—each tailored to different stages of the lifecycle, ensuring smooth transitions and robust deployment strategies.
-</p>
+                 Inherit from a common baseline to keep it DRY.</p>
               <Link to="/core-concepts/stacks" class="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section class="alternate-section section--image-left">
-            <Screengrab title="Atmos Stacks" command="# Deploy your stacks with the console UI or using GitHub Actions" slug="atmos-version" />
+            <Screengrab title="Atmos Stacks" command="# Deploy your stacks with the console UI or using GitHub Actions" slug="demo-stacks/deploy" />
             <div class="section__description">
               <h2>Deploy 🚀</h2>
               <p>Execute deployments with precision using Terraform's plan and apply commands, fully integrated with native GitOps workflows through GitHub Actions for seamless automation.</p>
@@ -60,10 +60,10 @@ function Home() {
             </div>
           </section>
           <footer>
-            <h2>What are you waiting for? It's FREE and Open Source</h2>
+            <h2>What are you waiting for? <strong class="atmos__text">It's FREE and Open Source</strong></h2>
             <h3><strong class="underline">Your team can succeed</strong> with Terraform today.</h3>
             <section class="cta-section">
-              <Link to="/" class="button button--lg button--primary"><p>Try the Quick Start</p></Link>
+              <Link to="/quick-start/" class="button button--lg button--primary"><p>Try the Quick Start</p></Link>
             </section>
           </footer>
         </main>

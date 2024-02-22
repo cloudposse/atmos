@@ -46,7 +46,7 @@ tree -CAF --gitignore
 scripts/demo-stacks/start-your-project.sh
 scripts/demo-stacks/write-your-components.sh
 scripts/demo-stacks/define-your-stacks.sh
-#scripts/demo-stacks/deploy-staging.sh
-#scripts/demo-stacks/deploy-dev.sh
-#scripts/demo-stacks/deploy-prod.sh
-#scripts/demo-stacks/deploy.sh
+scripts/demo-stacks/deploy-staging.sh
+scripts/demo-stacks/deploy-dev.sh
+scripts/demo-stacks/deploy-prod.sh
+scripts/demo-stacks/deploy.sh
