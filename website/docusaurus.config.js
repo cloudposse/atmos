@@ -55,6 +55,9 @@ const config = {
                 glossaryFilepath: './docs/reference/glossary/index.mdx',
                 glossaryComponentPath: '../../../src/components/glossary/Glossary.tsx'
         }],
+        [
+            'custom-loaders', {}
+        ]
     ],
 
     presets: [
@@ -80,6 +83,7 @@ const config = {
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),
                 },
+            
             }),
         ],
     ],

@@ -1,0 +1,48 @@
+---
+title: atmos help
+sidebar_label: help
+sidebar_class_name: command
+order: 10
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<br/>
+
+<Screengrab title="atmos help" slug="atmos--help" />
+
+## Usage
+
+The `atmos --help` and `atmos -h` commands show help for all Atmos CLI commands.
+
+```shell
+atmos help
+atmos --help
+atmos -h
+```
+
+## Examples
+
+```shell
+atmos help               # Starts an interactive help UI in the terminal
+atmos --help             # Shows help for all Atmos CLI commands
+atmos -h                 # Shows help for all Atmos CLI commands
+atmos atlantis --help    # Executes 'atlantis' commands
+atmos aws --help         # Executes 'aws' commands
+atmos completion --help  # Executes 'completion' commands
+atmos describe --help    # Executes 'describe' commands
+atmos helmfile --help    # Executes 'helmfile' commands
+atmos terraform --help   # Executes 'terraform' commands
+atmos validate --help    # Executes 'validate' commands
+atmos vendor --help      # Executes 'vendor' commands
+atmos workflow --help    # Executes 'workflow' commands
+```
+
+## Screenshots
+
+The `atmos help` starts an interactive help UI in the terminal:
+
+<Terminal title="atmos help (interactive)">
+![`atmos help` command](/img/cli/help/atmos-help-command.png)
+</Terminal>
+
