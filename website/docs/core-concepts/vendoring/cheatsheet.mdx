@@ -4,7 +4,7 @@ title:  Vendoring Cheatsheet
 sidebar_label: Cheatsheet
 sidebar_position: 2
 ---
-import Link from '@docusaurus/Link'
+
 import Card from '@site/src/components/Card'
 import CardGroup from '@site/src/components/CardGroup'
 
@@ -12,16 +12,17 @@ import CardGroup from '@site/src/components/CardGroup'
   <Card title="Filsystem Layout">
   ```
   ├── atmos.yaml
+  ├── vendor.yaml
   └── components
-      ├── vendor.yaml
       └── myapp
-          ├── main.tf
-          ├── outputs.tf
-          └── variables.tf
+         ├── main.tf
+         ├── outputs.tf
+         └── variables.tf
   ```
   </Card>
+
   <Card title="Vendor Schema">
-  ```yaml title="components/vendor.yaml"
+  ```yaml title="vendor.yaml"
   apiVersion: atmos/v1
   kind: AtmosVendorConfig
   metadata:

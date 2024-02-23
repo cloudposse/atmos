@@ -565,9 +565,7 @@ strong.underline {
 }
 
 strong.underline::after {
-
 }
-
 
 .cheatsheet {
     display: flex;
@@ -610,6 +608,7 @@ strong.underline::after {
   display: flex;
   width: auto;
 }
+
 .cheatsheet > h2 {
     flex-basis: 100%;
     font-size: 2em;

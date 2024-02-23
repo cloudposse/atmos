@@ -1,6 +1,6 @@
 ## Demo Scripts
 
-This folder contains scripts that are used to produce automated headless demos of atmos. 
+This folder contains scripts that are used to produce automated headless demos of Atmos. 
 
 > [!IMPORTANT]
-> These scripts not required for the operation of atmos. They are examples of invoking atmos on the command line.
+> These scripts not required for the operation of Atmos. They are examples of invoking Atmos on the command line.
