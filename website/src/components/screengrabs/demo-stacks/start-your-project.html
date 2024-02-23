@@ -1,0 +1,55 @@
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Here's a simple way to organize environments.
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> tree -I *.tf .
+
+<span style="font-weight:bold;color:#005f87;">.</span>/
+├── atmos.yaml
+├── <span style="font-weight:bold;color:#005f87;">components</span>/
+│   └── <span style="font-weight:bold;color:#005f87;">terraform</span>/
+│       └── <span style="font-weight:bold;color:#005f87;">myapp</span>/
+│           └── README.md
+└── <span style="font-weight:bold;color:#005f87;">stacks</span>/
+    ├── <span style="font-weight:bold;color:#005f87;">catalog</span>/
+    │   └── myapp.yaml
+    └── <span style="font-weight:bold;color:#005f87;">deploy</span>/
+        ├── dev.yaml
+        ├── prod.yaml
+        └── staging.yaml
+
+6 directories, 6 files
+
+
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Customize how to organize environments in the atmos.yaml file.
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Pay special attention to the name_pattern, which is how Atmos knows
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # where to find the stacks.
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat atmos.yaml
+
+
+     File: <span style="font-weight:bold;">atmos.yaml</span>
+<span style="color:#404040;">   1</span> <span style="color:#5faf5f;">base_path</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">./</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">   2</span> 
+<span style="color:#404040;">   3</span> <span style="color:#5faf5f;">components</span><span style="color:#2a2a2a;">:</span>
+<span style="color:#404040;">   4</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">terraform</span><span style="color:#2a2a2a;">:</span>
+<span style="color:#404040;">   5</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">base_path</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">components/terraform</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">   6</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">apply_auto_approve</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#0087af;">false</span>
+<span style="color:#404040;">   7</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">deploy_run_init</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#0087af;">true</span>
+<span style="color:#404040;">   8</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">init_run_reconfigure</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#0087af;">true</span>
+<span style="color:#404040;">   9</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">auto_generate_backend_file</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#0087af;">false</span>
+<span style="color:#404040;">  10</span> <span style="color:#2a2a2a;">  </span>
+<span style="color:#404040;">  11</span> <span style="color:#5faf5f;">stacks</span><span style="color:#2a2a2a;">:</span>
+<span style="color:#404040;">  12</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">base_path</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">stacks</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">  13</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">included_paths</span><span style="color:#2a2a2a;">:</span>
+<span style="color:#404040;">  14</span> <span style="color:#2a2a2a;">    </span><span style="color:#2a2a2a;">-</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">deploy/**/*</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">  15</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">excluded_paths</span><span style="color:#2a2a2a;">:</span>
+<span style="color:#404040;">  16</span> <span style="color:#2a2a2a;">    </span><span style="color:#2a2a2a;">-</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">**/_defaults.yaml</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">  17</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">name_pattern</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">{stage}</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">  18</span> 
+<span style="color:#404040;">  19</span> <span style="color:#5faf5f;">logs</span><span style="color:#2a2a2a;">:</span>
+<span style="color:#404040;">  20</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">file</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">/dev/stdout</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">  21</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">level</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">Info</span>
+
+
+

@@ -1,0 +1,12 @@
+vars:
+  stage: staging
+  
+import:
+  - catalog/myapp
+
+components:
+  terraform:
+    myapp:
+      vars:
+        location: Los Angeles
+        lang: en

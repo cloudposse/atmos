@@ -1,0 +1,107 @@
+---
+title: atmos terraform deploy
+sidebar_label: deploy
+sidebar_class_name: command
+id: deploy
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note purpose
+Use this command to execute `terraform apply -auto-approve` on an Atmos component in an Atmos stack.
+:::
+
+<br/>
+
+<Screengrab title="atmos terraform deploy --help" slug="atmos-terraform-deploy--help" />
+
+## Usage
+
+Execute the `terraform deploy` subcommand like this:
+
+```shell
+atmos terraform deploy <component> -s <stack>
+```
+
+- `atmos terraform deploy` command supports `--deploy-run-init=true|false` flag to enable/disable running `terraform init` before executing the
+  command
+
+- `atmos terraform deploy` command automatically sets `-auto-approve` flag when running `terraform apply`
+
+- `atmos terraform deploy` command supports `--from-plan` flag. If the flag is specified, the command will use the planfile previously generated
+  by `atmos terraform plan` command instead of generating a new planfile, e.g. `atmos terraform deploy <component> -s <stack> --from-plan`. Note that
+  in this case, the planfile name is in the format supported by Atmos and is saved to the component's folder
+
+- `atmos terraform deploy` command supports `--planfile` flag to specify the path to a planfile. The `--planfile` flag should be used instead of the
+  planfile argument in the native `terraform apply <planfile>` command. For example, you can execute the command
+  `atmos terraform plan <component> -s <stack> -out=<FILE>`, which will save the generated plan to a file on disk,
+  and then execute the command `atmos terraform deploy <component> -s <stack> --planfile <FILE>` to apply the previously generated planfile
+
+See [all flags](#flags).
+
+<br/>
+
+:::tip
+Run `atmos terraform deploy --help` to see all the available options
+:::
+
+## Examples
+
+### Simple Example
+
+Deploy the `top-level-component1` using the configuration specified in the `tenant1-ue2-dev` stack. This command explicitly targets a stack, which defines the environment and region settings for the deployment.
+
+```shell
+atmos terraform deploy top-level-component1 --stack tenant1-ue2-dev
+```
+
+### Planfiles
+
+Deploy `top-level-component1` based on a previously generated execution plan. The `-s` flag specifies the `tenant1-ue2-dev` stack, and `--from-plan` indicates that the deploy should proceed with the plan that was previously created, ensuring that the deployment matches the plan's specifications.
+
+```shell
+atmos terraform deploy top-level-component1 -s tenant1-ue2-dev --from-plan
+```
+
+Or use `-s` for a specific execution plan file located at `<path_to_planfile>` to ensure precision in what is deployed.
+
+```shell
+atmos terraform deploy top-level-component1 -s tenant1-ue2-dev --planfile <path_to_planfile>
+```
+
+### Targeting Specific Stages
+
+This demonstrates how Atmos can be used to deploy infrastructure components, like a VPC, specifying the stack to ensure the deployment occurs within the correct environment and configuration context.
+
+```shell
+atmos terraform deploy infra/vpc -s tenant1-ue2-staging
+atmos terraform deploy test/test-component -s tenant1-ue2-dev
+atmos terraform deploy test/test-component-override-2 -s tenant2-ue2-prod
+atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
+```
+
+## Arguments
+
+| Argument    | Description               | Required |
+|:------------|:--------------------------|:---------|
+| `component` | Atmos terraform component | yes      |
+
+## Flags
+
+| Flag                | Description                                                                                                                                                                                                             | Alias | Required |
+|:--------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--stack`           | Atmos stack                                                                                                                                                                                                             | `-s`  | yes      |
+| `--dry-run`         | Dry run                                                                                                                                                                                                                 |       | no       |
+| `--deploy-run-init` | Enable/disable running `terraform init` before executing the command                                                                                                                                                    |       | no       |
+| `--from-plan`       | If the flag is specified, use the `planfile` previously generated by Atmos instead of<br/>generating a new `planfile`. The planfile name is in the format supported by Atmos<br/>and is saved to the component's folder |       | no       |
+| `--planfile`        | The path to a planfile. The `--planfile` flag should be used instead of the planfile<br/>argument in the native `terraform apply <planfile>` command                                                                    |       | no       |
+
+<br/>
+
+:::note
+
+The `atmos terraform deploy` command supports all native `terraform apply` options described
+in [Terraform apply options](https://developer.hashicorp.com/terraform/cli/commands/apply#apply-options), with the exception that a planfile argument
+can't be provided on the command line. To use a previously generated planfile, use the `--from-plan` or `--planfile` command-line flags
+
+:::
