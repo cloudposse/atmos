@@ -4,7 +4,7 @@ relative_path=$(dirname `realpath "$0"`)
 source $relative_path/.demo.rc
 
 prompt
-comment "Here's how simple it is to organize your environemnts."
+comment "Here's how simple it is to organize your environments."
 comment "(but it's entirely configurable)."
 prompt
 run tree stacks
@@ -19,7 +19,7 @@ run cat stacks/catalog/myapp.yaml
 newline 2
 prompt
 comment "Then we define each environment importing that baseline configuration."
-comment "Here's the the configuration for the 'dev' environment looks like..."
+comment "Here's how the configuration for the 'dev' environment looks like..."
 prompt
 run cat stacks/deploy/dev.yaml
 
