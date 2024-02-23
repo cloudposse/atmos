@@ -40,11 +40,10 @@ jobs:
             echo "files=$(find . -path './build-harness' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)" >> $GITHUB_OUTPUT
           else
             files=$(gh pr diff --name-only ${{ github.event.pull_request.number }} | (grep '\.tape$' | grep -v '(style|defaults)\.tape$' || true) | cut -d/ -f2-)
-            echo "files=$files" >> $GITHUB_OUTPUTå
+            echo "files=$files" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up matrix
-        if: steps.labeled.outputs.labeled == 'true'
         id: create-matrix
         run: |
           echo "matrix=$(echo -n ${{ steps.tapes.outputs.files }} | jq -R -s -c 'split(" ")')" >> $GITHUB_OUTPUT
