@@ -634,7 +634,7 @@ strong.underline::after {
 
 /* Terminal Styling */
 .terminal {
-    min-width: 50vw;
+    min-width: 45vw;
     color: #ccc;
     /*background: #171717; */
     background: #070e12;
