@@ -157,6 +157,10 @@ article h1 {
     --ifm-alert-background-color: #000;
 }
 
+.alert--secondary {
+    margin-top: 2em;
+}
+
 .button--lg {
     margin: 1em;
     padding-top: 0.8em;
