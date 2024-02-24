@@ -18,6 +18,8 @@ detect_package_manager() {
         echo "alpine"				
     elif command -v yum &> /dev/null; then
         echo "rpm"
+		elif command -v nix-env &> /dev/null; then
+        echo "nix"
     else
         echo "none"
     fi
@@ -70,6 +72,12 @@ install_via_brew() {
 	brew install atmos
 }
 
+# Function to install via Homebrew
+install_via_nix() {
+	echo "Using Nix package manager..."
+	nix-env -iA nixpkgs.atmos
+}
+
 # Main installation function
 install_atmos() {
 	# Installation flow
@@ -80,6 +88,8 @@ install_atmos() {
 			
 			if [ "$package_manager" == "brew" ]; then
 				install_via_brew
+			elif [ "$package_manager" == "nix" ]; then
+				install_via_nix
 			elif [ "$package_manager" == "none" ]; then
 				echo "No package manager detected. Installing via binary download..."
 				install_via_binary_download
