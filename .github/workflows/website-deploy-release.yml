@@ -3,9 +3,9 @@ name: "Website Deploy Release"
 on:
   workflow_dispatch:
 
-  release:
-    types:
-      - published
+  push:
+    branches:
+      - master
 
 env:
   AWS_REGION: us-east-2
