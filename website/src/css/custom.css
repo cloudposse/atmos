@@ -336,7 +336,8 @@ html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
 
 .landing-page .section__description {
     font-size: 1em;
-    margin-left: 3em;
+    margin-left: 1.5em;
+    margin-right: 1.5em;
     display: flex;
     flex-direction: column;
 }
@@ -365,6 +366,7 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
 
 .landing-page main section {
   max-width: 1600px;
+  overflow: hidden;
 }
 
 .landing-page main {
@@ -395,6 +397,7 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
 .landing-page header {
   display: flex;
   max-height: 90vh;
+  min-height: 700px;
   height: 100vh;
   width: 100vw;
   justify-content: center;
@@ -439,7 +442,7 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
 
 .hero__cta {
   gap: 1rem;
-  align-items: center;  
+  justify-content: center;
   display: flex;
 
 }
@@ -468,24 +471,24 @@ html[data-theme='dark'] .landing-page main h2.section {
 }
 
 .landing-page main h3 {
-  text-align: center;
+    text-align: center;
 }
 
-.landing-page main footer h3 {
-  font-size: 2em;
+.landing-page footer h3 {
+    font-size: 2em;
+    line-height: 1.7em;
+    color: #7c7b7b;
+    text-align: center;
 }
 
-.landing-page main footer {
+.landing-page footer {
     background: #0a1922;
     min-width: 100vw;
     padding: 3em;
+    text-align: center;
 }
 
-.landing-page main footer h3 {
-    color: #7c7b7b;
-}
-
-html[data-theme='dark'] .landing-page main footer {
+html[data-theme='dark'] .landing-page footer {
     background: rgb(0 0 0 / 21%);
 }
 
@@ -502,7 +505,7 @@ html[data-theme='dark'] .landing-page main footer {
 }
 
 .landing-page .alternate-section .terminal {
-    max-width: 52vw;
+    max-width: 52%;
 }
 
 .landing-page .terminal pre.screengrab {
@@ -512,6 +515,19 @@ html[data-theme='dark'] .landing-page main footer {
 
 @media screen and (max-width: 996px)
 {
+    .landing-page header {
+        justify-content: flex-start;
+        max-width: 100vw;
+        overflow: hidden;;
+    }
+
+    .hero__cta {
+        gap: 1rem;
+        display: flex;
+        max-width: 100vw;
+        flex-wrap: wrap;
+    }
+
     .alternate-section {
         flex-wrap: wrap;
     }
@@ -531,7 +547,7 @@ html[data-theme='dark'] .landing-page main footer {
         margin-bottom: 0;
     }
 
-    .landing-page main footer h2 {
+    .landing-page footer h2 {
         display: flex;
         flex-direction: column;
     }
@@ -643,12 +659,11 @@ strong.underline::after {
 
 /* Terminal Styling */
 .terminal {
-    min-width: 45vw;
+    min-width: 100%;
     color: #ccc;
     /*background: #171717; */
     background: #070e12;
     margin-top: 10px;
-    margin-left: 20px;  
     line-height: 0.8em;
     border-radius: 10px;
     padding: 0.5em;
