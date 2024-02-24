@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 jobs:
-  website-deploy-release:
+  website-deploy-prod:
     runs-on: ubuntu-latest
 
     environment:
