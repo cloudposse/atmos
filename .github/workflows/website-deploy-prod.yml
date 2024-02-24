@@ -1,4 +1,4 @@
-name: "Website Deploy Release"
+name: "Website Deploy Prod"
 
 on:
   workflow_dispatch:
