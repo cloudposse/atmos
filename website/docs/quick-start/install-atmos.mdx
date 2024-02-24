@@ -1,0 +1,152 @@
+---
+title: Install Atmos
+sidebar_label: Install Atmos
+sidebar_position: 2
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+There are many ways to install Atmos.
+
+
+To check what version of Atmos you have installed, just run `atmos version`.
+
+To find the latest available version of Atmos, visit the [Releases Page](https://github.com/cloudposse/atmos/releases). The latest version will
+always be available for download here.
+
+Atmos has native packages for macOS and every major Linux distribution. We also supply binary releases for Windows.
+
+<Tabs>
+  <TabItem value="macos" label="macOS" default>
+    #### macOS (OSX)
+
+    From Homebrew, install directly by running:
+
+    ```shell
+    brew install atmos
+    ```
+  </TabItem>
+
+  <TabItem value="deb" label="Debian/Ubuntu">
+
+    #### Debian Linux (DEB)
+
+    On Debian, use the Cloud Posse package repository provided by Cloudsmith:
+
+    ```shell
+    # Add the Cloud Posse package repository hosted by Cloudsmith
+    apt-get update && apt-get install -y apt-utils curl
+    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' │ bash
+
+    # Install atmos
+    apt-get install atmos@="${ATMOS_VERSION}-*"
+    ```
+  </TabItem>
+
+  <TabItem value="rpm" label="RedHat/CentOS">
+    #### RedHat/CentOS Linux (RPM)
+
+    On RedHat or CentOS, use the Cloud Posse package repository provided by Cloudsmith:
+
+    ```shell
+    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' │ sudo -E bash
+
+    # Install atmos
+    sudo yum install atmos-${ATMOS_VERSION}.x86_64
+    ```
+  </TabItem>
+
+  <TabItem value="alpine" label="Alpine Linux">
+
+    #### Alpine Linux (APK)
+    On Alpine, use the Cloud Posse package repository provided by Cloudsmith:
+
+    ```shell
+    # Install the Cloud Posse package repository hosted by Cloudsmith
+    curl -fsSL 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.alpine.sh' │ bash
+
+    # Install atmos
+    apk add atmos@cloudposse
+    ```
+  </TabItem>
+
+  <TabItem value="nixos" label="NixOS">
+
+    #### NixOS
+    On NixOS, run the following command to install:
+
+    ```shell
+    nix-env -iA nixpkgs.atmos
+    ```
+  </TabItem>
+
+  <TabItem value="go" label="Go">
+    #### Install with Go
+
+    Install the latest version:
+
+    ```shell
+    go install github.com/cloudposse/atmos
+    ```
+
+    Grab a specific version:
+
+    ```shell
+    go install github.com/cloudposse/atmos@v1.64.0
+    ```
+
+    Or specifically request the latest version.
+
+    ```shell
+    go install github.com/cloudposse/atmos@latest
+    ```
+
+    __NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1`
+    when running `atmos version`.
+  </TabItem>
+
+  <TabItem value="source" label="From Source">
+    #### Build from Source
+
+    ```shell
+    make build
+    ```
+
+    or run this and replace `$version` with the version that should be returned with `atmos version`.
+
+    ```shell
+    go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/cmd.Version=$version'"
+    ```
+  </TabItem>
+
+  <TabItem value="installer" label="Automatic Installer">
+    #### Automatic Installer
+
+    If you're not sure which method to use, you can always use the automatic installer. It will figure out which
+    of the mechanisms above to use, and perform it.
+
+    Paste the following into a macOS Terminal or Linux shell prompt.
+
+    ```shell
+    curl -fsSL https://atmos.tools/install.sh | bash
+    ```
+  </TabItem>
+</Tabs>
+
+:::note
+The latest version of Atmos might not be available with third party package managers.
+:::
+
+
+## Download Binaries from Releases Page
+
+- Go to [Releases Page](https://github.com/cloudposse/atmos/releases)
+- Download the binary for your operating system and architecture. Replace `${version}` with the desired version
+
+  - e.g. If you’re on a Mac (M1/M2/M3), download the `atmos_${version}_darwin_arm64` binary
+  - e.g. If you’re on an Intel Mac, download the `atmos_${version}_darwin_amd64` binary
+  - e.g. If you’re on Windows, download `atmos_${version}_windows_amd64.exe`, etc.
+
+- Rename the downloaded file to `atmos` (optional)
+- Add the execution bit to the binary (e.g. on Linux and Mac, run `chmod u+x atmos`)
+- Place the binary somewhere on your `PATH` (e.g. on Linux and Mac: `mv atmos /usr/local/bin/`)
