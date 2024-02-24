@@ -73,16 +73,22 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
   <TabItem value="go" label="Go">
     #### Install with Go
 
-    Install the latest version
+    Install the latest version:
 
     ```shell
     go install github.com/cloudposse/atmos
     ```
 
-    Get a specific version
+    Grab a specific version:
 
     ```shell
-    go install github.com/cloudposse/atmos
+    go install github.com/cloudposse/atmos@v1.64.0
+    ```
+
+    Or specifically request the latest version.
+
+    ```shell
+    go install github.com/cloudposse/atmos@latest
     ```
 
     __NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1`
