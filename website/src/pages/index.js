@@ -59,14 +59,14 @@ function Home() {
               <Link to="/cli/commands/terraform/usage" class="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
-          <footer>
+        </main>
+        <footer>
             <h2>What are you waiting for? <strong class="atmos__text">It's FREE and Open Source</strong></h2>
             <h3><strong class="underline">Your team can succeed</strong> with Terraform today.</h3>
             <section class="cta-section">
               <Link to="/quick-start/" class="button button--lg button--primary"><p>Try the Quick Start</p></Link>
             </section>
-          </footer>
-        </main>
+        </footer>
       </Layout>
     </div>
   );
