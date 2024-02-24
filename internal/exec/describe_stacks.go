@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
@@ -78,12 +79,31 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		sections = strings.Split(sectionsCsv, ",")
 	}
 
-	finalStacksMap, err := ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections, false)
+	jmespath, err := flags.GetString("jmespath")
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, finalStacksMap)
+	jsonpath, err := flags.GetString("jsonpath")
+	if err != nil {
+		return err
+	}
+
+	result, err := ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections, false)
+	if err != nil {
+		return err
+	}
+
+	var finalResult any
+	if jmespath != "" {
+		finalResult, err = evalUtils.EvaluateJmesPath(jmespath, result)
+	} else if jsonpath != "" {
+		finalResult, err = evalUtils.EvaluateJsonPath(jmespath, result)
+	} else {
+		finalResult = result
+	}
+
+	err = printOrWriteToFile(format, file, finalResult)
 	if err != nil {
 		return err
 	}

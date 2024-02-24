@@ -1,6 +1,7 @@
 package exec
 
 import (
+	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -36,14 +37,33 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	component := args[0]
-
-	componentSection, err := ExecuteDescribeComponent(component, stack)
+	jmespath, err := flags.GetString("jmespath")
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, componentSection)
+	jsonpath, err := flags.GetString("jsonpath")
+	if err != nil {
+		return err
+	}
+
+	component := args[0]
+
+	result, err := ExecuteDescribeComponent(component, stack)
+	if err != nil {
+		return err
+	}
+
+	var finalResult any
+	if jmespath != "" {
+		finalResult, err = evalUtils.EvaluateJmesPath(jmespath, result)
+	} else if jsonpath != "" {
+		finalResult, err = evalUtils.EvaluateJsonPath(jmespath, result)
+	} else {
+		finalResult = result
+	}
+
+	err = printOrWriteToFile(format, file, finalResult)
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	"reflect"
 	"strings"
 
@@ -46,14 +47,33 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	component := args[0]
-
-	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack)
+	jmespath, err := flags.GetString("jmespath")
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, dependents)
+	jsonpath, err := flags.GetString("jsonpath")
+	if err != nil {
+		return err
+	}
+
+	component := args[0]
+
+	result, err := ExecuteDescribeDependents(cliConfig, component, stack)
+	if err != nil {
+		return err
+	}
+
+	var finalResult any
+	if jmespath != "" {
+		finalResult, err = evalUtils.EvaluateJmesPath(jmespath, result)
+	} else if jsonpath != "" {
+		finalResult, err = evalUtils.EvaluateJsonPath(jmespath, result)
+	} else {
+		finalResult = result
+	}
+
+	err = printOrWriteToFile(format, file, finalResult)
 	if err != nil {
 		return err
 	}

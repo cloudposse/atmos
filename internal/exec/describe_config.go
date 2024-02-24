@@ -1,6 +1,7 @@
 package exec
 
 import (
+	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -15,6 +16,16 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	jmespath, err := flags.GetString("jmespath")
+	if err != nil {
+		return err
+	}
+
+	jsonpath, err := flags.GetString("jsonpath")
+	if err != nil {
+		return err
+	}
+
 	info, err := processCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -25,7 +36,16 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(format, "", cliConfig)
+	var finalResult any
+	if jmespath != "" {
+		finalResult, err = evalUtils.EvaluateJmesPath(jmespath, cliConfig)
+	} else if jsonpath != "" {
+		finalResult, err = evalUtils.EvaluateJsonPath(jmespath, cliConfig)
+	} else {
+		finalResult = cliConfig
+	}
+
+	err = printOrWriteToFile(format, "", finalResult)
 	if err != nil {
 		return err
 	}

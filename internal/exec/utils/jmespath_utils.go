@@ -14,6 +14,7 @@ import (
 	"github.com/jmespath/go-jmespath"
 )
 
-func evaluateJmesPath(query string, data any) (any, error) {
-	return jmespath.Search(query, data)
+// EvaluateJmesPath evaluate a JMESPath expression
+func EvaluateJmesPath(expression string, data any) (any, error) {
+	return jmespath.Search(expression, data)
 }

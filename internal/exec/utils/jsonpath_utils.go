@@ -10,6 +10,7 @@ import (
 	"github.com/PaesslerAG/jsonpath"
 )
 
-func evaluateJsonPath(query string, data any) (any, error) {
-	return jsonpath.Get(query, data)
+// EvaluateJsonPath evaluate a JSONPath expression
+func EvaluateJsonPath(expression string, data any) (any, error) {
+	return jsonpath.Get(expression, data)
 }

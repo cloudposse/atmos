@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -83,6 +84,16 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
 
+	jmespath, err := flags.GetString("jmespath")
+	if err != nil {
+		return err
+	}
+
+	jsonpath, err := flags.GetString("jsonpath")
+	if err != nil {
+		return err
+	}
+
 	var affected []schema.Affected
 	if repoPath == "" {
 		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks)
@@ -94,9 +105,18 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	var finalResult any
+	if jmespath != "" {
+		finalResult, err = evalUtils.EvaluateJmesPath(jmespath, affected)
+	} else if jsonpath != "" {
+		finalResult, err = evalUtils.EvaluateJsonPath(jmespath, affected)
+	} else {
+		finalResult = affected
+	}
+
 	u.LogTrace(cliConfig, fmt.Sprintf("\nAffected components and stacks: \n"))
 
-	err = printOrWriteToFile(format, file, affected)
+	err = printOrWriteToFile(format, file, finalResult)
 	if err != nil {
 		return err
 	}
