@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	"reflect"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )

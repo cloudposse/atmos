@@ -1,10 +1,10 @@
 package exec
 
 import (
-	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	evalUtils "github.com/cloudposse/atmos/internal/exec/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
