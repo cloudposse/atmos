@@ -41,6 +41,8 @@ atmos describe config -f json
 
 ## Flags
 
-| Flag        | Description                                         | Alias | Required |
-|:------------|:----------------------------------------------------|:------|:---------|
-| `--format`  | Output format: `json` or `yaml` (`json` is default) | `-f`  | no       |
+| Flag         | Description                                                                                                  | Alias | Required |
+|:-------------|:-------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--format`   | Output format: `json` or `yaml` (`json` is default)                                                          | `-f`  | no       |
+| `--jsonpath` | JSONPath expression to query and filter the command output. https://goessner.net/articles/JsonPath           |       | no       |
+| `--jmespath` | JMESPath expression to query and filter the command output. https://jmespath.org  https://jmespath.site/main |       | no       |

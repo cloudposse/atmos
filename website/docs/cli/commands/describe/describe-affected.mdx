@@ -192,6 +192,8 @@ Affected components and stacks:
 | `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
 | `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
 | `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                            | no       |
+| `--jsonpath`                       | JSONPath expression to query and filter the command output. https://goessner.net/articles/JsonPath                                                               | no       |
+| `--jmespath`                       | JMESPath expression to query and filter the command output. https://jmespath.org  https://jmespath.site/main                                                     | no       |
 
 ## Output
 
@@ -328,11 +330,11 @@ where:
       ```yaml title="stacks/orgs/cp/tenant1/_defaults.yaml"
       settings:
         spacelift:
-          # All Spacelift child stacks for the `tenant1` tenant are managed by the 
+          # All Spacelift child stacks for the `tenant1` tenant are managed by the
           # `tenant1-ue2-prod-infrastructure-tenant1` Spacelift admin stack.
-          # The `admin_stack_selector` attribute is used to find the affected Spacelift 
+          # The `admin_stack_selector` attribute is used to find the affected Spacelift
           # admin stack for each affected Atmos stack
-          # when executing the command 
+          # when executing the command
           # `atmos describe affected --include-spacelift-admin-stacks=true`
           admin_stack_selector:
             component: infrastructure-tenant1

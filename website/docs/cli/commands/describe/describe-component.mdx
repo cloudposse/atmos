@@ -55,11 +55,13 @@ atmos describe component test/test-component-override -s tenant2-ue2-prod
 
 ## Flags
 
-| Flag       | Description                                         | Alias | Required |
-|:-----------|:----------------------------------------------------|:------|:---------|
-| `--stack`  | Atmos stack                                         | `-s`  | yes      |
-| `--format` | Output format: `yaml` or `json` (`yaml` is default) | `-f`  | no       |
-| `--file`   | If specified, write the result to the file          |       | no       |
+| Flag         | Description                                                                                                  | Alias | Required |
+|:-------------|:-------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--stack`    | Atmos stack                                                                                                  | `-s`  | yes      |
+| `--format`   | Output format: `yaml` or `json` (`yaml` is default)                                                          | `-f`  | no       |
+| `--file`     | If specified, write the result to the file                                                                   |       | no       |
+| `--jsonpath` | JSONPath expression to query and filter the command output. https://goessner.net/articles/JsonPath           |       | no       |
+| `--jmespath` | JMESPath expression to query and filter the command output. https://jmespath.org  https://jmespath.site/main |       | no       |
 
 ## Output
 

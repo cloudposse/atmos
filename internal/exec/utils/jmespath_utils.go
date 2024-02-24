@@ -1,6 +1,7 @@
 // https://github.com/jmespath/go-jmespath
-// http://jmespath.org
-// http://jmespath.org/tutorial.html
+// https://jmespath.org
+// https://jmespath.org/tutorial.html
+// https://jmespath.site/main
 //
 // AWS CLI and Azure CLI support JMESPath:
 // https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-filter.html

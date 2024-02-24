@@ -13,8 +13,8 @@ var describeCmd = &cobra.Command{
 }
 
 func init() {
-	describeCmd.PersistentFlags().String("jsonpath", "", "JSONPath query to filter and query the command output. https://goessner.net/articles/JsonPath")
-	describeCmd.PersistentFlags().String("jmespath", "", "JMESPath query to filter and query the command output. https://jmespath.org  https://jmespath.site/main")
+	describeCmd.PersistentFlags().String("jsonpath", "", "JSONPath expression to query and filter the command output. https://goessner.net/articles/JsonPath")
+	describeCmd.PersistentFlags().String("jmespath", "", "JMESPath expression to query and filter the command output. https://jmespath.org  https://jmespath.site/main")
 
 	RootCmd.AddCommand(describeCmd)
 }
