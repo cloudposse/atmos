@@ -105,5 +105,9 @@ install_atmos() {
 # Run the installation
 install_atmos
 
-echo "Atmos has been successfully installed!"
+# Check if atmos is installed properly
+atmos=$(PATH=.:$PATH command -v atmos)
+$atmos version
+
+echo "Atmos has been successfully installed to ${atmos}"
 exit 0
