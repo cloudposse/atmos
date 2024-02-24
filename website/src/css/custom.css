@@ -49,7 +49,6 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
     -webkit-text-fill-color: transparent;
 }
 
-
 .menu__list-item-collapsible {
     font-weight: bold;
 }
@@ -113,6 +112,10 @@ article ul >li, article ol > li {
     margin-bottom: 1em;
 }
 
+article h1 {
+    margin-top: 1em;
+}
+
 /* You can override the default Infima variables here. */
 :root {
     --ifm-code-font-size: 95%;
@@ -146,6 +149,16 @@ article ul >li, article ol > li {
     --ifm-card-background-color: #eeeeee14;
     --ifm-button-color: #ccc;
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+    
+}
+
+[data-theme='dark'] .alert--secondary {
+    --ifm-color-secondary-contrast-background: #000;
+    --ifm-alert-background-color: #000;
+}
+
+.alert--secondary {
+    margin-top: 2em;
 }
 
 .button--lg {
@@ -463,6 +476,10 @@ html[data-theme='dark'] .landing-page main h2.section {
 
 .landing-page main h3 {
     text-align: center;
+}
+
+.landing-page footer h2 {
+    color: #ccc;
 }
 
 .landing-page footer h3 {
