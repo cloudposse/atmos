@@ -474,6 +474,10 @@ html[data-theme='dark'] .landing-page main h2.section {
     text-align: center;
 }
 
+.landing-page footer h2 {
+    color: #fff;
+}
+
 .landing-page footer h3 {
     font-size: 2em;
     line-height: 1.7em;
