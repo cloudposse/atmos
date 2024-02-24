@@ -8,6 +8,7 @@
 # https://medium.com/@agarwalshubhi17/rego-cheat-sheet-5e25faa6eee8
 # https://code.tutsplus.com/tutorials/regular-expressions-with-go-part-1--cms-30403
 # https://www.styra.com/blog/how-to-write-your-first-rules-in-rego-the-policy-language-for-opa
+# https://www.styra.com/blog/how-to-express-or-in-rego/
 # https://www.openpolicyagent.org/docs/v0.12.2/how-does-opa-work
 
 # Atmos looks for the 'errors' (array of strings) output from all OPA policies
