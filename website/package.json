@@ -20,7 +20,7 @@
     "@docusaurus/preset-classic": "^3.1.1",
     "@docusaurus/theme-mermaid": "^3.1.1",
     "@grnet/docusaurus-terminology": "^2.0.0-rc",
-    "@mdx-js/react": "^3.0.0",
+    "@mdx-js/react": "^3.0.1",
     "clsx": "^2.1.0",
     "custom-loaders": "file:plugins/custom-loaders",
     "docusaurus-plugin-image-zoom": "^2.0.0",
