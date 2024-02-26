@@ -19,3 +19,10 @@ stacks:
 logs:
   file: "/dev/stdout"
   level: Info
+
+# CLI command aliases
+aliases:
+  tp: terraform plan
+  up: terraform apply
+  down: terraform destroy
+  ds: describe stacks
