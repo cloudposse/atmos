@@ -108,13 +108,15 @@ func processCommandAliases(
 
 	for k, v := range aliases {
 		alias := strings.TrimSpace(k)
-		commandToRun := "atmos " + strings.TrimSpace(v)
+		cmd := strings.TrimSpace(v)
+		aliasFor := fmt.Sprintf("alias for '%s'", cmd)
+		commandToRun := "atmos " + cmd
 
 		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
 			var aliasCommand = &cobra.Command{
 				Use:   alias,
-				Short: alias,
-				Long:  alias,
+				Short: aliasFor,
+				Long:  aliasFor,
 				Run: func(cmd *cobra.Command, args []string) {
 					err := e.ExecuteShell(cliConfig, commandToRun, commandToRun, ".", nil, false)
 					if err != nil {
