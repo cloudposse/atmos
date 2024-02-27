@@ -93,6 +93,44 @@ func processCustomCommands(
 	return nil
 }
 
+// processCommandAliases processes the command aliases
+func processCommandAliases(
+	cliConfig schema.CliConfiguration,
+	aliases schema.CommandAliases,
+	parentCommand *cobra.Command,
+	topLevel bool,
+) error {
+	existingTopLevelCommands := make(map[string]*cobra.Command)
+
+	if topLevel {
+		existingTopLevelCommands = getTopLevelCommands()
+	}
+
+	for k, v := range aliases {
+		alias := strings.TrimSpace(k)
+		commandToRun := "atmos " + strings.TrimSpace(v)
+
+		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
+			var aliasCommand = &cobra.Command{
+				Use:   alias,
+				Short: alias,
+				Long:  alias,
+				Run: func(cmd *cobra.Command, args []string) {
+					err := e.ExecuteShell(cliConfig, commandToRun, commandToRun, ".", nil, false)
+					if err != nil {
+						u.LogErrorAndExit(err)
+					}
+				},
+			}
+
+			// Add the alias to the parent command
+			parentCommand.AddCommand(aliasCommand)
+		}
+	}
+
+	return nil
+}
+
 // preCustomCommand is run before a custom command is executed
 func preCustomCommand(
 	cmd *cobra.Command,

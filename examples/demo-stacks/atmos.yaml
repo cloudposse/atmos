@@ -26,3 +26,5 @@ aliases:
   up: terraform apply
   down: terraform destroy
   ds: describe stacks
+  ls: list stacks
+  lc: list components

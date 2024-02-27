@@ -72,9 +72,14 @@ func Execute() error {
 		u.LogErrorAndExit(err)
 	}
 
-	// If CLI configuration was found, add its custom commands
+	// If CLI configuration was found, process its custom commands and command aliases
 	if err == nil {
 		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
+
+		err = processCommandAliases(cliConfig, cliConfig.CommandAliases, RootCmd, true)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
