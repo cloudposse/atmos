@@ -7,15 +7,13 @@ import (
 	"path"
 	"strings"
 
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 )
 
 // processCustomCommands processes and executes custom commands
@@ -120,14 +118,13 @@ func processCommandAliases(
 				Long:               aliasFor,
 				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 				Run: func(cmd *cobra.Command, args []string) {
-					var flagsToAdd []string
-					cmd.Flags().Visit(func(f *pflag.Flag) {
-						flagsToAdd = append(flagsToAdd, f.Name)
-						flagsToAdd = append(flagsToAdd, f.Value.String())
-					})
+					err := cmd.ParseFlags(args)
+					if err != nil {
+						u.LogErrorAndExit(err)
+					}
 
-					commandToRun := fmt.Sprintf("%s %s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "), strings.Join(flagsToAdd, " "))
-					err := e.ExecuteShell(cliConfig, commandToRun, commandToRun, ".", nil, false)
+					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
+					err = e.ExecuteShell(cliConfig, commandToRun, commandToRun, ".", nil, false)
 					if err != nil {
 						u.LogErrorAndExit(err)
 					}
@@ -135,6 +132,7 @@ func processCommandAliases(
 			}
 
 			// Add the alias to the parent command
+			aliasCommand.DisableFlagParsing = true
 			parentCommand.AddCommand(aliasCommand)
 		}
 	}
