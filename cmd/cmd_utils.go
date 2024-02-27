@@ -9,6 +9,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -108,16 +109,24 @@ func processCommandAliases(
 
 	for k, v := range aliases {
 		alias := strings.TrimSpace(k)
-		cmd := strings.TrimSpace(v)
-		aliasFor := fmt.Sprintf("alias for '%s'", cmd)
-		commandToRun := "atmos " + cmd
 
 		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
+			aliasCmd := strings.TrimSpace(v)
+			aliasFor := fmt.Sprintf("alias for '%s'", aliasCmd)
+
 			var aliasCommand = &cobra.Command{
-				Use:   alias,
-				Short: aliasFor,
-				Long:  aliasFor,
+				Use:                alias,
+				Short:              aliasFor,
+				Long:               aliasFor,
+				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 				Run: func(cmd *cobra.Command, args []string) {
+					var flagsToAdd []string
+					cmd.Flags().Visit(func(f *pflag.Flag) {
+						flagsToAdd = append(flagsToAdd, f.Name)
+						flagsToAdd = append(flagsToAdd, f.Value.String())
+					})
+
+					commandToRun := fmt.Sprintf("%s %s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "), strings.Join(flagsToAdd, " "))
 					err := e.ExecuteShell(cliConfig, commandToRun, commandToRun, ".", nil, false)
 					if err != nil {
 						u.LogErrorAndExit(err)
