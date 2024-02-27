@@ -131,8 +131,9 @@ func processCommandAliases(
 				},
 			}
 
-			// Add the alias to the parent command
 			aliasCommand.DisableFlagParsing = true
+
+			// Add the alias to the parent command
 			parentCommand.AddCommand(aliasCommand)
 		}
 	}

@@ -601,6 +601,7 @@ schemas:
 
 # CLI command aliases
 aliases:
+  tf: terraform
   tp: terraform plan
   up: terraform apply
   down: terraform destroy
