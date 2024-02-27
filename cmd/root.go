@@ -64,18 +64,6 @@ func Execute() error {
 		}
 	}
 
-	return RootCmd.Execute()
-}
-
-func init() {
-	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
-		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
-
-	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
-	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
-
-	cobra.OnInitialize(initConfig)
-
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
@@ -91,6 +79,18 @@ func init() {
 			u.LogErrorAndExit(err)
 		}
 	}
+
+	return RootCmd.Execute()
+}
+
+func init() {
+	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
+		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
+
+	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
+	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
+
+	cobra.OnInitialize(initConfig)
 }
 
 func initConfig() {

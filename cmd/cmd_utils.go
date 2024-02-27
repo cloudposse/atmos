@@ -27,8 +27,8 @@ func processCustomCommands(
 	var command *cobra.Command
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
-	for _, c := range RootCmd.Commands() {
-		existingTopLevelCommands[c.Name()] = c
+	if topLevel {
+		existingTopLevelCommands = getTopLevelCommands()
 	}
 
 	for _, commandCfg := range commands {
@@ -112,6 +112,17 @@ func preCustomCommand(
 		_ = cmd.Help()
 		os.Exit(0)
 	}
+}
+
+// getTopLevelCommands returns the top-level commands
+func getTopLevelCommands() map[string]*cobra.Command {
+	existingTopLevelCommands := make(map[string]*cobra.Command)
+
+	for _, c := range RootCmd.Commands() {
+		existingTopLevelCommands[c.Name()] = c
+	}
+
+	return existingTopLevelCommands
 }
 
 // executeCustomCommand executes a custom command
