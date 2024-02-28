@@ -5,6 +5,7 @@ id: configuration
 description: Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI.
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
 
 # CLI Configuration
 
@@ -57,9 +58,9 @@ components:
 stacks:
   base_path: stacks
   included_paths:
-  - orgs/**/*
+    - "orgs/**/*"
   excluded_paths:
-  - '**/_defaults.yaml'
+    - "**/_defaults.yaml"
   name_pattern: '{tenant}-{environment}-{stage}'
 workflows:
   base_path: stacks/workflows
@@ -71,6 +72,18 @@ schemas:
     base_path: stacks/schemas/jsonschema
   opa:
     base_path: stacks/schemas/opa
+# CLI command aliases
+aliases:
+  # Aliases for Atmos native commands
+  tf: terraform
+  tp: terraform plan
+  up: terraform apply
+  down: terraform destroy
+  ds: describe stacks
+  dc: describe component
+  # Aliases for Atmos custom commands
+  ls: list stacks
+  lc: list components
 ```
 
 <br/>
@@ -435,6 +448,10 @@ commands:
       - echo ${KUBECONFIG}
 ```
 
+:::tip
+  For more information, refer to [Atmos Custom Commands](/core-concepts/custom-commands)
+:::
+
 ## Integrations
 
 ```yaml
@@ -556,6 +573,64 @@ To prevent Atmos from logging any messages, you can do one of the following:
 - Set `logs.file` or the ENV variable `ATMOS_LOGS_FILE` to `/dev/null`
 
 - Set `logs.level` or the ENV variable `ATMOS_LOGS_LEVEL` to `Off`
+
+## Aliases
+
+CLI command aliases are configured in the `aliases` section.
+
+An alias lets you create a shortcut name for an existing CLI command. Any CLI command can be aliased, including the Atmos
+native commands like `terraform apply` or `describe stacks`, as well as [Atmos Custom Commands](/core-concepts/custom-commands).
+
+For example:
+
+```yaml
+aliases:
+  # Aliases for Atmos native commands
+  tf: terraform
+  tp: terraform plan
+  up: terraform apply
+  down: terraform destroy
+  ds: describe stacks
+  dc: describe component
+  # Aliases for Atmos custom commands
+  ls: list stacks
+  lc: list components
+```
+
+<br/>
+
+Execute an alias as you would any Atmos native or custom command:
+
+```console
+> atmos ls
+
+plat-ue2-dev
+plat-ue2-prod
+plat-ue2-staging
+plat-uw2-dev
+plat-uw2-prod
+plat-uw2-staging
+```
+
+<br/>
+
+The aliases configured in the `aliases` section automatically appear in Atmos help, and are shown as
+`alias for '<command>'`.
+
+For example:
+
+<Terminal title="atmos --help">
+    ![`atmos --help`](/img/cli/help/atmos-help-command-3.png)
+</Terminal>
+
+<br/>
+
+An alias automatically supports all command line arguments and flags that the aliased command accepts.
+
+For example:
+
+- `atmos up <component> -s <stack>` supports all the parameters from the aliased command `atmos terraform apply <component> -s <stack>`
+- `atmos dc <component> -s <stack>` supports all the parameters from the aliased command `atmos describe component <component> -s <stack>`
 
 ## Environment Variables
 

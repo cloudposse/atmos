@@ -347,3 +347,16 @@ schemas:
     # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
     manifest: "../quick-start/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+
+# CLI command aliases
+aliases:
+  # Aliases for Atmos native commands
+  tf: terraform
+  tp: terraform plan
+  up: terraform apply
+  down: terraform destroy
+  ds: describe stacks
+  dc: describe component
+  # Aliases for Atmos custom commands
+  ls: list stacks
+  lc: list components
