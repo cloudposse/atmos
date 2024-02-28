@@ -19,16 +19,3 @@ stacks:
 logs:
   file: "/dev/stdout"
   level: Info
-
-# CLI command aliases
-aliases:
-  # Aliases for Atmos native commands
-  tf: terraform
-  tp: terraform plan
-  up: terraform apply
-  down: terraform destroy
-  ds: describe stacks
-  dc: describe component
-  # Aliases for Atmos custom commands
-  ls: list stacks
-  lc: list components
