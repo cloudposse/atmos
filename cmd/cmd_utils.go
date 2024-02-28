@@ -17,25 +17,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	// This map contains the existing atmos top-level commands
-	// All custom top-level commands will be checked against this map in order to not override `atmos` top-level commands,
-	// but just add subcommands to them
-	existingTopLevelCommands = map[string]*cobra.Command{
-		"atlantis":   atlantisCmd,
-		"aws":        awsCmd,
-		"completion": completionCmd,
-		"describe":   describeCmd,
-		"docs":       docsCmd,
-		"helmfile":   helmfileCmd,
-		"terraform":  terraformCmd,
-		"validate":   validateCmd,
-		"vendor":     vendorCmd,
-		"version":    versionCmd,
-		"workflow":   workflowCmd,
-	}
-)
-
 // processCustomCommands processes and executes custom commands
 func processCustomCommands(
 	cliConfig schema.CliConfiguration,
@@ -44,6 +25,11 @@ func processCustomCommands(
 	topLevel bool,
 ) error {
 	var command *cobra.Command
+	existingTopLevelCommands := make(map[string]*cobra.Command)
+
+	if topLevel {
+		existingTopLevelCommands = getTopLevelCommands()
+	}
 
 	for _, commandCfg := range commands {
 		// Clone the 'commandCfg' struct into a local variable because of the automatic closure in the `Run` function of the Cobra command.
@@ -107,6 +93,55 @@ func processCustomCommands(
 	return nil
 }
 
+// processCommandAliases processes the command aliases
+func processCommandAliases(
+	cliConfig schema.CliConfiguration,
+	aliases schema.CommandAliases,
+	parentCommand *cobra.Command,
+	topLevel bool,
+) error {
+	existingTopLevelCommands := make(map[string]*cobra.Command)
+
+	if topLevel {
+		existingTopLevelCommands = getTopLevelCommands()
+	}
+
+	for k, v := range aliases {
+		alias := strings.TrimSpace(k)
+
+		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
+			aliasCmd := strings.TrimSpace(v)
+			aliasFor := fmt.Sprintf("alias for '%s'", aliasCmd)
+
+			var aliasCommand = &cobra.Command{
+				Use:                alias,
+				Short:              aliasFor,
+				Long:               aliasFor,
+				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+				Run: func(cmd *cobra.Command, args []string) {
+					err := cmd.ParseFlags(args)
+					if err != nil {
+						u.LogErrorAndExit(err)
+					}
+
+					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
+					err = e.ExecuteShell(cliConfig, commandToRun, commandToRun, ".", nil, false)
+					if err != nil {
+						u.LogErrorAndExit(err)
+					}
+				},
+			}
+
+			aliasCommand.DisableFlagParsing = true
+
+			// Add the alias to the parent command
+			parentCommand.AddCommand(aliasCommand)
+		}
+	}
+
+	return nil
+}
+
 // preCustomCommand is run before a custom command is executed
 func preCustomCommand(
 	cmd *cobra.Command,
@@ -126,6 +161,17 @@ func preCustomCommand(
 		_ = cmd.Help()
 		os.Exit(0)
 	}
+}
+
+// getTopLevelCommands returns the top-level commands
+func getTopLevelCommands() map[string]*cobra.Command {
+	existingTopLevelCommands := make(map[string]*cobra.Command)
+
+	for _, c := range RootCmd.Commands() {
+		existingTopLevelCommands[c.Name()] = c
+	}
+
+	return existingTopLevelCommands
 }
 
 // executeCustomCommand executes a custom command

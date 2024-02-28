@@ -1,0 +1,80 @@
+---
+id: cheatsheet
+title:  Vendoring Cheatsheet
+sidebar_label: Cheatsheet
+sidebar_position: 2
+---
+
+import Card from '@site/src/components/Card'
+import CardGroup from '@site/src/components/CardGroup'
+
+<CardGroup title="Configuration" className="cheatsheet">
+  <Card title="Filsystem Layout">
+  ```
+  ├── atmos.yaml
+  ├── vendor.yaml
+  └── components
+      └── myapp
+         ├── main.tf
+         ├── outputs.tf
+         └── variables.tf
+  ```
+  </Card>
+
+  <Card title="Vendor Schema">
+  ```yaml title="vendor.yaml"
+  apiVersion: atmos/v1
+  kind: AtmosVendorConfig
+  metadata:
+    name: example-vendor-config
+    description: Atmos vendoring manifest
+  spec:
+    imports:
+      - "vendor/something"
+    sources:
+      - component: "vpc"
+        source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+        version: "latest"
+        targets: ["components/terraform/infra/vpc/{{.Version}}"]
+        included_paths: ["**/*.tf"]
+        tags:
+          - test
+          - networking
+    ```
+  </Card>
+
+  
+  <Card title="Componet Schema">
+    ```yaml title="components/$component/component.yaml"
+    apiVersion: atmos/v1
+    kind: ComponentVendorConfig
+    metadata:
+      name: vpc-flow-logs-bucket-vendor-config
+      description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
+    spec:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
+        version: 1.398.0
+        included_paths: ["**/*.tf"]
+        excluded_paths: ["**/context.tf"]
+      mixins:
+        - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
+          filename: context.tf
+      ```
+  </Card>
+</CardGroup>
+
+<CardGroup title="Commands" className="cheatsheet">
+    <Card title="Vendor Pull">
+    ```shell
+    atmos vendor pull
+    atmos vendor pull --component vpc-mixin-1
+    atmos vendor pull -c vpc-mixin-2
+    atmos vendor pull -c vpc-mixin-3
+    atmos vendor pull -c vpc-mixin-4
+    atmos vendor pull --tags test
+    atmos vendor pull --tags networking,storage
+    ```
+    </Card>    
+</CardGroup>
+

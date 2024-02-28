@@ -1,0 +1,52 @@
+#
+# List of commands to be run in the `demo-stacks` example
+#
+atmos helmfile --help
+atmos helmfile generate --help
+atmos helmfile generate varfile --help
+atmos --help
+atmos atlantis --help
+atmos atlantis generate --help
+atmos atlantis generate repo-config --help
+atmos aws --help
+atmos aws eks --help
+atmos aws eks update-kubeconfig --help
+atmos completion --help
+atmos completion bash
+atmos completion fish
+atmos completion powershell
+atmos completion zsh
+atmos describe --help
+atmos describe affected --help
+atmos describe component --help
+atmos describe config --help
+atmos describe dependents --help
+atmos describe stacks --help
+atmos describe workflows --help
+atmos docs --help
+atmos terraform --help
+atmos terraform clean --help
+atmos terraform deploy --help
+atmos terraform generate --help
+atmos terraform generate backend --help
+atmos terraform generate backends --help
+atmos terraform generate varfile --help
+atmos terraform generate varfiles --help
+atmos terraform shell --help
+atmos terraform workspace --help
+atmos validate --help
+atmos validate component --help
+atmos validate stacks --help
+atmos vendor --help
+atmos vendor pull --help
+atmos version
+atmos workflow --help
+tree
+tree -CAF --gitignore
+scripts/demo-stacks/start-your-project.sh
+scripts/demo-stacks/write-your-components.sh
+scripts/demo-stacks/define-your-stacks.sh
+scripts/demo-stacks/deploy-staging.sh
+scripts/demo-stacks/deploy-dev.sh
+scripts/demo-stacks/deploy-prod.sh
+scripts/demo-stacks/deploy.sh

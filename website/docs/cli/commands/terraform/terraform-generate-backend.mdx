@@ -1,0 +1,60 @@
+---
+title: atmos terraform generate backend
+sidebar_label: generate backend
+sidebar_class_name: command
+id: generate-backend
+description: Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note purpose
+Use this command to generate a Terraform backend config file for an Atmos terraform component in a stack.
+:::
+
+<br/>
+
+<Screengrab title="atmos terraform generate backend --help" slug="atmos-terraform-generate-backend--help" />
+
+## Usage
+
+Execute the `terraform generate backend` command like this:
+
+```shell
+atmos terraform generate backend <component> -s <stack>
+```
+
+This command generates a backend config file for an Atmos terraform component in a stack.
+
+:::tip
+Run `atmos terraform generate backend --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos terraform generate backend top-level-component1 -s tenant1-ue2-dev
+atmos terraform generate backend infra/vpc -s tenant1-ue2-staging
+atmos terraform generate backend test/test-component -s tenant1-ue2-dev
+atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-prod
+```
+
+## Arguments
+
+| Argument    | Description               | Required |
+|:------------|:--------------------------|:---------|
+| `component` | Atmos terraform component | yes      |
+
+## Flags
+
+| Flag        | Description | Alias | Required |
+|:------------|:------------|:------|:---------|
+| `--stack`   | Atmos stack | `-s`  | yes      |
+| `--dry-run` | Dry run     |       | no       |
+
+<br/>
+
+:::info
+Refer to [Terraform backend configuration](https://developer.hashicorp.com/terraform/language/settings/backends/configuration) for more details
+on `terraform` backends and supported formats
+:::

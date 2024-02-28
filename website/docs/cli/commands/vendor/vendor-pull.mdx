@@ -1,0 +1,154 @@
+---
+title: atmos vendor pull
+sidebar_label: pull
+sidebar_class_name: command
+id: pull
+description: Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note Purpose
+This command implements [Atmos Vendoring](/core-concepts/vendoring/). Use this command to download sources from local and remote 
+repositories for Terraform and Helmfile components and stacks.
+:::
+
+<br/>
+
+<Screengrab title="atmos vendor pull --help" slug="atmos-vendor-pull--help" />
+
+<br/>
+<br/>
+
+With Atmos vendoring, you can copy components and other artifacts from the following sources:
+
+- Copy all files from an [OCI Registry](https://opencontainers.org) into a local folder
+- Copy all files from Git, Mercurial, Amazon S3, Google GCP into a local folder
+- Copy all files from an HTTP/HTTPS endpoint into a local folder
+- Copy a single file from an HTTP/HTTPS endpoint to a local file
+- Copy a local file into a local folder (keeping the same file name)
+- Copy a local file to a local file with a different file name
+- Copy a local folder (all files) into a local folder
+
+## Usage
+
+Execute the `vendor pull` command like this:
+
+```shell
+atmos vendor pull
+atmos vendor pull --component <component> [options]
+atmos vendor pull -c <component> [options]
+atmos vendor pull --tags <tag1>,<tag2> [options]
+```
+
+## Description
+
+Atmos supports two different ways of vendoring components, stacks and other artifacts:
+
+- Using `component.yaml` vendoring manifest
+- Using `vendor.yaml` vendoring manifest
+
+The `component.yaml` vendoring manifest can be used to vendor components from remote repositories.
+A `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
+Using `component.yaml` is not recommended, and it's maintained for backwards compatibility.
+
+The `vendor.yaml` vendoring manifest provides more functionality than using `component.yaml` files.
+It's used to describe vendoring config for all components, stacks and other artifacts for the entire infrastructure.
+The file is placed into the directory from which the `atmos vendor pull` command is executed. It's the recommended way to describe vendoring
+configurations.
+
+## Vendoring using `vendor.yaml` manifest
+
+- The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
+  and other artifacts.
+
+- The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
+  archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
+  [OCI registries](https://opencontainers.org).
+
+- The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
+  are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
+  will be considered relative to the `base_path`. Multiple targets can be specified.
+
+- `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
+  (double-star/globstar `**` is supported as well).
+
+- The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the
+  specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
+
+:::tip
+Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
+:::
+
+## Vendoring using `component.yaml` manifest
+
+- The `component.yaml` vendoring manifest supports Kubernetes-style YAML config to describe component vendoring configuration.
+  The file is placed into the component's folder.
+
+- The URIs (`uri`) in `component.yaml` support all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
+  archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
+  [OCI registries](https://opencontainers.org).
+
+- `included_paths` and `excluded_paths` in `component.yaml` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for
+  file names/paths (double-star/globstar `**` is supported as well).
+
+:::tip
+Refer to [`Atmos Component Vendoring`](/core-concepts/components/vendoring) for more details
+:::
+
+## Vendoring from OCI Registries
+
+The following config can be used to download the `vpc` component from an AWS public ECR registry:
+
+  ```yaml
+  apiVersion: atmos/v1
+  kind: ComponentVendorConfig
+  metadata:
+    name: vpc-vendor-config
+    description: Config for vendoring of 'vpc' component
+  spec:
+    source:
+      # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html)
+      uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      version: "latest"
+  ```
+
+<br/>
+
+:::tip
+Run `atmos vendor pull --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos vendor pull
+atmos vendor pull --component vpc
+atmos vendor pull -c vpc-flow-logs-bucket
+atmos vendor pull -c echo-server --type helmfile
+atmos vendor pull --tags dev,test
+atmos vendor pull --tags networking --dry-run
+```
+
+<br/>
+
+:::note
+
+When executing the `atmos vendor pull` command, Atmos performs the following steps to decide which vendoring manifest to use:
+
+- If `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the command
+  against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest.
+  If the flag `--component` is passed in, Atmos will vendor only that component
+
+- If `vendor.yaml` is not found, Atmos will look for the `component.yaml` manifest in the component's folder. If `component.yaml` is not found,
+  an error will be thrown. The flag `--component` is required in this case
+
+:::
+
+## Flags
+
+| Flag          | Description                                                                                                  | Alias | Required |
+|:--------------|:-------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--component` | Atmos component to pull                                                                                      | `-c`  | no       |
+| `--tags`      | Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string |       | no       |
+| `--type`      | Component type: `terraform` or `helmfile` (`terraform` is default)                                           | `-t`  | no       |
+| `--dry-run`   | Dry run                                                                                                      |       | no       |

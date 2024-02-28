@@ -1,0 +1,10 @@
+atmos --help
+atmos version
+atmos terraform --help
+atmos helmfile --help
+atmos vendor --help
+atmos workflow --help
+atmos aws --help
+atmos describe --help
+atmos completion --help
+atmos atlantis --help

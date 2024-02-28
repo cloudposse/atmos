@@ -1,0 +1,44 @@
+#!/bin/bash
+#
+# This file defines the DSL for the deom
+#
+
+relative_path=$(dirname `realpath "$0"`)
+cd $relative_path/../../../../examples/demo-stacks
+
+demo_name=$(basename $(pwd))
+
+shopt -s expand_aliases
+
+alias tree='tree -CF --gitignore -I ".git" -I "terraform.tfstate*" -I "*.tfvars.json" -I "cache*.txt"'
+alias bat='bat --force-colorization --style header,numbers --theme="GitHub"'
+alias cat='bat'
+
+function clean() {
+    find . -type d -name '.terraform' -prune  -exec rm -rf {} \;
+    find . -type f -name '.terraform.lock.hcl' -exec rm -f {} \;
+    find . -type d -name 'terraform.tfstate.d' -prune -exec rm -rf {} \;
+    find . -type f -name '*.tfvar.json' -exec rm -f {} \;
+}
+
+function newline() {
+    local repeat=${1:-1}  # Set default value to 1 if no parameter is provided
+    for ((i=0; i<repeat; i++)); do
+        echo
+    done
+}
+
+function prompt() {
+    echo -e "\033[1;92m>\033[0m $*\033[0m"
+    #echo -e "\033[32m$demo_name/ \033[1;92m>\033[0m $*\033[0m"
+}
+
+function run() {
+    prompt $*
+    newline 1
+    eval "$*"
+}
+
+function comment() {
+    prompt "#" $*
+}

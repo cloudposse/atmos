@@ -1,0 +1,245 @@
+# powershell completion for atmos                                -*- shell-script -*-
+
+function __atmos_debug {
+    if ($env:BASH_COMP_DEBUG_FILE) {
+        &quot;$args&quot; | Out-File -Append -FilePath &quot;$env:BASH_COMP_DEBUG_FILE&quot;
+    }
+}
+
+filter __atmos_escapeStringWithSpecialChars {
+    $_ -replace '\s|#|@|\$|;|,|''|\{|\}|\(|\)|&quot;|`|\||&lt;|&gt;|&amp;','`$&amp;'
+}
+
+[scriptblock]${__atmosCompleterBlock} = {
+    param(
+            $WordToComplete,
+            $CommandAst,
+            $CursorPosition
+        )
+
+    # Get the current command line and convert into a string
+    $Command = $CommandAst.CommandElements
+    $Command = &quot;$Command&quot;
+
+    __atmos_debug &quot;&quot;
+    __atmos_debug &quot;========= starting completion logic ==========&quot;
+    __atmos_debug &quot;WordToComplete: $WordToComplete Command: $Command CursorPosition: $CursorPosition&quot;
+
+    # The user could have moved the cursor backwards on the command-line.
+    # We need to trigger completion from the $CursorPosition location, so we need
+    # to truncate the command-line ($Command) up to the $CursorPosition location.
+    # Make sure the $Command is longer then the $CursorPosition before we truncate.
+    # This happens because the $Command does not include the last space.
+    if ($Command.Length -gt $CursorPosition) {
+        $Command=$Command.Substring(0,$CursorPosition)
+    }
+    __atmos_debug &quot;Truncated command: $Command&quot;
+
+    $ShellCompDirectiveError=1
+    $ShellCompDirectiveNoSpace=2
+    $ShellCompDirectiveNoFileComp=4
+    $ShellCompDirectiveFilterFileExt=8
+    $ShellCompDirectiveFilterDirs=16
+    $ShellCompDirectiveKeepOrder=32
+
+    # Prepare the command to request completions for the program.
+    # Split the command at the first space to separate the program and arguments.
+    $Program,$Arguments = $Command.Split(&quot; &quot;,2)
+
+    $RequestComp=&quot;$Program __complete $Arguments&quot;
+    __atmos_debug &quot;RequestComp: $RequestComp&quot;
+
+    # we cannot use $WordToComplete because it
+    # has the wrong values if the cursor was moved
+    # so use the last argument
+    if ($WordToComplete -ne &quot;&quot; ) {
+        $WordToComplete = $Arguments.Split(&quot; &quot;)[-1]
+    }
+    __atmos_debug &quot;New WordToComplete: $WordToComplete&quot;
+
+
+    # Check for flag with equal sign
+    $IsEqualFlag = ($WordToComplete -Like &quot;--*=*&quot; )
+    if ( $IsEqualFlag ) {
+        __atmos_debug &quot;Completing equal sign flag&quot;
+        # Remove the flag part
+        $Flag,$WordToComplete = $WordToComplete.Split(&quot;=&quot;,2)
+    }
+
+    if ( $WordToComplete -eq &quot;&quot; -And ( -Not $IsEqualFlag )) {
+        # If the last parameter is complete (there is a space following it)
+        # We add an extra empty parameter so we can indicate this to the go method.
+        __atmos_debug &quot;Adding extra empty parameter&quot;
+        # PowerShell 7.2+ changed the way how the arguments are passed to executables,
+        # so for pre-7.2 or when Legacy argument passing is enabled we need to use
+        # `&quot;`&quot; to pass an empty argument, a &quot;&quot; or '' does not work!!!
+        if ($PSVersionTable.PsVersion -lt [version]'7.2.0' -or
+            ($PSVersionTable.PsVersion -lt [version]'7.3.0' -and -not [ExperimentalFeature]::IsEnabled(&quot;PSNativeCommandArgumentPassing&quot;)) -or
+            (($PSVersionTable.PsVersion -ge [version]'7.3.0' -or [ExperimentalFeature]::IsEnabled(&quot;PSNativeCommandArgumentPassing&quot;)) -and
+              $PSNativeCommandArgumentPassing -eq 'Legacy')) {
+             $RequestComp=&quot;$RequestComp&quot; + ' `&quot;`&quot;'
+        } else {
+             $RequestComp=&quot;$RequestComp&quot; + ' &quot;&quot;'
+        }
+    }
+
+    __atmos_debug &quot;Calling $RequestComp&quot;
+    # First disable ActiveHelp which is not supported for Powershell
+    ${env:ATMOS_ACTIVE_HELP}=0
+
+    #call the command store the output in $out and redirect stderr and stdout to null
+    # $Out is an array contains each line per element
+    Invoke-Expression -OutVariable out &quot;$RequestComp&quot; 2&gt;&amp;1 | Out-Null
+
+    # get directive from last line
+    [int]$Directive = $Out[-1].TrimStart(':')
+    if ($Directive -eq &quot;&quot;) {
+        # There is no directive specified
+        $Directive = 0
+    }
+    __atmos_debug &quot;The completion directive is: $Directive&quot;
+
+    # remove directive (last element) from out
+    $Out = $Out | Where-Object { $_ -ne $Out[-1] }
+    __atmos_debug &quot;The completions are: $Out&quot;
+
+    if (($Directive -band $ShellCompDirectiveError) -ne 0 ) {
+        # Error code.  No completion.
+        __atmos_debug &quot;Received error from custom completion go code&quot;
+        return
+    }
+
+    $Longest = 0
+    [Array]$Values = $Out | ForEach-Object {
+        #Split the output in name and description
+        $Name, $Description = $_.Split(&quot;`t&quot;,2)
+        __atmos_debug &quot;Name: $Name Description: $Description&quot;
+
+        # Look for the longest completion so that we can format things nicely
+        if ($Longest -lt $Name.Length) {
+            $Longest = $Name.Length
+        }
+
+        # Set the description to a one space string if there is none set.
+        # This is needed because the CompletionResult does not accept an empty string as argument
+        if (-Not $Description) {
+            $Description = &quot; &quot;
+        }
+        @{Name=&quot;$Name&quot;;Description=&quot;$Description&quot;}
+    }
+
+
+    $Space = &quot; &quot;
+    if (($Directive -band $ShellCompDirectiveNoSpace) -ne 0 ) {
+        # remove the space here
+        __atmos_debug &quot;ShellCompDirectiveNoSpace is called&quot;
+        $Space = &quot;&quot;
+    }
+
+    if ((($Directive -band $ShellCompDirectiveFilterFileExt) -ne 0 ) -or
+       (($Directive -band $ShellCompDirectiveFilterDirs) -ne 0 ))  {
+        __atmos_debug &quot;ShellCompDirectiveFilterFileExt ShellCompDirectiveFilterDirs are not supported&quot;
+
+        # return here to prevent the completion of the extensions
+        return
+    }
+
+    $Values = $Values | Where-Object {
+        # filter the result
+        $_.Name -like &quot;$WordToComplete*&quot;
+
+        # Join the flag back if we have an equal sign flag
+        if ( $IsEqualFlag ) {
+            __atmos_debug &quot;Join the equal sign flag back to the completion value&quot;
+            $_.Name = $Flag + &quot;=&quot; + $_.Name
+        }
+    }
+
+    # we sort the values in ascending order by name if keep order isn't passed
+    if (($Directive -band $ShellCompDirectiveKeepOrder) -eq 0 ) {
+        $Values = $Values | Sort-Object -Property Name
+    }
+
+    if (($Directive -band $ShellCompDirectiveNoFileComp) -ne 0 ) {
+        __atmos_debug &quot;ShellCompDirectiveNoFileComp is called&quot;
+
+        if ($Values.Length -eq 0) {
+            # Just print an empty string here so the
+            # shell does not start to complete paths.
+            # We cannot use CompletionResult here because
+            # it does not accept an empty string as argument.
+            &quot;&quot;
+            return
+        }
+    }
+
+    # Get the current mode
+    $Mode = (Get-PSReadLineKeyHandler | Where-Object {$_.Key -eq &quot;Tab&quot; }).Function
+    __atmos_debug &quot;Mode: $Mode&quot;
+
+    $Values | ForEach-Object {
+
+        # store temporary because switch will overwrite $_
+        $comp = $_
+
+        # PowerShell supports three different completion modes
+        # - TabCompleteNext (default windows style - on each key press the next option is displayed)
+        # - Complete (works like bash)
+        # - MenuComplete (works like zsh)
+        # You set the mode with Set-PSReadLineKeyHandler -Key Tab -Function &lt;mode&gt;
+
+        # CompletionResult Arguments:
+        # 1) CompletionText text to be used as the auto completion result
+        # 2) ListItemText   text to be displayed in the suggestion list
+        # 3) ResultType     type of completion result
+        # 4) ToolTip        text for the tooltip with details about the object
+
+        switch ($Mode) {
+
+            # bash like
+            &quot;Complete&quot; {
+
+                if ($Values.Length -eq 1) {
+                    __atmos_debug &quot;Only one completion left&quot;
+
+                    # insert space after value
+                    [System.Management.Automation.CompletionResult]::new($($comp.Name | __atmos_escapeStringWithSpecialChars) + $Space, &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+
+                } else {
+                    # Add the proper number of spaces to align the descriptions
+                    while($comp.Name.Length -lt $Longest) {
+                        $comp.Name = $comp.Name + &quot; &quot;
+                    }
+
+                    # Check for empty description and only add parentheses if needed
+                    if ($($comp.Description) -eq &quot; &quot; ) {
+                        $Description = &quot;&quot;
+                    } else {
+                        $Description = &quot;  ($($comp.Description))&quot;
+                    }
+
+                    [System.Management.Automation.CompletionResult]::new(&quot;$($comp.Name)$Description&quot;, &quot;$($comp.Name)$Description&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+                }
+             }
+
+            # zsh like
+            &quot;MenuComplete&quot; {
+                # insert space after value
+                # MenuComplete will automatically show the ToolTip of
+                # the highlighted value at the bottom of the suggestions.
+                [System.Management.Automation.CompletionResult]::new($($comp.Name | __atmos_escapeStringWithSpecialChars) + $Space, &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+            }
+
+            # TabCompleteNext and in case we get something unknown
+            Default {
+                # Like MenuComplete but we don't want to add a space here because
+                # the user need to press space anyway to get the completion.
+                # Description will not be shown because that's not possible with TabCompleteNext
+                [System.Management.Automation.CompletionResult]::new($($comp.Name | __atmos_escapeStringWithSpecialChars), &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+            }
+        }
+
+    }
+}
+
+Register-ArgumentCompleter -CommandName 'atmos' -ScriptBlock ${__atmosCompleterBlock}
