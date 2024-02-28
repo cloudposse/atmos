@@ -350,13 +350,13 @@ schemas:
 
 # CLI command aliases
 aliases:
-  # Aliases to Atmos native commands
+  # Aliases for Atmos native commands
   tf: terraform
   tp: terraform plan
   up: terraform apply
   down: terraform destroy
   ds: describe stacks
   dc: describe component
-  # Aliases to Atmos custom commands
+  # Aliases for Atmos custom commands
   ls: list stacks
   lc: list components
