@@ -1002,15 +1002,18 @@ func ProcessStackConfig(
 					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[any]any); !componentAzurermExists {
 						if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
 							azureKeyPrefixComponent := component
-							baseKeyName := ""
+							var keyName []string
 							if baseComponentName != "" {
 								azureKeyPrefixComponent = baseComponentName
 							}
 							if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[any]any); globalAzurermExists {
-								baseKeyName = globalAzurerm["key"].(string)
+								if _, globalAzurermKeyExists := globalAzurerm["key"].(string); globalAzurermKeyExists {
+									keyName = append(keyName, globalAzurerm["key"].(string))
+								}
 							}
 							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
-							finalComponentBackend["key"] = fmt.Sprintf("%s/%s.terraform.tfstate", baseKeyName, componentKeyName)
+							keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
+							finalComponentBackend["key"] = strings.Join(keyName, "/")
 
 						}
 					}
