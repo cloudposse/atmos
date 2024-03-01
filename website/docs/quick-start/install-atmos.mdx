@@ -150,3 +150,33 @@ The latest version of Atmos might not be available with third party package mana
 - Rename the downloaded file to `atmos` (optional)
 - Add the execution bit to the binary (e.g. on Linux and Mac, run `chmod u+x atmos`)
 - Place the binary somewhere on your `PATH` (e.g. on Linux and Mac: `mv atmos /usr/local/bin/`)
+
+## NerdFonts
+
+Atmos is a modern CLI with a Text-based UI (TUI), as such, for the best experience we recommend ensuring you have
+modern fonts installed and working with your terminal. Nerd Fonts are popular fonts that are patched to include icons.
+
+The exact process will depend on your terminal and operating system, but the general idea is to install a font that
+includes the necessary glyphs and then configure your terminal.
+
+Go to https://www.nerdfonts.com/ for more information. We recommend the "Fira Code" NerdFont version, which is whatall our
+screenshots are based on.
+
+<Tabs>
+  <TabItem value="homebrew-cask-fonts" label="Homebrew">
+    #### Homebrew
+
+    If you're using Homebrew, you can tap the `homebrew-cask-fonts` repository to install Nerd Fonts.
+
+    Paste the following into a macOS Terminal window.
+
+    ```shell
+    brew tap homebrew/cask-fonts                     # You only need to do this once!
+    brew search nerd-font                            # Search for font packages
+
+    # EXAMPLE: Install the NerdFont version of Fira Code
+    brew install --cask font-fira-code-nerd-font
+    ```
+  </TabItem>
+</Tabs>
+
