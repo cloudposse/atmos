@@ -151,16 +151,38 @@ The latest version of Atmos might not be available with third party package mana
 - Add the execution bit to the binary (e.g. on Linux and Mac, run `chmod u+x atmos`)
 - Place the binary somewhere on your `PATH` (e.g. on Linux and Mac: `mv atmos /usr/local/bin/`)
 
-## NerdFonts
+## Set Up Your Terminal
 
 Atmos is a modern CLI with a Text-based UI (TUI), as such, for the best experience we recommend ensuring you have
-modern fonts installed and working with your terminal. Nerd Fonts are popular fonts that are patched to include icons.
+a decent terminal and modern fonts installed and configured in your terminal.
+
+### TERM Environment Variable
+
+As the standard terminal only supports 256 colors, we advise macOS users to use [iTerm2](https://iterm2.com/) or any other modern day macOS terminal that supports ANSI characters.
+
+Atmos uses ANSI color codes. These should work in every modern terminal, but you may have to set the `TERM` environment variable to `xterm-256color` for it to work.
+This can be peristed in your `~/.bashrc` or `~/.zshrc` file (or the respective RC file of whatever shell is in use).
+
+```shell
+export TERM=xterm-256color
+```
+
+:::tip Install NerdFonts
+To display all icons used by `atmos`, we recommend the use of a Nerd Font.
+:::
+
+### NerdFonts
+
+ Nerd Fonts are popular fonts that are patched to include icons.
 
 The exact process will depend on your terminal and operating system, but the general idea is to install a font that
 includes the necessary glyphs and then configure your terminal.
 
-Go to https://www.nerdfonts.com/ for more information. We recommend the "Fira Code" NerdFont version, which is whatall our
-screenshots are based on.
+Go to https://www.nerdfonts.com/ for more information.
+
+::tip
+We recommend the "Fira Code" NerdFont version, which is what all our screenshots are based on.
+:::
 
 <Tabs>
   <TabItem value="homebrew-cask-fonts" label="Homebrew">
