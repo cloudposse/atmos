@@ -78,6 +78,20 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     ```shell
     nix-env -iA nixpkgs.atmos
     ```
+
+    To get the latest version, you may need to update the Nix config to add "unstable" packages. 
+
+    For example, in `~/.config/nixpkgs/config.nix` add the following line to the file:
+
+    ```console
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    ```
+
+    Then run the following to install:
+
+    ```shell
+    nix-shell -p atmos
+    ```
   </TabItem>
 
   <TabItem value="go" label="Go">
