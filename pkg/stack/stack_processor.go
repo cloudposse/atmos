@@ -492,6 +492,7 @@ func ProcessStackConfig(
 	terraformSettings := map[any]any{}
 	terraformEnv := map[any]any{}
 	terraformCommand := ""
+	terraformProviders := map[any]any{}
 
 	helmfileVars := map[any]any{}
 	helmfileSettings := map[any]any{}
@@ -587,6 +588,13 @@ func ProcessStackConfig(
 	globalAndTerraformEnv, err := m.Merge([]map[any]any{globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
+	}
+
+	if i, ok := globalTerraformSection[cfg.ProvidersSectionName]; ok {
+		terraformProviders, ok = i.(map[any]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
+		}
 	}
 
 	// Global backend
@@ -717,6 +725,14 @@ func ProcessStackConfig(
 					}
 				}
 
+				componentProviders := map[any]any{}
+				if i, ok := componentMap[cfg.ProvidersSectionName]; ok {
+					componentProviders, ok = i.(map[any]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.providers' section in the file '%s'", component, stackName)
+					}
+				}
+
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[any]any{}
@@ -776,6 +792,7 @@ func ProcessStackConfig(
 				componentOverridesVars := map[any]any{}
 				componentOverridesSettings := map[any]any{}
 				componentOverridesEnv := map[any]any{}
+				componentOverridesProviders := map[any]any{}
 				componentOverridesTerraformCommand := ""
 
 				if i, ok := componentMap["overrides"]; ok {
@@ -806,6 +823,12 @@ func ProcessStackConfig(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.command' in the manifest '%s'", component, stackName)
 						}
 					}
+
+					if i, ok = componentOverrides[cfg.ProvidersSectionName]; ok {
+						if componentOverridesProviders, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.providers' in the manifest '%s'", component, stackName)
+						}
+					}
 				}
 
 				// Process base component(s)
@@ -813,6 +836,7 @@ func ProcessStackConfig(
 				baseComponentVars := map[any]any{}
 				baseComponentSettings := map[any]any{}
 				baseComponentEnv := map[any]any{}
+				baseComponentProviders := map[any]any{}
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
 				baseComponentBackendSection := map[any]any{}
@@ -847,6 +871,7 @@ func ProcessStackConfig(
 					baseComponentVars = baseComponentConfig.BaseComponentVars
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentProviders = baseComponentConfig.BaseComponentProviders
 					baseComponentName = baseComponentConfig.FinalBaseComponentName
 					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
@@ -951,6 +976,16 @@ func ProcessStackConfig(
 					baseComponentEnv,
 					componentEnv,
 					componentOverridesEnv,
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				finalComponentProviders, err := m.Merge([]map[any]any{
+					terraformProviders,
+					baseComponentProviders,
+					componentProviders,
+					componentOverridesProviders,
 				})
 				if err != nil {
 					return nil, err
@@ -1123,6 +1158,7 @@ func ProcessStackConfig(
 				comp["inheritance"] = componentInheritanceChain
 				comp["metadata"] = componentMetadata
 				comp[cfg.OverridesSectionName] = componentOverrides
+				comp[cfg.ProvidersSectionName] = finalComponentProviders
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName

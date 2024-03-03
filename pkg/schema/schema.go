@@ -396,6 +396,7 @@ type BaseComponentConfig struct {
 	BaseComponentVars                      map[any]any
 	BaseComponentSettings                  map[any]any
 	BaseComponentEnv                       map[any]any
+	BaseComponentProviders                 map[any]any
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string
