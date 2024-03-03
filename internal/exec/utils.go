@@ -901,6 +901,13 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 	}
 }
 
+// generateComponentProviderOverrides generates provider overrides for components
+func generateComponentProviderOverrides(providerOverrides map[any]any) map[string]any {
+	return map[string]any{
+		"provider": providerOverrides,
+	}
+}
+
 // FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defind in
 func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
 	var deps []string
