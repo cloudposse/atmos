@@ -43,5 +43,6 @@ components:
         dns_hostnames_enabled: true
       providers:
         context:
-          component: vpc
-          atmos_component: infra/vpc
+          values:
+            component: vpc
+            atmos_component: infra/vpc

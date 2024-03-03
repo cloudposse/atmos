@@ -29,10 +29,27 @@ terraform:
 
   providers:
     context:
-      namespace: eg
-      tenant: plat
-      environment: gbl
-      stage: test
+      enabled: true
+      delimiter: "-"
+      properties:
+        namespace:
+          required: true
+          min_length: 2
+          max_length: 4
+        tenant:
+          required: true
+          min_length: 2
+          max_length: 10
+        environment:
+          required: true
+          min_length: 2
+          max_length: 6
+        stage:
+          required: true
+          min_length: 2
+          max_length: 20
+      values:
+        namespace: cp
 
 helmfile:
   vars: {}

@@ -4,3 +4,9 @@ vars:
 settings:
   config:
     is_prod: true
+
+terraform:
+  providers:
+    context:
+      values:
+        stage: prod

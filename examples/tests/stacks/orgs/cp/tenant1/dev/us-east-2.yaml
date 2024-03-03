@@ -21,8 +21,7 @@ terraform:
 
   overrides:
     providers:
-      context:
-        stage: test2
+      context: {}
 
 components:
   terraform:

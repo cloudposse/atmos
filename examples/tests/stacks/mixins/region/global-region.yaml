@@ -1,3 +1,9 @@
 vars:
   region: us-east-2
   environment: gbl
+
+terraform:
+  providers:
+    context:
+      values:
+        environment: gbl
