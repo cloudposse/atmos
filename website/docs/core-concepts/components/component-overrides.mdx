@@ -15,6 +15,7 @@ You can override the following sections in the component(s) configuration:
 - `vars`
 - `settings`
 - `env`
+- `providers`
 - `command`
 
 The `overrides` section can be used in the global scope or in the Terraform and Helmfile scopes.
@@ -31,6 +32,9 @@ overrides:
   settings: {}
   # Override the variables for the components in the current stack manifest and all its imports
   vars: {}
+  # Override the providers configuration section for the Terraform components in the current stack manifest and all its imports
+  # Note: this applies only to Terraform components in the `terraform.overrides` section
+  providers: {}
   # Override the command to execute for the components in the current stack manifest and all its imports
   command: "<command to execute>"
 ```
@@ -43,6 +47,7 @@ terraform:
     env: {}
     settings: {}
     vars: {}
+    providers: {}
     command: "<command to execute>"
 
 helmfile:
