@@ -1122,7 +1122,7 @@ func ProcessStackConfig(
 				comp["command"] = finalComponentTerraformCommand
 				comp["inheritance"] = componentInheritanceChain
 				comp["metadata"] = componentMetadata
-				comp["overrides"] = componentOverrides
+				comp[cfg.OverridesSectionName] = componentOverrides
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName

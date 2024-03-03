@@ -175,6 +175,9 @@
         },
         "overrides": {
           "$ref": "#/definitions/overrides"
+        },
+        "providers": {
+          "$ref": "#/definitions/providers"
         }
       },
       "required": [],
@@ -225,6 +228,9 @@
         },
         "remote_state_backend": {
           "$ref": "#/definitions/remote_state_backend"
+        },
+        "providers": {
+          "$ref": "#/definitions/providers"
         }
       },
       "required": [],
@@ -432,7 +438,8 @@
         "remote",
         "vault",
         "static",
-        "azurerm"
+        "azurerm",
+        "gcs"
       ],
       "description": "Backend type",
       "title": "backend_type"
@@ -537,6 +544,9 @@
         },
         "settings": {
           "$ref": "#/definitions/settings"
+        },
+        "providers": {
+          "$ref": "#/definitions/providers"
         }
       },
       "required": [],
@@ -716,6 +726,12 @@
         "steps"
       ],
       "title": "workflow_manifest"
+    },
+    "providers": {
+      "type": "object",
+      "description": "Providers section",
+      "additionalProperties": true,
+      "title": "providers"
     }
   }
 }
