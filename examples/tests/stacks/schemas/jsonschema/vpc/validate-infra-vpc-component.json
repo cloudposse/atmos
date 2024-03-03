@@ -11,7 +11,7 @@
         "region": {
           "type": "string"
         },
-        "cidr_block": {
+        "ipv4_primary_cidr_block": {
           "type": "string",
           "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))?$"
         },
@@ -22,7 +22,7 @@
       "additionalProperties": true,
       "required": [
         "region",
-        "cidr_block",
+        "ipv4_primary_cidr_block",
         "map_public_ip_on_launch"
       ]
     }
