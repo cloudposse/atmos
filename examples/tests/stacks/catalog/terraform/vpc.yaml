@@ -41,3 +41,7 @@ components:
         max_subnet_count: 3
         map_public_ip_on_launch: true
         dns_hostnames_enabled: true
+      providers:
+        context:
+          component: vpc
+          atmos_component: infra/vpc
