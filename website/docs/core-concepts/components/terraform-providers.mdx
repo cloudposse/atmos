@@ -1,10 +1,11 @@
 ---
-title: Component Overrides
-sidebar_position: 9
-sidebar_label: Overrides
-description: Use the 'Component Overrides' pattern to modify components' configuration and behavior in the current scope.
-id: overrides
+title: Terraform Providers
+sidebar_position: 10
+sidebar_label: Terraform Providers
+description: Configure and override Terraform Providers.
+id: terraform_providers
 ---
+
 import Terminal from '@site/src/components/Terminal'
 
 Atmos supports the [Component Overrides](/design-patterns/component-overrides) Design Pattern to modify components' configuration and behavior using
@@ -25,18 +26,6 @@ The `overrides` section can be used in the global scope or in the Terraform and 
 The `overrides` section schema at the global scope is as follows:
 
 ```yaml
-overrides:
-  # Override the ENV variables for the components in the current stack manifest and all its imports
-  env: {}
-  # Override the settings for the components in the current stack manifest and all its imports
-  settings: {}
-  # Override the variables for the components in the current stack manifest and all its imports
-  vars: {}
-  # Override the providers configuration section for the Terraform components in the current stack manifest and all its imports
-  # Note: this applies only to Terraform components in the `terraform.providers` and `component.terraform.<component>.providers` sections
-  providers: {}
-  # Override the command to execute for the components in the current stack manifest and all its imports
-  command: "<command to execute>"
 ```
 
 The `overrides` section schemas at the Terraform and Helmfile levels are as follows:
