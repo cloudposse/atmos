@@ -64,6 +64,7 @@ func FindComponentConfig(
 	var componentVarsSection map[any]any
 	var componentSettingsSection map[any]any
 	var componentOverridesSection map[any]any
+	var componentProvidersSection map[any]any
 	var componentImportsSection []string
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
@@ -95,6 +96,9 @@ func FindComponentConfig(
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
 		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
+	}
+	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
+		componentProvidersSection = map[any]any{}
 	}
 	if componentBackendSection, ok = componentSection["backend"].(map[any]any); !ok {
 		componentBackendSection = nil
@@ -139,6 +143,7 @@ func FindComponentConfig(
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
 	configAndStacksInfo.ComponentOverridesSection = componentOverridesSection
+	configAndStacksInfo.ComponentProvidersSection = componentProvidersSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -893,6 +898,13 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 				backendType: backendConfig,
 			},
 		},
+	}
+}
+
+// generateComponentProviderOverrides generates provider overrides for components
+func generateComponentProviderOverrides(providerOverrides map[any]any) map[string]any {
+	return map[string]any{
+		"provider": providerOverrides,
 	}
 }
 

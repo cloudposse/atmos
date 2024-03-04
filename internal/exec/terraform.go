@@ -198,12 +198,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return fmt.Errorf("\nComponent '%s' did not pass the validation policies.\n", info.ComponentFromArg)
 	}
 
-	// Auto generate backend file
+	// Component working directory
+	workingDir := constructTerraformComponentWorkingDir(cliConfig, info)
+
+	// Auto-generate backend file
 	if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-		backendFileName := path.Join(
-			constructTerraformComponentWorkingDir(cliConfig, info),
-			"backend.tf.json",
-		)
+		backendFileName := path.Join(workingDir, "backend.tf.json")
 
 		u.LogDebug(cliConfig, "Writing the backend config to file:")
 		u.LogDebug(cliConfig, backendFileName)
@@ -211,6 +211,22 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if !info.DryRun {
 			var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
 			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	if len(info.ComponentProvidersSection) > 0 {
+		providerOverrideFileName := path.Join(workingDir, "providers_override.tf.json")
+
+		u.LogDebug(cliConfig, "\nWriting the provider overrides to file:")
+		u.LogDebug(cliConfig, providerOverrideFileName)
+
+		if !info.DryRun {
+			var providerOverrides = generateComponentProviderOverrides(info.ComponentProvidersSection)
+			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
 			if err != nil {
 				return err
 			}
@@ -296,7 +312,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		u.LogDebug(cliConfig, "Stack path: "+path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := constructTerraformComponentWorkingDir(cliConfig, info)
 	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
 
 	// Print ENV vars if they are found in the component's stack config

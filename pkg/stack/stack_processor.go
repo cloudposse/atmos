@@ -492,6 +492,7 @@ func ProcessStackConfig(
 	terraformSettings := map[any]any{}
 	terraformEnv := map[any]any{}
 	terraformCommand := ""
+	terraformProviders := map[any]any{}
 
 	helmfileVars := map[any]any{}
 	helmfileSettings := map[any]any{}
@@ -587,6 +588,13 @@ func ProcessStackConfig(
 	globalAndTerraformEnv, err := m.Merge([]map[any]any{globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
+	}
+
+	if i, ok := globalTerraformSection[cfg.ProvidersSectionName]; ok {
+		terraformProviders, ok = i.(map[any]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
+		}
 	}
 
 	// Global backend
@@ -717,6 +725,14 @@ func ProcessStackConfig(
 					}
 				}
 
+				componentProviders := map[any]any{}
+				if i, ok := componentMap[cfg.ProvidersSectionName]; ok {
+					componentProviders, ok = i.(map[any]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.providers' section in the file '%s'", component, stackName)
+					}
+				}
+
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[any]any{}
@@ -776,6 +792,7 @@ func ProcessStackConfig(
 				componentOverridesVars := map[any]any{}
 				componentOverridesSettings := map[any]any{}
 				componentOverridesEnv := map[any]any{}
+				componentOverridesProviders := map[any]any{}
 				componentOverridesTerraformCommand := ""
 
 				if i, ok := componentMap["overrides"]; ok {
@@ -806,6 +823,12 @@ func ProcessStackConfig(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.command' in the manifest '%s'", component, stackName)
 						}
 					}
+
+					if i, ok = componentOverrides[cfg.ProvidersSectionName]; ok {
+						if componentOverridesProviders, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.providers' in the manifest '%s'", component, stackName)
+						}
+					}
 				}
 
 				// Process base component(s)
@@ -813,6 +836,7 @@ func ProcessStackConfig(
 				baseComponentVars := map[any]any{}
 				baseComponentSettings := map[any]any{}
 				baseComponentEnv := map[any]any{}
+				baseComponentProviders := map[any]any{}
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
 				baseComponentBackendSection := map[any]any{}
@@ -847,6 +871,7 @@ func ProcessStackConfig(
 					baseComponentVars = baseComponentConfig.BaseComponentVars
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentProviders = baseComponentConfig.BaseComponentProviders
 					baseComponentName = baseComponentConfig.FinalBaseComponentName
 					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
@@ -956,6 +981,16 @@ func ProcessStackConfig(
 					return nil, err
 				}
 
+				finalComponentProviders, err := m.Merge([]map[any]any{
+					terraformProviders,
+					baseComponentProviders,
+					componentProviders,
+					componentOverridesProviders,
+				})
+				if err != nil {
+					return nil, err
+				}
+
 				// Final backend
 				finalComponentBackendType := globalBackendType
 				if len(baseComponentBackendType) > 0 {
@@ -982,21 +1017,38 @@ func ProcessStackConfig(
 					}
 				}
 
+				// AWS S3 backend
 				// Check if `backend` section has `workspace_key_prefix` for `s3` backend type
 				// If it does not, use the component name instead
 				// It will also be propagated to `remote_state_backend` section of `s3` type
 				if finalComponentBackendType == "s3" {
-					if _, ok := finalComponentBackend["workspace_key_prefix"].(string); !ok {
-						workspaceKeyPrefixComponent := component
+					if p, ok := finalComponentBackend["workspace_key_prefix"].(string); !ok || p == "" {
+						workspaceKeyPrefix := component
 						if baseComponentName != "" {
-							workspaceKeyPrefixComponent = baseComponentName
+							workspaceKeyPrefix = baseComponentName
 						}
-						finalComponentBackend["workspace_key_prefix"] = strings.Replace(workspaceKeyPrefixComponent, "/", "-", -1)
+						finalComponentBackend["workspace_key_prefix"] = strings.Replace(workspaceKeyPrefix, "/", "-", -1)
 					}
 				}
 
+				// Google GSC backend
+				// Check if `backend` section has `prefix` for `gcs` backend type
+				// If it does not, use the component name instead
+				// https://developer.hashicorp.com/terraform/language/settings/backends/gcs
+				// https://developer.hashicorp.com/terraform/language/settings/backends/gcs#prefix
+				if finalComponentBackendType == "gcs" {
+					if p, ok := finalComponentBackend["prefix"].(string); !ok || p == "" {
+						prefix := component
+						if baseComponentName != "" {
+							prefix = baseComponentName
+						}
+						finalComponentBackend["prefix"] = strings.Replace(prefix, "/", "-", -1)
+					}
+				}
+
+				// Azure backend
 				// Check if component `backend` section has `key` for `azurerm` backend type
-				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique tf state key
+				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique Terraform state key
 				// The backend state file will be formatted like so: {global key name}/{component name}.terraform.tfstate
 				if finalComponentBackendType == "azurerm" {
 					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[any]any); !componentAzurermExists {
@@ -1014,7 +1066,6 @@ func ProcessStackConfig(
 							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
 							keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
 							finalComponentBackend["key"] = strings.Join(keyName, "/")
-
 						}
 					}
 				}
@@ -1106,7 +1157,8 @@ func ProcessStackConfig(
 				comp["command"] = finalComponentTerraformCommand
 				comp["inheritance"] = componentInheritanceChain
 				comp["metadata"] = componentMetadata
-				comp["overrides"] = componentOverrides
+				comp[cfg.OverridesSectionName] = componentOverrides
+				comp[cfg.ProvidersSectionName] = finalComponentProviders
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName

@@ -27,6 +27,30 @@ terraform:
     s3:
       role_arn: "arn:aws:iam::123456789012:role/cp-gbl-root-terraform"
 
+  providers:
+    context:
+      enabled: true
+      delimiter: "-"
+      properties:
+        namespace:
+          required: true
+          min_length: 2
+          max_length: 4
+        tenant:
+          required: true
+          min_length: 2
+          max_length: 10
+        environment:
+          required: true
+          min_length: 2
+          max_length: 6
+        stage:
+          required: true
+          min_length: 2
+          max_length: 20
+      values:
+        namespace: cp
+
 helmfile:
   vars: {}
 

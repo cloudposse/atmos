@@ -78,7 +78,7 @@ with the following configuration as an example:
 ```yaml
   # .github/config/atmos-gitops.yaml
   atmos-config-path: ./rootfs/usr/local/etc/atmos/
-  atmos-version: 1.54.0
+  atmos-version: 1.65.0
   aws-region: us-east-2
   enable-infracost: false
   group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
@@ -88,7 +88,7 @@ with the following configuration as an example:
   terraform-state-bucket: cptest-core-ue2-auto-gitops
   terraform-state-role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
   terraform-state-table: cptest-core-ue2-auto-gitops
-  terraform-version: 1.5.2
+  terraform-version: 1.65.0
 ```
 
 ## Requirements

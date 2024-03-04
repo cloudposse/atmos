@@ -18,3 +18,5 @@ components:
     "infra/vpc":
       vars:
         ipv4_primary_cidr_block: 10.8.0.0/18
+        map_public_ip_on_launch: false
+        vpc_flow_logs_enabled: false

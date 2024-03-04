@@ -96,7 +96,7 @@ The output contains the following sections:
     where the variables, outputs and child modules are defined are also included. Invalid Terraform configurations are also detected, and in case of
     any issues, the warnings and errors are shows in the `terraform_config.diagnostics` section
 
-- `env` - a list of ENV variables defined for the Atmos component
+- `env` - a map of ENV variables defined for the Atmos component
 
 - `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
 
@@ -126,6 +126,8 @@ The output contains the following sections:
   (after the deep-merging and processing all the inheritance chains and all the base components)
 
 - `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/components/overrides) for more details
+
+- `providers` - a map of provider configurations for the component
 
 ## Difference between `imports`, `deps_all` and `deps` outputs
 

@@ -122,6 +122,7 @@ type ConfigAndStacksInfo struct {
 	ComponentVarsSection          map[any]any
 	ComponentSettingsSection      map[any]any
 	ComponentOverridesSection     map[any]any
+	ComponentProvidersSection     map[any]any
 	ComponentEnvSection           map[any]any
 	ComponentEnvList              []string
 	ComponentBackendSection       map[any]any
@@ -395,6 +396,7 @@ type BaseComponentConfig struct {
 	BaseComponentVars                      map[any]any
 	BaseComponentSettings                  map[any]any
 	BaseComponentEnv                       map[any]any
+	BaseComponentProviders                 map[any]any
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string

@@ -378,6 +378,7 @@ func ProcessBaseComponentConfig(
 	var baseComponentVars map[any]any
 	var baseComponentSettings map[any]any
 	var baseComponentEnv map[any]any
+	var baseComponentProviders map[any]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[any]any
@@ -492,6 +493,13 @@ func ProcessBaseComponentConfig(
 			}
 		}
 
+		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
+			baseComponentProviders, ok = baseComponentProvidersSection.(map[any]any)
+			if !ok {
+				return fmt.Errorf("invalid '%s.providers' section in the stack '%s'", baseComponent, stack)
+			}
+		}
+
 		// Base component backend
 		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
 			baseComponentBackendType, ok = i.(string)
@@ -554,6 +562,13 @@ func ProcessBaseComponentConfig(
 			return err
 		}
 		baseComponentConfig.BaseComponentEnv = merged
+
+		// Base component `providers`
+		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentProviders = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
