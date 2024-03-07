@@ -97,7 +97,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 
 	// Spacelift stack
 	if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
-		contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+		contextPrefix, err := cfg.GetContextPrefix(stackName, context, GetStackNamePattern(cliConfig), stackName)
 		if err != nil {
 			return "", err
 		}

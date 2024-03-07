@@ -139,7 +139,7 @@ func ExecuteDescribeStacks(
 						// Component vars
 						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
 							context = cfg.GetContextFromVars(varsSection)
-							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
+							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
@@ -182,7 +182,7 @@ func ExecuteDescribeStacks(
 								if len(sections) == 0 || u.SliceContainsString(sections, "workspace") {
 									workspace, err := BuildTerraformWorkspace(
 										stackName,
-										cliConfig.Stacks.NamePattern,
+										GetStackNamePattern(cliConfig),
 										metadataSection,
 										context,
 									)
@@ -229,8 +229,8 @@ func ExecuteDescribeStacks(
 
 						// Component vars
 						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
-							context := cfg.GetContextFromVars(varsSection)
-							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
+							ctx := cfg.GetContextFromVars(varsSection)
+							stackName, err = cfg.GetContextPrefix(stackFileName, ctx, GetStackNamePattern(cliConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}

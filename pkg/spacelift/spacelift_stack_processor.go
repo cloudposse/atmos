@@ -68,7 +68,7 @@ func CreateSpaceliftStacks(
 		return TransformStackConfigToSpaceliftStacks(
 			stacks,
 			stackConfigPathTemplate,
-			cliConfig.Stacks.NamePattern,
+			e.GetStackNamePattern(cliConfig),
 			processImports,
 			rawStackConfigs,
 		)

@@ -133,7 +133,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 				return err
 			}
 
-			if len(cliConfig.Stacks.NamePattern) < 1 {
+			if len(GetStackNamePattern(cliConfig)) < 1 {
 				return errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 			}
 
@@ -142,7 +142,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 				kubeconfigContext.Tenant,
 				kubeconfigContext.Environment,
 				kubeconfigContext.Stage,
-				cliConfig.Stacks.NamePattern,
+				GetStackNamePattern(cliConfig),
 			)
 			if err != nil {
 				return err

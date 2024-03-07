@@ -314,7 +314,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, cliConfig.Stacks.NamePattern, stackConfigFileName)
+				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, GetStackNamePattern(cliConfig), stackConfigFileName)
 				if err != nil {
 					return err
 				}
@@ -327,7 +327,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				workspace, err := BuildTerraformWorkspace(
 					stackConfigFileName,
-					cliConfig.Stacks.NamePattern,
+					GetStackNamePattern(cliConfig),
 					metadataSection,
 					context,
 				)

@@ -318,7 +318,7 @@ func ProcessStacks(
 
 		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
-			cliConfig.Stacks.NamePattern,
+			GetStackNamePattern(cliConfig),
 			configAndStacksInfo.Stack,
 		)
 		if err != nil {
@@ -351,7 +351,7 @@ func ProcessStacks(
 
 			configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 				configAndStacksInfo.Context,
-				cliConfig.Stacks.NamePattern,
+				GetStackNamePattern(cliConfig),
 				stackName,
 			)
 			if err != nil {
@@ -389,7 +389,7 @@ func ProcessStacks(
 					"Are the component and stack names correct? Did you forget an import?%v\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
-					cliConfig.Stacks.NamePattern,
+					GetStackNamePattern(cliConfig),
 					cliConfigYaml)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
@@ -398,7 +398,7 @@ func ProcessStacks(
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
-				cliConfig.Stacks.NamePattern)
+				GetStackNamePattern(cliConfig))
 			u.LogErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
@@ -447,7 +447,7 @@ func ProcessStacks(
 	// workspace
 	workspace, err := BuildTerraformWorkspace(
 		configAndStacksInfo.Stack,
-		cliConfig.Stacks.NamePattern,
+		GetStackNamePattern(cliConfig),
 		configAndStacksInfo.ComponentMetadataSection,
 		configAndStacksInfo.Context,
 	)

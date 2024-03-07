@@ -158,3 +158,8 @@ func BuildComponentPath(
 
 	return componentPath
 }
+
+// GetStackNamePattern returns stack name pattern
+func GetStackNamePattern(cliConfig schema.CliConfiguration) string {
+	return cliConfig.Stacks.NamePattern
+}

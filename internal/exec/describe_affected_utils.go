@@ -1122,7 +1122,7 @@ func addAffectedSpaceliftAdminStack(
 		return affectedList, nil
 	}
 
-	adminStackContextPrefix, err := cfg.GetContextPrefix(currentStackName, adminStackContext, cliConfig.Stacks.NamePattern, currentStackName)
+	adminStackContextPrefix, err := cfg.GetContextPrefix(currentStackName, adminStackContext, GetStackNamePattern(cliConfig), currentStackName)
 	if err != nil {
 		return nil, err
 	}
@@ -1149,7 +1149,7 @@ func addAffectedSpaceliftAdminStack(
 								return nil, err
 							}
 
-							contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
+							contextPrefix, err := cfg.GetContextPrefix(stackName, context, GetStackNamePattern(cliConfig), stackName)
 							if err != nil {
 								return nil, err
 							}

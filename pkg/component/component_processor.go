@@ -65,13 +65,13 @@ func ProcessComponentFromContext(
 		return nil, err
 	}
 
-	if len(cliConfig.Stacks.NamePattern) < 1 {
+	if len(e.GetStackNamePattern(cliConfig)) < 1 {
 		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		u.LogError(er)
 		return nil, er
 	}
 
-	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, cliConfig.Stacks.NamePattern)
+	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, e.GetStackNamePattern(cliConfig))
 	if err != nil {
 		u.LogError(err)
 		return nil, err
