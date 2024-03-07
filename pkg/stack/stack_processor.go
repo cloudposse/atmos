@@ -3,19 +3,15 @@ package stack
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
+	"github.com/santhosh-tekuri/jsonschema/v5"
+	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-	"text/template"
-	"text/template/parse"
-
-	"github.com/Masterminds/sprig/v3"
-	"github.com/pkg/errors"
-	"github.com/santhosh-tekuri/jsonschema/v5"
-	"gopkg.in/yaml.v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
@@ -370,23 +366,13 @@ func ProcessYAMLConfigFile(
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
 				// The import was not found -> check if the import is a Go template; if not, return the error
-				t, err2 := template.New(imp).Funcs(sprig.FuncMap()).Parse(imp)
+				isGolangTemplate, err2 := u.IsGolangTemplate(imp)
 				if err2 != nil {
 					return nil, nil, nil, err2
 				}
 
-				isGoTemplate := false
-
-				// Iterate over all nodes in the template and check if any of them is of type `NodeAction` (field evaluation)
-				for _, node := range t.Root.Nodes {
-					if node.Type() == parse.NodeAction {
-						isGoTemplate = true
-						break
-					}
-				}
-
 				// If the import is not a Go template and SkipIfMissing is false, return the error
-				if !isGoTemplate && !importStruct.SkipIfMissing {
+				if !isGolangTemplate && !importStruct.SkipIfMissing {
 					if err != nil {
 						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
 							imp,

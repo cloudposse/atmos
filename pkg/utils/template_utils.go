@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"text/template"
+	"text/template/parse"
 
 	"github.com/Masterminds/sprig/v3"
 )
@@ -34,4 +35,24 @@ func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingT
 	}
 
 	return res.String(), nil
+}
+
+// IsGolangTemplate checks if the provided string is a Go template
+func IsGolangTemplate(str string) (bool, error) {
+	t, err := template.New(str).Funcs(sprig.FuncMap()).Parse(str)
+	if err != nil {
+		return false, err
+	}
+
+	isGoTemplate := false
+
+	// Iterate over all nodes in the template and check if any of them is of type `NodeAction` (field evaluation)
+	for _, node := range t.Root.Nodes {
+		if node.Type() == parse.NodeAction {
+			isGoTemplate = true
+			break
+		}
+	}
+
+	return isGoTemplate, nil
 }
