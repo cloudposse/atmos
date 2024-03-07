@@ -180,6 +180,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.Stacks.NamePattern = stacksNamePattern
 	}
 
+	stacksNameTemplate := os.Getenv("ATMOS_STACKS_NAME_TEMPLATE")
+	if len(stacksNameTemplate) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_TEMPLATE=%s", stacksNameTemplate))
+		cliConfig.Stacks.NameTemplate = stacksNameTemplate
+	}
+
 	componentsTerraformBasePath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
 	if len(componentsTerraformBasePath) > 0 {
 		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=%s", componentsTerraformBasePath))
