@@ -545,19 +545,28 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
 	// Process `Go` templates in sections
-	providersSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentProvidersSection)
+	componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-	providersSectionProcessed, err := u.ProcessTmpl("providers", providersSectionStr, configAndStacksInfo.ComponentSection, true)
+	componentSectionProcessed, err := u.ProcessTmpl("providers", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-	providersSectionConverted, err := c.YAMLToMapOfInterfaces(providersSectionProcessed)
-	configAndStacksInfo.ComponentProvidersSection = providersSectionConverted
+	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
+	configAndStacksInfo.ComponentProvidersSection = configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any)
+	configAndStacksInfo.ComponentVarsSection = configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[any]any)
+	configAndStacksInfo.ComponentSettingsSection = configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[any]any)
+	configAndStacksInfo.ComponentEnvSection = configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[any]any)
+	configAndStacksInfo.ComponentOverridesSection = configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[any]any)
+	configAndStacksInfo.ComponentMetadataSection = configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[any]any)
+	configAndStacksInfo.ComponentBackendSection = configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[any]any)
+	configAndStacksInfo.ComponentBackendType = configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string)
 
 	return configAndStacksInfo, nil
 }

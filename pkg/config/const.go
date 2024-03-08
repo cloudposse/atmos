@@ -39,9 +39,15 @@ const (
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor.yaml"
 
-	ImportSectionName    = "import"
-	OverridesSectionName = "overrides"
-	ProvidersSectionName = "providers"
+	ImportSectionName      = "import"
+	OverridesSectionName   = "overrides"
+	ProvidersSectionName   = "providers"
+	VarsSectionName        = "vars"
+	SettingsSectionName    = "settings"
+	EnvSectionName         = "env"
+	BackendSectionName     = "backend"
+	BackendTypeSectionName = "backend_type"
+	MetadataSectionName    = "metadata"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
