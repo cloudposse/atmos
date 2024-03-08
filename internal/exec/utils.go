@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -542,6 +543,21 @@ func ProcessStacks(
 	}
 	configAndStacksInfo.ComponentSection["deps"] = componentDeps
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
+
+	// Process `Go` templates in sections
+	providersSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentProvidersSection)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	providersSectionProcessed, err := u.ProcessTmpl("providers", providersSectionStr, configAndStacksInfo.ComponentSection, true)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	providersSectionConverted, err := c.YAMLToMapOfInterfaces(providersSectionProcessed)
+	configAndStacksInfo.ComponentProvidersSection = providersSectionConverted
+	if err != nil {
+		return configAndStacksInfo, err
+	}
 
 	return configAndStacksInfo, nil
 }
