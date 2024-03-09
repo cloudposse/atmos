@@ -410,7 +410,7 @@ func ProcessYAMLConfigFile(
 				c.MapsOfInterfacesToMapsOfStrings(mergedContext),
 				ignoreMissingFiles,
 				importStruct.SkipTemplatesProcessing,
-				importStruct.IgnoreMissingTemplateValues,
+				true, // importStruct.IgnoreMissingTemplateValues,
 				importStruct.SkipIfMissing,
 				finalTerraformOverrides,
 				finalHelmfileOverrides,
