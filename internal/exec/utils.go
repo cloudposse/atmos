@@ -49,8 +49,8 @@ var (
 	}
 )
 
-// FindComponentConfig finds component config sections
-func FindComponentConfig(
+// ProcessComponentConfig finds component config sections
+func ProcessComponentConfig(
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
@@ -298,7 +298,7 @@ func ProcessStacks(
 
 	// Check and process stacks
 	if cliConfig.StackType == "Directory" {
-		err = FindComponentConfig(
+		err = ProcessComponentConfig(
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
@@ -331,8 +331,8 @@ func ProcessStacks(
 		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
-			// Check if we've found the component config
-			err = FindComponentConfig(
+			// Check if we've found the component in the stack
+			err = ProcessComponentConfig(
 				&configAndStacksInfo,
 				stackName,
 				stacksMap,
@@ -368,7 +368,7 @@ func ProcessStacks(
 
 				u.LogDebug(
 					cliConfig,
-					fmt.Sprintf("Found config for the component '%s' and stack '%s' in the stack manifest '%s'",
+					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
 						stackName,
