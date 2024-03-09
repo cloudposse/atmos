@@ -87,16 +87,16 @@ func FindComponentConfig(
 		return fmt.Errorf("could not find the stack '%s'", stack)
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
-		return fmt.Errorf("'components' section is missing in the stack file '%s'", stack)
+		return fmt.Errorf("'components' section is missing in the stack manifest '%s'", stack)
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
-		return fmt.Errorf("'components/%s' section is missing in the stack file '%s'", componentType, stack)
+		return fmt.Errorf("'components.%s' section is missing in the stack manifest '%s'", componentType, stack)
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		return fmt.Errorf("no config found for the component '%s' in the stack file '%s'", component, stack)
+		return fmt.Errorf("no config found for the component '%s' in the stack manifest '%s'", component, stack)
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
-		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
+		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack manifest '%s'", component, stack)
 	}
 	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
 		componentProvidersSection = map[any]any{}
@@ -368,7 +368,7 @@ func ProcessStacks(
 
 				u.LogDebug(
 					cliConfig,
-					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack config file '%s'",
+					fmt.Sprintf("Found config for the component '%s' and stack '%s' in the stack manifest '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
 						stackName,
