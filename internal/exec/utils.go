@@ -549,10 +549,12 @@ func ProcessStacks(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-	componentSectionProcessed, err := u.ProcessTmpl("providers", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+
+	componentSectionProcessed, err := u.ProcessTmpl("all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
 	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
 	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
 	if err != nil {
