@@ -49,7 +49,7 @@ var (
 	}
 )
 
-// ProcessComponentConfig finds component config sections
+// ProcessComponentConfig processes component config sections
 func ProcessComponentConfig(
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
