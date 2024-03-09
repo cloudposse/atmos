@@ -559,14 +559,37 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	configAndStacksInfo.ComponentProvidersSection = configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any)
-	configAndStacksInfo.ComponentVarsSection = configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[any]any)
-	configAndStacksInfo.ComponentSettingsSection = configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[any]any)
-	configAndStacksInfo.ComponentEnvSection = configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[any]any)
-	configAndStacksInfo.ComponentOverridesSection = configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[any]any)
-	configAndStacksInfo.ComponentMetadataSection = configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[any]any)
-	configAndStacksInfo.ComponentBackendSection = configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[any]any)
-	configAndStacksInfo.ComponentBackendType = configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string)
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentProvidersSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentVarsSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentSettingsSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentEnvSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentOverridesSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentMetadataSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentBackendSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
+		configAndStacksInfo.ComponentBackendType = i
+	}
 
 	return configAndStacksInfo, nil
 }
