@@ -101,10 +101,10 @@ func FindComponentConfig(
 	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
 		componentProvidersSection = map[any]any{}
 	}
-	if componentBackendSection, ok = componentSection["backend"].(map[any]any); !ok {
+	if componentBackendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
 		componentBackendSection = nil
 	}
-	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
+	if componentBackendType, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
 		componentBackendType = ""
 	}
 	if componentImportsSection, ok = stackSection["imports"].([]string); !ok {
@@ -113,10 +113,10 @@ func FindComponentConfig(
 	if command, ok = componentSection["command"].(string); !ok {
 		command = ""
 	}
-	if componentEnvSection, ok = componentSection["env"].(map[any]any); !ok {
+	if componentEnvSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
 		componentEnvSection = map[any]any{}
 	}
-	if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
 		componentSettingsSection = map[any]any{}
 	}
 	if componentOverridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
