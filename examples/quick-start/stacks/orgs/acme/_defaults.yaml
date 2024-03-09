@@ -13,3 +13,9 @@ vars:
 #      key: "terraform.tfstate"
 #      region: "your-aws-region"
 #      role_arn: "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
+
+terraform:
+  vars:
+    tags:
+      atmos_component: "{{ .atmos_component }}"
+      atmos_stack: "{{ .atmos_stack }}"
