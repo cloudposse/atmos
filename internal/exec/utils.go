@@ -345,18 +345,29 @@ func ProcessStacks(
 
 			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
-			// Process context
-			configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+			if cliConfig.Stacks.NameTemplate != "" {
+				nameTemplateProcessed, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				if err2 != nil {
+					return configAndStacksInfo, err2
+				}
 
-			configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
-				configAndStacksInfo.Context,
-				GetStackNamePattern(cliConfig),
-				stackName,
-			)
-			if err != nil {
-				continue
+				configAndStacksInfo.ContextPrefix = nameTemplateProcessed
+			} else if cliConfig.Stacks.NamePattern != "" {
+				// Process context
+				configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+				configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+				configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
+				configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+					configAndStacksInfo.Context,
+					GetStackNamePattern(cliConfig),
+					stackName,
+				)
+				if err != nil {
+					continue
+				}
+			} else {
+				return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config file")
 			}
 
 			// Check if we've found the stack
@@ -556,6 +567,10 @@ func ProcessStacks(
 	}
 
 	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
 	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
 	if err != nil {
 		return configAndStacksInfo, err
