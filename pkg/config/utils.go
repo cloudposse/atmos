@@ -445,7 +445,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 		if part == "{namespace}" {
 			if len(context.Namespace) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'namespace`, but the stack '%s' does not have a namespace defined in the stack file '%s'",
+					fmt.Errorf("the stack name pattern '%s' specifies 'namespace', but the stack '%s' does not have a namespace defined in the stack file '%s'",
 						stackNamePattern,
 						stack,
 						stackFile,
@@ -459,7 +459,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'tenant`, but the stack '%s' does not have a tenant defined in the stack file '%s'",
+					fmt.Errorf("the stack name pattern '%s' specifies 'tenant', but the stack '%s' does not have a tenant defined in the stack file '%s'",
 						stackNamePattern,
 						stack,
 						stackFile,
@@ -473,7 +473,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 		} else if part == "{environment}" {
 			if len(context.Environment) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'environment`, but the stack '%s' does not have an environment defined in the stack file '%s'",
+					fmt.Errorf("the stack name pattern '%s' specifies 'environment', but the stack '%s' does not have an environment defined in the stack file '%s'",
 						stackNamePattern,
 						stack,
 						stackFile,
@@ -487,7 +487,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 		} else if part == "{stage}" {
 			if len(context.Stage) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'stage`, but the stack '%s' does not have a stage defined in the stack file '%s'",
+					fmt.Errorf("the stack name pattern '%s' specifies 'stage', but the stack '%s' does not have a stage defined in the stack file '%s'",
 						stackNamePattern,
 						stack,
 						stackFile,
