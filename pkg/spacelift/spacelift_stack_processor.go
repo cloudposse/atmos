@@ -366,7 +366,11 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Spacelift stack name
-					spaceliftStackName, spaceliftStackNamePattern := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+					spaceliftStackName, spaceliftStackNamePattern, err := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+					if err != nil {
+						u.LogError(err)
+						return nil, err
+					}
 
 					// Add Spacelift stack config to the final map
 					spaceliftStackNameKey := strings.Replace(spaceliftStackName, "/", "-", -1)

@@ -6,19 +6,18 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
-func BuildSpaceliftStackName(spaceliftSettings map[any]any, context schema.Context, contextPrefix string) (string, string) {
-	if spaceliftStackNameTemplate, ok := spaceliftSettings["stack_name_template"].(string); ok {
-		return cfg.ReplaceContextTokens(context, spaceliftStackNameTemplate), spaceliftStackNameTemplate
-	} else if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
-		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
+func BuildSpaceliftStackName(spaceliftSettings map[any]any, context schema.Context, contextPrefix string) (string, string, error) {
+	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
+		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
-		return spaceliftStackName, contextPrefix
+		return spaceliftStackName, contextPrefix, nil
 	} else {
 		defaultSpaceliftStackNamePattern := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
-		return strings.Replace(defaultSpaceliftStackNamePattern, "/", "-", -1), contextPrefix
+		return strings.Replace(defaultSpaceliftStackNamePattern, "/", "-", -1), contextPrefix, nil
 	}
 }
 
@@ -68,7 +67,12 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 					}
 
 					context.Component = component
-					spaceliftStackName, _ := BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+
+					spaceliftStackName, _, err := BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+					if err != nil {
+						return nil, err
+					}
+
 					allStackNames = append(allStackNames, strings.Replace(spaceliftStackName, "/", "-", -1))
 				}
 			}
@@ -86,6 +90,8 @@ func BuildSpaceliftStackNameFromComponentConfig(
 
 	var spaceliftStackName string
 	var spaceliftSettingsSection map[any]any
+	var contextPrefix string
+	var err error
 
 	if i, ok2 := configAndStacksInfo.ComponentSettingsSection["spacelift"]; ok2 {
 		spaceliftSettingsSection = i.(map[any]any)
@@ -96,12 +102,22 @@ func BuildSpaceliftStackNameFromComponentConfig(
 		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
 
-		contextPrefix, err := cfg.GetContextPrefix(configAndStacksInfo.Stack, context, GetStackNamePattern(cliConfig), configAndStacksInfo.Stack)
+		if cliConfig.Stacks.NameTemplate != "" {
+			contextPrefix, err = u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, context, GetStackNamePattern(cliConfig), configAndStacksInfo.Stack)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		spaceliftStackName, _, err = BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
 		if err != nil {
 			return "", err
 		}
-
-		spaceliftStackName, _ = BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
 	}
 
 	return spaceliftStackName, nil
