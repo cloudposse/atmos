@@ -396,21 +396,20 @@ func ProcessStacks(
 			}
 
 			return configAndStacksInfo,
-				fmt.Errorf("\nSearched all stack YAML files, but could not find config for the component '%s' in the stack '%s'.\n"+
-					"Check that all variables in the stack name pattern '%s' are correctly defined in the stack config files.\n"+
+				fmt.Errorf("\nCould not find the component '%s' in the stack '%s'.\n"+
+					"Check that all the context variables are correctly defined in the stack manifests.\n"+
 					"Are the component and stack names correct? Did you forget an import?%v\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
-					GetStackNamePattern(cliConfig),
 					cliConfigYaml)
 		} else if foundStackCount > 1 {
-			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
-				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
+			err = fmt.Errorf("\nFound duplicate config for the component '%s' in the stack '%s' in the manifests: %v.\n"+
+				"Check that all the context variables are correctly defined in the manifests and not duplicated.\n"+
 				"Check that all imports are valid.",
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
-				GetStackNamePattern(cliConfig))
+			)
 			u.LogErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
