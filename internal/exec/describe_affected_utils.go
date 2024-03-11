@@ -858,14 +858,14 @@ func appendToAffected(
 		}
 
 		// Affected Spacelift stack
-		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
-			cliConfig,
-			componentName,
-			stackName,
-			settingsSection,
-			varSection,
-		)
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg:         componentName,
+			Stack:                    stackName,
+			ComponentVarsSection:     varSection,
+			ComponentSettingsSection: settingsSection,
+		}
 
+		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
 		if err != nil {
 			return nil, err
 		}

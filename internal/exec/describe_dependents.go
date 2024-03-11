@@ -232,14 +232,14 @@ func ExecuteDescribeDependents(
 					if stackComponentType == "terraform" {
 
 						// Spacelift stack
-						spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
-							cliConfig,
-							stackComponentName,
-							stackName,
-							stackComponentSettingsSection,
-							stackComponentVarsSection,
-						)
+						configAndStacksInfo := schema.ConfigAndStacksInfo{
+							ComponentFromArg:         stackComponentName,
+							Stack:                    stackName,
+							ComponentVarsSection:     stackComponentVarsSection,
+							ComponentSettingsSection: stackComponentSettingsSection,
+						}
 
+						spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
 						if err != nil {
 							return nil, err
 						}

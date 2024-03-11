@@ -486,7 +486,7 @@ func ProcessStacks(
 	}
 
 	// Spacelift stack
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig2(cliConfig, configAndStacksInfo)
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
