@@ -486,34 +486,19 @@ func ProcessStacks(
 	}
 
 	// Spacelift stack
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
-		cliConfig,
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.Stack,
-		configAndStacksInfo.ComponentSettingsSection,
-		configAndStacksInfo.ComponentVarsSection,
-	)
-
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig2(cliConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-
 	if spaceliftStackName != "" {
 		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
 	}
 
 	// Atlantis project
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
-		cliConfig,
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.ComponentSettingsSection,
-		configAndStacksInfo.ComponentVarsSection,
-	)
-
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig2(cliConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-
 	if atlantisProjectName != "" {
 		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}

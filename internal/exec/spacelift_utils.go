@@ -107,3 +107,32 @@ func BuildSpaceliftStackNameFromComponentConfig(
 
 	return spaceliftStackName, nil
 }
+
+// BuildSpaceliftStackNameFromComponentConfig2 builds Spacelift stack name from the component config
+func BuildSpaceliftStackNameFromComponentConfig2(
+	cliConfig schema.CliConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
+) (string, error) {
+
+	var spaceliftStackName string
+	var spaceliftSettingsSection map[any]any
+
+	if i, ok2 := configAndStacksInfo.ComponentSettingsSection["spacelift"]; ok2 {
+		spaceliftSettingsSection = i.(map[any]any)
+	}
+
+	context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+	context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
+
+	// Spacelift stack
+	if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
+		contextPrefix, err := cfg.GetContextPrefix(configAndStacksInfo.Stack, context, GetStackNamePattern(cliConfig), configAndStacksInfo.Stack)
+		if err != nil {
+			return "", err
+		}
+
+		spaceliftStackName, _ = BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)
+	}
+
+	return spaceliftStackName, nil
+}
