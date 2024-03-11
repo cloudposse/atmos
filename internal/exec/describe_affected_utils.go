@@ -862,6 +862,10 @@ func appendToAffected(
 			Stack:                    stackName,
 			ComponentVarsSection:     varSection,
 			ComponentSettingsSection: settingsSection,
+			ComponentSection: map[string]any{
+				"vars":     varSection,
+				"settings": settingsSection,
+			},
 		}
 
 		// Affected Spacelift stack

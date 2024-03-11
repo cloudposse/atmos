@@ -6,8 +6,11 @@ terraform:
     tags:
       atmos_component: "{{ .atmos_component }}"
       atmos_stack: "{{ .atmos_stack }}"
+      atmos_manifest: "{{ .atmos_stack_file }}"
       spacelift_stack: "{{ .spacelift_stack }}"
       atlantis_project: "{{ .atlantis_project }}"
+      region: "{{ .vars.region }}"
+      terraform_workspace: "{{ .workspace }}"
 
   backend_type: s3 # s3, remote, vault, static, azurerm, etc.
   backend:
@@ -63,11 +66,11 @@ terraform:
         atmos_stack: "{{ .atmos_stack }}"
 
 helmfile:
-  vars: {}
+  vars: { }
 
 components:
-  terraform: {}
-  helmfile: {}
+  terraform: { }
+  helmfile: { }
 
 settings:
   spacelift:

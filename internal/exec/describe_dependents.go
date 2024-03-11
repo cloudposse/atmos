@@ -237,6 +237,10 @@ func ExecuteDescribeDependents(
 							Stack:                    stackName,
 							ComponentVarsSection:     stackComponentVarsSection,
 							ComponentSettingsSection: stackComponentSettingsSection,
+							ComponentSection: map[string]any{
+								"vars":     stackComponentVarsSection,
+								"settings": stackComponentSettingsSection,
+							},
 						}
 
 						spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
