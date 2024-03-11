@@ -10,7 +10,9 @@ import (
 
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
 func BuildSpaceliftStackName(spaceliftSettings map[any]any, context schema.Context, contextPrefix string) (string, string) {
-	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
+	if spaceliftStackNameTemplate, ok := spaceliftSettings["stack_name_template"].(string); ok {
+		return cfg.ReplaceContextTokens(context, spaceliftStackNameTemplate), spaceliftStackNameTemplate
+	} else if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
 		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
 		return spaceliftStackName, contextPrefix
@@ -89,11 +91,11 @@ func BuildSpaceliftStackNameFromComponentConfig(
 		spaceliftSettingsSection = i.(map[any]any)
 	}
 
-	context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-	context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
-
 	// Spacelift stack
 	if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
+		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
+
 		contextPrefix, err := cfg.GetContextPrefix(configAndStacksInfo.Stack, context, GetStackNamePattern(cliConfig), configAndStacksInfo.Stack)
 		if err != nil {
 			return "", err
