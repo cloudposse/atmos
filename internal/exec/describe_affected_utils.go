@@ -869,21 +869,13 @@ func appendToAffected(
 		if err != nil {
 			return nil, err
 		}
-
 		affected.SpaceliftStack = spaceliftStackName
 
 		// Affected Atlantis project
-		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
-			cliConfig,
-			componentName,
-			settingsSection,
-			varSection,
-		)
-
+		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
 		if err != nil {
 			return nil, err
 		}
-
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {

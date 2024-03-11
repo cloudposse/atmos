@@ -243,21 +243,13 @@ func ExecuteDescribeDependents(
 						if err != nil {
 							return nil, err
 						}
-
 						dependent.SpaceliftStack = spaceliftStackName
 
 						// Atlantis project
-						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
-							cliConfig,
-							stackComponentName,
-							stackComponentSettingsSection,
-							stackComponentVarsSection,
-						)
-
+						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
 						if err != nil {
 							return nil, err
 						}
-
 						dependent.AtlantisProject = atlantisProjectName
 					}
 

@@ -495,7 +495,7 @@ func ProcessStacks(
 	}
 
 	// Atlantis project
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig2(cliConfig, configAndStacksInfo)
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
