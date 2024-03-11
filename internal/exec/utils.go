@@ -456,7 +456,7 @@ func ProcessStacks(
 	}
 
 	// Terraform workspace
-	workspace, err := BuildTerraformWorkspace2(cliConfig, configAndStacksInfo)
+	workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}

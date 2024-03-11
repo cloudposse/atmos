@@ -319,18 +319,22 @@ func ExecuteAtlantisGenerateRepoConfig(
 					return err
 				}
 
+				configAndStacksInfo := schema.ConfigAndStacksInfo{
+					ComponentFromArg:         componentName,
+					Stack:                    stackConfigFileName,
+					ComponentMetadataSection: metadataSection,
+					ComponentSettingsSection: settingsSection,
+					ComponentVarsSection:     varsSection,
+					Context:                  context,
+				}
+
 				// Calculate terraform workspace
 				// Base component is required to calculate terraform workspace for derived components
 				if terraformComponent != componentName {
 					context.BaseComponent = terraformComponent
 				}
 
-				workspace, err := BuildTerraformWorkspace(
-					stackConfigFileName,
-					GetStackNamePattern(cliConfig),
-					metadataSection,
-					context,
-				)
+				workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 				if err != nil {
 					return err
 				}

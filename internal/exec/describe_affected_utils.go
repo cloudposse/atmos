@@ -857,7 +857,6 @@ func appendToAffected(
 			settingsSection = i.(map[any]any)
 		}
 
-		// Affected Spacelift stack
 		configAndStacksInfo := schema.ConfigAndStacksInfo{
 			ComponentFromArg:         componentName,
 			Stack:                    stackName,
@@ -865,6 +864,7 @@ func appendToAffected(
 			ComponentSettingsSection: settingsSection,
 		}
 
+		// Affected Spacelift stack
 		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
 		if err != nil {
 			return nil, err

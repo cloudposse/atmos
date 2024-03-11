@@ -180,12 +180,15 @@ func ExecuteDescribeStacks(
 
 								// Terraform workspace
 								if len(sections) == 0 || u.SliceContainsString(sections, "workspace") {
-									workspace, err := BuildTerraformWorkspace(
-										stackName,
-										GetStackNamePattern(cliConfig),
-										metadataSection,
-										context,
-									)
+									configAndStacksInfo := schema.ConfigAndStacksInfo{
+										ComponentFromArg:         componentName,
+										Stack:                    stackName,
+										ComponentMetadataSection: metadataSection,
+										ComponentVarsSection:     varsSection,
+										Context:                  context,
+									}
+
+									workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 									if err != nil {
 										return nil, err
 									}
