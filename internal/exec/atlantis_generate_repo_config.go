@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -13,6 +12,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -360,7 +360,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						WhenModified: whenModified,
 					}
 
-					atlantisProjectName := BuildAtlantisProjectName(context, projectTemplate.Name)
+					atlantisProjectName := cfg.ReplaceContextTokens(context, projectTemplate.Name)
 
 					atlantisProject := schema.AtlantisProjectConfig{
 						Name:                      atlantisProjectName,

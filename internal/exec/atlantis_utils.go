@@ -10,11 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// BuildAtlantisProjectName builds an Atlantis project name from the provided context and project name pattern
-func BuildAtlantisProjectName(context schema.Context, projectNameTemplate string) string {
-	return cfg.ReplaceContextTokens(context, projectNameTemplate)
-}
-
 // BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from the component config
 func BuildAtlantisProjectNameFromComponentConfig(
 	cliConfig schema.CliConfiguration,
@@ -37,12 +32,11 @@ func BuildAtlantisProjectNameFromComponentConfig(
 			}
 		}
 
-		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
-
 		// If Atlantis project template is defined and has a name, replace tokens in the name and add the Atlantis project to the output
 		if !reflect.ValueOf(atlantisProjectTemplate).IsZero() && atlantisProjectTemplate.Name != "" {
-			atlantisProjectName = BuildAtlantisProjectName(context, atlantisProjectTemplate.Name)
+			context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+			context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
+			atlantisProjectName = cfg.ReplaceContextTokens(context, atlantisProjectTemplate.Name)
 		}
 	}
 
