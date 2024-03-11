@@ -285,9 +285,9 @@ func ProcessStacks(
 	if cliConfig.Logs.Level == u.LogLevelTrace {
 		var msg string
 		if cliConfig.StackType == "Directory" {
-			msg = "\nFound the config file for the provided stack:"
+			msg = "\nFound stack manifest:"
 		} else {
-			msg = "\nFound stack config files:"
+			msg = "\nFound stack manifests:"
 		}
 		u.LogTrace(cliConfig, msg)
 		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
@@ -346,17 +346,14 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			if cliConfig.Stacks.NameTemplate != "" {
-				nameTemplateProcessed, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
-					return configAndStacksInfo, err2
+					continue
 				}
-
-				configAndStacksInfo.ContextPrefix = nameTemplateProcessed
+				configAndStacksInfo.ContextPrefix = tmpl
 			} else if cliConfig.Stacks.NamePattern != "" {
 				// Process context
 				configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-				configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-				configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
 
 				configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 					configAndStacksInfo.Context,
@@ -367,8 +364,11 @@ func ProcessStacks(
 					continue
 				}
 			} else {
-				return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config file")
+				return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config")
 			}
+
+			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
 
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
@@ -455,13 +455,8 @@ func ProcessStacks(
 		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
 	}
 
-	// workspace
-	workspace, err := BuildTerraformWorkspace(
-		configAndStacksInfo.Stack,
-		GetStackNamePattern(cliConfig),
-		configAndStacksInfo.ComponentMetadataSection,
-		configAndStacksInfo.Context,
-	)
+	// Terraform workspace
+	workspace, err := BuildTerraformWorkspace2(cliConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}

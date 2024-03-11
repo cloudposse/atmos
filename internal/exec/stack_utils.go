@@ -47,6 +47,50 @@ func BuildTerraformWorkspace(
 	return strings.Replace(workspace, "/", "-", -1), nil
 }
 
+// BuildTerraformWorkspace2 builds Terraform workspace
+func BuildTerraformWorkspace2(cliConfig schema.CliConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+	var contextPrefix string
+	var err error
+	var tmpl string
+
+	if cliConfig.Stacks.NameTemplate != "" {
+		tmpl, err = u.ProcessTmpl("terraform-workspace-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		if err != nil {
+			return "", err
+		}
+		contextPrefix = tmpl
+	} else if cliConfig.Stacks.NamePattern != "" {
+		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, cliConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		contextPrefix = strings.Replace(configAndStacksInfo.Stack, "/", "-", -1)
+	}
+
+	var workspace string
+	componentMetadata := configAndStacksInfo.ComponentMetadataSection
+
+	// Terraform workspace can be overridden per component using `metadata.terraform_workspace_pattern` or `metadata.terraform_workspace_template` or `metadata.terraform_workspace`
+	if terraformWorkspaceTemplate, terraformWorkspaceTemplateExist := componentMetadata["terraform_workspace_template"].(string); terraformWorkspaceTemplateExist {
+		tmpl, err = u.ProcessTmpl("terraform_workspace_template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
+		if err != nil {
+			return "", err
+		}
+		workspace = tmpl
+	} else if terraformWorkspacePattern, terraformWorkspacePatternExist := componentMetadata["terraform_workspace_pattern"].(string); terraformWorkspacePatternExist {
+		workspace = cfg.ReplaceContextTokens(configAndStacksInfo.Context, terraformWorkspacePattern)
+	} else if terraformWorkspace, terraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); terraformWorkspaceExist {
+		workspace = terraformWorkspace
+	} else if configAndStacksInfo.Context.BaseComponent == "" {
+		workspace = contextPrefix
+	} else {
+		workspace = fmt.Sprintf("%s-%s", contextPrefix, configAndStacksInfo.Context.Component)
+	}
+
+	return strings.Replace(workspace, "/", "-", -1), nil
+}
+
 // ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether the component is real or abstract
 func ProcessComponentMetadata(
 	component string,
