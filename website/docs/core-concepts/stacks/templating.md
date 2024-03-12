@@ -131,4 +131,4 @@ terraform:
       provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'
 ```
 
-the tags will be automatically added to all the resources in the infrastructure.
+the tags will be automatically added to all the resources provisioned in the infrastructure.
