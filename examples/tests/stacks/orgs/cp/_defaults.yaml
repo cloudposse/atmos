@@ -61,7 +61,6 @@ terraform:
         tenant: "{{ .vars.tenant }}"
         environment: "{{ .vars.environment }}"
         stage: "{{ .vars.stage }}"
-        component: "{{ .component }}"
         atmos_component: "{{ .atmos_component }}"
         atmos_stack: "{{ .atmos_stack }}"
 

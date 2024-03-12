@@ -202,6 +202,10 @@ func ExecuteDescribeStacks(
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 
+						if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
+							configAndStacksInfo.ComponentSection["component"] = componentName
+						}
+
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
 							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
@@ -361,6 +365,10 @@ func ExecuteDescribeStacks(
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+
+						if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
+							configAndStacksInfo.ComponentSection["component"] = componentName
+						}
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
