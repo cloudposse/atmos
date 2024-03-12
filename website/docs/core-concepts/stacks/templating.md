@@ -1,8 +1,8 @@
 ---
-title: Stack Mixins
-sidebar_position: 6
-sidebar_label: Mixins
-id: mixins
+title: Stack Templating
+sidebar_position: 7
+sidebar_label: Templating
+id: templating
 ---
 
 Mixins are reusable snippets of configurations (like regions, tags, etc) included in stack configurations to avoid repetition and enhance modularity. 
@@ -17,7 +17,7 @@ Mixins are treated the same as all other imports in Atmos, with no special handl
 
 ## Use-cases
 
-Here are some use-cases for when to use mixins.
+Here are some use-cases for when to Mixins.
 
 ### Mixins by Region
 
@@ -75,8 +75,6 @@ terraform:
     rds-cluster:
     # ...
 ```
-
-<br/>
 
 :::tip Use Mixins for Naming Conventions
 This simple example highlights a simple fix for one of the most common issues in enterprise organizations: naming inconsistency.

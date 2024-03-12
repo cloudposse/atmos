@@ -1,6 +1,6 @@
 ---
 title: Stack Validation
-sidebar_position: 4
+sidebar_position: 2
 sidebar_label: Validation
 description: Validate all Stack configurations and YAML syntax.
 id: validation
