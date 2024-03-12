@@ -61,7 +61,16 @@ stacks:
     - "orgs/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: '{tenant}-{environment}-{stage}'
+  # To define Atmos stack naming convention, use either `name_pattern` or `name_template`.
+  # `name_template` has higher priority (if `name_template` is specified, `name_pattern` will be ignored).
+  # `name_pattern` uses the predefined context tokens {namespace}, {tenant}, {environment}, {stage}.
+  # `name_pattern` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  name_pattern: "{tenant}-{environment}-{stage}"
+  # `name_template` is a Golang template.
+  # For the template tokens, and you can use any Atmos sections and attributes that the Atmos command
+  # `atmos describe component <component> -s <stack>` generates (refer to https://atmos.tools/cli/commands/describe/component).
+  # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
+  # name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 workflows:
   base_path: stacks/workflows
 logs:
@@ -159,7 +168,7 @@ components:
 
 ## Stacks
 
-Define the stack name pattern and specify where to find stacks.
+Define the stack name pattern or template and specify where to find stacks.
 
 ```yaml
 stacks:
@@ -177,8 +186,16 @@ stacks:
     # Tell Atmos that all `_defaults.yaml` files are not top-level stack manifests
     - "**/_defaults.yaml"
 
-  # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  # To define Atmos stack naming convention, use either `name_pattern` or `name_template`.
+  # `name_template` has higher priority (if `name_template` is specified, `name_pattern` will be ignored).
+  # `name_pattern` uses the predefined context tokens {namespace}, {tenant}, {environment}, {stage}.
+  # `name_pattern` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
   name_pattern: "{tenant}-{environment}-{stage}"
+  # `name_template` is a Golang template.
+  # For the template tokens, and you can use any Atmos sections and attributes that the Atmos command
+  # `atmos describe component <component> -s <stack>` generates (refer to https://atmos.tools/cli/commands/describe/component).
+  # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
+  # name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 ```
 
 - `stacks.base_path` specifies the path to the folder where **all** Atmos stack config files (stack manifests) are defined.
@@ -207,7 +224,7 @@ stacks:
 <br/>
 
 - `stacks.name_pattern` configures the name pattern for the top-level Atmos stacks using the context variables `namespace`, `tenant`, `environment`
-  and `stage` as the template tokens. Depending on the structure of your organization, OUs, accounts and regions, set `stacks.name_pattern` to the
+  and `stage` as the tokens. Depending on the structure of your organization, OUs, accounts and regions, set `stacks.name_pattern` to the
   following:
 
   - `name_pattern: {stage}` - if you use just one region and a few accounts (stages) in just one organization and one OU. In this case, the
@@ -234,6 +251,49 @@ stacks:
     like `atmos terraform apply <component> --stack org1-plat-ue2-dev`, `atmos terraform apply <component> --stack org2-core-uw2-staging`
     and `atmos terraform apply <component> --stack org2-plat-ue1-prod`, where `org1` and `org2` are the organization names (defined as `namespace` in
     the corresponding `_defaults.yaml` config files for the organizations)
+
+- `stacks.name_template` serves the same purpose as `stacks.name_pattern` (defines the naming convention for the top-level Atmos stacks), but
+  provides much more functionality. Instead of using the predefined context variables as tokens, it uses [Go templates](https://pkg.go.dev/text/template).
+  [Sprig Functions](https://masterminds.github.io/sprig/) are supported as well
+
+  - For the `Go` template tokens, and you can use any Atmos sections (e.g. `vars`, `providers`, `settings`)
+    that the Atmos command [`atmos describe component <component> -s <stack>`](/cli/commands/describe/component) generates
+    for a component in a stack.
+
+  - `name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"` defines the same name pattern for the top-level
+    Atmos stacks as `name_pattern: "{tenant}-{environment}-{stage}"` does
+
+  - Since `stacks.name_template` allows using any variables form the `vars` section (and other sections), you can define
+    your own naming convention for your organization or for different clouds (AWS, Azure, GCP). For example, in the
+    corresponding `_defaults.yaml` stack manifests, you can use the following variables:
+
+    - `org` instead of `namespace`
+    - `division` instead of `tenant`
+    - `region` instead of `environment`
+    - `account` instead of `stage`
+
+    Then define the following `stacks.name_template` in `atmos.yaml`:
+
+    ```yaml title="atmos.yaml"
+    stacks:
+      name_template: "{{.vars.division}}-{{.vars.account}}-{{.vars.region}}"
+    ```
+
+    You will be able to execute all Atmos commands using the newly defined naming convention:
+
+    ```shell
+    atmos terraform plan <component> -s <division-account-region>
+    atmos terraform apply <component> -s <division-account-region>
+    atmos describe component <component> -s <division-account-region>
+    ```
+
+    :::note
+    Use either `stacks.name_pattern` or `stacks.name_template` to define the naming convention for the top-level Atmos stacks.
+
+    `stacks.name_template` has higher priority.
+
+    If `stacks.name_template` is specified, `stacks.name_pattern` will be ignored.
+    :::
 
 <br/>
 
@@ -655,6 +715,7 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack manifests                                                                                                                                                                            |
 | ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           | List of paths to not consider as top-level stacks                                                                                                                                                                            |
 | ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as Atmos stack names                                                                                                                                                                               |
+| ATMOS_STACKS_NAME_TEMPLATE                            | stacks.name_template                            | Stack name Golang template to use as Atmos stack names                                                                                                                                                                       |
 | ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                                                                                                                 |
 | ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                                                                                                           |
 | ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           | Base path to OPA policies for component validation                                                                                                                                                                           |

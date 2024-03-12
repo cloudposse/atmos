@@ -4,9 +4,3 @@ vars:
 settings:
   config:
     is_prod: false
-
-terraform:
-  providers:
-    context:
-      values:
-        stage: dev

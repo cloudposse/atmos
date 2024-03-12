@@ -11,37 +11,44 @@ import (
 )
 
 // BuildTerraformWorkspace builds Terraform workspace
-func BuildTerraformWorkspace(
-	stack string,
-	stackNamePattern string,
-	componentMetadata map[any]any,
-	context schema.Context,
-) (string, error) {
-
+func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	var contextPrefix string
 	var err error
+	var tmpl string
 
-	if stackNamePattern != "" {
-		contextPrefix, err = cfg.GetContextPrefix(stack, context, stackNamePattern, stack)
+	if cliConfig.Stacks.NameTemplate != "" {
+		tmpl, err = u.ProcessTmpl("terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		if err != nil {
+			return "", err
+		}
+		contextPrefix = tmpl
+	} else if cliConfig.Stacks.NamePattern != "" {
+		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, cliConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
 		if err != nil {
 			return "", err
 		}
 	} else {
-		contextPrefix = strings.Replace(stack, "/", "-", -1)
+		contextPrefix = strings.Replace(configAndStacksInfo.Stack, "/", "-", -1)
 	}
 
 	var workspace string
+	componentMetadata := configAndStacksInfo.ComponentMetadataSection
 
-	if terraformWorkspacePattern, terraformWorkspacePatternExist := componentMetadata["terraform_workspace_pattern"].(string); terraformWorkspacePatternExist {
-		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace_pattern`
-		workspace = cfg.ReplaceContextTokens(context, terraformWorkspacePattern)
+	// Terraform workspace can be overridden per component using `metadata.terraform_workspace_pattern` or `metadata.terraform_workspace_template` or `metadata.terraform_workspace`
+	if terraformWorkspaceTemplate, terraformWorkspaceTemplateExist := componentMetadata["terraform_workspace_template"].(string); terraformWorkspaceTemplateExist {
+		tmpl, err = u.ProcessTmpl("terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
+		if err != nil {
+			return "", err
+		}
+		workspace = tmpl
+	} else if terraformWorkspacePattern, terraformWorkspacePatternExist := componentMetadata["terraform_workspace_pattern"].(string); terraformWorkspacePatternExist {
+		workspace = cfg.ReplaceContextTokens(configAndStacksInfo.Context, terraformWorkspacePattern)
 	} else if terraformWorkspace, terraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); terraformWorkspaceExist {
-		// Terraform workspace can be overridden per component in YAML config `metadata.terraform_workspace`
 		workspace = terraformWorkspace
-	} else if context.BaseComponent == "" {
+	} else if configAndStacksInfo.Context.BaseComponent == "" {
 		workspace = contextPrefix
 	} else {
-		workspace = fmt.Sprintf("%s-%s", contextPrefix, context.Component)
+		workspace = fmt.Sprintf("%s-%s", contextPrefix, configAndStacksInfo.Context.Component)
 	}
 
 	return strings.Replace(workspace, "/", "-", -1), nil
@@ -157,4 +164,9 @@ func BuildComponentPath(
 	}
 
 	return componentPath
+}
+
+// GetStackNamePattern returns stack name pattern
+func GetStackNamePattern(cliConfig schema.CliConfiguration) string {
+	return cliConfig.Stacks.NamePattern
 }

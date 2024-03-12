@@ -14,9 +14,3 @@ settings:
       tenant: tenant1
       environment: ue2
       stage: prod
-
-terraform:
-  providers:
-    context:
-      values:
-        tenant: tenant1

@@ -12,9 +12,3 @@ components:
           - us-east-2a
           - us-east-2b
           - us-east-2c
-
-terraform:
-  providers:
-    context:
-      values:
-        environment: ue2

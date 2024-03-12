@@ -2,7 +2,15 @@ vars:
   namespace: cp
 
 terraform:
-  vars: {}
+  vars:
+    tags:
+      atmos_component: "{{ .atmos_component }}"
+      atmos_stack: "{{ .atmos_stack }}"
+      atmos_manifest: "{{ .atmos_stack_file }}"
+      spacelift_stack: "{{ .spacelift_stack }}"
+      atlantis_project: "{{ .atlantis_project }}"
+      region: "{{ .vars.region }}"
+      terraform_workspace: "{{ .workspace }}"
 
   backend_type: s3 # s3, remote, vault, static, azurerm, etc.
   backend:
@@ -49,14 +57,19 @@ terraform:
           min_length: 2
           max_length: 20
       values:
-        namespace: cp
+        namespace: "{{ .vars.namespace }}"
+        tenant: "{{ .vars.tenant }}"
+        environment: "{{ .vars.environment }}"
+        stage: "{{ .vars.stage }}"
+        atmos_component: "{{ .atmos_component }}"
+        atmos_stack: "{{ .atmos_stack }}"
 
 helmfile:
-  vars: {}
+  vars: { }
 
 components:
-  terraform: {}
-  helmfile: {}
+  terraform: { }
+  helmfile: { }
 
 settings:
   spacelift:

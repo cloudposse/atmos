@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -13,6 +12,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -314,9 +314,23 @@ func ExecuteAtlantisGenerateRepoConfig(
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, cliConfig.Stacks.NamePattern, stackConfigFileName)
+				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, GetStackNamePattern(cliConfig), stackConfigFileName)
 				if err != nil {
 					return err
+				}
+
+				configAndStacksInfo := schema.ConfigAndStacksInfo{
+					ComponentFromArg:         componentName,
+					Stack:                    stackConfigFileName,
+					ComponentMetadataSection: metadataSection,
+					ComponentSettingsSection: settingsSection,
+					ComponentVarsSection:     varsSection,
+					Context:                  context,
+					ComponentSection: map[string]any{
+						cfg.VarsSectionName:     varsSection,
+						cfg.SettingsSectionName: settingsSection,
+						cfg.MetadataSectionName: metadataSection,
+					},
 				}
 
 				// Calculate terraform workspace
@@ -325,12 +339,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 					context.BaseComponent = terraformComponent
 				}
 
-				workspace, err := BuildTerraformWorkspace(
-					stackConfigFileName,
-					cliConfig.Stacks.NamePattern,
-					metadataSection,
-					context,
-				)
+				workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 				if err != nil {
 					return err
 				}
@@ -360,7 +369,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						WhenModified: whenModified,
 					}
 
-					atlantisProjectName := BuildAtlantisProjectName(context, projectTemplate.Name)
+					atlantisProjectName := cfg.ReplaceContextTokens(context, projectTemplate.Name)
 
 					atlantisProject := schema.AtlantisProjectConfig{
 						Name:                      atlantisProjectName,

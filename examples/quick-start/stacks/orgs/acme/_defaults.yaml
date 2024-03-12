@@ -13,3 +13,15 @@ vars:
 #      key: "terraform.tfstate"
 #      region: "your-aws-region"
 #      role_arn: "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
+
+terraform:
+  vars:
+    tags:
+      atmos_component: "{{ .atmos_component }}"
+      atmos_stack: "{{ .atmos_stack }}"
+      atmos_manifest: "{{ .atmos_stack_file }}"
+      terraform_workspace: "{{ .workspace }}"
+      # `provisioned_at` uses the Sprig functions
+      # https://masterminds.github.io/sprig/date.html
+      # https://pkg.go.dev/time#pkg-constants
+      provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'

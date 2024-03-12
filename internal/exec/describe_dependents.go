@@ -232,32 +232,28 @@ func ExecuteDescribeDependents(
 					if stackComponentType == "terraform" {
 
 						// Spacelift stack
-						spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
-							cliConfig,
-							stackComponentName,
-							stackName,
-							stackComponentSettingsSection,
-							stackComponentVarsSection,
-						)
+						configAndStacksInfo := schema.ConfigAndStacksInfo{
+							ComponentFromArg:         stackComponentName,
+							Stack:                    stackName,
+							ComponentVarsSection:     stackComponentVarsSection,
+							ComponentSettingsSection: stackComponentSettingsSection,
+							ComponentSection: map[string]any{
+								cfg.VarsSectionName:     stackComponentVarsSection,
+								cfg.SettingsSectionName: stackComponentSettingsSection,
+							},
+						}
 
+						spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
 						if err != nil {
 							return nil, err
 						}
-
 						dependent.SpaceliftStack = spaceliftStackName
 
 						// Atlantis project
-						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
-							cliConfig,
-							stackComponentName,
-							stackComponentSettingsSection,
-							stackComponentVarsSection,
-						)
-
+						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
 						if err != nil {
 							return nil, err
 						}
-
 						dependent.AtlantisProject = atlantisProjectName
 					}
 
