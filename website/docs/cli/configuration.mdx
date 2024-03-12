@@ -61,7 +61,16 @@ stacks:
     - "orgs/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: '{tenant}-{environment}-{stage}'
+  # To define Atmos stack naming convention, use either `name_pattern` or `name_template`.
+  # `name_template` has higher priority (if `name_template` is specified, `name_pattern` will be ignored).
+  # `name_pattern` uses the predefined context tokens {namespace}, {tenant}, {environment}, {stage}.
+  # `name_pattern` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  name_pattern: "{tenant}-{environment}-{stage}"
+  # `name_template` is a Golang template.
+  # For the template tokens, and you can use any Atmos sections and attributes that the Atmos command
+  # `atmos describe component <component> -s <stack>` generates (refer to https://atmos.tools/cli/commands/describe/component).
+  # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
+  # name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 workflows:
   base_path: stacks/workflows
 logs:
