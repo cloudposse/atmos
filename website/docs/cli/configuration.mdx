@@ -168,7 +168,7 @@ components:
 
 ## Stacks
 
-Define the stack name pattern and specify where to find stacks.
+Define the stack name pattern or template and specify where to find stacks.
 
 ```yaml
 stacks:
@@ -186,8 +186,15 @@ stacks:
     # Tell Atmos that all `_defaults.yaml` files are not top-level stack manifests
     - "**/_defaults.yaml"
 
-  # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  # To define Atmos stack naming convention, use either `name_pattern` or `name_template`.
+  # `name_template` has higher priority (if `name_template` is specified, `name_pattern` will be ignored).
+  # `name_pattern` uses the predefined context tokens {namespace}, {tenant}, {environment}, {stage}.
+  # `name_pattern` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
   name_pattern: "{tenant}-{environment}-{stage}"
+  # `name_template` is a Golang template.
+  # For the template tokens, and you can use any Atmos sections and attributes that the Atmos command
+  # `atmos describe component <component> -s <stack>` generates (refer to https://atmos.tools/cli/commands/describe/component).
+  # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
 ```
 
 - `stacks.base_path` specifies the path to the folder where **all** Atmos stack config files (stack manifests) are defined.
@@ -216,7 +223,7 @@ stacks:
 <br/>
 
 - `stacks.name_pattern` configures the name pattern for the top-level Atmos stacks using the context variables `namespace`, `tenant`, `environment`
-  and `stage` as the template tokens. Depending on the structure of your organization, OUs, accounts and regions, set `stacks.name_pattern` to the
+  and `stage` as the tokens. Depending on the structure of your organization, OUs, accounts and regions, set `stacks.name_pattern` to the
   following:
 
   - `name_pattern: {stage}` - if you use just one region and a few accounts (stages) in just one organization and one OU. In this case, the
