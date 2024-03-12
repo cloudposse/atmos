@@ -109,6 +109,8 @@ func ExecuteDescribeStacks(
 	finalStacksMap := make(map[string]any)
 	var varsSection map[any]any
 	var metadataSection map[any]any
+	var settingsSection map[any]any
+	var envSection map[any]any
 	var stackName string
 	context := schema.Context{}
 
@@ -137,17 +139,53 @@ func ExecuteDescribeStacks(
 						}
 
 						// Component vars
-						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
+						if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
+							varsSection = map[any]any{}
+						}
+
+						// Component metadata
+						if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); !ok {
+							metadataSection = map[any]any{}
+						}
+
+						// Component settings
+						if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
+							settingsSection = map[any]any{}
+						}
+
+						// Component env
+						if envSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
+							envSection = map[any]any{}
+						}
+
+						configAndStacksInfo := schema.ConfigAndStacksInfo{
+							ComponentFromArg:         componentName,
+							Stack:                    stackName,
+							ComponentMetadataSection: metadataSection,
+							ComponentVarsSection:     varsSection,
+							ComponentSettingsSection: settingsSection,
+							ComponentEnvSection:      envSection,
+							Context:                  context,
+							ComponentSection: map[string]any{
+								cfg.VarsSectionName:     varsSection,
+								cfg.MetadataSectionName: metadataSection,
+								cfg.SettingsSectionName: settingsSection,
+								cfg.EnvSectionName:      envSection,
+							},
+						}
+
+						// Stack name
+						if cliConfig.Stacks.NameTemplate != "" {
+							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							if err != nil {
+								return nil, err
+							}
+						} else {
 							context = cfg.GetContextFromVars(varsSection)
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
-						}
-
-						// Component metadata
-						if metadataSection, ok = componentSection["metadata"].(map[any]any); !ok {
-							metadataSection = map[any]any{}
 						}
 
 						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
@@ -180,14 +218,6 @@ func ExecuteDescribeStacks(
 
 								// Terraform workspace
 								if len(sections) == 0 || u.SliceContainsString(sections, "workspace") {
-									configAndStacksInfo := schema.ConfigAndStacksInfo{
-										ComponentFromArg:         componentName,
-										Stack:                    stackName,
-										ComponentMetadataSection: metadataSection,
-										ComponentVarsSection:     varsSection,
-										Context:                  context,
-									}
-
 									workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 									if err != nil {
 										return nil, err
@@ -231,9 +261,50 @@ func ExecuteDescribeStacks(
 						}
 
 						// Component vars
-						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
-							ctx := cfg.GetContextFromVars(varsSection)
-							stackName, err = cfg.GetContextPrefix(stackFileName, ctx, GetStackNamePattern(cliConfig), stackFileName)
+						if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
+							varsSection = map[any]any{}
+						}
+
+						// Component metadata
+						if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); !ok {
+							metadataSection = map[any]any{}
+						}
+
+						// Component settings
+						if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
+							settingsSection = map[any]any{}
+						}
+
+						// Component env
+						if envSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
+							envSection = map[any]any{}
+						}
+
+						configAndStacksInfo := schema.ConfigAndStacksInfo{
+							ComponentFromArg:         componentName,
+							Stack:                    stackName,
+							ComponentMetadataSection: metadataSection,
+							ComponentVarsSection:     varsSection,
+							ComponentSettingsSection: settingsSection,
+							ComponentEnvSection:      envSection,
+							Context:                  context,
+							ComponentSection: map[string]any{
+								cfg.VarsSectionName:     varsSection,
+								cfg.MetadataSectionName: metadataSection,
+								cfg.SettingsSectionName: settingsSection,
+								cfg.EnvSectionName:      envSection,
+							},
+						}
+
+						// Stack name
+						if cliConfig.Stacks.NameTemplate != "" {
+							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							if err != nil {
+								return nil, err
+							}
+						} else {
+							context = cfg.GetContextFromVars(varsSection)
+							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}

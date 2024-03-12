@@ -326,6 +326,11 @@ func ExecuteAtlantisGenerateRepoConfig(
 					ComponentSettingsSection: settingsSection,
 					ComponentVarsSection:     varsSection,
 					Context:                  context,
+					ComponentSection: map[string]any{
+						cfg.VarsSectionName:     varsSection,
+						cfg.SettingsSectionName: settingsSection,
+						cfg.MetadataSectionName: metadataSection,
+					},
 				}
 
 				// Calculate terraform workspace

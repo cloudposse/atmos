@@ -238,8 +238,8 @@ func ExecuteDescribeDependents(
 							ComponentVarsSection:     stackComponentVarsSection,
 							ComponentSettingsSection: stackComponentSettingsSection,
 							ComponentSection: map[string]any{
-								"vars":     stackComponentVarsSection,
-								"settings": stackComponentSettingsSection,
+								cfg.VarsSectionName:     stackComponentVarsSection,
+								cfg.SettingsSectionName: stackComponentSettingsSection,
 							},
 						}
 
