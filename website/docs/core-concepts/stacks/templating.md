@@ -42,7 +42,7 @@ component:
         component: vpc
         backend_type: s3
         region: "us-east-2"
-        assume_role: "IAM Role ARN"
+        assume_role: "<role-arn>"
       backend_type: "{{ .settings.backend_type }}"
       metadata:
         component: "{{ .settings.component }}"
@@ -65,7 +65,7 @@ component:
           region: "{{ .vars.region }}"
           terraform_workspace: "{{ .workspace }}"
           assumed_role: "{{ .providers.aws.assume_role }}"
-          description: "'{{ .atmos_component }}' component provisioned in '{{ .atmos_stack }}' stack by assuming IAM role '{{ .providers.aws.assume_role }}'"
+          description: "{{ .atmos_component }} component provisioned in {{ .atmos_stack }} stack by assuming IAM role {{ .providers.aws.assume_role }}"
           # `provisioned_at` uses the Sprig functions
           # https://masterminds.github.io/sprig/date.html
           # https://pkg.go.dev/time#pkg-constants
@@ -84,14 +84,14 @@ settings:
   component: vpc
   backend_type: s3
   region: us-east-2
-  assume_role: IAM Role ARN
+  assume_role: <role-arn>
 backend_type: s3
 metadata:
   component: vpc
 providers:
   aws:
     region: us-east-2
-    assume_role: IAM Role ARN
+    assume_role: <role-arn>
 env:
   ENV1: e1
   ENV2: 1-2
@@ -100,11 +100,11 @@ vars:
   var2: 2
   var3: 3
   tags:
-    assumed_role: IAM Role ARN
+    assumed_role: <role-arn>
     atmos_component: vpc
     atmos_manifest: orgs/acme/plat/dev/us-east-2
     atmos_stack: plat-ue2-dev
-    description: vpc component provisioned in plat-ue2-dev stack
+    description: vpc component provisioned in plat-ue2-dev stack by assuming IAM role <role-arn>
     provisioned_at: "2024-03-12T16:18:24Z"
     region: us-east-2
     terraform_workspace: plat-ue2-dev
