@@ -125,9 +125,6 @@ terraform:
       atmos_stack: "{{ .atmos_stack }}"
       atmos_manifest: "{{ .atmos_stack_file }}"
       terraform_workspace: "{{ .workspace }}"
-      # `provisioned_at` uses the Sprig functions
-      # https://masterminds.github.io/sprig/date.html
-      # https://pkg.go.dev/time#pkg-constants
       provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'
 ```
 
