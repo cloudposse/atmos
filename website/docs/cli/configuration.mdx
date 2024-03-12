@@ -254,7 +254,7 @@ stacks:
 
 - `stacks.name_template` serves the same purpose as `stacks.name_pattern` (defines the naming convention for the top-level Atmos stacks), but
   provides much more functionality. Instead of using the predefined context variables as tokens, it uses [Go templates](https://pkg.go.dev/text/template).
-  [Sprig Function](https://masterminds.github.io/sprig/) are supported as well
+  [Sprig Functions](https://masterminds.github.io/sprig/) are supported as well
 
   - For the `Go` template tokens, and you can use any Atmos sections (e.g. `vars`, `providers`, `settings`)
     that the Atmos command [`atmos describe component <component> -s <stack>`](/cli/commands/describe/component) generates

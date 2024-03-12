@@ -1,99 +1,134 @@
 ---
-title: Stack Templating
+title: Stack Manifest Templating
 sidebar_position: 7
 sidebar_label: Templating
 id: templating
 ---
 
-Mixins are reusable snippets of configurations (like regions, tags, etc) included in stack configurations to avoid repetition and enhance modularity. 
-They allow for defining common settings, variables, or configurations once and applying them efficiently across various stacks.
+Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
+[Sprig Functions](https://masterminds.github.io/sprig/) are supported as well.
 
-Mixins are really just a [Design Pattern](/design-patterns/component-catalog-with-mixins) that uses [`imports`](/core-concepts/stacks/imports) to
-alter the Stack in some deliberate way. 
+You can use `Go` templates in the following Atmos section to refer to values in the same or other sections:
 
-:::important 
-Mixins are treated the same as all other imports in Atmos, with no special handling or technical distinction.
+  - `vars`
+  - `settings`
+  - `env`
+  - `metadata`
+  - `providers`
+  - `overrides`
+  - `backend`
+  - `backend_type`
+
+<br/>
+
+:::tip
+In the template tokens, you can refer to any value in any section that the Atmos command 
+[`atmos describe component <component> -s <stack>`](/cli/commands/describe/component) generates
 :::
 
-## Use-cases
+<br/>
 
-Here are some use-cases for when to Mixins.
+For example, let's say we have the following component configuration using `Go` templates:
 
-### Mixins by Region
-
-Mixins organized by region will make it very easy to configure where a stack is deployed by simply changing the imported mixin.
-
-Consider naming them after the canonical region name for the cloud provider you're using.
-
-For example, here's what it would look like for AWS. Let's name this file `mixins/region/us-east-1.yaml`.
-Now, anytime we want a Parent Stack deployed in the `us-east-1` region, we just need to specify this import, and we'll automatically inherit all the settings for that region.
-
-
-For example, let's define a mixin with the defaults for operating in the `us-east-1` region:
-
-```yaml title="mixins/region/us-east-1.yaml"
-vars:
-  region: us-east-1   # the canonical cloud region
-  availability_zones: # the designated availability zones to use in this region
-  - us-east-1a  
-  - us-east-1b
-```
-
-Then we can use this mixin, anytime we deploy in `us-east-1` to ensure we conform to the organization's standards.
-
-```yaml title="stacks/prod/network.yaml"
-imports:
-- mixins/region/us-east-1
-
-terraform:
-  components:
+```yaml
+component:
+  terraform:
     vpc:
-    # ...
+      settings:
+        setting1: 1
+        setting2: 2
+        setting3: "{{ .vars.var3 }}"
+        setting4: "{{ .settings.setting1 }}"
+        component: vpc
+        backend_type: s3
+        region: "us-east-2"
+        assume_role: "IAM Role ARN"
+      backend_type: "{{ .settings.backend_type }}"
+      metadata:
+        component: "{{ .settings.component }}"
+      providers:
+        aws:
+          region: "{{ .settings.region }}"
+          assume_role: "{{ .settings.assume_role }}"
+      env:
+        ENV1: e1
+        ENV2: "{{ .settings.setting1 }}-{{ .settings.setting2 }}"
+      vars:
+        var1: "{{ .settings.setting1 }}"
+        var2: "{{ .settings.setting2 }}"
+        var3: 3
+        # Add the tags to all the resources provisioned by this Atmos component
+        tags:
+          atmos_component: "{{ .atmos_component }}"
+          atmos_stack: "{{ .atmos_stack }}"
+          atmos_manifest: "{{ .atmos_stack_file }}"
+          region: "{{ .vars.region }}"
+          terraform_workspace: "{{ .workspace }}"
+          assumed_role: "{{ .providers.aws.assume_role }}"
+          description: "'{{ .atmos_component }}' component provisioned in '{{ .atmos_stack }}' stack by assuming IAM role '{{ .providers.aws.assume_role }}'"
+          # `provisioned_at` uses the Sprig functions
+          # https://masterminds.github.io/sprig/date.html
+          # https://pkg.go.dev/time#pkg-constants
+          provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'
 ```
 
-### Mixins by Stage
+When executing Atmos commands like `atmos describe component` and `atmos terraform plan/apply`, Atmos processes all the template tokens 
+in the manifest and generates the final configuration for the component in the stack:
 
-Provide the default settings for operating in a particular stage (e.g. Dev, Staging, Prod) to enforce consistency.
-
-For example, let's define the stage name and required tags for production in the mixin file named `mixins/stage/prod.yaml`
-
-```yaml title="mixins/stage/prod.yaml"
+```yaml title="atmos describe component vpc -s plat-ue2-dev"
+settings:
+  setting1: 1
+  setting2: 2
+  setting3: 3
+  setting4: 1
+  component: vpc
+  backend_type: s3
+  region: us-east-2
+  assume_role: IAM Role ARN
+backend_type: s3
+metadata:
+  component: vpc
+providers:
+  aws:
+    region: us-east-2
+    assume_role: IAM Role ARN
+env:
+  ENV1: e1
+  ENV2: 1-2
 vars:
-  stage: prod
+  var1: 1
+  var2: 2
+  var3: 3
   tags:
-    CostCenter: 12345
+    assumed_role: IAM Role ARN
+    atmos_component: vpc
+    atmos_manifest: orgs/acme/plat/dev/us-east-2
+    atmos_stack: plat-ue2-dev
+    description: vpc component provisioned in plat-ue2-dev stack
+    provisioned_at: "2024-03-12T16:18:24Z"
+    region: us-east-2
+    terraform_workspace: plat-ue2-dev
 ```
 
-Now, anytime we want to provision a parent stack in production, we'll want to add this to the imports:
+<br/>
 
-```yaml title="stacks/prod/backing-services.yaml"
-imports:
-- mixins/stage/prod
+While `Go` templates in Atmos stack manifests offer great flexibility for various use-cases, one of the obvious use-cases
+is to add a standard set of tags to all the resources in the infrastructure.
 
+For example, by adding this configuration to the `stacks/orgs/acme/_defaults.yaml` Org-level stack manifest:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
 terraform:
-  components:
-    rds-cluster:
-    # ...
+  vars:
+    tags:
+      atmos_component: "{{ .atmos_component }}"
+      atmos_stack: "{{ .atmos_stack }}"
+      atmos_manifest: "{{ .atmos_stack_file }}"
+      terraform_workspace: "{{ .workspace }}"
+      # `provisioned_at` uses the Sprig functions
+      # https://masterminds.github.io/sprig/date.html
+      # https://pkg.go.dev/time#pkg-constants
+      provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'
 ```
 
-:::tip Use Mixins for Naming Conventions
-This simple example highlights a simple fix for one of the most common issues in enterprise organizations: naming inconsistency.
-Using a mixin is a great way for organizations ensure naming conventions are followed consistently. 
-
-For example, there are many ways developers will define `production`.
-
-- e.g. `prd`
-- e.g. `prod`
-- e.g. `production`
-- e.g. `Production`
-- e.g. `Prod`
-- e.g. `PROD`
-- etc
-:::
-
-To avoid this situation, use the mixin `mixins/stage/prod` and always use the appropriate naming convention.
-
-## References
-
-  - [Component Catalog Atmos Design Pattern](/design-patterns/component-catalog)
-  - [Component Catalog with Mixins Atmos Design Pattern](/design-patterns/component-catalog-with-mixins)
+the tags will be automatically added to all the resources in the infrastructure.
