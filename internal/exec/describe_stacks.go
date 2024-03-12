@@ -165,7 +165,6 @@ func ExecuteDescribeStacks(
 							ComponentVarsSection:     varsSection,
 							ComponentSettingsSection: settingsSection,
 							ComponentEnvSection:      envSection,
-							Context:                  context,
 							ComponentSection: map[string]any{
 								cfg.VarsSectionName:     varsSection,
 								cfg.MetadataSectionName: metadataSection,
@@ -182,6 +181,7 @@ func ExecuteDescribeStacks(
 							}
 						} else {
 							context = cfg.GetContextFromVars(varsSection)
+							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
 							if err != nil {
 								return nil, err
