@@ -2,15 +2,17 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"text/template"
 	"text/template/parse"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/hairyhenderson/gomplate/v3"
 )
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	t, err := template.New(tmplName).Funcs(sprig.FuncMap()).Parse(tmplValue)
+	t, err := template.New(tmplName).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}
@@ -39,7 +41,7 @@ func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingT
 
 // IsGolangTemplate checks if the provided string is a Go template
 func IsGolangTemplate(str string) (bool, error) {
-	t, err := template.New(str).Funcs(sprig.FuncMap()).Parse(str)
+	t, err := template.New(str).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(str)
 	if err != nil {
 		return false, err
 	}

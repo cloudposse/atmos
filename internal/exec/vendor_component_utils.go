@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 	"gopkg.in/yaml.v2"
@@ -104,7 +105,7 @@ func ExecuteComponentVendorInternal(
 
 	// Parse 'uri' template
 	if vendorComponentSpec.Source.Version != "" {
-		t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Parse(vendorComponentSpec.Source.Uri)
+		t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
 		if err != nil {
 			return err
 		}
@@ -301,7 +302,7 @@ func ExecuteComponentVendorInternal(
 
 			// Parse 'uri' template
 			if mixin.Version != "" {
-				t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Funcs(sprig.FuncMap()).Parse(mixin.Uri)
+				t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
 				if err != nil {
 					return err
 				}
