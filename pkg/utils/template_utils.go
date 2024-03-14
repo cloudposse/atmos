@@ -8,11 +8,14 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/hairyhenderson/gomplate/v3"
+	"github.com/samber/lo"
 )
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	t, err := template.New(tmplName).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(tmplValue)
+	funcs := lo.Assign(sprig.FuncMap(), gomplate.CreateFuncs(context.Background(), nil))
+
+	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}
