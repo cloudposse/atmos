@@ -36,7 +36,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.9.0
-	github.com/zclconf/go-cty v1.14.3
+	github.com/zclconf/go-cty v1.14.4
 	gopkg.in/yaml.v2 v2.4.0
 	mvdan.cc/sh/v3 v3.8.0
 )
