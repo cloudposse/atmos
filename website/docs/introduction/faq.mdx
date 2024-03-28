@@ -5,8 +5,8 @@ sidebar_label: FAQ
 sidebar_position: 3
 ---
 
+
 import ReactPlayer from 'react-player'
-import Link from '@docusaurus/Link'
 
 
 ### Why is the tool called Atmos?
@@ -71,9 +71,9 @@ Furthermore, Atmos delivers prescriptive guidance on [design patterns](/design-p
 
 ### Can Atmos be used together with Terragrunt?
 
-Yes, technically, Atmos and Terragrunt can be used in conjunction. However, it's important to acknowledge that this combination introduces a significant overlap in functionality and some philosophical differences. Developers generally prefer to minimize the number of layers in their tooling to avoid complexity, and integrating these two tools could steepen the learning curve for teams. 
+Yes, technically, Atmos and Terragrunt can be used in conjunction. However, it's important to acknowledge that this combination introduces a significant overlap in functionality and some philosophical differences. Developers generally prefer to minimize the number of layers in their tooling to avoid complexity, and integrating these two tools could steepen the learning curve for teams.
 
-The key motivation for integrating Terragrunt within Atmos would be to offer a seamless CLI (Command Line Interface) experience, facilitating a gradual transition to Atmos's methodologies. This strategy allows teams to utilize Terragrunt for existing infrastructure management ("for historical reasons") while adopting Atmos for new projects. Essentially, it's a strategic approach to support migration to Atmos, enabling the tool to invoke Terragrunt where necessary, as teams progressively shift towards fully embracing Atmos for infrastructure orchestration. 
+The key motivation for integrating Terragrunt within Atmos would be to offer a seamless CLI (Command Line Interface) experience, facilitating a gradual transition to Atmos's methodologies. This strategy allows teams to utilize Terragrunt for existing infrastructure management ("for historical reasons") while adopting Atmos for new projects. Essentially, it's a strategic approach to support migration to Atmos, enabling the tool to invoke Terragrunt where necessary, as teams progressively shift towards fully embracing Atmos for infrastructure orchestration.
 
 There are a few ways to accomplish it, depending on your needs or preferences.
 
@@ -91,16 +91,19 @@ custom commands, so any tool can be powered by atmos.
 
 ### Does Atmos work with Terraform Cloud and Terraform Enterprise?
 
-Probably, but we haven't tested it.
+Yes, refer to [Terraform Backends](/core-concepts/components/terraform-backends) for how to configure Terraform backends,
+including [Terraform Cloud Settings](https://developer.hashicorp.com/terraform/cli/cloud/settings).
 
-Here's why it should work with any CI/CD system.
+### Does Atmos work with CI/CD systems?
+
+Yes, here's why it should work with any CI/CD system:
 
 - Atmos works with *vanilla* Terraform HCL code (we do not introduce any proprietary HCL code formats)
 - Atmos can [generate `.tfvar` files](/cli/commands/terraform/generate-varfiles) from the deep-merged configurations for any given stack, or all stacks at once.
 - Commit those `.tfvar`, then run Terraform as normal, passing the appropriate `.tfvar` file to the `terraform` command with the `-vars` argument.
 
 Our recommended way of practicing GitOps with Terraform is with our turn-key [GitHub Actions](/integrations/github-actions/).
-  
+
 ### Does Atmos work with Atlantis?
 
 Yes, it does. See our [integration page](/integrations/atlantis).
@@ -124,7 +127,7 @@ ensuring straightforward and accessible functionality without the need for ongoi
 Atmos is free and open source under the permissive APACHE2 license.
 
 :::tip Words of Wisdom
-We believe the most successful open-source tools are not themselves the end products sold in the market; instead, they serve as enablers, 
+We believe the most successful open-source tools are not themselves the end products sold in the market; instead, they serve as enablers,
 empowering others to build and innovate successful products.
 :::
 
