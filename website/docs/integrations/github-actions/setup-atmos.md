@@ -27,5 +27,5 @@ jobs:
         uses: cloudposse/github-action-setup-atmos
         with:
           # Make sure to pin to the latest version of atmos
-          atmos_version: 1.66.0
+          atmos_version: 1.67.0
   ```
