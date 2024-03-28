@@ -205,7 +205,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if cliConfig.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := path.Join(workingDir, "backend.tf.json")
 
-		u.LogDebug(cliConfig, "Writing the backend config to file:")
+		u.LogDebug(cliConfig, "\nWriting the backend config to file:")
 		u.LogDebug(cliConfig, backendFileName)
 
 		if !info.DryRun {
