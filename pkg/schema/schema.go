@@ -61,18 +61,19 @@ type Logs struct {
 }
 
 type Context struct {
-	Namespace     string `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
-	Tenant        string `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
-	Environment   string `yaml:"environment" json:"environment" mapstructure:"environment"`
-	Stage         string `yaml:"stage" json:"stage" mapstructure:"stage"`
-	Region        string `yaml:"region" json:"region" mapstructure:"region"`
-	Component     string `yaml:"component" json:"component" mapstructure:"component"`
-	BaseComponent string `yaml:"base_component" json:"base_component" mapstructure:"base_component"`
-	ComponentPath string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
-	Workspace     string `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
-	Attributes    []any  `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
-	File          string `yaml:"file" json:"file" mapstructure:"file"`
-	Folder        string `yaml:"folder" json:"folder" mapstructure:"folder"`
+	Namespace          string `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
+	Tenant             string `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
+	Environment        string `yaml:"environment" json:"environment" mapstructure:"environment"`
+	Stage              string `yaml:"stage" json:"stage" mapstructure:"stage"`
+	Region             string `yaml:"region" json:"region" mapstructure:"region"`
+	Component          string `yaml:"component" json:"component" mapstructure:"component"`
+	BaseComponent      string `yaml:"base_component" json:"base_component" mapstructure:"base_component"`
+	ComponentPath      string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Workspace          string `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
+	Attributes         []any  `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
+	File               string `yaml:"file" json:"file" mapstructure:"file"`
+	Folder             string `yaml:"folder" json:"folder" mapstructure:"folder"`
+	TerraformWorkspace string `yaml:"terraform_workspace" json:"terraform_workspace" mapstructure:"terraform_workspace"`
 }
 
 type ArgsAndFlagsInfo struct {

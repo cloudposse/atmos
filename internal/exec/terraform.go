@@ -209,7 +209,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		u.LogDebug(cliConfig, backendFileName)
 
 		if !info.DryRun {
-			var componentBackendConfig = generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
+			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
+			if err != nil {
+				return err
+			}
+
 			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
 			if err != nil {
 				return err
