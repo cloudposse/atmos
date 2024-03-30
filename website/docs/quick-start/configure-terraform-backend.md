@@ -337,11 +337,20 @@ different scopes and generate the final backend config for the components in the
 We mentioned before that you can configure the Terraform backend for the components manually (by creating a file `backend.tf` in each Terraform
 component's folder), or you can set up Atmos to generate the backend configuration for each component in the stacks automatically. While
 auto-generating the backend config file is helpful and saves you from creating the backend files for each component, it becomes a requirement
-when you provision multiple instance of a Terraform component into the same environment (same account and region).
+when you provision multiple instances of a Terraform component into the same environment (same account and region).
 
 You can provision more than one instance of the same Terraform component (with the same or different settings) into the same environment by defining
-many Atmos components that provide configuration for the Terraform component. For example, the following config shows how to define two Atmos
-components, `vpc/1` and `vpc/2`, which both point to the same Terraform component `vpc`:
+many Atmos components that provide configuration for the Terraform component. 
+
+:::tip
+For more information on configuring and provision multiple instances of a Terraform component,
+refer to [Multiple Component Instances Atmos Design Patterns](/design-patterns/multiple-component-instances)
+:::
+
+<br/>
+
+For example, the following config shows how to define two Atmos components, `vpc/1` and `vpc/2`, which both point to 
+the same Terraform component `vpc`:
 
 ```yaml
 import:
