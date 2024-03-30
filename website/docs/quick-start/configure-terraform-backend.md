@@ -202,7 +202,7 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
   ```
 
   Note that this is optional. If you don’t add `backend.s3.workspace_key_prefix` to the component manifest, the Atmos component name will be used
-  automatically (which is this example is `vpc`). `/` (slash) in the Atmos component name will get replaced with `-` (dash).
+  automatically (which is this example is `vpc`). `/` (slash) in the Atmos component name will be replaced with `-` (dash).
 
   We usually don’t specify `workspace_key_prefix` for each component and let Atmos use the component name as `workspace_key_prefix`.
 
@@ -336,7 +336,7 @@ different scopes and generate the final backend config for the components in the
 
 We mentioned before that you can configure the Terraform backend for the components manually (by creating a file `backend.tf` in each Terraform
 component's folder), or you can set up Atmos to generate the backend configuration for each component in the stacks automatically. While
-auto-generating the backend config file is helpful and saves you from creating the backend files for each component, it becomes a requirements
+auto-generating the backend config file is helpful and saves you from creating the backend files for each component, it becomes a requirement
 when you provision multiple instance of a Terraform component into the same environment (same account and region).
 
 You can provision more than one instance of the same Terraform component (with the same or different settings) into the same environment by defining
