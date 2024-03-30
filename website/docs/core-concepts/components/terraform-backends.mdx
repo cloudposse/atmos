@@ -9,11 +9,9 @@ id: terraform-backends
 import Terminal from '@site/src/components/Terminal'
 
 By default, Terraform will use a backend called [local](https://developer.hashicorp.com/terraform/language/settings/backends/local), which stores
-Terraform state on the local filesystem, locks that state using system APIs, and performs operations locally. For any scenario beyond a basic
-playground setup, such as staging or production environments, we'll provision and
-configure the Terraform [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3) backend.
+Terraform state on the local filesystem, locks that state using system APIs, and performs operations locally.
 
-## Terraform Local Backend
+## Local Backend
 
 Terraform's local backend is designed for development and testing purposes and is generally not recommended for production use. There are several
 reasons why using the local backend in a production environment may not be suitable:
@@ -42,34 +40,28 @@ To address these concerns, it's recommended to use one of the supported remote b
 HashiCorp Consul, or Terraform Cloud, for production environments. Remote backends provide better scalability, collaboration support, and durability,
 making them more suitable for managing infrastructure at scale in production environments.
 
-## Terraform S3 Backend
+## Terraform Backends Supported by Atmos
+
+Atmos supports all the backends supported by Terraform, plus it adds a special `static` backend type:
+
+- [local](https://developer.hashicorp.com/terraform/language/settings/backends/local)
+- [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3)
+- [azurerm](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm)
+- [gcs](https://developer.hashicorp.com/terraform/language/settings/backends/gcs)
+- [remote](https://developer.hashicorp.com/terraform/language/settings/backends/remote)
+- [consul](https://developer.hashicorp.com/terraform/language/settings/backends/consul)
+- [cos](https://developer.hashicorp.com/terraform/language/settings/backends/cos)
+- [http](https://developer.hashicorp.com/terraform/language/settings/backends/http)
+- [kubernetes](https://developer.hashicorp.com/terraform/language/settings/backends/kubernetes)
+- [oss](https://developer.hashicorp.com/terraform/language/settings/backends/oss)
+- [pg](https://developer.hashicorp.com/terraform/language/settings/backends/pg)
+- [cloud](https://developer.hashicorp.com/terraform/cli/cloud/settings)
+- static
+
+## Amazon S3 Backend
 
 Terraform's S3 backend is a popular remote backend for storing Terraform state files in an Amazon Simple Storage Service (S3) bucket. Using S3 as a
-backend offers several advantages over local backends, particularly in production environments. Here's an overview of the key features and benefits of
-using the Terraform S3 backend:
-
-- **Remote State Storage**: The Terraform state file is stored remotely in an S3 bucket. This allows multiple users and Terraform instances to access
-and manage the same state file, promoting collaboration and consistency across deployments.
-
-- **Concurrency and Locking**: S3 backend supports state file locking, which prevents multiple Terraform instances from modifying the state file
-simultaneously. This helps avoid conflicts and ensures that changes are applied in a coordinated manner, especially in multi-user or automated
-environments.
-
-- **Durability and Versioning**: S3 provides high durability for object storage, and it automatically replicates data across multiple availability
-zones. Additionally, versioning can be enabled on the S3 bucket, allowing you to track changes to the state file over time. This enhances data
-integrity and provides a safety net in case of accidental changes or deletions.
-
-- **Access Control and Security**: S3 supports fine-grained access control policies, allowing you to restrict access to the state file based on AWS
-Identity and Access Management (IAM) roles and policies. This helps ensure that only authorized users or processes can read or modify the Terraform
-state.
-
-- **Integration with AWS Features**: The S3 backend integrates well with other AWS services. For example, you can use AWS Key Management Service (KMS)
-for server-side encryption of the state file, and you can leverage AWS Identity and Access Management (IAM) roles for secure access to the S3
-bucket.
-
-- **Terraform Remote Operations**: The S3 backend can be used in conjunction with Terraform Remote Operations, allowing you to run Terraform
-commands remotely while keeping the state in S3. This is useful for scenarios where the Terraform client and the infrastructure being managed are
-separated.
+backend offers many advantages over local backends, particularly in production environments.
 
 To configure Terraform to use an S3 backend, you typically provide the S3 bucket name and an optional key prefix in your Terraform configuration.
 Here's a simplified example:
@@ -93,33 +85,6 @@ Here's a simplified example:
 
 In the example, `terraform_locks` is a DynamoDB table used for state locking. DynamoDB is recommended for locking when using the S3 backend to ensure
 safe concurrent access.
-
-## Provision Terraform S3 Backend
-
-Before using Terraform S3 backend, a backend S3 bucket and DynamoDB table need to be provisioned.
-
-You can provision them using the [tfstate-backend](https://github.com/cloudposse/terraform-aws-tfstate-backend) Terraform module and
-[tfstate-backend](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/tfstate-backend) Terraform component (root module).
-
-Note that the [tfstate-backend](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/tfstate-backend) Terraform component
-can be added to the `components/terraform` folder, the configuration for the component can be added to the `stacks`, and the component itself
-can be provisioned with Atmos.
-
-Here's an example of an Atmos manifest to configure the `tfstate-backend` Terraform component:
-
-```yaml title="stacks/catalog/tfstate-backend/defaults.yaml"
-components:
-  terraform:
-    tfstate-backend:
-      vars:
-        enable_server_side_encryption: true
-        enabled: true
-        force_destroy: false
-        name: tfstate
-        prevent_unencrypted_uploads: true
-```
-
-## Configure Terraform S3 Backend
 
 Once the S3 bucket and DynamoDB table are provisioned, you can start using them to store Terraform state for the Terraform components.
 There are two ways of doing this:
@@ -145,8 +110,6 @@ terraform {
 of configuring Terraform state backend since it offers many advantages and will save you from manually creating a backend configuration file for
 each component
 
-### Configure Terraform S3 Backend with Atmos
-
 Configuring Terraform S3 backend with Atmos consists of the three steps:
 
 - Set `auto_generate_backend_file` to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section:
@@ -157,8 +120,6 @@ components:
   # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
   auto_generate_backend_file: true
   ```
-
-Refer to [Quick Start: Configure CLI](/quick-start/configure-cli) and [CLI Configurtion](/cli/configuration) for more details.
 
 - Configure the S3 backend in one of the `_defaults.yaml` manifests. You can configure it for the entire Organization, or per OU/tenant, or per
 region, or per account.
@@ -243,17 +204,17 @@ You can also generate the backend configuration file for a component in a stack 
 command [atmos terraform generate backend](/cli/commands/terraform/generate-backend). Or generate the backend configuration files for all components
 by executing the command [atmos terraform generate backends](/cli/commands/terraform/generate-backends).
 
-<br/>
+## Azure Storage Backend
 
-# Terraform Backend Inheritance
+## Google Cloud Storage Backend
 
-In the previous section, we configured the S3 backend for the entire Organization by adding the `terraform.backend.s3` section to
-the `stacks/orgs/acme/_defaults.yaml` stack manifest. The same backend configuration (S3 bucket, DynamoDB table, and IAM role) will be used for all
-OUs, accounts and regions.
+## Terraform Cloud Backend
 
-Suppose that for security and audit reasons, you want to use different Terraform backends for the `dev`, `staging` and `prod` accounts. Each account
-needs to have a separate S3 bucket, DynamoDB table, and IAM role with different permissions (for example, the `development` Team should be able to
-access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
+## Terraform Backend Inheritance
+
+Suppose that for security and audit reasons, you want to use different Terraform backends for the `dev`, `staging` and `prod` accounts.
+Each AWS account needs to have a separate S3 bucket, DynamoDB table, and IAM role with different permissions
+(for example, the `development` Team should be able to access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
 
 Atmos supports this use-case by using deep-merging of stack manifests, [Imports](/core-concepts/stacks/imports)
 and [Inheritance](/core-concepts/components/inheritance), which makes the backend configuration reusable and DRY.

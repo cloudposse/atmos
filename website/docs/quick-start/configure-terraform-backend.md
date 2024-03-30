@@ -238,9 +238,7 @@ You can also generate the backend configuration file for a component in a stack 
 command [atmos terraform generate backend](/cli/commands/terraform/generate-backend). Or generate the backend configuration files for all components
 by executing the command [atmos terraform generate backends](/cli/commands/terraform/generate-backends).
 
-<br/>
-
-# Terraform Backend Inheritance
+## Terraform Backend Inheritance
 
 In the previous section, we configured the S3 backend for the entire Organization by adding the `terraform.backend.s3` section to
 the `stacks/orgs/acme/_defaults.yaml` stack manifest. The same backend configuration (S3 bucket, DynamoDB table, and IAM role) will be used for all
