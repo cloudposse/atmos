@@ -15,11 +15,11 @@
     "build:site": "npm run build"
   },
   "dependencies": {
-    "@docusaurus/core": "^3.1.1",
-    "@docusaurus/plugin-client-redirects": "^3.1.1",
-    "@docusaurus/preset-classic": "^3.1.1",
-    "@docusaurus/theme-mermaid": "^3.1.1",
-    "@grnet/docusaurus-terminology": "^2.0.0-rc",
+    "@docusaurus/core": "^3.2.0",
+    "@docusaurus/plugin-client-redirects": "^3.2.0",
+    "@docusaurus/preset-classic": "^3.2.0",
+    "@docusaurus/theme-mermaid": "^3.2.0",
+    "@grnet/docusaurus-terminology": "^2.0.0-rc.1",
     "@mdx-js/react": "^3.0.1",
     "clsx": "^2.1.0",
     "custom-loaders": "file:plugins/custom-loaders",
