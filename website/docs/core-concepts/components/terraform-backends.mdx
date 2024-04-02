@@ -244,7 +244,7 @@ terraform:
 
 <br/>
 
-For each component, you can add the `key` parameter similar to the following:
+For each component, you can optionally add the `key` parameter similar to the following:
 
 <Terminal>
 ```yaml
@@ -254,7 +254,7 @@ components:
       # Optional backend configuration for the component
       backend:
         azurerm:
-          key: "my-component-key"
+          key: "my-component"
 ```
 </Terminal>
 
@@ -288,6 +288,66 @@ will generate a backend config JSON file `backend.tf.json` in the component's fo
 <br/>
 
 ## Google Cloud Storage Backend
+
+[`gcs`](https://developer.hashicorp.com/terraform/language/settings/backends/gcs) backend stores the state as an object
+in a configurable `prefix` in a pre-existing bucket on Google Cloud Storage (GCS).
+The bucket must exist prior to configuring the backend. The backend supports state locking.
+
+To configure the [Google Cloud Storage backend](https://developer.hashicorp.com/terraform/language/settings/backends/gcs)
+in Atmos, add the following config to an Atmos manifest in `_defaults.yaml`:
+
+<Terminal title="_defaults.yaml">
+```yaml
+terraform:
+  backend_type: gcs
+  backend:
+    gcs:
+      bucket: "tf-state"
+      # Other parameters
+```
+</Terminal>
+
+<br/>
+
+For each component, you can optionally add the `prefix` parameter similar to the following:
+
+<Terminal>
+```yaml
+components:
+  terraform:
+    my-component:
+      # Optional backend configuration for the component
+      backend:
+        gcp:
+          prefix: "my-component"
+```
+</Terminal>
+
+<br/>
+
+If the `prefix` is not specified for a component, Atmos will use the component name (`my-component` in the example above)
+to auto-generate the `prefix`. In the component name, all occurrences of `/` (slash) will be replaced with `-` (dash).
+
+If `auto_generate_backend_file` is set to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section,
+Atmos will deep-merge the backend configurations from the `_defaults.yaml` manifests and from the component itself, and
+will generate a backend config JSON file `backend.tf.json` in the component's folder, similar to the following example:
+
+<Terminal title="backend.tf.json">
+```json
+{
+  "terraform": {
+    "backend": {
+      "gcp": {
+        "bucket": "tf-state",
+        "prefix": "my-component"
+      }
+    }
+  }
+}
+```
+</Terminal>
+
+<br/>
 
 ## Terraform Cloud Backend
 
