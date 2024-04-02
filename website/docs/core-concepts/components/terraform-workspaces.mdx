@@ -81,8 +81,9 @@ Atmos components. In this case, Atmos calculates the Terraform workspace for eac
 with the component name.
 
 For example, the following manifest shows how to define two Atmos components, `vpc/1` and `vpc/2`,
-which both point to the same Terraform component `vpc`:
+which both point to the same Terraform component `vpc`, in the stack `ue2-dev`:
 
+<Terminal title="stacks/ue2-dev.yaml">
 ```yaml
 vars:
   # Context variables that define the Atmos stack `ue2-dev`
@@ -117,10 +118,90 @@ components:
         name: vpc-2
         ipv4_primary_cidr_block: 10.10.0.0/18
 ```
+</Terminal>
 
 <br/>
 
+When you provision the components by executing the commands:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc/1 -s ue2-dev
+    atmos terraform apply vpc/2 -s ue2-dev
+    ```
+</Terminal>
+
+<br/>
+
+Atmos sets the [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
+ENV variable to `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively, and Terraform selects (or creates) different workspaces
+for the components. This is done because the same Terraform component `vpc` is used as the workspace prefix
+(in case of [AWS S3 backend](https://developer.hashicorp.com/terraform/language/settings/backends/s3),
+folder in the S3 state bucket), and it's necessary to have different subfolders (`ue2-dev-vpc-1`
+and `ue2-dev-vpc-2` instead of just `ue2-dev`) to store the Terraform state files.
+
 ## Terraform Workspace Override in Atmos
+
+You can override Terraform workspaces for Atmos components by using `metadata.terraform_workspace` and
+`metadata.terraform_workspace_pattern` attributes. For example:
+
+<Terminal title="stacks/ue2-dev.yaml">
+```yaml
+vars:
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    vpc/1:
+      metadata:
+        component: vpc
+        # Override Terraform workspace
+        terraform_workspace: "vpc-1-workspace-override"
+
+    vpc/2:
+      metadata:
+        component: vpc
+        # Override Terraform workspace
+        terraform_workspace_pattern: "{environment}-{stage}-{component}-workspace-override"
+```
+</Terminal>
+
+<br/>
+
+When you provision the components by executing the commands:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc/1 -s ue2-dev
+    atmos terraform apply vpc/2 -s ue2-dev
+    ```
+</Terminal>
+
+<br/>
+
+Atmos sets the Terraform workspace `vpc-1-workspace-override` for the `vpc/1` component, and
+`ue2-dev-vpc-2-workspace-override` for the `vpc/2` component.
+
+The following context tokens are supported by the `metadata.terraform_workspace_pattern` attribute:
+
+- `{namespace}`
+- `{tenant}`
+- `{environment}`
+- `{region}`
+- `{stage}`
+- `{attributes}`
+- `{component}`
+- `{base-component}`
+
+<br/>
+
+:::tip
+For more information on Atmos base and derived components, and to understand the `{base-component}` token,
+refer to [Atmos Component Inheritance](/core-concepts/components/inheritance)
+:::
+
+<br/>
 
 ## References
 
