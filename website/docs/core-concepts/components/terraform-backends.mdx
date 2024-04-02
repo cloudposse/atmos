@@ -193,7 +193,7 @@ or `atmos terraform apply vpc -s <stack>`, before executing the Terraform comman
 the `_defaults.yaml` manifest and from the component itself, and will generate a backend config JSON file `backend.tf.json` in the component's folder,
 similar to the following example:
 
-<Terminal>
+<Terminal title="backend.tf.json">
 ```json
 {
   "terraform": {
@@ -227,7 +227,7 @@ Blob with the given Key within the Blob Container within the Blob Storage Accoun
 and consistency checking with Azure Blob Storage native capabilities.
 
 To configure the [Azure Blob Storage backend](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm)
-in Atmos, add the following config to an Atmos manifest:
+in Atmos, add the following config to an Atmos manifest in `_defaults.yaml`:
 
 <Terminal title="_defaults.yaml">
 ```yaml
@@ -239,6 +239,35 @@ terraform:
       storage_account_name: "abcd1234"
       container_name: "tfstate"
       key: "xxxx.terraform.tfstate"
+      # Other parameters
+```
+</Terminal>
+
+<br/>
+
+If the `key` is not specified (either in the global or component manifests, refer to [Terraform Backend Inheritance](#terraform-backend-inheritance)),
+Atmos will use the component name to auto-generate the `key` parameter in the format `<component-name>.terraform.tfstate`
+replacing `<component-name>` with the Atmos component name.
+All occurrences of `/` (slash) will be replaced with `-` (dash) in `<component-name>`.
+
+If `auto_generate_backend_file` is set to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section,
+Atmos will deep-merge the backend configurations from the `_defaults.yaml` manifests and from the component itself, and
+will generate a backend config JSON file `backend.tf.json` in the component's folder, similar to the following example:
+
+<Terminal title="backend.tf.json">
+```json
+{
+  "terraform": {
+    "backend": {
+      "azurerm": {
+        "resource_group_name": "StorageAccount-ResourceGroup",
+        "storage_account_name": "abcd1234",
+        "container_name": "tfstate",
+        "key": "xxxx.terraform.tfstate"
+      }
+    }
+  }
+}
 ```
 </Terminal>
 
