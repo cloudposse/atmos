@@ -134,7 +134,7 @@ When you provision the components by executing the commands:
 <br/>
 
 Atmos sets the [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
-ENV variable to `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively, and Terraform selects (or creates) different workspaces
+environment variable to `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively, and Terraform selects (or creates) different workspaces
 for the components. This is done because the same Terraform component `vpc` is used as the workspace prefix
 (in case of [AWS S3 backend](https://developer.hashicorp.com/terraform/language/settings/backends/s3),
 folder in the S3 state bucket), and it's necessary to have different subfolders (`ue2-dev-vpc-1`
