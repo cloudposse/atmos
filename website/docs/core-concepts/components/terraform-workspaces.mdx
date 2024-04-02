@@ -8,7 +8,122 @@ id: terraform-workspaces
 
 import Terminal from '@site/src/components/Terminal'
 
+In Terraform, a [workspace](https://developer.hashicorp.com/terraform/language/state/workspaces) is a feature that allows
+you to manage multiple "state" environments within a Terraform configuration. Each workspace maintains its own state,
+allowing you to deploy and manage infrastructure configurations independently.
+
+Workspaces are useful in several scenarios:
+
+- **Environment Isolation**: Workspaces enable you to have separate environments within a Terraform configuration.
+Each workspace can have its own set of resources and configurations.
+
+- **Parallel Development**: Workspaces facilitate parallel development by allowing different team members to work on
+different workspaces concurrently without interfering with each other's changes.
+
+- **Testing and Experimentation**: Workspaces are helpful for testing and experimentation.
+You can create temporary workspaces to test changes or new configurations without affecting the main production environment.
+
+- **State Management**: Workspaces manage separate states for each environment.
+This helps in maintaining clarity and avoiding conflicts when multiple environments are being managed.
+
+- **Deployment Strategies**: Workspaces can be used to implement different deployment strategies.
+For example, you might use separate workspaces for blue-green deployments or canary releases.
+
+To work with workspaces in Terraform, you can use commands like `terraform workspace new`, `terraform workspace select`,
+and `terraform workspace delete` to create, switch between, and delete workspaces respectively.
+Additionally, the ENV variable [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
+can be used to create and select Terraform workspaces.
+
+## Terraform Workspaces in Atmos
+
+Atmos uses and automatically calculates Terraform workspaces to manage top-level stacks. By default, Atmos uses the stack
+name as the Terraform workspace when provisioning components in the stack. For example, consider the following manifest
+for the component `vpc` in the stack `ue2-dev`:
+
+<Terminal title="stacks/ue2-dev.yaml">
+```yaml
+vars:
+  # Context variables that define the Atmos stack `ue2-dev`
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+      # Define the variables specific to this component
+      vars:
+        name: my-vpc
+        ipv4_primary_cidr_block: 10.9.0.0/18
+```
+</Terminal>
+
+<br/>
+
+When you provision the `vpc` component in the stack `ue2-dev` by executing the following command:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc -s ue2-dev
+    ```
+</Terminal>
+
+<br/>
+
+Atmos sets the [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
+ENV variable to the name of the stack `ue2-dev`, and Terraform then selects this workspace or creates it if it does not exist.
+
+The exception to the default rule (using the stack name as Terraform workspace) is when we provision more than one
+instance of the same Terraform component (with the same or different settings) into the same stack by defining multiple
+Atmos components. In this case, Atmos calculates the Terraform workspace for each component by joining the stack name
+with the component name.
+
+For example, the following manifest shows how to define two Atmos components, `vpc/1` and `vpc/2`,
+which both point to the same Terraform component `vpc`:
+
+```yaml
+vars:
+  # Context variables that define the Atmos stack `ue2-dev`
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    # Atmos component `vpc/1`
+    vpc/1:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+        # Inherit the defaults for all VPC components
+        inherits:
+          - vpc/defaults
+      # Define/override variables specific to this `vpc/1` component
+      vars:
+        name: vpc-1
+        ipv4_primary_cidr_block: 10.9.0.0/18
+
+    # Atmos component `vpc/2`
+    vpc/2:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+        # Inherit the defaults for all VPC components
+        inherits:
+          - vpc/defaults
+      # Define/override variables specific to this `vpc/2` component
+      vars:
+        name: vpc-2
+        ipv4_primary_cidr_block: 10.10.0.0/18
+```
+
+<br/>
+
+## Terraform Workspace Override in Atmos
+
 ## References
 
 - [Terraform Workspaces](https://developer.hashicorp.com/terraform/language/state/workspaces)
 - [Managing Terraform Workspaces](https://developer.hashicorp.com/terraform/cli/workspaces)
+- [Terraform Environment Variables](https://developer.hashicorp.com/terraform/cli/config/environment-variables)
