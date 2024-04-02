@@ -414,8 +414,8 @@ similar to the following example:
 <br/>
 
 Instead of specifying the `workspaces.name` parameter for each component in the component manifests, you can use
-the `{terraform_workspace}` token in a stack manifest in `_defaults.yaml`. The token `{terraform_workspace}` will be
-automatically replaced by Atmos with the Terraform workspace for each component.
+the `{terraform_workspace}` token in the `cloud` backend config in the `_defaults.yaml` manifest.
+The token `{terraform_workspace}` will be automatically replaced by Atmos with the Terraform workspace for each component.
 This will make the entire configuration DRY.
 
 <Terminal title="_defaults.yaml">
