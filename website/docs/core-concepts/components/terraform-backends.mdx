@@ -238,17 +238,31 @@ terraform:
       resource_group_name: "StorageAccount-ResourceGroup"
       storage_account_name: "abcd1234"
       container_name: "tfstate"
-      key: "xxxx.terraform.tfstate"
       # Other parameters
 ```
 </Terminal>
 
 <br/>
 
-If the `key` is not specified (either in the global or component manifests, refer to [Terraform Backend Inheritance](#terraform-backend-inheritance)),
-Atmos will use the component name to auto-generate the `key` parameter in the format `<component-name>.terraform.tfstate`
-replacing `<component-name>` with the Atmos component name.
-All occurrences of `/` (slash) will be replaced with `-` (dash) in `<component-name>`.
+For each component, you can add the `key` parameter similar to the following:
+
+<Terminal>
+```yaml
+components:
+  terraform:
+    my-component:
+      # Optional backend configuration for the component
+      backend:
+        azurerm:
+          key: "my-component-key"
+```
+</Terminal>
+
+<br/>
+
+If the `key` is not specified for a component, Atmos will use the component name (`my-component` in the example above)
+to auto-generate the `key` parameter in the format `<component-name>.terraform.tfstate` replacing `<component-name>`
+with the Atmos component name. In `<component-name>`, all occurrences of `/` (slash) will be replaced with `-` (dash).
 
 If `auto_generate_backend_file` is set to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section,
 Atmos will deep-merge the backend configurations from the `_defaults.yaml` manifests and from the component itself, and
@@ -263,7 +277,7 @@ will generate a backend config JSON file `backend.tf.json` in the component's fo
         "resource_group_name": "StorageAccount-ResourceGroup",
         "storage_account_name": "abcd1234",
         "container_name": "tfstate",
-        "key": "xxxx.terraform.tfstate"
+        "key": "my-component.terraform.tfstate"
       }
     }
   }
