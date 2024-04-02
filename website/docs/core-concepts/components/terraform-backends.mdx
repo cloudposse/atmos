@@ -8,6 +8,8 @@ id: terraform-backends
 
 import Terminal from '@site/src/components/Terminal'
 
+Backends define where Terraform stores its [state](https://developer.hashicorp.com/terraform/language/state) data files.
+
 Atmos supports all the backends supported by Terraform:
 
 - [local](https://developer.hashicorp.com/terraform/language/settings/backends/local)
@@ -57,8 +59,9 @@ making them more suitable for managing infrastructure at scale in production env
 
 ## AWS S3 Backend
 
-Terraform's S3 backend is a popular remote backend for storing Terraform state files in an Amazon Simple Storage Service (S3) bucket. Using S3 as a
-backend offers many advantages over local backends, particularly in production environments.
+Terraform's [S3](https://developer.hashicorp.com/terraform/language/settings/backends/s3) backend is a popular remote
+backend for storing Terraform state files in an Amazon Simple Storage Service (S3) bucket. Using S3 as a backend offers
+many advantages, particularly in production environments.
 
 To configure Terraform to use an S3 backend, you typically provide the S3 bucket name and an optional key prefix in your Terraform configuration.
 Here's a simplified example:
@@ -217,7 +220,29 @@ You can also generate the backend configuration file for a component in a stack 
 command [atmos terraform generate backend](/cli/commands/terraform/generate-backend). Or generate the backend configuration files for all components
 by executing the command [atmos terraform generate backends](/cli/commands/terraform/generate-backends).
 
-## Azure Storage Backend
+## Azure Blob Storage Backend
+
+[`azurerm`](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm) backend stores the state as a
+Blob with the given Key within the Blob Container within the Blob Storage Account. This backend supports state locking
+and consistency checking with Azure Blob Storage native capabilities.
+
+To configure the [Azure Blob Storage backend](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm)
+in Atmos, add the following config to an Atmos manifest:
+
+<Terminal title="_defaults.yaml">
+```yaml
+terraform:
+  backend_type: azurerm
+  backend:
+    azurerm:
+      resource_group_name: "StorageAccount-ResourceGroup"
+      storage_account_name: "abcd1234"
+      container_name: "tfstate"
+      key: "xxxx.terraform.tfstate"
+```
+</Terminal>
+
+<br/>
 
 ## Google Cloud Storage Backend
 
@@ -226,7 +251,7 @@ by executing the command [atmos terraform generate backends](/cli/commands/terra
 ## Terraform Backend Inheritance
 
 Suppose that for security and audit reasons, you want to use different Terraform backends for `dev`, `staging` and `prod`.
-Each AWS account needs to have a separate S3 bucket, DynamoDB table, and IAM role with different permissions
+Each account needs to have a separate S3 bucket, DynamoDB table, and IAM role with different permissions
 (for example, the `development` Team should be able to access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
 
 Atmos supports this use-case by using deep-merging of stack manifests, [Imports](/core-concepts/stacks/imports)
@@ -239,13 +264,13 @@ Add the following config to the Organization stack manifest in `stacks/orgs/acme
 <Terminal title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
 terraform:
-backend_type: s3
-backend:
-  s3:
-    acl: "bucket-owner-full-control"
-    encrypt: true
-    key: "terraform.tfstate"
-    region: "your-aws-region"
+  backend_type: s3
+  backend:
+    s3:
+      acl: "bucket-owner-full-control"
+      encrypt: true
+      key: "terraform.tfstate"
+      region: "your-aws-region"
 ```
 </Terminal>
 
@@ -256,12 +281,12 @@ Add the following config to the `dev` stack manifest in `stacks/orgs/acme/plat/d
 <Terminal title="stacks/orgs/acme/plat/dev/_defaults.yaml">
 ```yaml
 terraform:
-backend_type: s3
-backend:
-  s3:
-    bucket: "your-dev-s3-bucket-name"
-    dynamodb_table: "your-dev-dynamodb-table-name"
-    role_arn: "IAM Role with permissions to access the 'dev' Terraform backend"
+  backend_type: s3
+  backend:
+    s3:
+      bucket: "your-dev-s3-bucket-name"
+      dynamodb_table: "your-dev-dynamodb-table-name"
+      role_arn: "IAM Role with permissions to access the 'dev' Terraform backend"
 ```
 </Terminal>
 
@@ -272,12 +297,12 @@ Add the following config to the `staging` stack manifest in `stacks/orgs/acme/pl
 <Terminal title="stacks/orgs/acme/plat/staging/_defaults.yaml">
 ```yaml
 terraform:
-backend_type: s3
-backend:
-  s3:
-    bucket: "your-staging-s3-bucket-name"
-    dynamodb_table: "your-staging-dynamodb-table-name"
-    role_arn: "IAM Role with permissions to access the 'staging' Terraform backend"
+  backend_type: s3
+  backend:
+    s3:
+      bucket: "your-staging-s3-bucket-name"
+      dynamodb_table: "your-staging-dynamodb-table-name"
+      role_arn: "IAM Role with permissions to access the 'staging' Terraform backend"
 ```
 </Terminal>
 
@@ -288,12 +313,12 @@ Add the following config to the `prod` stack manifest in `stacks/orgs/acme/plat/
 <Terminal title="stacks/orgs/acme/plat/prod/_defaults.yaml">
 ```yaml
 terraform:
-backend_type: s3
-backend:
-  s3:
-    bucket: "your-prod-s3-bucket-name"
-    dynamodb_table: "your-prod-dynamodb-table-name"
-    role_arn: "IAM Role with permissions to access the 'prod' Terraform backend"
+  backend_type: s3
+  backend:
+    s3:
+      bucket: "your-prod-s3-bucket-name"
+      dynamodb_table: "your-prod-dynamodb-table-name"
+      role_arn: "IAM Role with permissions to access the 'prod' Terraform backend"
 ```
 </Terminal>
 
