@@ -91,12 +91,9 @@ custom commands, so any tool can be powered by atmos.
 
 ### Does Atmos work with Terraform Cloud and Terraform Enterprise?
 
-Yes, refer to [Terraform Backends](/core-concepts/components/terraform-backends) for how to configure Terraform backends,
-including [Terraform Cloud Settings](https://developer.hashicorp.com/terraform/cli/cloud/settings).
+Probably, but we haven't tested it.
 
-### Does Atmos work with CI/CD systems?
-
-Yes, here's why it should work with any CI/CD system:
+Here's why it should work with any CI/CD system.
 
 - Atmos works with *vanilla* Terraform HCL code (we do not introduce any proprietary HCL code formats)
 - Atmos can [generate `.tfvar` files](/cli/commands/terraform/generate-varfiles) from the deep-merged configurations for any given stack, or all stacks at once.
