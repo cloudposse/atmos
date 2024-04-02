@@ -439,7 +439,8 @@
         "vault",
         "static",
         "azurerm",
-        "gcs"
+        "gcs",
+        "cloud"
       ],
       "description": "Backend type",
       "title": "backend_type"
@@ -455,7 +456,9 @@
         "remote",
         "vault",
         "static",
-        "azurerm"
+        "azurerm",
+        "gcs",
+        "cloud"
       ],
       "description": "Remote state backend type",
       "title": "remote_state_backend_type"
@@ -521,6 +524,14 @@
           "additionalProperties": true
         },
         "azurerm": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "gcs": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "cloud": {
           "type": "object",
           "additionalProperties": true
         }

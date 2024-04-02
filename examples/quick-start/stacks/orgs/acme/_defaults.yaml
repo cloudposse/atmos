@@ -1,19 +1,6 @@
 vars:
   namespace: acme
 
-# Terraform S3 backend configuration
-#terraform:
-#  backend_type: s3
-#  backend:
-#    s3:
-#      acl: "bucket-owner-full-control"
-#      encrypt: true
-#      bucket: "your-s3-bucket-name"
-#      dynamodb_table: "your-dynamodb-table-name"
-#      key: "terraform.tfstate"
-#      region: "your-aws-region"
-#      role_arn: "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
-
 terraform:
   vars:
     tags:
@@ -25,3 +12,27 @@ terraform:
       # https://masterminds.github.io/sprig/date.html
       # https://pkg.go.dev/time#pkg-constants
       provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'
+
+  # Terraform backend configuration
+  # https://atmos.tools/core-concepts/components/terraform-backends
+  # https://developer.hashicorp.com/terraform/language/settings/backends/configuration
+  #  backend_type: cloud  # s3, cloud
+  #  backend:
+  #    # AWS S3 backend
+  #    s3:
+  #      acl: "bucket-owner-full-control"
+  #      encrypt: true
+  #      bucket: "your-s3-bucket-name"
+  #      dynamodb_table: "your-dynamodb-table-name"
+  #      key: "terraform.tfstate"
+  #      region: "us-east-2"
+  #      role_arn: "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
+  #    # Terraform Cloud backend
+  #    # https://developer.hashicorp.com/terraform/cli/cloud/settings
+  #    cloud:
+  #      organization: "your-org"
+  #      hostname: "app.terraform.io"
+  #      workspaces:
+  #        # The token `{terraform_workspace}` will be automatically replaced with the
+  #        # Terraform workspace for each Atmos component
+  #        name: "{terraform_workspace}"
