@@ -936,14 +936,47 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 }
 
 // generateComponentBackendConfig generates backend config for components
-func generateComponentBackendConfig(backendType string, backendConfig map[any]any) map[string]any {
+func generateComponentBackendConfig(backendType string, backendConfig map[any]any, terraformWorkspace string) (map[string]any, error) {
+
+	// Generate backend config file for Terraform Cloud
+	// https://developer.hashicorp.com/terraform/cli/cloud/settings
+	if backendType == "cloud" {
+		var backendConfigFinal = backendConfig
+
+		if terraformWorkspace != "" {
+			// Process template tokens in the backend config
+			backendConfigStr, err := u.ConvertToYAML(backendConfig)
+			if err != nil {
+				return nil, err
+			}
+
+			ctx := schema.Context{
+				TerraformWorkspace: terraformWorkspace,
+			}
+
+			backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
+
+			backendConfigFinal, err = c.YAMLToMapOfInterfaces(backendConfigStrReplaced)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return map[string]any{
+			"terraform": map[string]any{
+				"cloud": backendConfigFinal,
+			},
+		}, nil
+	}
+
+	// Generate backend config file for all other Terraform backends
 	return map[string]any{
 		"terraform": map[string]any{
 			"backend": map[string]any{
 				backendType: backendConfig,
 			},
 		},
-	}
+	}, nil
 }
 
 // generateComponentProviderOverrides generates provider overrides for components

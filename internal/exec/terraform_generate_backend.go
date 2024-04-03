@@ -52,7 +52,10 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return fmt.Errorf("\nCould not find 'backend' config for the '%s' component.\n", component)
 	}
 
-	componentBackendConfig := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection)
+	componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
+	if err != nil {
+		return err
+	}
 
 	u.LogDebug(cliConfig, "Component backend config:\n\n")
 

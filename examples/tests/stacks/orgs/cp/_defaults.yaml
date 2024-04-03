@@ -12,7 +12,9 @@ terraform:
       region: "{{ .vars.region }}"
       terraform_workspace: "{{ .workspace }}"
 
-  backend_type: s3 # s3, remote, vault, static, azurerm, etc.
+  backend_type: s3 # s3, remote, vault, static, azurerm, gcs, cloud
+
+  # https://developer.hashicorp.com/terraform/language/settings/backends/configuration
   backend:
     s3:
       encrypt: true
@@ -30,6 +32,12 @@ terraform:
       key: dev.atmos
     remote: {}
     vault: {}
+    # https://developer.hashicorp.com/terraform/cli/cloud/settings
+    cloud:
+      organization: "my-org"
+      hostname: "app.terraform.io"
+      workspaces:
+        name: "{terraform_workspace}"
 
   remote_state_backend:
     s3:
