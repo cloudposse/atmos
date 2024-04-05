@@ -45,10 +45,7 @@ func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingT
 
 // IsGolangTemplate checks if the provided string is a Go template
 func IsGolangTemplate(str string) (bool, error) {
-	// Add Gomplate and Sprig functions
-	funcs := lo.Assign(gomplate.CreateFuncs(context.Background(), nil), sprig.FuncMap())
-
-	t, err := template.New(str).Funcs(funcs).Parse(str)
+	t, err := template.New(str).Parse(str)
 	if err != nil {
 		return false, err
 	}
