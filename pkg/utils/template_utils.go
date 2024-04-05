@@ -13,8 +13,8 @@ import (
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	// Add Sprig and Gomplate functions
-	funcs := lo.Assign(sprig.FuncMap(), gomplate.CreateFuncs(context.Background(), nil))
+	// Add Gomplate and Sprig functions
+	funcs := lo.Assign(gomplate.CreateFuncs(context.Background(), nil), sprig.FuncMap())
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -45,7 +45,10 @@ func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingT
 
 // IsGolangTemplate checks if the provided string is a Go template
 func IsGolangTemplate(str string) (bool, error) {
-	t, err := template.New(str).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(str)
+	// Add Gomplate and Sprig functions
+	funcs := lo.Assign(gomplate.CreateFuncs(context.Background(), nil), sprig.FuncMap())
+
+	t, err := template.New(str).Funcs(funcs).Parse(str)
 	if err != nil {
 		return false, err
 	}
