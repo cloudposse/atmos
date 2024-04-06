@@ -6,9 +6,8 @@ id: templating
 ---
 
 Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
-[Sprig Functions](https://masterminds.github.io/sprig/) and [`gomplate`](https://docs.gomplate.ca/)
-are supported as well, including [Gomplate Functions](https://docs.gomplate.ca/functions/) 
-and [Gomplate Datasources](https://docs.gomplate.ca/datasources/).
+[Sprig Functions](https://masterminds.github.io/sprig/) and [Gomplate Functions](https://docs.gomplate.ca/functions/)
+are supported as well.
 
 You can use `Go` templates in the following Atmos section to refer to values in the same or other sections:
 
