@@ -212,7 +212,7 @@ The following examples produce the same result:
 ```yaml
 chart_values:
   template-github-commit-status:
-    message: |
+    message: >-
       Application {{`{{ .app.metadata.name }}`}} is now running new version.
 ```
 
@@ -225,7 +225,7 @@ chart_values:
 ```yaml
 chart_values:
   template-github-commit-status:
-    message: |
+    message: >-
       {{ printf "Application {{ .app.metadata.name }} is now running new version." }}
 ```
 
