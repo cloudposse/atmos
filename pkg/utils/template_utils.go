@@ -12,7 +12,12 @@ import (
 )
 
 // ProcessTmpl parses and executes Go templates
-func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
+func ProcessTmpl(
+	tmplName string,
+	tmplValue string,
+	tmplData any,
+	ignoreMissingTemplateValues bool,
+) (string, error) {
 	// Add Gomplate and Sprig functions
 	funcs := lo.Assign(gomplate.CreateFuncs(context.Background(), nil), sprig.FuncMap())
 

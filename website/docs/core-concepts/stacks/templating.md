@@ -9,7 +9,9 @@ Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifes
 [Sprig Functions](https://masterminds.github.io/sprig/) and [Gomplate Functions](https://docs.gomplate.ca/functions/)
 are supported as well.
 
-You can use `Go` templates in the following Atmos section to refer to values in the same or other sections:
+## Atmos sections supporting `Go` templates
+
+You can use `Go` templates in the following Atmos sections to refer to values in the same or other sections:
 
   - `vars`
   - `settings`
@@ -111,7 +113,7 @@ vars:
     terraform_workspace: plat-ue2-dev
 ```
 
-<br/>
+## Use-cases
 
 While `Go` templates in Atmos stack manifests offer great flexibility for various use-cases, one of the obvious use-cases
 is to add a standard set of tags to all the resources in the infrastructure.
@@ -129,4 +131,100 @@ terraform:
       provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'
 ```
 
-the tags will be processed and automatically added to all the resources provisioned in the infrastructure.
+The tags will be processed and automatically added to all the resources provisioned in the infrastructure.
+
+## Excluding templates from processing by Atmos
+
+If you need to provide `Go` templates to external systems (e.g. ArgoCD or Datadog) verbatim and prevent Atmos from
+processing the templates, use **double curly braces + backtick + double curly braces** instead of just **double curly braces**:
+
+```console
+{{`{{  instead of  {{
+
+}}`}}  instead of  }}
+```
+
+For example:
+
+```yaml
+components:
+  terraform:
+
+    eks/argocd:
+      metadata:
+        component: "eks/argocd"
+      vars:
+        enabled: true
+        name: "argocd"
+        chart_repository: "https://argoproj.github.io/argo-helm"
+        chart_version: 5.46.0
+
+        chart_values:
+          template-github-commit-status:
+            message: |
+              Application {{`{{ .app.metadata.name }}`}} is now running new version.
+            webhook:
+              github-commit-status:
+                method: POST
+                path: "/repos/{{`{{ call .repo.FullNameByRepoURL .app.metadata.annotations.app_repository }}`}}/statuses/{{`{{ .app.metadata.annotations.app_commit }}`}}"
+                body: |
+                  {
+                    {{`{{ if eq .app.status.operationState.phase "Running" }}`}} "state": "pending"{{`{{end}}`}}
+                    {{`{{ if eq .app.status.operationState.phase "Succeeded" }}`}} "state": "success"{{`{{end}}`}}
+                    {{`{{ if eq .app.status.operationState.phase "Error" }}`}} "state": "error"{{`{{end}}`}}
+                    {{`{{ if eq .app.status.operationState.phase "Failed" }}`}} "state": "error"{{`{{end}}`}},
+                    "description": "ArgoCD",
+                    "target_url": "{{`{{ .context.argocdUrl }}`}}/applications/{{`{{ .app.metadata.name }}`}}",
+                    "context": "continuous-delivery/{{`{{ .app.metadata.name }}`}}"
+                  }
+```
+
+When Atmos processes the templates in the manifest shown above, it renders them as raw strings allowing sending
+the templates to the external system for processing:
+
+```yaml
+chart_values:
+  template-github-commit-status:
+    message: |
+      Application {{ .app.metadata.name }} is now running new version.
+    webhook:
+      github-commit-status:
+        method: POST
+        path: "/repos/{{ call .repo.FullNameByRepoURL .app.metadata.annotations.app_repository }}/statuses/{{ .app.metadata.annotations.app_commit }}"
+        body: |
+          {
+            {{ if eq .app.status.operationState.phase "Running" }} "state": "pending"{{end}}
+            {{ if eq .app.status.operationState.phase "Succeeded" }} "state": "success"{{end}}
+            {{ if eq .app.status.operationState.phase "Error" }} "state": "error"{{end}}
+            {{ if eq .app.status.operationState.phase "Failed" }} "state": "error"{{end}},
+            "description": "ArgoCD",
+            "target_url": "{{ .context.argocdUrl }}/applications/{{ .app.metadata.name }}",
+            "context": "continuous-delivery/{{ .app.metadata.name }}"
+          }
+```
+
+<br/>
+
+The `printf` template function is also supported and can be used instead of **double curly braces + backtick + double curly braces**.
+
+The following examples produce the same result:
+
+```yaml
+chart_values:
+  template-github-commit-status:
+    message: |
+      Application {{`{{ .app.metadata.name }}`}} is now running new version.
+```
+
+```yaml
+chart_values:
+  template-github-commit-status:
+    message: "Application {{`{{ .app.metadata.name }}`}} is now running new version."
+```
+
+```yaml
+chart_values:
+  template-github-commit-status:
+    message: |
+      {{ printf "Application {{ .app.metadata.name }} is now running new version." }}
+```
