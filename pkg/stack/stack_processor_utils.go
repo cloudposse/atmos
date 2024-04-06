@@ -266,6 +266,7 @@ func CreateComponentStackMap(
 
 			if !isDirectory && isYaml {
 				config, _, _, err := ProcessYAMLConfigFile(
+					schema.CliConfiguration{},
 					stacksBasePath,
 					p,
 					map[string]map[any]any{},

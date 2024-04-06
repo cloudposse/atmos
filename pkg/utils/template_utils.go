@@ -9,10 +9,13 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/samber/lo"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(
+	cliConfig schema.CliConfiguration,
 	tmplName string,
 	tmplValue string,
 	tmplData any,
