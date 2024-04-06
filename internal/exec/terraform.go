@@ -318,6 +318,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
 
+	// Set terraform workspace via ENV var
+	if !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_WORKSPACE=%s", info.TerraformWorkspace))
+	}
+
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
 		u.LogDebug(cliConfig, "\nUsing ENV vars:")
@@ -368,11 +373,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
-
-	// Set terraform workspace via ENV var
-	if !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_WORKSPACE=%s", info.TerraformWorkspace))
-	}
 
 	// Check if the terraform command requires a user interaction,
 	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
