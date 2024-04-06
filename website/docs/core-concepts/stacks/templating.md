@@ -228,3 +228,9 @@ chart_values:
     message: |
       {{ printf "Application {{ .app.metadata.name }} is now running new version." }}
 ```
+
+```yaml
+chart_values:
+  template-github-commit-status:
+    message: '{{ printf "Application {{ .app.metadata.name }} is now running new version." }}'
+```
