@@ -2,15 +2,40 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"text/template"
 	"text/template/parse"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/hairyhenderson/gomplate/v3"
+	"github.com/samber/lo"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ProcessTmpl parses and executes Go templates
-func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	t, err := template.New(tmplName).Funcs(sprig.FuncMap()).Parse(tmplValue)
+func ProcessTmpl(
+	cliConfig schema.CliConfiguration,
+	tmplName string,
+	tmplValue string,
+	tmplData any,
+	ignoreMissingTemplateValues bool,
+) (string, error) {
+	if !cliConfig.Templates.Settings.Enabled {
+		return tmplValue, nil
+	}
+
+	// Add Gomplate and Sprig functions
+	funcs := make(map[string]any)
+
+	if cliConfig.Templates.Settings.Gomplate.Enabled {
+		funcs = lo.Assign(funcs, gomplate.CreateFuncs(context.Background(), nil))
+	}
+	if cliConfig.Templates.Settings.Sprig.Enabled {
+		funcs = lo.Assign(funcs, sprig.FuncMap())
+	}
+
+	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}
@@ -39,7 +64,7 @@ func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingT
 
 // IsGolangTemplate checks if the provided string is a Go template
 func IsGolangTemplate(str string) (bool, error) {
-	t, err := template.New(str).Funcs(sprig.FuncMap()).Parse(str)
+	t, err := template.New(str).Parse(str)
 	if err != nil {
 		return false, err
 	}

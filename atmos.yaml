@@ -309,3 +309,16 @@ schemas:
     # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+
+# `Go` templates in Atmos manifests
+# https://atmos.tools/core-concepts/stacks/templating
+# https://pkg.go.dev/text/template
+templates:
+  settings:
+    enabled: true
+    # https://masterminds.github.io/sprig
+    sprig:
+      enabled: true
+    # https://docs.gomplate.ca
+    gomplate:
+      enabled: true

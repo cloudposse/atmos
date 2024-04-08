@@ -28,6 +28,7 @@ var (
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
 // and returns a list of stack configs
 func ProcessYAMLConfigFiles(
+	cliConfig schema.CliConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
@@ -67,6 +68,7 @@ func ProcessYAMLConfigFiles(
 			)
 
 			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(
+				cliConfig,
 				stackBasePath,
 				p,
 				map[string]map[any]any{},
@@ -145,6 +147,7 @@ func ProcessYAMLConfigFiles(
 // recursively processes and deep-merges all imports,
 // and returns the final stack config
 func ProcessYAMLConfigFile(
+	cliConfig schema.CliConfiguration,
 	basePath string,
 	filePath string,
 	importsConfig map[string]map[any]any,
@@ -193,9 +196,9 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Process `Go` templates in the stack manifest using the provided context
+	// Process `Go` templates in the imported stack manifest using the provided context
 	if !skipTemplatesProcessingInImports && len(context) > 0 {
-		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackYamlConfig, err = u.ProcessTmpl(cliConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -404,6 +407,7 @@ func ProcessYAMLConfigFile(
 		// Process the imports in the current manifest
 		for _, importFile := range importMatches {
 			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(
+				cliConfig,
 				basePath,
 				importFile,
 				importsConfig,

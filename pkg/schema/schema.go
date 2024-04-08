@@ -11,6 +11,7 @@ type CliConfiguration struct {
 	CommandAliases                CommandAliases `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
 	Integrations                  Integrations   `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 	Schemas                       Schemas        `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
+	Templates                     Templates      `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Initialized                   bool           `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	StacksBaseAbsolutePath        string         `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string       `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
@@ -20,6 +21,24 @@ type CliConfiguration struct {
 	StackConfigFilesRelativePaths []string       `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string       `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string         `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
+}
+
+type Templates struct {
+	Settings TemplatesSettings `yaml:"settings" json:"settings" mapstructure:"settings"`
+}
+
+type TemplatesSettings struct {
+	Enabled  bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Sprig    TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
+	Gomplate TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+}
+
+type TemplatesSettingsSprig struct {
+	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+}
+
+type TemplatesSettingsGomplate struct {
+	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 }
 
 type Terraform struct {
