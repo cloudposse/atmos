@@ -373,10 +373,9 @@ aliases:
 # https://pkg.go.dev/text/template
 templates:
   enabled: true
-  num_passes: 1
-  # https://masterminds.github.io/sprig/
+  # https://masterminds.github.io/sprig
   sprig:
     enabled: true
-  # https://docs.gomplate.ca/
+  # https://docs.gomplate.ca
   gomplate:
-    enabled: false
+    enabled: true

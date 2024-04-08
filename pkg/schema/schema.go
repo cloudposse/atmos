@@ -24,10 +24,9 @@ type CliConfiguration struct {
 }
 
 type Templates struct {
-	Enabled   bool              `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	NumPasses int               `yaml:"num_passes" json:"num_passes" mapstructure:"num_passes"`
-	Sprig     TemplatesSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
-	Gomplate  TemplatesGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+	Enabled  bool              `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Sprig    TemplatesSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
+	Gomplate TemplatesGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
 }
 
 type TemplatesSprig struct {

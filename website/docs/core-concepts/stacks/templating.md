@@ -9,6 +9,52 @@ Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifes
 [Sprig Functions](https://masterminds.github.io/sprig/) and [Gomplate Functions](https://docs.gomplate.ca/functions/)
 are supported as well.
 
+## Configuration
+
+Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI config file](/cli/configuration) in the
+`templates` section:
+
+```yaml
+# https://pkg.go.dev/text/template
+templates:
+  enabled: true
+  # https://masterminds.github.io/sprig
+  sprig:
+    enabled: true
+  # https://docs.gomplate.ca
+  gomplate:
+    enabled: true
+```
+
+- `templates.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. If set
+  to `false`, Atmos will not process `Go` templates in stack manifests
+
+- `templates.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
+  in Atmos stack manifests
+
+- `templates.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/)
+  in Atmos stack manifests
+
+<br/>
+
+:::warning
+
+Some functions are present in both [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/).
+
+For example, the `env` function has the same name in [Sprig](https://masterminds.github.io/sprig/os.html) and
+[Gomplate](https://docs.gomplate.ca/functions/env/), but has different syntax and accept different number of arguments.
+
+If you use the `env` function from one templating engine and enable both [Sprig](https://masterminds.github.io/sprig/)
+and [Gomplate](https://docs.gomplate.ca/functions/), it will be invalid in the other templating engine, and an error will be thrown.
+
+For this reason, you can use the `templates.sprig.enabled` and `templates.gomplate.enabled` settings to selectively
+enable/disable the [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/)
+functions.
+
+:::
+
+<br/>
+
 ## Atmos sections supporting `Go` templates
 
 You can use `Go` templates in the following Atmos sections to refer to values in the same or other sections:
