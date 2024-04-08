@@ -17,22 +17,23 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
 ```yaml
 # https://pkg.go.dev/text/template
 templates:
-  enabled: true
-  # https://masterminds.github.io/sprig
-  sprig:
+  settings:
     enabled: true
-  # https://docs.gomplate.ca
-  gomplate:
-    enabled: true
+    # https://masterminds.github.io/sprig
+    sprig:
+      enabled: true
+    # https://docs.gomplate.ca
+    gomplate:
+      enabled: true
 ```
 
-- `templates.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. If set
-  to `false`, Atmos will not process `Go` templates in stack manifests
+- `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. 
+  If set to `false`, Atmos will not process `Go` templates in stack manifests
 
-- `templates.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
+- `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
   in Atmos stack manifests
 
-- `templates.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/)
+- `templates.settings.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/)
   in Atmos stack manifests
 
 <br/>
@@ -47,7 +48,7 @@ For example, the `env` function has the same name in [Sprig](https://masterminds
 If you use the `env` function from one templating engine and enable both [Sprig](https://masterminds.github.io/sprig/)
 and [Gomplate](https://docs.gomplate.ca/functions/), it will be invalid in the other templating engine, and an error will be thrown.
 
-For this reason, you can use the `templates.sprig.enabled` and `templates.gomplate.enabled` settings to selectively
+For this reason, you can use the `templates.settings.sprig.enabled` and `templates.settings,gomplate.enabled` settings to selectively
 enable/disable the [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/)
 functions.
 

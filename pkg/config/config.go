@@ -68,12 +68,14 @@ var (
 			},
 		},
 		Templates: schema.Templates{
-			Enabled: true,
-			Sprig: schema.TemplatesSprig{
+			Settings: schema.TemplatesSettings{
 				Enabled: true,
-			},
-			Gomplate: schema.TemplatesGomplate{
-				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
 			},
 		},
 		Initialized: true,

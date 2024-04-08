@@ -21,17 +21,17 @@ func ProcessTmpl(
 	tmplData any,
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
-	if !cliConfig.Templates.Enabled {
+	if !cliConfig.Templates.Settings.Enabled {
 		return tmplValue, nil
 	}
 
 	// Add Gomplate and Sprig functions
 	funcs := make(map[string]any)
 
-	if cliConfig.Templates.Gomplate.Enabled {
+	if cliConfig.Templates.Settings.Gomplate.Enabled {
 		funcs = lo.Assign(funcs, gomplate.CreateFuncs(context.Background(), nil))
 	}
-	if cliConfig.Templates.Sprig.Enabled {
+	if cliConfig.Templates.Settings.Sprig.Enabled {
 		funcs = lo.Assign(funcs, sprig.FuncMap())
 	}
 

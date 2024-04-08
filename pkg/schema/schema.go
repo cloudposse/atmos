@@ -24,16 +24,20 @@ type CliConfiguration struct {
 }
 
 type Templates struct {
-	Enabled  bool              `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Sprig    TemplatesSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
-	Gomplate TemplatesGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+	Settings TemplatesSettings `yaml:"settings" json:"settings" mapstructure:"settings"`
 }
 
-type TemplatesSprig struct {
+type TemplatesSettings struct {
+	Enabled  bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Sprig    TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
+	Gomplate TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+}
+
+type TemplatesSettingsSprig struct {
 	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 }
 
-type TemplatesGomplate struct {
+type TemplatesSettingsGomplate struct {
 	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 }
 
