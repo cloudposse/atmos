@@ -115,10 +115,11 @@ component:
           terraform_workspace: "{{ .workspace }}"
           assumed_role: "{{ .providers.aws.assume_role }}"
           description: "{{ .atmos_component }} component provisioned in {{ .atmos_stack }} stack by assuming IAM role {{ .providers.aws.assume_role }}"
-          # `provisioned_at` uses the Sprig functions
-          # https://masterminds.github.io/sprig/date.html
-          # https://pkg.go.dev/time#pkg-constants
-          provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'
+          # Examples of using the Gomplate and Sprig functions
+          # https://docs.gomplate.ca/functions/strings
+          atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
+          # https://masterminds.github.io/sprig/os.html
+          provisioned_by_user: '{{ env "USER" }}'
 ```
 
 When executing Atmos commands like `atmos describe component` and `atmos terraform plan/apply`, Atmos processes all the template tokens 
@@ -151,10 +152,11 @@ vars:
   tags:
     assumed_role: <role-arn>
     atmos_component: vpc
+    atmos_component_description: Vpc component "common" provisioned in the stack "plat-ue2-dev"
     atmos_manifest: orgs/acme/plat/dev/us-east-2
     atmos_stack: plat-ue2-dev
     description: vpc component provisioned in plat-ue2-dev stack by assuming IAM role <role-arn>
-    provisioned_at: "2024-03-12T16:18:24Z"
+    provisioned_by_user: <user>
     region: us-east-2
     terraform_workspace: plat-ue2-dev
 ```
@@ -174,7 +176,11 @@ terraform:
       atmos_stack: "{{ .atmos_stack }}"
       atmos_manifest: "{{ .atmos_stack_file }}"
       terraform_workspace: "{{ .workspace }}"
-      provisioned_at: '{{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'
+      # Examples of using the Gomplate and Sprig functions
+      # https://docs.gomplate.ca/functions/strings
+      atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
+      # https://masterminds.github.io/sprig/os.html
+      provisioned_by_user: '{{ env "USER" }}'
 ```
 
 The tags will be processed and automatically added to all the resources provisioned in the infrastructure.
