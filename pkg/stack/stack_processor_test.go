@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"github.com/cloudposse/atmos/pkg/schema"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,7 @@ func TestStackProcessor(t *testing.T) {
 	processComponentDeps := true
 
 	var listResult, mapResult, _, err = ProcessYAMLConfigFiles(
+		schema.CliConfiguration{},
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,

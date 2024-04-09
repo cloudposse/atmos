@@ -67,6 +67,17 @@ var (
 				BasePath: "stacks/schemas/opa",
 			},
 		},
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
 		Initialized: true,
 	}
 )

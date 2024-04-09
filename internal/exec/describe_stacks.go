@@ -208,7 +208,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = u.ProcessTmpl(cliConfig, "describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -263,7 +263,7 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmpl("describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 							if err != nil {
 								return nil, err
 							}
@@ -274,9 +274,6 @@ func ExecuteDescribeStacks(
 							}
 
 							componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
-							if err != nil {
-								return nil, err
-							}
 
 							// Add sections
 							for sectionName, section := range componentSection {
@@ -372,7 +369,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = u.ProcessTmpl(cliConfig, "describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -419,7 +416,7 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmpl("describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 							if err != nil {
 								return nil, err
 							}
@@ -430,9 +427,6 @@ func ExecuteDescribeStacks(
 							}
 
 							componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
-							if err != nil {
-								return nil, err
-							}
 
 							// Add sections
 							for sectionName, section := range componentSection {
