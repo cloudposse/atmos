@@ -35,7 +35,7 @@ Atmos automatically manages Terraform workspaces for you when you provision comp
 
 ## Terraform Workspaces in Atmos
 
-Atmos uses and automatically calculates Terraform workspaces to manage top-level stacks. By default, Atmos uses the stack
+Atmos automatically calculates Terraform workspace names and uses workspaces to manage top-level stacks. By default, Atmos uses the stack
 name as the Terraform workspace when provisioning components in the stack. For example, consider the following manifest
 for the component `vpc` in the stack `ue2-dev`:
 
@@ -134,9 +134,9 @@ When you provision the components by executing the commands:
 
 <br/>
 
-Atmos sets the [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
-environment variable to `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively, and Terraform selects (or creates) different workspaces
-for the components. This is done because the same Terraform component `vpc` is used as the workspace prefix
+Atmos computes the workspace names as `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively,
+and selects the appropriate workspace for each component (again, creating it if needed).
+This is done because the same Terraform component `vpc` is used as the workspace prefix
 (in case of [AWS S3 backend](https://developer.hashicorp.com/terraform/language/settings/backends/s3),
 folder in the S3 state bucket), and it's necessary to have different subfolders (`ue2-dev-vpc-1`
 and `ue2-dev-vpc-2` instead of just `ue2-dev`) to store the Terraform state files.
