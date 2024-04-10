@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"os"
+	osexec "os/exec"
 	"path"
 	"strings"
 
@@ -388,6 +389,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			workspaceSelectRedirectStdErr,
 		)
 		if err != nil {
+			var osErr *osexec.ExitError
+			ok := errors.As(err, &osErr)
+			if !ok || osErr.ExitCode() != 1 {
+				// err is not a non-zero exit code or err is not exit code 1, which we are expecting
+				return err
+			}
 			err = ExecuteShellCommand(
 				cliConfig,
 				info.Command,
