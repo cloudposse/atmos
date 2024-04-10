@@ -318,11 +318,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
 
-	// Set terraform workspace via ENV var
-	if !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_WORKSPACE=%s", info.TerraformWorkspace))
-	}
-
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
 		u.LogDebug(cliConfig, "\nUsing ENV vars:")
@@ -373,6 +368,40 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
+
+	// Run `terraform workspace` before executing other terraform commands
+	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
+		workspaceSelectRedirectStdErr := "/dev/stdout"
+
+		// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
+		if info.RedirectStdErr != "" {
+			workspaceSelectRedirectStdErr = info.RedirectStdErr
+		}
+
+		err = ExecuteShellCommand(
+			cliConfig,
+			info.Command,
+			[]string{"workspace", "select", info.TerraformWorkspace},
+			componentPath,
+			info.ComponentEnvList,
+			info.DryRun,
+			workspaceSelectRedirectStdErr,
+		)
+		if err != nil {
+			err = ExecuteShellCommand(
+				cliConfig,
+				info.Command,
+				[]string{"workspace", "new", info.TerraformWorkspace},
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	// Check if the terraform command requires a user interaction,
 	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
