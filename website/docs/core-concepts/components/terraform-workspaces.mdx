@@ -31,8 +31,7 @@ For example, you might use separate workspaces for blue-green deployments or can
 
 To work with workspaces in Terraform, you can use commands like `terraform workspace new`, `terraform workspace select`,
 and `terraform workspace delete` to create, switch between, and delete workspaces respectively.
-Additionally, the ENV variable [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
-can be used to create and select Terraform workspaces.
+Atmos automatically manages Terraform workspaces for you when you provision components in a stack.
 
 ## Terraform Workspaces in Atmos
 
@@ -72,8 +71,10 @@ When you provision the `vpc` component in the stack `ue2-dev` by executing the f
 
 <br/>
 
-Atmos sets the [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
-ENV variable to the name of the stack `ue2-dev`, and Terraform then selects this workspace or creates it if it does not exist.
+Atmos computes the workspace name to be `ue2-dev`. Any Atmos Terraform command other than `init`, using this stack,
+will cause Atmos to select this workspace, creating it if needed. (This leaves the workspace selected as a side effect
+for subsequent Terraform commands run outside of Atmos. Atmos version 1.55 took away this side effect, but it was
+restored in version 1.69.)
 
 The exception to the default rule (using the stack name as Terraform workspace) is when we provision more than one
 instance of the same Terraform component (with the same or different settings) into the same stack by defining multiple
