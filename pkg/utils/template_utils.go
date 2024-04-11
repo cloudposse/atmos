@@ -38,7 +38,6 @@ func ProcessTmpl(
 				return "", err
 			}
 		}
-
 		funcs = lo.Assign(funcs, gomplate.CreateFuncs(context.Background(), &d))
 	}
 	if cliConfig.Templates.Settings.Sprig.Enabled {

@@ -255,3 +255,5 @@ templates:
     # https://docs.gomplate.ca
     gomplate:
       enabled: true
+      # https://docs.gomplate.ca/datasources
+      datasources: {}

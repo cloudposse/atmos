@@ -25,6 +25,8 @@ templates:
     # https://docs.gomplate.ca
     gomplate:
       enabled: true
+      # https://docs.gomplate.ca/datasources
+      datasources: {}
 ```
 
 - `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. 
