@@ -235,6 +235,7 @@ func sectionContainsAnyNotEmptySections(section map[any]any, sectionsToCheck []s
 
 // CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
 func CreateComponentStackMap(
+	cliConfig schema.CliConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
@@ -266,7 +267,7 @@ func CreateComponentStackMap(
 
 			if !isDirectory && isYaml {
 				config, _, _, err := ProcessYAMLConfigFile(
-					schema.CliConfiguration{},
+					cliConfig,
 					stacksBasePath,
 					p,
 					map[string]map[any]any{},

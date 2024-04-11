@@ -543,8 +543,7 @@ func ProcessStacks(
 
 	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, "all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 	if err != nil {
-		// If any error returned from the templates processing, log it and exit
-		u.LogErrorAndExit(err)
+		return configAndStacksInfo, err
 	}
 
 	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
