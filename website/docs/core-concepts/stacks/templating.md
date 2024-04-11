@@ -14,7 +14,7 @@ are supported as well.
 Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI config file](/cli/configuration) in the
 `templates` section:
 
-```yaml
+```yaml title="atmos.yaml"
 # https://pkg.go.dev/text/template
 templates:
   settings:
