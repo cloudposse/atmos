@@ -198,6 +198,11 @@ func ProcessYAMLConfigFile(
 
 	// Process `Go` templates in the imported stack manifest using the provided context
 	if !skipTemplatesProcessingInImports && len(context) > 0 {
+		// Always process `Go` templates in imports since we need to import all the dependencies first in order to process stacks
+		cliConfig.Templates.Settings.Enabled = true
+		cliConfig.Templates.Settings.Sprig.Enabled = true
+		cliConfig.Templates.Settings.Gomplate.Enabled = true
+
 		stackYamlConfig, err = u.ProcessTmpl(cliConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			return nil, nil, nil, err

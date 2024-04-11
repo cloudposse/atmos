@@ -535,15 +535,16 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["deps"] = componentDeps
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
-	// Process `Go` templates in sections
+	// Process `Go` templates in Atmos manifest sections
 	componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, "all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 	if err != nil {
-		return configAndStacksInfo, err
+		// If any error returned from the templates processing, log it and exit
+		u.LogErrorAndExit(err)
 	}
 
 	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
@@ -553,6 +554,7 @@ func ProcessStacks(
 
 	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
 
+	// Process sections
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any); ok {
 		configAndStacksInfo.ComponentProvidersSection = i
 	}
