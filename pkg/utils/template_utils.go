@@ -8,6 +8,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/hairyhenderson/gomplate/v3"
+	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,7 +30,16 @@ func ProcessTmpl(
 	funcs := make(map[string]any)
 
 	if cliConfig.Templates.Settings.Gomplate.Enabled {
-		funcs = lo.Assign(funcs, gomplate.CreateFuncs(context.Background(), nil))
+		// Process and add Gomplate `datasources`
+		d := data.Data{}
+		for k, v := range cliConfig.Templates.Settings.Gomplate.Datasources {
+			_, err := d.DefineDatasource(k, v)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		funcs = lo.Assign(funcs, gomplate.CreateFuncs(context.Background(), &d))
 	}
 	if cliConfig.Templates.Settings.Sprig.Enabled {
 		funcs = lo.Assign(funcs, sprig.FuncMap())
