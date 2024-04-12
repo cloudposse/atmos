@@ -10,8 +10,10 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
+	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
+	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -28,15 +30,39 @@ func ProcessTmpl(
 		return tmplValue, nil
 	}
 
-	// Add Gomplate and Sprig functions
+	// Add Gomplate and Sprig functions and datasources
 	funcs := make(map[string]any)
 
+	// Gomplate functions and datasources
 	if cliConfig.Templates.Settings.Gomplate.Enabled {
-		// Process and add Gomplate `datasources
-		// Merge the datasources from `atmos.yaml` and from the `settings.templates` section in stack manifests
-		datasources := lo.Assign(cliConfig.Templates.Settings.Gomplate.Datasources, settingsTemplates.Gomplate.Datasources)
+		// Process and add Gomplate datasources
 
-		// If timeout is not defined, use 5 seconds
+		// Merge the datasources from `atmos.yaml` and from the `settings.templates` section in stack manifests
+		var cliConfigDatasources map[any]any
+		var stackManifestDatasources map[any]any
+
+		err := mapstructure.Decode(cliConfig.Templates.Settings.Gomplate.Datasources, &cliConfigDatasources)
+		if err != nil {
+			return "", err
+		}
+
+		err = mapstructure.Decode(settingsTemplates.Gomplate.Datasources, &stackManifestDatasources)
+		if err != nil {
+			return "", err
+		}
+
+		merged, err := merge.Merge([]map[any]any{cliConfigDatasources, stackManifestDatasources})
+		if err != nil {
+			return "", err
+		}
+
+		var datasources map[string]schema.TemplatesSettingsGomplateDatasource
+		err = mapstructure.Decode(merged, &datasources)
+		if err != nil {
+			return "", err
+		}
+
+		// If timeout is not provided, use 5 seconds
 		timeoutSeconds := cliConfig.Templates.Settings.Gomplate.Timeout
 		if timeoutSeconds == 0 {
 			timeoutSeconds = 5
@@ -63,6 +89,7 @@ func ProcessTmpl(
 		funcs = lo.Assign(funcs, gomplate.CreateFuncs(ctx, &d))
 	}
 
+	// Sprig functions
 	if cliConfig.Templates.Settings.Sprig.Enabled {
 		funcs = lo.Assign(funcs, sprig.FuncMap())
 	}
