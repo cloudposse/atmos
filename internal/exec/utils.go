@@ -542,14 +542,14 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	var settingsSection schema.Settings
+	var settingsSectionStruct schema.Settings
 
-	err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSection)
+	err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, settingsSection, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 	if err != nil {
 		// If any error returned from the templates processing, log it and exit
 		u.LogErrorAndExit(err)

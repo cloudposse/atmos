@@ -2,17 +2,6 @@ vars:
   namespace: cp
 
 terraform:
-  settings:
-    templates:
-      gomplate:
-        timeout: 5  # 5 seconds timeout to execute the datasources
-        # https://docs.gomplate.ca/datasources
-        datasources:
-          ip:
-            url: "https://httpbin.org/get"
-            headers:
-              accept:
-                - "application/json"
   vars:
     tags:
       atmos_component: "{{ .atmos_component }}"
@@ -23,7 +12,7 @@ terraform:
       region: "{{ .vars.region }}"
       terraform_workspace: "{{ .workspace }}"
       # https://docs.gomplate.ca/datasources
-      provisioned_by_ip: '{{ (datasource "ip").origin }}'
+      provisioned_by_ip: '{{ (datasource "ip").ip }}'
 
   backend_type: s3 # s3, remote, vault, static, azurerm, gcs, cloud
 
@@ -93,6 +82,16 @@ components:
   helmfile: { }
 
 settings:
+  templates:
+    gomplate:
+      timeout: 20  # 20 seconds timeout to execute the datasources
+      # https://docs.gomplate.ca/datasources
+      datasources:
+        ip:
+          url: "https://api.ipify.org?format=json"
+          headers:
+            accept:
+              - "application/json"
   spacelift:
     workspace_enabled: false
     autodeploy: false

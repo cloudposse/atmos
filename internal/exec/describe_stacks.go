@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	c "github.com/cloudposse/atmos/pkg/convert"
+	"github.com/mitchellh/mapstructure"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -263,7 +264,13 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, schema.Settings{}, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							var settingsSectionStruct schema.Settings
+							err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+							if err != nil {
+								return nil, err
+							}
+
+							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 							if err != nil {
 								return nil, err
 							}
@@ -416,7 +423,13 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, schema.Settings{}, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							var settingsSectionStruct schema.Settings
+							err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+							if err != nil {
+								return nil, err
+							}
+
+							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 							if err != nil {
 								return nil, err
 							}

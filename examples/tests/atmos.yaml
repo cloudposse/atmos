@@ -382,9 +382,4 @@ templates:
       enabled: true
       timeout: 5
       # https://docs.gomplate.ca/datasources
-      datasources:
-        httpbin:
-          url: "https://httpbin.org/get"
-          headers:
-            accept:
-              - "application/json"
+      datasources: {}
