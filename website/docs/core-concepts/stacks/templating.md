@@ -248,6 +248,7 @@ component:
           provisioned_by_ip: '{{ (datasource "ip").ip }}'
           config1_tag: '{{ (datasource "config-1").tag }}'
           config2_service_name: '{{ (datasource "config-2").service.name }}'
+          config3_team_name: '{{ (datasource "config-3").team.name }}'
 ```
 
 When executing Atmos commands like `atmos describe component` and `atmos terraform plan/apply`, Atmos processes all the template tokens 
@@ -285,6 +286,7 @@ vars:
     atmos_stack: plat-ue2-dev
     config1_tag: test1
     config2_service_name: service1
+    config3_team_name: my-team
     description: vpc component provisioned in plat-ue2-dev stack by assuming IAM role <role-arn>
     provisioned_by_user: <user>
     provisioned_by_ip: 167.38.132.237
