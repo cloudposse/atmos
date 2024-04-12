@@ -206,6 +206,10 @@ func ProcessYAMLConfigFile(
 		cliConfig.Templates.Settings.Enabled = true
 		cliConfig.Templates.Settings.Sprig.Enabled = true
 		cliConfig.Templates.Settings.Gomplate.Enabled = true
+		// Datasources can be defined in stack manifests in the `settings.templates` sections and will not be available yet
+		// in imports because imports are processed befor the deep-merging the stack manifests and finding the final value
+		// of the `settings.templates` section
+		cliConfig.Templates.Settings.Gomplate.IgnoreDatasourcesProcessingErrorsInImports = true
 
 		stackManifestTemplatesProcessed, err = u.ProcessTmpl(cliConfig, schema.Settings{}, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
