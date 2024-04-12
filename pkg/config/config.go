@@ -75,7 +75,7 @@ var (
 				},
 				Gomplate: schema.TemplatesSettingsGomplate{
 					Enabled:     true,
-					Datasources: make(map[string]string),
+					Datasources: make(map[string]schema.TemplatesSettingsGomplateDatasource),
 				},
 			},
 		},

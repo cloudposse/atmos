@@ -5,6 +5,7 @@ import (
 	"context"
 	"text/template"
 	"text/template/parse"
+	"time"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/hairyhenderson/gomplate/v3"
@@ -31,15 +32,34 @@ func ProcessTmpl(
 
 	if cliConfig.Templates.Settings.Gomplate.Enabled {
 		// Process and add Gomplate `datasources`
+
+		// If timeout is not defined, use 5 seconds
+		timeoutSeconds := cliConfig.Templates.Settings.Gomplate.Timeout
+		if timeoutSeconds == 0 {
+			timeoutSeconds = 5
+		}
+
+		ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
+		defer cancelFunc()
+
 		d := data.Data{}
+		d.Ctx = ctx
+
 		for k, v := range cliConfig.Templates.Settings.Gomplate.Datasources {
-			_, err := d.DefineDatasource(k, v)
+			_, err := d.DefineDatasource(k, v.Url)
 			if err != nil {
 				return "", err
 			}
+
+			// Add datasource headers
+			if len(v.Headers) > 0 {
+				d.Sources[k].Header = v.Headers
+			}
 		}
-		funcs = lo.Assign(funcs, gomplate.CreateFuncs(context.Background(), &d))
+
+		funcs = lo.Assign(funcs, gomplate.CreateFuncs(ctx, &d))
 	}
+
 	if cliConfig.Templates.Settings.Sprig.Enabled {
 		funcs = lo.Assign(funcs, sprig.FuncMap())
 	}

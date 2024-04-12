@@ -37,9 +37,15 @@ type TemplatesSettingsSprig struct {
 	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 }
 
+type TemplatesSettingsGomplateDatasource struct {
+	Url     string              `yaml:"url" json:"url" mapstructure:"url"`
+	Headers map[string][]string `yaml:"headers" json:"headers" mapstructure:"headers"`
+}
+
 type TemplatesSettingsGomplate struct {
-	Enabled     bool              `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Datasources map[string]string `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
+	Enabled     bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Timeout     int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
+	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
 }
 
 type Terraform struct {
