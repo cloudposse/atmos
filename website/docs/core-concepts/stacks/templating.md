@@ -158,22 +158,24 @@ For example, taking into account the configurations described above in `atmos.ya
 and in the `stacks/orgs/acme/_defaults.yaml` stack manifest, the final `datasources` map will look like this:
 
 ```yaml title="stacks/orgs/acme/_defaults.yaml"
-datasources:
-  ip:
-    url: "https://api.ipify.org?format=json"
-    headers:
-      accept:
-        - "application/json"
-  config-1:
-    url: "./my-config1.json"
-  config-2:
-    url: "file:///config2.json"
-  config-3:
-    url: "file:///config3.json"
+gomplate:
+  timeout: 7
+  datasources:
+    ip:
+      url: "https://api.ipify.org?format=json"
+      headers:
+        accept:
+          - "application/json"
+    config-1:
+      url: "./my-config1.json"
+    config-2:
+      url: "file:///config2.json"
+    config-3:
+      url: "file:///config3.json"
 ```
 
 Note that the `config-1` datasource from `atmos.yaml` was overridden with the `config-1` datasource from the 
-`stacks/orgs/acme/_defaults.yaml` stack manifest.
+`stacks/orgs/acme/_defaults.yaml` stack manifest. The `timeout` attribute was overridden as well.
 
 You can now use the `datasources` in `Go` templates in all Atmos sections that support `Go` templates.
 
