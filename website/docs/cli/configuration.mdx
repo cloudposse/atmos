@@ -129,7 +129,7 @@ base_path: "."
 
 Specify the default behaviors for components.
 
-```yaml
+```yaml title="atmos.yaml"
 components:
   terraform:
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
@@ -171,7 +171,7 @@ components:
 
 Define the stack name pattern or template and specify where to find stacks.
 
-```yaml
+```yaml title="atmos.yaml"
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
   # Supports both absolute and relative paths
@@ -306,7 +306,7 @@ Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to co
 
 ## Workflows
 
-```yaml
+```yaml title="atmos.yaml"
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
   # Supports both absolute and relative paths
@@ -324,7 +324,7 @@ Then developers can just run `atmos help` and discover all available commands.
 
 Here are some examples to play around with to get started.
 
-```yaml
+```yaml title="atmos.yaml"
 # Custom CLI commands
 commands:
   - name: tf
@@ -515,7 +515,7 @@ commands:
 
 ## Integrations
 
-```yaml
+```yaml title="atmos.yaml"
 # Integrations
 integrations:
 
@@ -583,7 +583,7 @@ integrations:
 
 Configure the paths where to find OPA and JSON Schema files.
 
-```yaml
+```yaml title="atmos.yaml"
 # Validation schemas (for validating atmos stacks and components)
 schemas:
   # https://json-schema.org
@@ -612,7 +612,7 @@ schemas:
 
 Logs are configured in the `logs` section:
 
-```yaml
+```yaml title="atmos.yaml"
 logs:
   # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
   file: "/dev/stdout"
@@ -644,7 +644,7 @@ native commands like `terraform apply` or `describe stacks`, as well as [Atmos C
 
 For example:
 
-```yaml
+```yaml title="atmos.yaml"
 # CLI command aliases
 aliases:
   # Aliases for Atmos native commands
@@ -708,7 +708,7 @@ For more details, refer to [Atmos Stack Manifest Templating](/core-concepts/stac
 
 <br/>
 
-```yaml
+```yaml title="atmos.yaml"
 # https://pkg.go.dev/text/template
 templates:
   settings:

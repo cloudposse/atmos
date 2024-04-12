@@ -6,7 +6,9 @@ id: templating
 ---
 
 Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
-[Sprig Functions](https://masterminds.github.io/sprig/) and [Gomplate Functions](https://docs.gomplate.ca/functions/)
+
+[Sprig Functions](https://masterminds.github.io/sprig/), [Gomplate Functions](https://docs.gomplate.ca/functions/)
+and [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
 are supported as well.
 
 ## Configuration
@@ -23,13 +25,31 @@ templates:
     sprig:
       enabled: true
     # https://docs.gomplate.ca
+    # https://docs.gomplate.ca/functions
     gomplate:
       enabled: true
+      # Timeout in seconds to execute the datasources
+      timeout: 5
       # https://docs.gomplate.ca/datasources
-      datasources: {}
+      datasources:
+        # 'http' datasource
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        ip:
+          url: "https://api.ipify.org?format=json"
+          # https://docs.gomplate.ca/datasources/#sending-http-headers
+          # https://docs.gomplate.ca/usage/#--datasource-header-h
+          headers:
+            accept:
+              - "application/json"
+        # 'file' datasources
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        config-1:
+          url: "./config1.json"
+        config-2:
+          url: "file:///config2.json"
 ```
 
-- `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. 
+- `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
   If set to `false`, Atmos will not process `Go` templates in stack manifests
 
 - `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
@@ -37,6 +57,40 @@ templates:
 
 - `templates.settings.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/)
   in Atmos stack manifests
+
+- `templates.settings.gomplate.timeout` - timeout in seconds to execute [Gomplate Datasource](https://docs.gomplate.ca/datasources)
+
+- `templates.settings.gomplate.datasources` - a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions:
+
+  - The keys of the map are the datasource names, which are used in `Go` templates in Atmos stack manifests.
+    For example:
+
+    ```yaml
+     terraform:
+       vars:
+         tags:
+           provisioned_by_ip: '{{ (datasource "ip").ip }}'
+           config1_tag: '{{ (datasource "config-1").tag }}'
+           config2_service_name: '{{ (datasource "config-2").service.name }}'
+    ```
+
+  - The values of the map are the datasource definitions with the following schema:
+
+    - `url` - the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
+
+    - `headers` - a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
+      the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers).
+      The keys of the map are the header names. The values of the map are lists of values for the header.
+
+      The following configuration will result in the
+      [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
+      being sent with the HTTP request to the datasource:
+
+         ```yaml
+         headers:
+           accept:
+             - "application/json"
+        ```
 
 <br/>
 
