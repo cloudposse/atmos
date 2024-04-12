@@ -35,8 +35,6 @@ func ProcessTmpl(
 
 	// Gomplate functions and datasources
 	if cliConfig.Templates.Settings.Gomplate.Enabled {
-		// Process and add Gomplate datasources
-
 		// Merge the datasources from `atmos.yaml` and from the `settings.templates` section in stack manifests
 		var cliConfigDatasources map[any]any
 		var stackManifestDatasources map[any]any
@@ -94,6 +92,7 @@ func ProcessTmpl(
 		funcs = lo.Assign(funcs, sprig.FuncMap())
 	}
 
+	// Process the template
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
@@ -112,6 +111,7 @@ func ProcessTmpl(
 
 	t.Option(option)
 
+	// Execute the template
 	var res bytes.Buffer
 	err = t.Execute(&res, tmplData)
 	if err != nil {
