@@ -43,10 +43,9 @@ type TemplatesSettingsGomplateDatasource struct {
 }
 
 type TemplatesSettingsGomplate struct {
-	Enabled                                    bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Timeout                                    int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
-	Datasources                                map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
-	IgnoreDatasourcesProcessingErrorsInImports bool
+	Enabled     bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Timeout     int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
+	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
 }
 
 type Terraform struct {
