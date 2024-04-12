@@ -17,8 +17,8 @@ Templating in Atmos stack manifests can be configured in the following places:
 
 - In the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration)
 
-- In the `settings.templates` section in [Atmos stack manifests](/core-concepts/stacks).
-  The `settings.templates` section can be defined globally per organization, tenant, account, or per component.
+- In the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks).
+  The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component.
   Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/components/inheritance).
 
 ### Configuring templating in `atmos.yaml` CLI config file
@@ -124,7 +124,7 @@ functions.
 
 ### Configuring templating in Atmos stack manifests
 
-The `settings.templates` section can be defined globally per organization, tenant, account, or per component.
+The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component.
 Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/components/inheritance).
 
 For example, define [Gomplate Datasources](https://docs.gomplate.ca/datasources/) for the entire organization in the
@@ -133,23 +133,24 @@ For example, define [Gomplate Datasources](https://docs.gomplate.ca/datasources/
 ```yaml title="stacks/orgs/acme/_defaults.yaml"
 settings:
   templates:
-    gomplate:
-      # 7 seconds timeout to execute the datasources
-      timeout: 7
-      # https://docs.gomplate.ca/datasources
-      datasources:
-        # 'file' datasources
-        # https://docs.gomplate.ca/datasources/#using-file-datasources
-        config-1:
-          url: "./my-config1.json"
-        config-3:
-          url: "file:///config3.json"
+    settings:
+      gomplate:
+        # 7 seconds timeout to execute the datasources
+        timeout: 7
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          # 'file' datasources
+          # https://docs.gomplate.ca/datasources/#using-file-datasources
+          config-1:
+            url: "./my-config1.json"
+          config-3:
+            url: "file:///config3.json"
 ```
 
-Atmos deep-merges the configurations from the `settings.templates` section in [Atmos stack manifests](/core-concepts/stacks)
+Atmos deep-merges the configurations from the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks)
 with the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) using [inheritance](/core-concepts/components/inheritance).
 
-The `settings.templates` section in [Atmos stack manifests](/core-concepts/stacks) takes precedence over 
+The `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks) takes precedence over 
 the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration), allowing you to define the global
 `datasources` in `atmos.yaml` and then add or override `datasources` in Atmos stack manifests for the entire organization,
 tenant, account, or per component.
@@ -157,7 +158,7 @@ tenant, account, or per component.
 For example, taking into account the configurations described above in `atmos.yaml` [CLI config file](/cli/configuration) 
 and in the `stacks/orgs/acme/_defaults.yaml` stack manifest, the final `datasources` map will look like this:
 
-```yaml title="stacks/orgs/acme/_defaults.yaml"
+```yaml
 gomplate:
   timeout: 7
   datasources:

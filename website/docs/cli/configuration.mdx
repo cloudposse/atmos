@@ -40,7 +40,7 @@ names/paths (double-star/globstar `**` is supported as well)
 
 If `atmos.yaml` is not found in any of the searched locations, Atmos will use the default CLI configuration:
 
-```yaml
+```yaml title="atmos.yaml"
 base_path: "."
 components:
   terraform:
@@ -92,8 +92,6 @@ templates:
     # https://docs.gomplate.ca
     gomplate:
       enabled: true
-      # https://docs.gomplate.ca/datasources
-      datasources: {}
 ```
 
 <br/>

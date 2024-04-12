@@ -35,7 +35,7 @@ func ProcessTmpl(
 
 	// Gomplate functions and datasources
 	if cliConfig.Templates.Settings.Gomplate.Enabled {
-		// Merge the datasources from `atmos.yaml` and from the `settings.templates` section in stack manifests
+		// Merge the datasources from `atmos.yaml` and from the `settings.templates.settings` section in stack manifests
 		var cliConfigDatasources map[any]any
 		var stackManifestDatasources map[any]any
 
@@ -60,7 +60,7 @@ func ProcessTmpl(
 			return "", err
 		}
 
-		// If timeout is not provided in `atmos.yaml` nor in `settings.templates` stack manifest, use 5 seconds
+		// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
 		timeoutSeconds, _ := lo.Coalesce(cliConfig.Templates.Settings.Gomplate.Timeout, settingsSection.Templates.Gomplate.Timeout, 5)
 
 		ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
