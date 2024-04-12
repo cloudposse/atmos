@@ -284,7 +284,7 @@ func ExecuteAtmosVendorInternal(
 
 		// Parse 'source' template
 		if s.Version != "" {
-			uri, err = u.ProcessTmpl(cliConfig, fmt.Sprintf("source-%d-%s", indexSource, s.Version), s.Source, s, false)
+			uri, err = u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, fmt.Sprintf("source-%d-%s", indexSource, s.Version), s.Source, s, false)
 			if err != nil {
 				return err
 			}
@@ -318,7 +318,7 @@ func ExecuteAtmosVendorInternal(
 			var target string
 			// Parse 'target' template
 			if s.Version != "" {
-				target, err = u.ProcessTmpl(cliConfig, fmt.Sprintf("target-%d-%d-%s", indexSource, indexTarget, s.Version), tgt, s, false)
+				target, err = u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, fmt.Sprintf("target-%d-%d-%s", indexSource, indexTarget, s.Version), tgt, s, false)
 				if err != nil {
 					return err
 				}

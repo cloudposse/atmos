@@ -18,6 +18,7 @@ import (
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(
 	cliConfig schema.CliConfiguration,
+	settingsTemplates schema.SettingsTemplates,
 	tmplName string,
 	tmplValue string,
 	tmplData any,
@@ -31,7 +32,9 @@ func ProcessTmpl(
 	funcs := make(map[string]any)
 
 	if cliConfig.Templates.Settings.Gomplate.Enabled {
-		// Process and add Gomplate `datasources`
+		// Process and add Gomplate `datasources
+		// Merge the datasources from `atmos.yaml` and from the `settings.templates` section in stack manifests
+		datasources := lo.Assign(cliConfig.Templates.Settings.Gomplate.Datasources, settingsTemplates.Gomplate.Datasources)
 
 		// If timeout is not defined, use 5 seconds
 		timeoutSeconds := cliConfig.Templates.Settings.Gomplate.Timeout
@@ -45,7 +48,7 @@ func ProcessTmpl(
 		d := data.Data{}
 		d.Ctx = ctx
 
-		for k, v := range cliConfig.Templates.Settings.Gomplate.Datasources {
+		for k, v := range datasources {
 			_, err := d.DefineDatasource(k, v.Url)
 			if err != nil {
 				return "", err

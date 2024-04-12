@@ -208,7 +208,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = u.ProcessTmpl(cliConfig, "describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, "describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -263,7 +263,7 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 							if err != nil {
 								return nil, err
 							}
@@ -369,7 +369,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = u.ProcessTmpl(cliConfig, "describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, "describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -416,7 +416,7 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 							if err != nil {
 								return nil, err
 							}

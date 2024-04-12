@@ -103,7 +103,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
 
 		if cliConfig.Stacks.NameTemplate != "" {
-			contextPrefix, err = u.ProcessTmpl(cliConfig, "name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+			contextPrefix, err = u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, "name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 			if err != nil {
 				return "", err
 			}
