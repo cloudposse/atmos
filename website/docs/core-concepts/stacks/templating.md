@@ -13,8 +13,18 @@ are supported as well.
 
 ## Configuration
 
+Templating in Atmos stack manifests can be configured in the following places:
+
+- In the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration)
+
+- In the `settings.templates` section in [Atmos stack manifests](/core-concepts/stacks).
+  The `settings.templates` section can be defined globally per organization, tenant, account, or per component.
+  Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/components/inheritance).
+
+### Configuring templating in `atmos.yaml` CLI config file
+
 Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI config file](/cli/configuration) in the
-`templates` section:
+`templates.settings` section:
 
 ```yaml title="atmos.yaml"
 # https://pkg.go.dev/text/template
@@ -112,6 +122,61 @@ functions.
 
 <br/>
 
+### Configuring templating in Atmos stack manifests
+
+The `settings.templates` section can be defined globally per organization, tenant, account, or per component.
+Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/components/inheritance).
+
+For example, define [Gomplate Datasources](https://docs.gomplate.ca/datasources/) for the entire organization in the
+`stacks/orgs/acme/_defaults.yaml` stack manifest:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+settings:
+  templates:
+    gomplate:
+      # 7 seconds timeout to execute the datasources
+      timeout: 7
+      # https://docs.gomplate.ca/datasources
+      datasources:
+        # 'file' datasources
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        config-1:
+          url: "./my-config1.json"
+        config-3:
+          url: "file:///config3.json"
+```
+
+Atmos deep-merges the configurations from the `settings.templates` section in [Atmos stack manifests](/core-concepts/stacks)
+with the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) using [inheritance](/core-concepts/components/inheritance).
+
+The `settings.templates` section in [Atmos stack manifests](/core-concepts/stacks) takes precedence over 
+the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration), allowing you to define the global
+`datasources` in `atmos.yaml` and then add or override `datasources` in Atmos stack manifests for the entire organization,
+tenant, account, or per component.
+
+For example, taking into account the configurations described above in `atmos.yaml` [CLI config file](/cli/configuration) 
+and in the `stacks/orgs/acme/_defaults.yaml` stack manifest, the final `datasources` map will look like this:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+datasources:
+  ip:
+    url: "https://api.ipify.org?format=json"
+    headers:
+      accept:
+        - "application/json"
+  config-1:
+    url: "./my-config1.json"
+  config-2:
+    url: "file:///config2.json"
+  config-3:
+    url: "file:///config3.json"
+```
+
+Note that the `config-1` datasource from `atmos.yaml` was overridden with the `config-1` datasource from the 
+`stacks/orgs/acme/_defaults.yaml` stack manifest.
+
+You can now use the `datasources` in `Go` templates in all Atmos sections that support `Go` templates.
+
 ## Atmos sections supporting `Go` templates
 
 You can use `Go` templates in the following Atmos sections to refer to values in the same or other sections:
@@ -172,11 +237,15 @@ component:
           terraform_workspace: "{{ .workspace }}"
           assumed_role: "{{ .providers.aws.assume_role }}"
           description: "{{ .atmos_component }} component provisioned in {{ .atmos_stack }} stack by assuming IAM role {{ .providers.aws.assume_role }}"
-          # Examples of using the Gomplate and Sprig functions
-          # https://docs.gomplate.ca/functions/strings
-          atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
+          # Examples of using the Sprig and Gomplate functions and datasources
           # https://masterminds.github.io/sprig/os.html
           provisioned_by_user: '{{ env "USER" }}'
+          # https://docs.gomplate.ca/functions/strings
+          atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
+          # https://docs.gomplate.ca/datasources
+          provisioned_by_ip: '{{ (datasource "ip").ip }}'
+          config1_tag: '{{ (datasource "config-1").tag }}'
+          config2_service_name: '{{ (datasource "config-2").service.name }}'
 ```
 
 When executing Atmos commands like `atmos describe component` and `atmos terraform plan/apply`, Atmos processes all the template tokens 
@@ -212,8 +281,11 @@ vars:
     atmos_component_description: Vpc component "common" provisioned in the stack "plat-ue2-dev"
     atmos_manifest: orgs/acme/plat/dev/us-east-2
     atmos_stack: plat-ue2-dev
+    config1_tag: test1
+    config2_service_name: service1
     description: vpc component provisioned in plat-ue2-dev stack by assuming IAM role <role-arn>
     provisioned_by_user: <user>
+    provisioned_by_ip: 167.38.132.237
     region: us-east-2
     terraform_workspace: plat-ue2-dev
 ```
