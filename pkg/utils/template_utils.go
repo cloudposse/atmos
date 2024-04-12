@@ -20,7 +20,7 @@ import (
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(
 	cliConfig schema.CliConfiguration,
-	settingsTemplates schema.SettingsTemplates,
+	settingsSection schema.Settings,
 	tmplName string,
 	tmplValue string,
 	tmplData any,
@@ -44,7 +44,7 @@ func ProcessTmpl(
 			return "", err
 		}
 
-		err = mapstructure.Decode(settingsTemplates.Gomplate.Datasources, &stackManifestDatasources)
+		err = mapstructure.Decode(settingsSection.Templates.Gomplate.Datasources, &stackManifestDatasources)
 		if err != nil {
 			return "", err
 		}
@@ -60,11 +60,8 @@ func ProcessTmpl(
 			return "", err
 		}
 
-		// If timeout is not provided, use 5 seconds
-		timeoutSeconds := cliConfig.Templates.Settings.Gomplate.Timeout
-		if timeoutSeconds == 0 {
-			timeoutSeconds = 5
-		}
+		// If timeout is not provided in `atmos.yaml` nor in `settings.templates` stack manifest, use 5 seconds
+		timeoutSeconds, _ := lo.Coalesce(cliConfig.Templates.Settings.Gomplate.Timeout, settingsSection.Templates.Gomplate.Timeout, 5)
 
 		ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 		defer cancelFunc()

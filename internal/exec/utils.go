@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -347,7 +348,7 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			if cliConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, "name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := u.ProcessTmpl(cliConfig, schema.Settings{}, "name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
@@ -541,7 +542,14 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	var settingsSection schema.Settings
+
+	err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSection)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, settingsSection, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 	if err != nil {
 		// If any error returned from the templates processing, log it and exit
 		u.LogErrorAndExit(err)
@@ -554,7 +562,7 @@ func ProcessStacks(
 
 	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
 
-	// Process sections
+	// Process Atmos manifest sections
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any); ok {
 		configAndStacksInfo.ComponentProvidersSection = i
 	}

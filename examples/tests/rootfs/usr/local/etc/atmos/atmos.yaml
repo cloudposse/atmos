@@ -633,4 +633,4 @@ templates:
           url: "https://httpbin.org/get"
           headers:
             accept:
-              - application/json
+              - "application/json"

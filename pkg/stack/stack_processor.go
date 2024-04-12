@@ -207,7 +207,7 @@ func ProcessYAMLConfigFile(
 		cliConfig.Templates.Settings.Sprig.Enabled = true
 		cliConfig.Templates.Settings.Gomplate.Enabled = true
 
-		stackManifestTemplatesProcessed, err = u.ProcessTmpl(cliConfig, schema.SettingsTemplates{}, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, err = u.ProcessTmpl(cliConfig, schema.Settings{}, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
