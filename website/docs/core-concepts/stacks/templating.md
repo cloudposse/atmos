@@ -57,6 +57,18 @@ templates:
           url: "./config1.json"
         config-2:
           url: "file:///config2.json"
+        # `aws+smp` AWS Systems Manager Parameter Store datasource
+        # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+        secret-1:
+          url: "aws+smp:///path/to/secret"
+        # `aws+sm` AWS Secrets Manager datasource
+        # https://docs.gomplate.ca/datasources/#using-awssm-datasource
+        secret-2:
+          url: "aws+sm:///path/to/secret"
+        # `s3` datasource
+        # https://docs.gomplate.ca/datasources/#using-s3-datasources
+        s3-config:
+          url: "s3://mybucket/config/config.json"
 ```
 
 - `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
@@ -319,7 +331,7 @@ terraform:
 
 The tags will be processed and automatically added to all the resources provisioned in the infrastructure.
 
-## Excluding templates from processing by Atmos
+## Excluding templates in stack manifest from processing by Atmos
 
 If you need to provide `Go` templates to external systems (e.g. ArgoCD or Datadog) verbatim and prevent Atmos from
 processing the templates, use **double curly braces + backtick + double curly braces** instead of just **double curly braces**:
@@ -419,4 +431,108 @@ chart_values:
 chart_values:
   template-github-commit-status:
     message: '{{ printf "Application {{ .app.metadata.name }} is now running new version." }}'
+```
+
+## Excluding templates in imports from processing by Atmos
+
+If you are using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and `Go` templates
+in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go` 
+template processing two times (two passes):
+
+  - When importing the manifest and processing the template tokens using the variables from the provided `context` object
+  - After finding the component in the stack as the final step in the processing pipeline
+
+<br/>
+
+For example, we can define the following configuration in the `stacks/catalog/eks/eks_cluster.tmpl` template file:
+
+```yaml title="stacks/catalog/eks/eks_cluster.tmpl"
+components:
+  terraform:
+    eks/cluster:
+      metadata:
+        component: eks/cluster
+      vars:
+        enabled: "{{ .enabled }}"
+        name: "{{ .name }}"
+        tags:
+          atmos_component: "{{ .atmos_component }}"
+          atmos_stack: "{{ .atmos_stack }}"
+          terraform_workspace: "{{ .workspace }}"
+```
+
+<br/>
+
+Then we import the template into a top-level stack providing the context variables for the import in the `context` object:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
+import:
+  - path: "catalog/eks/eks_cluster.tmpl"
+    context:
+      enabled: true
+      name: prod-eks
+```
+
+Atmos will process the import and replace the template tokens using the variables from the `context`.
+Since the `context` does not provide the variables for the template tokens in `tags`, the following manifest will be
+generated:
+
+```yaml
+components:
+  terraform:
+    eks/cluster:
+      metadata:
+        component: eks/cluster
+      vars:
+        enabled: true
+        name: prod-eks
+        tags:
+          atmos_component: <no value>
+          atmos_stack: <no value>
+          terraform_workspace: <no value>
+```
+
+<br/>
+
+The second pass of template processing will not replace the tokens in `tags` because they are already processed in the 
+first pass (importing) and the values `<no value>` are generated.
+
+To deal with this, use **double curly braces + backtick + double curly braces** instead of just **double curly braces**
+in `tags` to prevent Atmos from processing the templates in the first pass and instead process them in the second pass:
+
+```yaml title="stacks/catalog/eks/eks_cluster.tmpl"
+components:
+  terraform:
+    eks/cluster:
+      metadata:
+        component: eks/cluster
+      vars:
+        enabled: "{{ .enabled }}"
+        name: "{{ .name }}"
+        tags:
+          atmos_component: "{{`{{ .atmos_component }}`}}"
+          atmos_stack: "{{`{{ .atmos_stack }}`}}"
+          terraform_workspace: "{{`{{ .workspace }}`}}"
+```
+
+<br/>
+
+Atmos will first process the import and replace the template tokens using the variables from the `context`.
+Then in the second pass the tokens in `tags` will be replaced with the correct values.
+
+It will generate the following manifest:
+
+```yaml
+components:
+  terraform:
+    eks/cluster:
+      metadata:
+        component: eks/cluster
+      vars:
+        enabled: true
+        name: prod-eks
+        tags:
+          atmos_component: eks/cluster
+          atmos_stack: plat-ue2-prod
+          terraform_workspace: plat-ue2-prod
 ```

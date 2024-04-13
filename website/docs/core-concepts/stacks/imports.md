@@ -55,7 +55,7 @@ The `import` section supports the following two formats:
 
 - a list of paths to the imported files, for example:
 
-  ```yaml title=stacks/orgs/cp/tenant1/test1/us-east-2.yaml
+  ```yaml title="stacks/orgs/cp/tenant1/test1/us-east-2.yaml"
   import:
     - mixins/region/us-east-2
     - orgs/cp/tenant1/test1/_defaults
@@ -122,9 +122,9 @@ Stack configurations can be templatized and then reused with different settings 
 
 For example, we can define the following configuration for EKS Atmos components in the `catalog/terraform/eks_cluster_tmpl.yaml` template file:
 
-```yaml title=stacks/catalog/terraform/eks_cluster_tmpl.yaml
+```yaml title="stacks/catalog/terraform/eks_cluster_tmpl.yaml"
 # Imports can also be parameterized using `Go` templates
-import: [ ]
+import: []
 
 components:
   terraform:
@@ -153,7 +153,7 @@ sections (`vars`, `settings`, `env`, `backend`, etc.), and even the `import` sec
 
 Then we can import the template into a top-level stack multiple times providing different context variables to each import:
 
-```yaml title=stacks/orgs/cp/tenant1/test1/us-west-2.yaml
+```yaml title="stacks/orgs/cp/tenant1/test1/us-west-2.yaml"
 import:
   - path: "mixins/region/us-west-2"
   - path: "orgs/cp/tenant1/test1/_defaults"
@@ -228,7 +228,7 @@ This will allow you to parameterize the entire chain of stack configurations and
 
 For example, let's create the configuration `stacks/catalog/terraform/eks_cluster_tmpl_hierarchical.yaml` with the following content:
 
-```yaml title=stacks/catalog/terraform/eks_cluster_tmpl_hierarchical.yaml
+```yaml title="stacks/catalog/terraform/eks_cluster_tmpl_hierarchical.yaml"
 import:
   # Use `region_tmpl` `Go` template and provide `context` for it.
   # This can also be done by using `Go` templates in the import path itself.
@@ -263,7 +263,7 @@ components:
 Then we can import the template into a top-level stack multiple times providing different context variables to each import and to the imports for
 the entire inheritance chain (which `catalog/terraform/eks_cluster_tmpl_hierarchical` imports itself):
 
-```yaml title=stacks/orgs/cp/tenant1/test1/us-west-1.yaml
+```yaml title="stacks/orgs/cp/tenant1/test1/us-west-1.yaml"
 import:
 
   # This import with the provided hierarchical context will dynamically generate
