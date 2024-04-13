@@ -77,10 +77,10 @@ templates:
 - `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
   in Atmos stack manifests
 
-- `templates.settings.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/)
-  in Atmos stack manifests
+- `templates.settings.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) 
+  and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests
 
-- `templates.settings.gomplate.timeout` - timeout in seconds to execute [Gomplate Datasource](https://docs.gomplate.ca/datasources)
+- `templates.settings.gomplate.timeout` - timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources)
 
 - `templates.settings.gomplate.datasources` - a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions:
 
