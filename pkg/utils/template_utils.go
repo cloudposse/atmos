@@ -18,7 +18,36 @@ import (
 )
 
 // ProcessTmpl parses and executes Go templates
-func ProcessTmpl(
+func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
+	t, err := template.New(tmplName).Funcs(sprig.FuncMap()).Parse(tmplValue)
+	if err != nil {
+		return "", err
+	}
+
+	// Control the behavior during execution if a map is indexed with a key that is not present in the map
+	// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
+	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
+	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
+
+	option := "missingkey=error"
+
+	if ignoreMissingTemplateValues {
+		option = "missingkey=default"
+	}
+
+	t.Option(option)
+
+	var res bytes.Buffer
+	err = t.Execute(&res, tmplData)
+	if err != nil {
+		return "", err
+	}
+
+	return res.String(), nil
+}
+
+// ProcessTmplWithDatasources parses and executes Go templates with datasources
+func ProcessTmplWithDatasources(
 	cliConfig schema.CliConfiguration,
 	settingsSection schema.Settings,
 	tmplName string,

@@ -348,7 +348,7 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			if cliConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := u.ProcessTmpl(cliConfig, schema.Settings{}, "name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
@@ -549,7 +549,7 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 	if err != nil {
 		// If any error returned from the templates processing, log it and exit
 		u.LogErrorAndExit(err)
