@@ -44,7 +44,7 @@ func ProcessTmpl(
 			return "", err
 		}
 
-		err = mapstructure.Decode(settingsSection.Templates.Gomplate.Datasources, &stackManifestDatasources)
+		err = mapstructure.Decode(settingsSection.Templates.Settings.Gomplate.Datasources, &stackManifestDatasources)
 		if err != nil {
 			return "", err
 		}
@@ -61,7 +61,7 @@ func ProcessTmpl(
 		}
 
 		// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
-		timeoutSeconds, _ := lo.Coalesce(cliConfig.Templates.Settings.Gomplate.Timeout, settingsSection.Templates.Gomplate.Timeout, 5)
+		timeoutSeconds, _ := lo.Coalesce(cliConfig.Templates.Settings.Gomplate.Timeout, settingsSection.Templates.Settings.Gomplate.Timeout, 5)
 
 		ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 		defer cancelFunc()
