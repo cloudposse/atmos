@@ -557,7 +557,14 @@ func ProcessStacks(
 
 	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
 	if err != nil {
-		return configAndStacksInfo, err
+		if !cliConfig.Templates.Settings.Enabled {
+			if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+				errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+				err = errors.Join(err, errors.New(errorMessage))
+			}
+		}
+		u.LogErrorAndExit(err)
 	}
 
 	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
