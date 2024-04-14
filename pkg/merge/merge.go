@@ -1,7 +1,7 @@
 package merge
 
 import (
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/fatih/color"
 	"github.com/imdario/mergo"
 	"gopkg.in/yaml.v2"
 )
@@ -25,13 +25,15 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		// so `mergo` does not have access to the original pointers
 		yamlCurrent, err := yaml.Marshal(current)
 		if err != nil {
-			u.LogError(err)
+			c := color.New(color.FgRed)
+			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
 		}
 
 		var dataCurrent map[any]any
 		if err = yaml.Unmarshal(yamlCurrent, &dataCurrent); err != nil {
-			u.LogError(err)
+			c := color.New(color.FgRed)
+			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
 		}
 
@@ -52,7 +54,8 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			u.LogError(err)
+			c := color.New(color.FgRed)
+			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
 		}
 	}

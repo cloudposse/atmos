@@ -37,8 +37,15 @@ type TemplatesSettingsSprig struct {
 	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 }
 
+type TemplatesSettingsGomplateDatasource struct {
+	Url     string              `yaml:"url" json:"url" mapstructure:"url"`
+	Headers map[string][]string `yaml:"headers" json:"headers" mapstructure:"headers"`
+}
+
 type TemplatesSettingsGomplate struct {
-	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Enabled     bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Timeout     int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
+	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
 }
 
 type Terraform struct {
@@ -460,8 +467,9 @@ type Dependent struct {
 type SettingsSpacelift map[any]any
 
 type Settings struct {
-	DependsOn DependsOn         `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
-	Spacelift SettingsSpacelift `yaml:"spacelift" json:"spacelift" mapstructure:"spacelift"`
+	DependsOn DependsOn         `yaml:"depends_on,omitempty" json:"depends_on,omitempty" mapstructure:"depends_on"`
+	Spacelift SettingsSpacelift `yaml:"spacelift,omitempty" json:"spacelift,omitempty" mapstructure:"spacelift"`
+	Templates Templates         `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 }
 
 // ConfigSourcesStackDependency defines schema for sources of config sections

@@ -17,7 +17,7 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 	var tmpl string
 
 	if cliConfig.Stacks.NameTemplate != "" {
-		tmpl, err = u.ProcessTmpl(cliConfig, "terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = u.ProcessTmpl("terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
@@ -36,7 +36,7 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 
 	// Terraform workspace can be overridden per component using `metadata.terraform_workspace_pattern` or `metadata.terraform_workspace_template` or `metadata.terraform_workspace`
 	if terraformWorkspaceTemplate, terraformWorkspaceTemplateExist := componentMetadata["terraform_workspace_template"].(string); terraformWorkspaceTemplateExist {
-		tmpl, err = u.ProcessTmpl(cliConfig, "terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = u.ProcessTmpl("terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}

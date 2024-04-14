@@ -196,17 +196,28 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Process `Go` templates in the imported stack manifest using the provided context
+	stackManifestTemplatesProcessed := stackYamlConfig
+	stackManifestTemplatesErrorMessage := ""
+
+	// Process `Go` templates in the imported stack manifest using the provided `context`
+	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && len(context) > 0 {
-		stackYamlConfig, err = u.ProcessTmpl(cliConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
-			return nil, nil, nil, err
+			if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
+				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+			}
+			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			return nil, nil, nil, e
 		}
 	}
 
-	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
+	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackManifestTemplatesProcessed)
 	if err != nil {
-		e := fmt.Errorf("invalid stack manifest '%s'\n%v", relativeFilePath, err)
+		if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
+			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+		}
+		e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
 		return nil, nil, nil, e
 	}
 

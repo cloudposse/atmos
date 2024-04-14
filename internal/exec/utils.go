@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -347,7 +348,7 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			if cliConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := u.ProcessTmpl(cliConfig, "name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
@@ -535,13 +536,20 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["deps"] = componentDeps
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
-	// Process `Go` templates in sections
+	// Process `Go` templates in Atmos manifest sections
 	componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmpl(cliConfig, "all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	var settingsSectionStruct schema.Settings
+
+	err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
 	if err != nil {
 		// If any error returned from the templates processing, log it and exit
 		u.LogErrorAndExit(err)
@@ -549,11 +557,19 @@ func ProcessStacks(
 
 	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
 	if err != nil {
-		return configAndStacksInfo, err
+		if !cliConfig.Templates.Settings.Enabled {
+			if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+				errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+				err = errors.Join(err, errors.New(errorMessage))
+			}
+		}
+		u.LogErrorAndExit(err)
 	}
 
 	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
 
+	// Process Atmos manifest sections
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any); ok {
 		configAndStacksInfo.ComponentProvidersSection = i
 	}

@@ -362,6 +362,9 @@
         },
         "atlantis": {
           "$ref": "#/definitions/atlantis"
+        },
+        "templates": {
+          "$ref": "#/definitions/templates"
         }
       },
       "required": [],
@@ -743,6 +746,12 @@
       "description": "Providers section",
       "additionalProperties": true,
       "title": "providers"
+    },
+    "templates": {
+      "type": "object",
+      "description": "Templates section",
+      "additionalProperties": true,
+      "title": "templates"
     }
   }
 }

@@ -80,6 +80,17 @@ components:
   helmfile: { }
 
 settings:
+  templates:
+    settings:
+      gomplate:
+        timeout: 20  # 20 seconds timeout to execute the datasources
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          ip:
+            url: "https://api.ipify.org?format=json"
+            headers:
+              accept:
+                - "application/json"
   spacelift:
     workspace_enabled: false
     autodeploy: false

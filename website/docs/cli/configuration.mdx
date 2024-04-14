@@ -40,7 +40,7 @@ names/paths (double-star/globstar `**` is supported as well)
 
 If `atmos.yaml` is not found in any of the searched locations, Atmos will use the default CLI configuration:
 
-```yaml
+```yaml title="atmos.yaml"
 base_path: "."
 components:
   terraform:
@@ -127,7 +127,7 @@ base_path: "."
 
 Specify the default behaviors for components.
 
-```yaml
+```yaml title="atmos.yaml"
 components:
   terraform:
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
@@ -169,7 +169,7 @@ components:
 
 Define the stack name pattern or template and specify where to find stacks.
 
-```yaml
+```yaml title="atmos.yaml"
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
   # Supports both absolute and relative paths
@@ -304,7 +304,7 @@ Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to co
 
 ## Workflows
 
-```yaml
+```yaml title="atmos.yaml"
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
   # Supports both absolute and relative paths
@@ -322,7 +322,7 @@ Then developers can just run `atmos help` and discover all available commands.
 
 Here are some examples to play around with to get started.
 
-```yaml
+```yaml title="atmos.yaml"
 # Custom CLI commands
 commands:
   - name: tf
@@ -513,7 +513,7 @@ commands:
 
 ## Integrations
 
-```yaml
+```yaml title="atmos.yaml"
 # Integrations
 integrations:
 
@@ -581,7 +581,7 @@ integrations:
 
 Configure the paths where to find OPA and JSON Schema files.
 
-```yaml
+```yaml title="atmos.yaml"
 # Validation schemas (for validating atmos stacks and components)
 schemas:
   # https://json-schema.org
@@ -610,7 +610,7 @@ schemas:
 
 Logs are configured in the `logs` section:
 
-```yaml
+```yaml title="atmos.yaml"
 logs:
   # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
   file: "/dev/stdout"
@@ -642,7 +642,7 @@ native commands like `terraform apply` or `describe stacks`, as well as [Atmos C
 
 For example:
 
-```yaml
+```yaml title="atmos.yaml"
 # CLI command aliases
 aliases:
   # Aliases for Atmos native commands
@@ -695,7 +695,9 @@ For example:
 ## Templates
 
 Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
-[Sprig Functions](https://masterminds.github.io/sprig/) and [Gomplate Functions](https://docs.gomplate.ca/functions/)
+
+[Sprig Functions](https://masterminds.github.io/sprig/), [Gomplate Functions](https://docs.gomplate.ca/functions/)
+and [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
 are supported as well.
 
 :::tip
@@ -704,7 +706,7 @@ For more details, refer to [Atmos Stack Manifest Templating](/core-concepts/stac
 
 <br/>
 
-```yaml
+```yaml title="atmos.yaml"
 # https://pkg.go.dev/text/template
 templates:
   settings:
@@ -713,8 +715,28 @@ templates:
     sprig:
       enabled: true
     # https://docs.gomplate.ca
+    # https://docs.gomplate.ca/functions
     gomplate:
       enabled: true
+      # Timeout in seconds to execute the datasources
+      timeout: 5
+      # https://docs.gomplate.ca/datasources
+      datasources:
+        # 'http' datasource
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        ip:
+          url: "https://api.ipify.org?format=json"
+          # https://docs.gomplate.ca/datasources/#sending-http-headers
+          # https://docs.gomplate.ca/usage/#--datasource-header-h
+          headers:
+            accept:
+              - "application/json"
+        # 'file' datasources
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        config-1:
+          url: "./config1.json"
+        config-2:
+          url: "file:///config2.json"
 ```
 
 - `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
@@ -724,7 +746,41 @@ templates:
    in Atmos stack manifests
 
 - `templates.settings.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/)
-  in Atmos stack manifests
+   and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests
+
+- `templates.settings.gomplate.timeout` - timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources)
+
+- `templates.settings.gomplate.datasources` - a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions:
+
+   - The keys of the map are the datasource names, which are used in `Go` templates in Atmos stack manifests.
+     For example:
+
+     ```yaml
+      terraform:
+        vars:
+          tags:
+            provisioned_by_ip: '{{ (datasource "ip").ip }}'
+            config1_tag: '{{ (datasource "config-1").tag }}'
+            config2_service_name: '{{ (datasource "config-2").service.name }}'
+     ```
+
+   - The values of the map are the datasource definitions with the following schema:
+
+     - `url` - the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
+
+     - `headers` - a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
+        the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers).
+        The keys of the map are the header names. The values of the map are lists of values for the header.
+
+        The following configuration will result in the
+        [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
+        being sent with the HTTP request to the datasource:
+
+          ```yaml
+          headers:
+            accept:
+              - "application/json"
+         ```
 
 <br/>
 

@@ -380,3 +380,6 @@ templates:
     # https://docs.gomplate.ca
     gomplate:
       enabled: true
+      timeout: 5
+      # https://docs.gomplate.ca/datasources
+      datasources: {}
