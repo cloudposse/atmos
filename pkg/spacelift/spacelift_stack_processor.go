@@ -28,8 +28,15 @@ func CreateSpaceliftStacks(
 	stackConfigPathTemplate string,
 ) (map[string]any, error) {
 
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	if err != nil {
+		u.LogError(err)
+		return nil, err
+	}
+
 	if len(filePaths) > 0 {
 		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
+			cliConfig,
 			stacksBasePath,
 			terraformComponentsBasePath,
 			helmfileComponentsBasePath,
@@ -43,15 +50,17 @@ func CreateSpaceliftStacks(
 			return nil, err
 		}
 
-		return TransformStackConfigToSpaceliftStacks(stacks, stackConfigPathTemplate, "", processImports, rawStackConfigs)
+		return TransformStackConfigToSpaceliftStacks(
+			cliConfig,
+			stacks,
+			stackConfigPathTemplate,
+			"",
+			processImports,
+			rawStackConfigs,
+		)
 	} else {
-		cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-		if err != nil {
-			u.LogError(err)
-			return nil, err
-		}
-
 		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
+			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
 			cliConfig.TerraformDirAbsolutePath,
 			cliConfig.HelmfileDirAbsolutePath,
@@ -66,9 +75,10 @@ func CreateSpaceliftStacks(
 		}
 
 		return TransformStackConfigToSpaceliftStacks(
+			cliConfig,
 			stacks,
 			stackConfigPathTemplate,
-			cliConfig.Stacks.NamePattern,
+			e.GetStackNamePattern(cliConfig),
 			processImports,
 			rawStackConfigs,
 		)
@@ -77,6 +87,7 @@ func CreateSpaceliftStacks(
 
 // TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
+	cliConfig schema.CliConfiguration,
 	stacks map[string]any,
 	stackConfigPathTemplate string,
 	stackNamePattern string,
@@ -207,7 +218,6 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 					spaceliftConfig["backend"] = componentBackend
 
-					// Component dependencies
 					configAndStacksInfo := schema.ConfigAndStacksInfo{
 						ComponentFromArg:          component,
 						ComponentType:             "terraform",
@@ -215,11 +225,22 @@ func TransformStackConfigToSpaceliftStacks(
 						ComponentVarsSection:      componentVars,
 						ComponentEnvSection:       componentEnv,
 						ComponentSettingsSection:  componentSettings,
+						ComponentMetadataSection:  componentMetadata,
 						ComponentBackendSection:   componentBackend,
 						ComponentBackendType:      backendTypeName,
 						ComponentInheritanceChain: componentInheritance,
+						Context:                   context,
+						ComponentSection: map[string]any{
+							cfg.VarsSectionName:        componentVars,
+							cfg.EnvSectionName:         componentEnv,
+							cfg.SettingsSectionName:    componentSettings,
+							cfg.MetadataSectionName:    componentMetadata,
+							cfg.BackendSectionName:     componentBackend,
+							cfg.BackendTypeSectionName: backendTypeName,
+						},
 					}
 
+					// Component dependencies
 					sources, err := e.ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
 					if err != nil {
 						return nil, err
@@ -234,12 +255,7 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["deps_all"] = componentDepsAll
 
 					// Terraform workspace
-					workspace, err := e.BuildTerraformWorkspace(
-						stackName,
-						stackNamePattern,
-						componentMetadata,
-						context,
-					)
+					workspace, err := e.BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 					if err != nil {
 						u.LogError(err)
 						return nil, err
@@ -360,7 +376,11 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
 					// Spacelift stack name
-					spaceliftStackName, spaceliftStackNamePattern := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+					spaceliftStackName, spaceliftStackNamePattern, err := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+					if err != nil {
+						u.LogError(err)
+						return nil, err
+					}
 
 					// Add Spacelift stack config to the final map
 					spaceliftStackNameKey := strings.Replace(spaceliftStackName, "/", "-", -1)

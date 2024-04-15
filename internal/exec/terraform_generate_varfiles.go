@@ -129,7 +129,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
+				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
 				if err != nil {
 					return err
 				}

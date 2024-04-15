@@ -15,29 +15,29 @@
     "build:site": "npm run build"
   },
   "dependencies": {
-    "@docusaurus/core": "^3.1.1",
-    "@docusaurus/plugin-client-redirects": "^3.1.1",
-    "@docusaurus/preset-classic": "^3.1.1",
-    "@docusaurus/theme-mermaid": "^3.1.1",
-    "@grnet/docusaurus-glossary-view": "^2.0.0-rc",
-    "@grnet/docusaurus-term-preview": "^2.0.0-rc",
-    "@grnet/docusaurus-terminology": "^2.0.0-rc",
-    "@mdx-js/react": "^3.0.0",
+    "@docusaurus/core": "^3.2.1",
+    "@docusaurus/plugin-client-redirects": "^3.2.1",
+    "@docusaurus/preset-classic": "^3.2.1",
+    "@docusaurus/theme-mermaid": "^3.2.1",
+    "@grnet/docusaurus-terminology": "^2.0.0-rc.1",
+    "@mdx-js/react": "^3.0.1",
     "clsx": "^2.1.0",
+    "custom-loaders": "file:plugins/custom-loaders",
     "docusaurus-plugin-image-zoom": "^2.0.0",
-    "marked": "^12.0.0",
+    "html-loader": "^5.0.0",
+    "marked": "^12.0.1",
     "prism-react-renderer": "^2.3.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-image-gallery": "^1.3.0",
-    "react-player": "^2.14.1",
+    "react-player": "^2.15.1",
     "react-table": "^7.8.0",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.4"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.1.1"
+    "@docusaurus/module-type-aliases": "^3.2.1"
   },
   "browserslist": {
     "production": [

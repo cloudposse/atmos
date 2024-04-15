@@ -19,6 +19,10 @@ terraform:
   vars:
     enabled: false
 
+  overrides:
+    providers:
+      context: {}
+
 components:
   terraform:
     "infra/vpc":

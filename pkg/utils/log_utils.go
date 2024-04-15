@@ -110,7 +110,7 @@ func log(cliConfig schema.CliConfiguration, logColor *color.Color, message strin
 				color.Red("%s\n", err)
 			}
 		} else {
-			f, err := os.OpenFile(cliConfig.Logs.File, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
+			f, err := os.OpenFile(cliConfig.Logs.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 			if err != nil {
 				color.Red("%s\n", err)
 				return

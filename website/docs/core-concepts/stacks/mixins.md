@@ -1,6 +1,6 @@
 ---
 title: Stack Mixins
-sidebar_position: 7
+sidebar_position: 6
 sidebar_label: Mixins
 id: mixins
 ---
@@ -17,7 +17,7 @@ Mixins are treated the same as all other imports in Atmos, with no special handl
 
 ## Use-cases
 
-Here are some use-cases for when to Mixins.
+Here are some use-cases for when to use mixins.
 
 ### Mixins by Region
 
@@ -29,9 +29,7 @@ For example, here's what it would look like for AWS. Let's name this file `mixin
 Now, anytime we want a Parent Stack deployed in the `us-east-1` region, we just need to specify this import, and we'll automatically inherit all the settings for that region.
 
 
-For example, let's define a mixin with the defaults for operating in the `us-east-1` region. 
-
-file named `mixins/stage/prod.yaml`
+For example, let's define a mixin with the defaults for operating in the `us-east-1` region:
 
 ```yaml title="mixins/region/us-east-1.yaml"
 vars:
@@ -77,6 +75,8 @@ terraform:
     rds-cluster:
     # ...
 ```
+
+<br/>
 
 :::tip Use Mixins for Naming Conventions
 This simple example highlights a simple fix for one of the most common issues in enterprise organizations: naming inconsistency.

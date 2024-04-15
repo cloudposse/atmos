@@ -2,23 +2,50 @@ package schema
 
 // CliConfiguration structure represents schema for `atmos.yaml` CLI config
 type CliConfiguration struct {
-	BasePath                      string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	Components                    Components   `yaml:"components" json:"components" mapstructure:"components"`
-	Stacks                        Stacks       `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
-	Workflows                     Workflows    `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
-	Logs                          Logs         `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
-	Commands                      []Command    `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
-	Integrations                  Integrations `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
-	Schemas                       Schemas      `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
-	Initialized                   bool         `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
-	StacksBaseAbsolutePath        string       `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
-	IncludeStackAbsolutePaths     []string     `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
-	ExcludeStackAbsolutePaths     []string     `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
-	TerraformDirAbsolutePath      string       `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
-	HelmfileDirAbsolutePath       string       `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
-	StackConfigFilesRelativePaths []string     `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
-	StackConfigFilesAbsolutePaths []string     `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
-	StackType                     string       `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
+	BasePath                      string         `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Components                    Components     `yaml:"components" json:"components" mapstructure:"components"`
+	Stacks                        Stacks         `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Workflows                     Workflows      `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
+	Logs                          Logs           `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Commands                      []Command      `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
+	CommandAliases                CommandAliases `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	Integrations                  Integrations   `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
+	Schemas                       Schemas        `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
+	Templates                     Templates      `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Initialized                   bool           `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
+	StacksBaseAbsolutePath        string         `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
+	IncludeStackAbsolutePaths     []string       `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
+	ExcludeStackAbsolutePaths     []string       `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
+	TerraformDirAbsolutePath      string         `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
+	HelmfileDirAbsolutePath       string         `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
+	StackConfigFilesRelativePaths []string       `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
+	StackConfigFilesAbsolutePaths []string       `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
+	StackType                     string         `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
+}
+
+type Templates struct {
+	Settings TemplatesSettings `yaml:"settings" json:"settings" mapstructure:"settings"`
+}
+
+type TemplatesSettings struct {
+	Enabled  bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Sprig    TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
+	Gomplate TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+}
+
+type TemplatesSettingsSprig struct {
+	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+}
+
+type TemplatesSettingsGomplateDatasource struct {
+	Url     string              `yaml:"url" json:"url" mapstructure:"url"`
+	Headers map[string][]string `yaml:"headers" json:"headers" mapstructure:"headers"`
+}
+
+type TemplatesSettingsGomplate struct {
+	Enabled     bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Timeout     int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
+	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
 }
 
 type Terraform struct {
@@ -47,6 +74,7 @@ type Stacks struct {
 	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
 	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
 	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NameTemplate  string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
 }
 
 type Workflows struct {
@@ -59,18 +87,19 @@ type Logs struct {
 }
 
 type Context struct {
-	Namespace     string `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
-	Tenant        string `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
-	Environment   string `yaml:"environment" json:"environment" mapstructure:"environment"`
-	Stage         string `yaml:"stage" json:"stage" mapstructure:"stage"`
-	Region        string `yaml:"region" json:"region" mapstructure:"region"`
-	Component     string `yaml:"component" json:"component" mapstructure:"component"`
-	BaseComponent string `yaml:"base_component" json:"base_component" mapstructure:"base_component"`
-	ComponentPath string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
-	Workspace     string `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
-	Attributes    []any  `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
-	File          string `yaml:"file" json:"file" mapstructure:"file"`
-	Folder        string `yaml:"folder" json:"folder" mapstructure:"folder"`
+	Namespace          string `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
+	Tenant             string `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
+	Environment        string `yaml:"environment" json:"environment" mapstructure:"environment"`
+	Stage              string `yaml:"stage" json:"stage" mapstructure:"stage"`
+	Region             string `yaml:"region" json:"region" mapstructure:"region"`
+	Component          string `yaml:"component" json:"component" mapstructure:"component"`
+	BaseComponent      string `yaml:"base_component" json:"base_component" mapstructure:"base_component"`
+	ComponentPath      string `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Workspace          string `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
+	Attributes         []any  `yaml:"attributes" json:"attributes" mapstructure:"attributes"`
+	File               string `yaml:"file" json:"file" mapstructure:"file"`
+	Folder             string `yaml:"folder" json:"folder" mapstructure:"folder"`
+	TerraformWorkspace string `yaml:"terraform_workspace" json:"terraform_workspace" mapstructure:"terraform_workspace"`
 }
 
 type ArgsAndFlagsInfo struct {
@@ -121,6 +150,7 @@ type ConfigAndStacksInfo struct {
 	ComponentVarsSection          map[any]any
 	ComponentSettingsSection      map[any]any
 	ComponentOverridesSection     map[any]any
+	ComponentProvidersSection     map[any]any
 	ComponentEnvSection           map[any]any
 	ComponentEnvList              []string
 	ComponentBackendSection       map[any]any
@@ -279,6 +309,10 @@ type CommandComponentConfig struct {
 	Stack     string `yaml:"stack" json:"stack" mapstructure:"stack"`
 }
 
+// CLI command aliases
+
+type CommandAliases map[string]string
+
 // Integrations
 
 type Integrations struct {
@@ -390,6 +424,7 @@ type BaseComponentConfig struct {
 	BaseComponentVars                      map[any]any
 	BaseComponentSettings                  map[any]any
 	BaseComponentEnv                       map[any]any
+	BaseComponentProviders                 map[any]any
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string
@@ -432,8 +467,9 @@ type Dependent struct {
 type SettingsSpacelift map[any]any
 
 type Settings struct {
-	DependsOn DependsOn         `yaml:"depends_on" json:"depends_on" mapstructure:"depends_on"`
-	Spacelift SettingsSpacelift `yaml:"spacelift" json:"spacelift" mapstructure:"spacelift"`
+	DependsOn DependsOn         `yaml:"depends_on,omitempty" json:"depends_on,omitempty" mapstructure:"depends_on"`
+	Spacelift SettingsSpacelift `yaml:"spacelift,omitempty" json:"spacelift,omitempty" mapstructure:"spacelift"`
+	Templates Templates         `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 }
 
 // ConfigSourcesStackDependency defines schema for sources of config sections

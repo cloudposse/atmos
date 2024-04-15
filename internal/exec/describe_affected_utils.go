@@ -857,37 +857,33 @@ func appendToAffected(
 			settingsSection = i.(map[any]any)
 		}
 
-		// Affected Spacelift stack
-		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
-			cliConfig,
-			componentName,
-			stackName,
-			settingsSection,
-			varSection,
-		)
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg:         componentName,
+			Stack:                    stackName,
+			ComponentVarsSection:     varSection,
+			ComponentSettingsSection: settingsSection,
+			ComponentSection: map[string]any{
+				cfg.VarsSectionName:     varSection,
+				cfg.SettingsSectionName: settingsSection,
+			},
+		}
 
+		// Affected Spacelift stack
+		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
 		if err != nil {
 			return nil, err
 		}
-
 		affected.SpaceliftStack = spaceliftStackName
 
 		// Affected Atlantis project
-		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
-			cliConfig,
-			componentName,
-			settingsSection,
-			varSection,
-		)
-
+		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
 		if err != nil {
 			return nil, err
 		}
-
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {
-			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks, stackName, componentName)
+			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks, stackName, componentName, configAndStacksInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -1088,6 +1084,7 @@ func addAffectedSpaceliftAdminStack(
 	stacks map[string]any,
 	currentStackName string,
 	currentComponentName string,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) ([]schema.Affected, error) {
 
 	// Convert the `settings` section to the `Settings` structure
@@ -1122,16 +1119,25 @@ func addAffectedSpaceliftAdminStack(
 		return affectedList, nil
 	}
 
-	adminStackContextPrefix, err := cfg.GetContextPrefix(currentStackName, adminStackContext, cliConfig.Stacks.NamePattern, currentStackName)
-	if err != nil {
-		return nil, err
+	var adminStackContextPrefix string
+
+	if cliConfig.Stacks.NameTemplate != "" {
+		adminStackContextPrefix, err = u.ProcessTmpl("spacelift-admin-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		adminStackContextPrefix, err = cfg.GetContextPrefix(currentStackName, adminStackContext, GetStackNamePattern(cliConfig), currentStackName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var componentVarsSection map[any]any
 	var componentSettingsSection map[any]any
 	var componentSettingsSpaceliftSection map[any]any
 
-	// Find the Spacelift adin stack that manages the current stack
+	// Find the Spacelift admin stack that manages the current stack
 	for stackName, stackSection := range stacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
@@ -1149,9 +1155,18 @@ func addAffectedSpaceliftAdminStack(
 								return nil, err
 							}
 
-							contextPrefix, err := cfg.GetContextPrefix(stackName, context, cliConfig.Stacks.NamePattern, stackName)
-							if err != nil {
-								return nil, err
+							var contextPrefix string
+
+							if cliConfig.Stacks.NameTemplate != "" {
+								contextPrefix, err = u.ProcessTmpl("spacelift-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+								if err != nil {
+									return nil, err
+								}
+							} else {
+								contextPrefix, err = cfg.GetContextPrefix(stackName, context, GetStackNamePattern(cliConfig), stackName)
+								if err != nil {
+									return nil, err
+								}
 							}
 
 							if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {

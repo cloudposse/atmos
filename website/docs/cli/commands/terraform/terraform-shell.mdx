@@ -1,0 +1,69 @@
+---
+title: atmos terraform shell
+sidebar_label: shell
+sidebar_class_name: command
+id: shell
+description: This command starts a new `SHELL` configured with the environment for an Atmos component in a stack to allow execution of all native terraform commands inside the shell without using any atmos-specific arguments and flags. This may by helpful to debug a component without going through Atmos.
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note Purpose
+This command starts a new `SHELL` configured with the environment for an Atmos component in a Stack to allow executing all native terraform commands
+inside the shell without using any atmos-specific arguments and flags.
+:::
+
+<br/>
+
+<Screengrab title="atmos terraform shell --help" slug="atmos-terraform-shell--help" />
+
+## Usage
+
+Execute the `terraform shell` command like this:
+
+```shell
+atmos terraform shell <component> -s <stack>
+```
+
+The command configures the environment for an Atmos component in a stack and starts a new shell suitable for executing all terraform commands natively
+without going through Atmos.
+
+The command does the following:
+
+- Processes the stack manifests, generates the required variables for the Atmos component in the stack, and writes them to a file in the
+  component's folder
+
+- Generates a backend config file for the Atmos component in the stack and writes it to a file in the component's folder (or as specified by the
+  [Atmos configuration setting](/cli/configuration))
+
+- Creates a `terraform` workspace for the component in the stack
+
+- Drops the user into a separate shell (process) with all the required paths and ENV vars set
+
+- Inside the shell, the user can execute all `terraform` commands using the native syntax
+
+<br/>
+
+:::tip
+Run `atmos terraform shell --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos terraform shell top-level-component1 -s tenant1-ue2-dev
+atmos terraform shell infra/vpc -s tenant1-ue2-staging
+atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
+```
+
+## Arguments
+
+| Argument    | Description     | Required |
+|:------------|:----------------|:---------|
+| `component` | Atmos component | yes      |
+
+## Flags
+
+| Flag        | Description | Alias | Required |
+|:------------|:------------|:------|:---------|
+| `--stack`   | Atmos stack | `-s`  | yes      |
+| `--dry-run` | Dry run     |       | no       |

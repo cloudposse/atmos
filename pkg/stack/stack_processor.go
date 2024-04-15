@@ -3,19 +3,15 @@ package stack
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
+	"github.com/santhosh-tekuri/jsonschema/v5"
+	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-	"text/template"
-	"text/template/parse"
-
-	"github.com/Masterminds/sprig/v3"
-	"github.com/pkg/errors"
-	"github.com/santhosh-tekuri/jsonschema/v5"
-	"gopkg.in/yaml.v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
@@ -32,6 +28,7 @@ var (
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
 // and returns a list of stack configs
 func ProcessYAMLConfigFiles(
+	cliConfig schema.CliConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
@@ -71,6 +68,7 @@ func ProcessYAMLConfigFiles(
 			)
 
 			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(
+				cliConfig,
 				stackBasePath,
 				p,
 				map[string]map[any]any{},
@@ -149,6 +147,7 @@ func ProcessYAMLConfigFiles(
 // recursively processes and deep-merges all imports,
 // and returns the final stack config
 func ProcessYAMLConfigFile(
+	cliConfig schema.CliConfiguration,
 	basePath string,
 	filePath string,
 	importsConfig map[string]map[any]any,
@@ -197,17 +196,28 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Process `Go` templates in the stack manifest using the provided context
+	stackManifestTemplatesProcessed := stackYamlConfig
+	stackManifestTemplatesErrorMessage := ""
+
+	// Process `Go` templates in the imported stack manifest using the provided `context`
+	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && len(context) > 0 {
-		stackYamlConfig, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
-			return nil, nil, nil, err
+			if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
+				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+			}
+			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			return nil, nil, nil, e
 		}
 	}
 
-	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackYamlConfig)
+	stackConfigMap, err := c.YAMLToMapOfInterfaces(stackManifestTemplatesProcessed)
 	if err != nil {
-		e := fmt.Errorf("invalid stack manifest '%s'\n%v", relativeFilePath, err)
+		if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
+			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+		}
+		e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
 		return nil, nil, nil, e
 	}
 
@@ -370,23 +380,13 @@ func ProcessYAMLConfigFile(
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
 				// The import was not found -> check if the import is a Go template; if not, return the error
-				t, err2 := template.New(imp).Funcs(sprig.FuncMap()).Parse(imp)
+				isGolangTemplate, err2 := u.IsGolangTemplate(imp)
 				if err2 != nil {
 					return nil, nil, nil, err2
 				}
 
-				isGoTemplate := false
-
-				// Iterate over all nodes in the template and check if any of them is of type `NodeAction` (field evaluation)
-				for _, node := range t.Root.Nodes {
-					if node.Type() == parse.NodeAction {
-						isGoTemplate = true
-						break
-					}
-				}
-
 				// If the import is not a Go template and SkipIfMissing is false, return the error
-				if !isGoTemplate && !importStruct.SkipIfMissing {
+				if !isGolangTemplate && !importStruct.SkipIfMissing {
 					if err != nil {
 						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
 							imp,
@@ -418,13 +418,14 @@ func ProcessYAMLConfigFile(
 		// Process the imports in the current manifest
 		for _, importFile := range importMatches {
 			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(
+				cliConfig,
 				basePath,
 				importFile,
 				importsConfig,
 				c.MapsOfInterfacesToMapsOfStrings(mergedContext),
 				ignoreMissingFiles,
 				importStruct.SkipTemplatesProcessing,
-				importStruct.IgnoreMissingTemplateValues,
+				true, // importStruct.IgnoreMissingTemplateValues,
 				importStruct.SkipIfMissing,
 				finalTerraformOverrides,
 				finalHelmfileOverrides,
@@ -492,6 +493,7 @@ func ProcessStackConfig(
 	terraformSettings := map[any]any{}
 	terraformEnv := map[any]any{}
 	terraformCommand := ""
+	terraformProviders := map[any]any{}
 
 	helmfileVars := map[any]any{}
 	helmfileSettings := map[any]any{}
@@ -587,6 +589,13 @@ func ProcessStackConfig(
 	globalAndTerraformEnv, err := m.Merge([]map[any]any{globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
+	}
+
+	if i, ok := globalTerraformSection[cfg.ProvidersSectionName]; ok {
+		terraformProviders, ok = i.(map[any]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
+		}
 	}
 
 	// Global backend
@@ -687,7 +696,7 @@ func ProcessStackConfig(
 				}
 
 				componentVars := map[any]any{}
-				if i, ok := componentMap["vars"]; ok {
+				if i, ok := componentMap[cfg.VarsSectionName]; ok {
 					componentVars, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.vars' section in the file '%s'", component, stackName)
@@ -695,7 +704,7 @@ func ProcessStackConfig(
 				}
 
 				componentSettings := map[any]any{}
-				if i, ok := componentMap["settings"]; ok {
+				if i, ok := componentMap[cfg.SettingsSectionName]; ok {
 					componentSettings, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.settings' section in the file '%s'", component, stackName)
@@ -710,17 +719,25 @@ func ProcessStackConfig(
 				}
 
 				componentEnv := map[any]any{}
-				if i, ok := componentMap["env"]; ok {
+				if i, ok := componentMap[cfg.EnvSectionName]; ok {
 					componentEnv, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.env' section in the file '%s'", component, stackName)
 					}
 				}
 
+				componentProviders := map[any]any{}
+				if i, ok := componentMap[cfg.ProvidersSectionName]; ok {
+					componentProviders, ok = i.(map[any]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.providers' section in the file '%s'", component, stackName)
+					}
+				}
+
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[any]any{}
-				if i, ok := componentMap["metadata"]; ok {
+				if i, ok := componentMap[cfg.MetadataSectionName]; ok {
 					componentMetadata, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.metadata' section in the file '%s'", component, stackName)
@@ -731,14 +748,14 @@ func ProcessStackConfig(
 				componentBackendType := ""
 				componentBackendSection := map[any]any{}
 
-				if i, ok := componentMap["backend_type"]; ok {
+				if i, ok := componentMap[cfg.BackendTypeSectionName]; ok {
 					componentBackendType, ok = i.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.backend_type' attribute in the file '%s'", component, stackName)
 					}
 				}
 
-				if i, ok := componentMap["backend"]; ok {
+				if i, ok := componentMap[cfg.BackendSectionName]; ok {
 					componentBackendSection, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.backend' section in the file '%s'", component, stackName)
@@ -776,26 +793,27 @@ func ProcessStackConfig(
 				componentOverridesVars := map[any]any{}
 				componentOverridesSettings := map[any]any{}
 				componentOverridesEnv := map[any]any{}
+				componentOverridesProviders := map[any]any{}
 				componentOverridesTerraformCommand := ""
 
-				if i, ok := componentMap["overrides"]; ok {
+				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
 					if componentOverrides, ok = i.(map[any]any); !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides' in the manifest '%s'", component, stackName)
 					}
 
-					if i, ok = componentOverrides["vars"]; ok {
+					if i, ok = componentOverrides[cfg.VarsSectionName]; ok {
 						if componentOverridesVars, ok = i.(map[any]any); !ok {
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.vars' in the manifest '%s'", component, stackName)
 						}
 					}
 
-					if i, ok = componentOverrides["settings"]; ok {
+					if i, ok = componentOverrides[cfg.SettingsSectionName]; ok {
 						if componentOverridesSettings, ok = i.(map[any]any); !ok {
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.settings' in the manifest '%s'", component, stackName)
 						}
 					}
 
-					if i, ok = componentOverrides["env"]; ok {
+					if i, ok = componentOverrides[cfg.EnvSectionName]; ok {
 						if componentOverridesEnv, ok = i.(map[any]any); !ok {
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.env' in the manifest '%s'", component, stackName)
 						}
@@ -806,6 +824,12 @@ func ProcessStackConfig(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.command' in the manifest '%s'", component, stackName)
 						}
 					}
+
+					if i, ok = componentOverrides[cfg.ProvidersSectionName]; ok {
+						if componentOverridesProviders, ok = i.(map[any]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.providers' in the manifest '%s'", component, stackName)
+						}
+					}
 				}
 
 				// Process base component(s)
@@ -813,6 +837,7 @@ func ProcessStackConfig(
 				baseComponentVars := map[any]any{}
 				baseComponentSettings := map[any]any{}
 				baseComponentEnv := map[any]any{}
+				baseComponentProviders := map[any]any{}
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
 				baseComponentBackendSection := map[any]any{}
@@ -847,6 +872,7 @@ func ProcessStackConfig(
 					baseComponentVars = baseComponentConfig.BaseComponentVars
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentProviders = baseComponentConfig.BaseComponentProviders
 					baseComponentName = baseComponentConfig.FinalBaseComponentName
 					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
@@ -956,6 +982,16 @@ func ProcessStackConfig(
 					return nil, err
 				}
 
+				finalComponentProviders, err := m.Merge([]map[any]any{
+					terraformProviders,
+					baseComponentProviders,
+					componentProviders,
+					componentOverridesProviders,
+				})
+				if err != nil {
+					return nil, err
+				}
+
 				// Final backend
 				finalComponentBackendType := globalBackendType
 				if len(baseComponentBackendType) > 0 {
@@ -982,36 +1018,55 @@ func ProcessStackConfig(
 					}
 				}
 
+				// AWS S3 backend
 				// Check if `backend` section has `workspace_key_prefix` for `s3` backend type
 				// If it does not, use the component name instead
 				// It will also be propagated to `remote_state_backend` section of `s3` type
 				if finalComponentBackendType == "s3" {
-					if _, ok := finalComponentBackend["workspace_key_prefix"].(string); !ok {
-						workspaceKeyPrefixComponent := component
+					if p, ok := finalComponentBackend["workspace_key_prefix"].(string); !ok || p == "" {
+						workspaceKeyPrefix := component
 						if baseComponentName != "" {
-							workspaceKeyPrefixComponent = baseComponentName
+							workspaceKeyPrefix = baseComponentName
 						}
-						finalComponentBackend["workspace_key_prefix"] = strings.Replace(workspaceKeyPrefixComponent, "/", "-", -1)
+						finalComponentBackend["workspace_key_prefix"] = strings.Replace(workspaceKeyPrefix, "/", "-", -1)
 					}
 				}
 
+				// Google GSC backend
+				// Check if `backend` section has `prefix` for `gcs` backend type
+				// If it does not, use the component name instead
+				// https://developer.hashicorp.com/terraform/language/settings/backends/gcs
+				// https://developer.hashicorp.com/terraform/language/settings/backends/gcs#prefix
+				if finalComponentBackendType == "gcs" {
+					if p, ok := finalComponentBackend["prefix"].(string); !ok || p == "" {
+						prefix := component
+						if baseComponentName != "" {
+							prefix = baseComponentName
+						}
+						finalComponentBackend["prefix"] = strings.Replace(prefix, "/", "-", -1)
+					}
+				}
+
+				// Azure backend
 				// Check if component `backend` section has `key` for `azurerm` backend type
-				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique tf state key
+				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique Terraform state key
 				// The backend state file will be formatted like so: {global key name}/{component name}.terraform.tfstate
 				if finalComponentBackendType == "azurerm" {
 					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[any]any); !componentAzurermExists {
 						if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
 							azureKeyPrefixComponent := component
-							baseKeyName := ""
+							var keyName []string
 							if baseComponentName != "" {
 								azureKeyPrefixComponent = baseComponentName
 							}
 							if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[any]any); globalAzurermExists {
-								baseKeyName = globalAzurerm["key"].(string)
+								if _, globalAzurermKeyExists := globalAzurerm["key"].(string); globalAzurermKeyExists {
+									keyName = append(keyName, globalAzurerm["key"].(string))
+								}
 							}
 							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
-							finalComponentBackend["key"] = fmt.Sprintf("%s/%s.terraform.tfstate", baseKeyName, componentKeyName)
-
+							keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
+							finalComponentBackend["key"] = strings.Join(keyName, "/")
 						}
 					}
 				}
@@ -1093,17 +1148,18 @@ func ProcessStackConfig(
 				}
 
 				comp := map[string]any{}
-				comp["vars"] = finalComponentVars
-				comp["settings"] = finalComponentSettings
-				comp["env"] = finalComponentEnv
-				comp["backend_type"] = finalComponentBackendType
-				comp["backend"] = finalComponentBackend
+				comp[cfg.VarsSectionName] = finalComponentVars
+				comp[cfg.SettingsSectionName] = finalComponentSettings
+				comp[cfg.EnvSectionName] = finalComponentEnv
+				comp[cfg.BackendTypeSectionName] = finalComponentBackendType
+				comp[cfg.BackendSectionName] = finalComponentBackend
 				comp["remote_state_backend_type"] = finalComponentRemoteStateBackendType
 				comp["remote_state_backend"] = finalComponentRemoteStateBackend
 				comp["command"] = finalComponentTerraformCommand
 				comp["inheritance"] = componentInheritanceChain
-				comp["metadata"] = componentMetadata
-				comp["overrides"] = componentOverrides
+				comp[cfg.MetadataSectionName] = componentMetadata
+				comp[cfg.OverridesSectionName] = componentOverrides
+				comp[cfg.ProvidersSectionName] = finalComponentProviders
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName
@@ -1132,7 +1188,7 @@ func ProcessStackConfig(
 				}
 
 				componentVars := map[any]any{}
-				if i2, ok := componentMap["vars"]; ok {
+				if i2, ok := componentMap[cfg.VarsSectionName]; ok {
 					componentVars, ok = i2.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.vars' section in the file '%s'", component, stackName)
@@ -1140,7 +1196,7 @@ func ProcessStackConfig(
 				}
 
 				componentSettings := map[any]any{}
-				if i, ok := componentMap["settings"]; ok {
+				if i, ok := componentMap[cfg.SettingsSectionName]; ok {
 					componentSettings, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.settings' section in the file '%s'", component, stackName)
@@ -1148,7 +1204,7 @@ func ProcessStackConfig(
 				}
 
 				componentEnv := map[any]any{}
-				if i, ok := componentMap["env"]; ok {
+				if i, ok := componentMap[cfg.EnvSectionName]; ok {
 					componentEnv, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.env' section in the file '%s'", component, stackName)
@@ -1158,7 +1214,7 @@ func ProcessStackConfig(
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[any]any{}
-				if i, ok := componentMap["metadata"]; ok {
+				if i, ok := componentMap[cfg.MetadataSectionName]; ok {
 					componentMetadata, ok = i.(map[any]any)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.metadata' section in the file '%s'", component, stackName)
@@ -1180,24 +1236,24 @@ func ProcessStackConfig(
 				componentOverridesEnv := map[any]any{}
 				componentOverridesHelmfileCommand := ""
 
-				if i, ok := componentMap["overrides"]; ok {
+				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
 					if componentOverrides, ok = i.(map[any]any); !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides' in the manifest '%s'", component, stackName)
 					}
 
-					if i, ok = componentOverrides["vars"]; ok {
+					if i, ok = componentOverrides[cfg.VarsSectionName]; ok {
 						if componentOverridesVars, ok = i.(map[any]any); !ok {
 							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.vars' in the manifest '%s'", component, stackName)
 						}
 					}
 
-					if i, ok = componentOverrides["settings"]; ok {
+					if i, ok = componentOverrides[cfg.SettingsSectionName]; ok {
 						if componentOverridesSettings, ok = i.(map[any]any); !ok {
 							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.settings' in the manifest '%s'", component, stackName)
 						}
 					}
 
-					if i, ok = componentOverrides["env"]; ok {
+					if i, ok = componentOverrides[cfg.EnvSectionName]; ok {
 						if componentOverridesEnv, ok = i.(map[any]any); !ok {
 							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.env' in the manifest '%s'", component, stackName)
 						}
@@ -1363,13 +1419,13 @@ func ProcessStackConfig(
 				}
 
 				comp := map[string]any{}
-				comp["vars"] = finalComponentVars
-				comp["settings"] = finalComponentSettings
-				comp["env"] = finalComponentEnv
+				comp[cfg.VarsSectionName] = finalComponentVars
+				comp[cfg.SettingsSectionName] = finalComponentSettings
+				comp[cfg.EnvSectionName] = finalComponentEnv
 				comp["command"] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
-				comp["metadata"] = componentMetadata
-				comp["overrides"] = componentOverrides
+				comp[cfg.MetadataSectionName] = componentMetadata
+				comp[cfg.OverridesSectionName] = componentOverrides
 
 				if baseComponentName != "" {
 					comp["component"] = baseComponentName

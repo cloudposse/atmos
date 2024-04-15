@@ -1,6 +1,6 @@
 ---
 title: Stack Catalogs
-sidebar_position: 7
+sidebar_position: 3
 sidebar_label: Catalogs
 id: catalogs
 description: Catalogs are how to organize all Stack configurations for easy imports. 

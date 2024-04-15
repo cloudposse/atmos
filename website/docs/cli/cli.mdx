@@ -6,6 +6,8 @@ sidebar_class_name: hidden command
 sidebar_position: 1
 description: This command starts an interactive UI to select an Atmos command, component and stack. Press "Enter" to execute the command
 ---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
 Use this command to start an interactive UI to select an Atmos command, component and stack. Press `Enter` to execute the command for the selected
@@ -46,11 +48,14 @@ an interactive UI in the terminal. Use the arrow keys to select stacks and compo
 
 In Atmos, you can easily search and navigate your configuration from the built-in UI.
 
+<Terminal title="atmos (interactive)">
 ![`atmos` CLI command mode 1](/img/cli/atmos/atmos-cli-command-1.png)
+</Terminal>
 
 ### Stacks for Components (Mode 2)
 
 You can also search for the stacks where a component is configured.
 
+<Terminal title="atmos (interactive)">
 ![`atmos` CLI command mode 2](/img/cli/atmos/atmos-cli-command-2.png)
-
+</Terminal>

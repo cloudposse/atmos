@@ -1,0 +1,220 @@
+---
+title: CLI Commands Cheat Sheet
+sidebar_position: 2
+sidebar_label: Cheat Sheet
+description: CLI Commands Cheat Sheet
+---
+import Link from '@docusaurus/Link'
+import Card from '@site/src/components/Card'
+import CardGroup from '@site/src/components/CardGroup'
+
+<CardGroup title="General" className="cheatsheet">
+
+  <Card url="/cli/commands/help">
+    ```
+    atmos
+    ```
+    <p>Start an interactive UI to select an Atmos command, component and stack. Press "Enter" to execute the command.</p>
+  </Card>
+
+  <Card url="/cli/commands/help">
+    ```
+    atmos help
+    ```   
+    <p>Show help for all Atmos CLI commands</p>
+  </Card>
+
+  <Card url="/cli/commands/docs">
+    ```
+    atmos docs
+    ```
+   <p>Open the Atmos documentation in a web browser</p>
+  </Card>
+
+  <Card url="/cli/commands/version">
+    ```
+    atmos version
+    ```
+    <p>Get the Atmos CLI version</p>
+  </Card>
+
+  <Card url="/cli/commands/completion">
+    ```
+    atmos completion
+    ```            
+    <p>Generate completion scripts for `Bash`, `Zsh`, `Fish` and `PowerShell`</p>
+  </Card>
+</CardGroup>
+
+<CardGroup title="Describe Commands" className="cheatsheet">
+  <Card url="/cli/commands/describe/affected">
+    ```
+    atmos describe affected
+    ```                         
+    <p>Generate a list of the affected Atmos components and stacks given two Git commits</p>
+  </Card>
+
+  <Card url="/cli/commands/describe/component">
+    ```
+    atmos describe component
+    ```                     
+    <p>Describe the complete configuration for an Atmos component in an Atmos stack</p>
+  </Card>
+
+  <Card url="/cli/commands/describe/config">
+    ```
+    atmos describe config
+    ```  
+    <p>Show the final (deep-merged) CLI configuration of all `atmos.yaml` file(s)</p>
+  </Card>
+
+  <Card url="/cli/commands/describe/dependents">
+    ```
+    atmos describe dependents
+    ```                    
+    <p>Show a list of Atmos components in Atmos stacks that depend on the provided Atmos component</p>
+  </Card>
+
+  <Card url="/cli/commands/describe/stacks">
+    ```
+    atmos describe stacks
+    ``` 
+    <p>Show the fully deep-merged configuration for all Atmos stacks and the components in the stacks</p>
+  </Card>
+
+  <Card url="/cli/commands/describe/workflows">
+    ```
+    atmos describe workflows
+    ```                      
+    <p>Show the configured Atmos workflows</p>
+  </Card>
+</CardGroup>
+
+<CardGroup title="Terraform Commands" className="cheatsheet">
+  <Card url="/cli/commands/terraform/usage">
+    ```
+    atmos terraform
+    ```      
+    <p>Execute `terraform` commands</p>
+  </Card>
+
+  <Card url="/cli/commands/terraform/clean">
+    ```
+    atmos terraform clean
+    ```   
+    <p>Delete the `.terraform` folder, the folder that `TF_DATA_DIR` ENV var points to, `.terraform.lock.hcl` file, `varfile` and `planfile` for a component in a stack</p>
+  </Card>
+
+  <Card url="/cli/commands/terraform/deploy">
+    ```
+    atmos terraform deploy
+    ```
+    <p>Execute `terraform apply -auto-approve` on an Atmos component in an Atmos stack</p>
+  </Card>
+
+  <Card url="/cli/commands/terraform/generate-backend">
+    ```
+    atmos terraform generate backend
+    ```
+    <p>Generate a Terraform backend config file for an Atmos terraform component in an Atmos stack</p>
+  </Card>
+
+  <Card url="/cli/commands/terraform/generate-backends">
+    ```
+    atmos terraform generate backends
+    ```
+    <p>Generate the Terraform backend config files for all Atmos terraform components in all stacks</p>
+  </Card>
+
+  <Card url="/cli/commands/terraform/generate-varfile">
+    ```
+    atmos terraform generate varfile
+    ```
+    <p>Generate a varfile (`.tfvar` ) for an Atmos terraform component in an Atmos stack</p>
+  </Card>
+
+  <Card url="/cli/commands/terraform/generate-varfiles">
+    ```
+    atmos terraform generate varfiles
+    ```     
+    <p>Generate the terraform varfiles (`.tfvar`) for all Atmos terraform components in all stacks</p>
+  </Card>
+
+  <Card url="/cli/commands/terraform/shell">
+    ```
+    atmos terraform shell
+    ```
+    <p>Start a new `SHELL` configured with the environment for an Atmos component in a stack to allow executing all native terraform commands inside the shell without using any atmos-specific arguments and flags</p>
+  </Card>
+
+  <Card url="/cli/commands/terraform/workspace">
+    ```
+    atmos terraform workspace
+    ```
+    <p>Calculate the Terraform workspace for an Atmos component (from the context variables and stack config), then run `terraform init -reconfigure`, then select the workspace by executing the `terraform workspace select` command</p>
+  </Card>
+</CardGroup>
+
+<CardGroup title="Helmfile Commands" className="cheatsheet">
+  <Card url="/cli/commands/helmfile/usage">
+    ```
+    atmos helmfile
+    ```
+    <p>Execute `helmfile` commands</p>
+  </Card>
+
+  <Card url="/cli/commands/helmfile/generate-varfile">
+    ```
+    atmos helmfile generate varfile
+    ```
+    <p>Generate a varfile for a helmfile component in an Atmos stack</p>
+  </Card>
+</CardGroup>
+
+<CardGroup title="Validate Commands" className="cheatsheet">
+  <Card url="/cli/commands/validate/component">
+    ```
+    atmos validate component
+    ```
+    <p>Validate an Atmos component in a stack using JSON Schema and OPA policies</p>
+  </Card>
+
+  <Card url="/cli/commands/validate/stacks">
+    ```
+    atmos validate stacks
+    ```
+    <p>Validate all Atmos stack configurations</p>
+  </Card>
+</CardGroup>
+
+<CardGroup title="Core Commands" className="cheatsheet">
+  <Card url="/cli/commands/vendor/pull">
+    ```
+    atmos vendor pull
+    ```
+    <p>Pull sources and mixins from remote repositories for Terraform and Helmfile components and other artifacts</p>
+  </Card>
+
+  <Card url="/cli/commands/workflow">
+    ```
+    atmos workflow
+    ```
+    <p>Perform sequential execution of `atmos` and `shell` commands defined as workflow steps</p>
+  </Card>
+</CardGroup>
+
+<CardGroup title="Integrations" className="cheatsheet">
+  <Card url="/cli/commands/aws/eks-update-kubeconfig">
+    ```
+    atmos aws eks update-kubeconfig
+    ```
+    <p>Download `kubeconfig` from an EKS cluster and save it to a file</p>
+  </Card>
+  
+  <Card url="/cli/commands/atlantis/generate-repo-config">
+    ```
+    atmos atlantis generate repo-config
+    ```
+    <p>Generates repository configuration for Atlantis</p>
+  </Card>
+</CardGroup>

@@ -64,6 +64,27 @@ func Execute() error {
 		}
 	}
 
+	// InitCliConfig finds and merges CLI configurations in the following order:
+	// system dir, home dir, current dir, ENV vars, command-line arguments
+	// Here we need the custom commands from the config
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil && !errors.Is(err, cfg.NotFound) {
+		u.LogErrorAndExit(err)
+	}
+
+	// If CLI configuration was found, process its custom commands and command aliases
+	if err == nil {
+		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
+
+		err = processCommandAliases(cliConfig, cliConfig.CommandAliases, RootCmd, true)
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
+	}
+
 	return RootCmd.Execute()
 }
 
@@ -75,22 +96,6 @@ func init() {
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
 	cobra.OnInitialize(initConfig)
-
-	// InitCliConfig finds and merges CLI configurations in the following order:
-	// system dir, home dir, current dir, ENV vars, command-line arguments
-	// Here we need the custom commands from the config
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil && !errors.Is(err, cfg.NotFound) {
-		u.LogErrorAndExit(err)
-	}
-
-	// If CLI configuration was found, add its custom commands
-	if err == nil {
-		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
-		if err != nil {
-			u.LogErrorAndExit(err)
-		}
-	}
 }
 
 func initConfig() {
