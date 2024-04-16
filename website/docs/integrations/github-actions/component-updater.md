@@ -49,7 +49,7 @@ jobs:
       # Install the Atmos Component Updater GitHub App:
       # https://github.com/apps/atmos-component-updater
       - name: Generate a token
-        id: generate-token
+        id: github-app
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.ATMOS_APP_ID }}
@@ -61,24 +61,37 @@ jobs:
           # https://atmos.tools/cli/configuration/#environment-variables
           ATMOS_CLI_CONFIG_PATH: ${{ github.workspace }}/rootfs/usr/local/etc/atmos/
         with:
-          github-access-token: ${{ steps.generate-token.outputs.token }}
+          github-access-token: ${{ steps.github-app.outputs.token }}
           log-level: INFO
           vendoring-enabled: true
           max-number-of-prs: 10
-          include: |
-            aws-*
-            eks/*
-            bastion
-          exclude: aws-sso,aws-saml
 
       - name: Delete abandoned update branches
         uses: phpdocker-io/github-actions-delete-abandoned-branches@v2
         with:
-          github_token: ${{ steps.generate-token.outputs.token }}
+          github_token: ${{ steps.github-app.outputs.token }}
           last_commit_age_days: 0
           allowed_prefixes: "component-update/"
           dry_run: no
 ```
+
+### Requirements
+
+This action will automatically suggest pull requests in your new repository.
+To do so, we need to install a GitHub App and allow GitHub Actions to create and approve pull requests within your GitHub Organization.
+For more on the Atmos Component Updater, see [atmos.tools](https://atmos.tools/integrations/github-actions/component-updater).
+
+- [ ] Install the Atmos Component Updater GitHub Action
+
+1. Go to [https://github.com/apps/atmos-component-updater](https://github.com/apps/atmos-component-updater)
+2. Install the Atmos Component Updater into your GitHub Organization
+3. [Generate a new private key for this Github App installation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys)
+4. Share both the App ID and the new private key with Cloud Posse in 1Password or set both as GitHub secrets. We will pull these secrets from GitHub Actions with `secrets.ATMOS_APP_ID` and `secrets.ATMOS_PRIVATE_KEY` respectively.
+
+- [ ] Allow GitHub Actions to create and approve pull requests
+
+1. Go to https://github.com/organizations/YOUR_ORG/settings/actions
+2. Check "Allow GitHub Actions to create and approve pull requests"
 
 ### Using a GitHub App
 
