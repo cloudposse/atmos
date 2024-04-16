@@ -107,15 +107,15 @@ To set up a GitHub App for this integration, either install the Cloud Posse mana
 ### Using GitHub Environments
 
 We recommend creating a new GitHub environment for Atmos (requires GitHub Enterprise). With environments, the Atmos Component Updater workflow will be required to follow any branch protection rules before running or accessing the environment's secrets. Plus, GitHub natively organizes these Deployments separately in the GitHub UI.
-
+To configure your environment, perform the following:
 1. Open "Settings" for your repository
 1. Navigate to "Environments"
 1. Select "New environment"
-1. Name the new environment, "atmos".
+1. Name the new environment, "`atmos`"
 1. In the drop-down next to "Deployment branches and tags", select "Protected branches only"
 1. In "Environment secrets", create the two required secrets for App ID and App Private Key from [Using a GitHub App](#using-a-github-app)
 
-Now the Atmos Component Updater workflow will create a new Deployment environment on the next workflow run, easily accessible from the GitHub UI.
+Now the Atmos Component Updater workflow will create a new Deployment in the `atmos` environment for each workflow run, easily accessible from the GitHub UI.
 
 ![Example Environment](/img/github-actions/github-deployment-environment.png)
 
