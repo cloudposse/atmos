@@ -78,7 +78,7 @@ jobs:
 ### Requirements
 
 This action will automatically open pull requests for updated components in your repository.
-To do so, we need to install a GitHub App and allow GitHub Actions to create and approve pull requests within your GitHub Organization.
+To use it, we recommend installing a GitHub App to allow GitHub Actions to create and approve pull requests within your GitHub Organization.
 For more on the Atmos Component Updater, see [atmos.tools](https://atmos.tools/integrations/github-actions/component-updater).
 
 - [ ] Install the Atmos Component Updater GitHub Action
