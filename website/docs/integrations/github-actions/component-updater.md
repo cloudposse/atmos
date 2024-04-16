@@ -94,7 +94,7 @@ To use it, we recommend installing a GitHub App to allow GitHub Actions to creat
 
 ### Using a GitHub App
 
-You may notice that we pass a generated token from a GitHub App to `github-access-token` instead of using the native `GITHUB_TOKEN`. We do this because Pull Requests will only trigger GitHub Workflows if the Pull Request is created by a GitHub App or PAT. For reference, see [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
+You may notice that we pass a generated token from a GitHub App to `github-access-token` instead of using the native `GITHUB_TOKEN`. We do this because Pull Requests will only trigger other GitHub Action Workflows if the Pull Request is created by a GitHub App or PAT. For reference, see [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
 
 To set up a GitHub App for this integration, either install the Cloud Posse managed GitHub App or create an app yourself. Install the Cloud Posse managed app from [github.com/apps/atmos-component-updater](https://github.com/apps/atmos-component-updater). If you wish to instead create the GitHub App yourself, assign only the following Repository permissions:
 
