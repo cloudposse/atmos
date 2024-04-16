@@ -78,19 +78,18 @@ jobs:
 ### Requirements
 
 This action will automatically open pull requests for updated components in your repository.
-To use it, we recommend installing a GitHub App to allow GitHub Actions to create and approve pull requests within your GitHub Organization.
-For more on the Atmos Component Updater, see [atmos.tools](https://atmos.tools/integrations/github-actions/component-updater).
+To use it, we recommend installing a GitHub App to allow GitHub Actions to create pull requests within your GitHub Organization.
 
 - [ ] Install the Atmos Component Updater GitHub Action
 
 1. Go to [https://github.com/apps/atmos-component-updater](https://github.com/apps/atmos-component-updater)
 2. Install the Atmos Component Updater into your GitHub Organization
 3. [Generate a new private key for this Github App installation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys)
-4. Share both the App ID and the new private key with Cloud Posse in 1Password or set both as GitHub secrets. We will pull these secrets from GitHub Actions with `secrets.ATMOS_APP_ID` and `secrets.ATMOS_PRIVATE_KEY` respectively.
+4. Save both the App ID and the new private key as secrets for GitHub Actions with `secrets.ATMOS_APP_ID` and `secrets.ATMOS_PRIVATE_KEY` respectively.
 
 - [ ] Allow GitHub Actions to create and approve pull requests
 
-1. Go to https://github.com/organizations/YOUR_ORG/settings/actions
+1. Go to `https://github.com/organizations/YOUR_ORG/settings/actions`
 2. Check "Allow GitHub Actions to create and approve pull requests"
 
 ### Using a GitHub App
