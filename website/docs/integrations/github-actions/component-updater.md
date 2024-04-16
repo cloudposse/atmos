@@ -106,7 +106,7 @@ To set up a GitHub App for this integration, either install the Cloud Posse mana
 
 ### Using GitHub Environments
 
-We recommend creating a new GitHub environment for Atmos. With environments, the Atmos Component Updater workflow will be required to follow any branch protection rules before running or accessing the environment's secrets. Plus, GitHub natively organizes these Deployments separately in the GitHub UI.
+We recommend creating a new GitHub environment for Atmos (requires GitHub Enterprise). With environments, the Atmos Component Updater workflow will be required to follow any branch protection rules before running or accessing the environment's secrets. Plus, GitHub natively organizes these Deployments separately in the GitHub UI.
 
 1. Open "Settings" for your repository
 1. Navigate to "Environments"
