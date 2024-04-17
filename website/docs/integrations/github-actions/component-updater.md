@@ -100,7 +100,7 @@ To set up a GitHub App for this integration, create an app for your Organization
 
 Feel free to download and use our Atmos icon with your GitHub App!
 
-<img src="/img/github-actions/github-app.png" style={{ width: '50', height: 'auto', margin: '10', position: 'relative'}}/><br/>
+<img src="/img/github-actions/github-app.png" style={{ height: 'auto', width: '50', margin: '10', position: 'relative'}}/><br/>
 
 :::
 
