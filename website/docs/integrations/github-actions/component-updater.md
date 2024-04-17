@@ -96,16 +96,12 @@ To set up a GitHub App for this integration, create an app for your Organization
 + Metadata: Read-only
 ```
 
-:::tip GitHub App Icon
-
 <details>
 <summary>Feel free to download and use our Atmos icon with your GitHub App!</summary>
 
 ![App Icon](/img/github-actions/github-app.png)
 
 </details>
-
-:::
 
 Once you've create the GitHub App, generate a new private key [following the GitHub documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys).
 
