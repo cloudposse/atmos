@@ -86,7 +86,7 @@ To use it, we recommend installing a GitHub App to allow GitHub Actions to creat
 
 ### Using a GitHub App
 
-You may notice that we pass a generated token from a GitHub App to `github-access-token` instead of using the native `GITHUB_TOKEN`. We do this because Pull Requests will only trigger GitHub Workflows if the Pull Request is created by a GitHub App or PAT. For reference, see [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
+You may notice that we pass a generated token from a GitHub App to `github-access-token` instead of using the native `GITHUB_TOKEN`. We do this because Pull Requests will only trigger other GitHub Action Workflows if the Pull Request is created by a GitHub App or PAT. For reference, see [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
 
 To set up a GitHub App for this integration, create an app for your Organization. Assign only the following Repository permissions:
 
@@ -110,16 +110,16 @@ Finally, save both the App ID and the new private key as secrets for GitHub Acti
 
 ### Using GitHub Environments
 
-We recommend creating a new GitHub environment for Atmos. With environments, the Atmos Component Updater workflow will be required to follow any branch protection rules before running or accessing the environment's secrets. Plus, GitHub natively organizes these Deployments separately in the GitHub UI.
-
+We recommend creating a new GitHub environment for Atmos (requires GitHub Enterprise). With environments, the Atmos Component Updater workflow will be required to follow any branch protection rules before running or accessing the environment's secrets. Plus, GitHub natively organizes these Deployments separately in the GitHub UI.
+To configure your environment, perform the following:
 1. Open "Settings" for your repository
 1. Navigate to "Environments"
 1. Select "New environment"
-1. Name the new environment, "atmos".
+1. Name the new environment, "`atmos`"
 1. In the drop-down next to "Deployment branches and tags", select "Protected branches only"
 1. In "Environment secrets", create the two required secrets for App ID and App Private Key from [Using a GitHub App](#using-a-github-app)
 
-Now the Atmos Component Updater workflow will create a new Deployment environment on the next workflow run, easily accessible from the GitHub UI.
+Now the Atmos Component Updater workflow will create a new Deployment in the `atmos` environment for each workflow run, easily accessible from the GitHub UI.
 
 ![Example Environment](/img/github-actions/github-deployment-environment.png)
 
