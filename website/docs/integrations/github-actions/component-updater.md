@@ -46,8 +46,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Install the Atmos Component Updater GitHub App:
-      # https://github.com/apps/atmos-component-updater
       - name: Generate a token
         id: github-app
         uses: actions/create-github-app-token@v1
@@ -80,13 +78,7 @@ jobs:
 This action will automatically open pull requests for updated components in your repository.
 To use it, we recommend installing a GitHub App to allow GitHub Actions to create pull requests within your GitHub Organization.
 
-- [ ] Install the Atmos Component Updater GitHub Action
-
-1. Go to [https://github.com/apps/atmos-component-updater](https://github.com/apps/atmos-component-updater)
-2. Install the Atmos Component Updater into your GitHub Organization
-3. [Generate a new private key for this Github App installation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys)
-4. Save both the App ID and the new private key as secrets for GitHub Actions with `secrets.ATMOS_APP_ID` and `secrets.ATMOS_PRIVATE_KEY` respectively.
-
+- [ ] Create and install a GitHub App, following [Using a GitHub App](#using-a-github-app)
 - [ ] Allow GitHub Actions to create and approve pull requests
 
 1. Go to `https://github.com/organizations/YOUR_ORG/settings/actions`
@@ -96,13 +88,25 @@ To use it, we recommend installing a GitHub App to allow GitHub Actions to creat
 
 You may notice that we pass a generated token from a GitHub App to `github-access-token` instead of using the native `GITHUB_TOKEN`. We do this because Pull Requests will only trigger GitHub Workflows if the Pull Request is created by a GitHub App or PAT. For reference, see [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
 
-To set up a GitHub App for this integration, either install the Cloud Posse managed GitHub App or create an app yourself. Install the Cloud Posse managed app from [github.com/apps/atmos-component-updater](https://github.com/apps/atmos-component-updater). If you wish to instead create the GitHub App yourself, assign only the following Repository permissions:
+To set up a GitHub App for this integration, create an app for your Organization. Assign only the following Repository permissions:
 
 ```diff
 + Contents: Read and write
 + Pull Requests: Read and write
 + Metadata: Read-only
 ```
+
+:::tip GitHub App Icon
+
+Feel free to download and use our Atmos icon with your GitHub App!
+
+<img src="/img/github-actions/github-app.png" style={{width: '480', height: 'auto', margin: '10', position: 'relative'}}/><br/>
+
+:::
+
+Once you've create the GitHub App, generate a new private key [following the GitHub documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys).
+
+Finally, save both the App ID and the new private key as secrets for GitHub Actions with `ATMOS_APP_ID` and `ATMOS_PRIVATE_KEY` respectively.
 
 ### Using GitHub Environments
 
