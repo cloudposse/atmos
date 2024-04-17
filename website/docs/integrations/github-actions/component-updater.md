@@ -98,9 +98,12 @@ To set up a GitHub App for this integration, create an app for your Organization
 
 :::tip GitHub App Icon
 
-Feel free to download and use our Atmos icon with your GitHub App!
+<details>
+<summary>Feel free to download and use our Atmos icon with your GitHub App!</summary>
 
-<img src="/img/github-actions/github-app.png" style={{ height: 'auto', width: '50', margin: '10', position: 'relative'}}/><br/>
+![App Icon](/img/github-actions/github-app.png)
+
+</details>
 
 :::
 
