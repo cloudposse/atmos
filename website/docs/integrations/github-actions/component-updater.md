@@ -109,7 +109,7 @@ You may notice that we pass a generated token from a GitHub App to `github-acces
 ```
 
 6. Generate a new private key [following the GitHub documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys).
-7. Finally, save both the App ID and the new private key as secrets for GitHub Actions with `ATMOS_APP_ID` and `ATMOS_PRIVATE_KEY` respectively.
+7. Finally, save both the App ID and the new private key as secrets for GitHub Actions with `ATMOS_APP_ID` and `ATMOS_PRIVATE_KEY` respectively. Note, if using GitHub Enterprise, we recommend using "GitHub Environments" to scope the Secrets to protected branches. If that's not available, use repository-scoped GitHub Secrets instead.
 
 ### Using GitHub Environments
 
