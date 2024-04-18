@@ -91,7 +91,7 @@ You may notice that we pass a generated token from a GitHub App to `github-acces
 1. Create a new GitHub App
 2. Name this new app whatever you prefer. For example, `Atmos Component Updater`.
 3. List a Homepage URL of your choosing. This is required by GitHub, but you can use any URL. For example use our documentation page: `https://atmos.tools/integrations/github-actions/component-updater/`
-4. (Optional) Add an icon for your new app
+4. (Optional) Add an icon for your new app (See below)
 
 <details>
 <summary>Feel free to download and use our Atmos icon with your GitHub App!</summary>
