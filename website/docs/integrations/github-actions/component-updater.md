@@ -120,7 +120,7 @@ To configure your environment, perform the following:
 1. Select "New environment"
 1. Name the new environment, "`atmos`"
 1. In the drop-down next to "Deployment branches and tags", select "Protected branches only"
-1. In "Environment secrets", create the two required secrets for App ID and App Private Key from [Using a GitHub App](#using-a-github-app)
+1. In "Environment secrets", create the two required secrets for App ID (` `ATMOS_APP_ID`) and App Private Key (`ATMOS_PRIVATE_KEY`) from [Using a GitHub App](#using-a-github-app) step.
 
 Now the Atmos Component Updater workflow will create a new Deployment in the `atmos` environment for each workflow run, easily accessible from the GitHub UI.
 
