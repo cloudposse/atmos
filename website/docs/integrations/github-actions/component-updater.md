@@ -79,10 +79,28 @@ This action will automatically open pull requests for updated components in your
 To use it, we recommend installing a GitHub App to allow GitHub Actions to create pull requests within your GitHub Organization.
 
 - [ ] Create and install a GitHub App, following [Using a GitHub App](#using-a-github-app)
+- [ ] Grant GitHub Actions workflows read and write permission
+
+1. Go to `https://github.com/organizations/YOUR_ORG/settings/actions`
+
+If you're using GitHub Enterprise, update this setting under "enterprises": `https://github.com/enterprises/YOUR_ORG/settings/actions`
+
+2. Find the section called "Workflow permissions"
+3. Select "Read and write permissions"
+
 - [ ] Allow GitHub Actions to create and approve pull requests
 
 1. Go to `https://github.com/organizations/YOUR_ORG/settings/actions`
+
+Or if you're using GitHub Enterprise, go to `https://github.com/enterprises/YOUR_ORG/settings/actions`
+
 2. Check "Allow GitHub Actions to create and approve pull requests"
+
+:::tip Repository-Level Action Settings
+
+Enabling these action settings at an Organization level will enable the same settings for all repositories in your Organization. Confirm the same settings have been enabled for your infrastructure repository and optionally disable these settings for other repositories in your Organization at your own discretion.
+
+:::
 
 ### Using a GitHub App
 
@@ -110,6 +128,14 @@ You may notice that we pass a generated token from a GitHub App to `github-acces
 
 6. Generate a new private key [following the GitHub documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys).
 7. Finally, save both the App ID and the new private key as secrets for GitHub Actions with `ATMOS_APP_ID` and `ATMOS_PRIVATE_KEY` respectively. Note, if using GitHub Enterprise, we recommend using "GitHub Environments" to scope the Secrets to protected branches. If that's not available, use repository-scoped GitHub Secrets instead.
+
+:::tip App ID
+
+The App ID is shown under GitHub App settings under `General > About > App ID`. The App ID is _not_ the same as the Installation ID that is given in the URL when you install the App.
+
+`https://github.com/settings/apps/<YOUR APP NAME>`
+
+:::
 
 ### Using GitHub Environments
 
