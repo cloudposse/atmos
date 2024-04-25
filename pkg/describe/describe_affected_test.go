@@ -50,7 +50,7 @@ func TestDescribeAffectedWithTargetRefCheckout(t *testing.T) {
 
 	// Git reference and commit SHA
 	// Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details
-	ref := "refs/heads/master"
+	ref := ""
 	sha := ""
 
 	affected, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, true, true)

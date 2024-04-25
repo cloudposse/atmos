@@ -116,9 +116,9 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// If `ref` flag is not provided, it will clone the HEAD of the default branch
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...\n", ref))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nCloning Git ref '%s' ...\n", ref))
 	} else {
-		u.LogTrace(cliConfig, "\nChecking out the HEAD of the default branch ...\n")
+		u.LogTrace(cliConfig, "\nCloned the HEAD of the default branch ...\n")
 	}
 
 	if verbose {
@@ -252,7 +252,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into temp directory '%s' ...", tempDir))
+	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into temp directory '%s' ...\n", tempDir))
 
 	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -268,28 +268,16 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
-	if ref != "" {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
+	remoteRepoHead, err := remoteRepo.Head()
+	if err != nil {
+		return nil, err
+	}
 
-		w, err := remoteRepo.Worktree()
-		if err != nil {
-			return nil, err
-		}
+	if ref == "" {
+		ref = remoteRepoHead.Name().String()
+	}
 
-		checkoutOptions := git.CheckoutOptions{
-			Branch: plumbing.ReferenceName(ref),
-			Create: false,
-			Force:  true,
-			Keep:   false,
-		}
-
-		err = w.Checkout(&checkoutOptions)
-		if err != nil {
-			return nil, err
-		}
-
-		u.LogTrace(cliConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
-	} else if sha != "" {
+	if sha != "" {
 		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
 
 		w, err := remoteRepo.Worktree()
@@ -310,6 +298,27 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		}
 
 		u.LogTrace(cliConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
+	} else {
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
+
+		w, err := remoteRepo.Worktree()
+		if err != nil {
+			return nil, err
+		}
+
+		checkoutOptions := git.CheckoutOptions{
+			Branch: plumbing.ReferenceName(ref),
+			Create: false,
+			Force:  true,
+			Keep:   false,
+		}
+
+		err = w.Checkout(&checkoutOptions)
+		if err != nil {
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
 	}
 
 	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
