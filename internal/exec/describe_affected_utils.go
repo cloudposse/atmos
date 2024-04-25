@@ -241,7 +241,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	defer removeTempDir(cliConfig, tempDir)
 
 	// Copy the local repo into the temp directory
-	u.LogTrace(cliConfig, fmt.Sprintf("\nCopying the local repo into temp directory '%s' ...", tempDir))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nCopying the local repo into the temp directory '%s' ...", tempDir))
 
 	copyOptions := cp.Options{
 		PreserveTimes: false,
@@ -252,7 +252,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into temp directory '%s' ...\n", tempDir))
+	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s' ...\n", tempDir))
 
 	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -266,10 +266,6 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	_, err = remoteRepo.Config()
 	if err != nil {
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
-	}
-
-	if ref == "" {
-		ref = "refs/remotes/origin/HEAD"
 	}
 
 	if sha != "" {
@@ -294,6 +290,11 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		u.LogTrace(cliConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
 	} else {
+		// If `ref` is not provided, use the HEAD of the origin
+		if ref == "" {
+			ref = "refs/remotes/origin/HEAD"
+		}
+
 		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
 
 		w, err := remoteRepo.Worktree()
