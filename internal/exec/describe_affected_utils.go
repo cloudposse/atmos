@@ -40,6 +40,10 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
+
 	localPath := "."
 
 	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
@@ -201,6 +205,10 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
+
 	localPath := "."
 
 	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
@@ -233,27 +241,18 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	defer removeTempDir(cliConfig, tempDir)
 
 	// Copy the local repo into the temp directory
+	u.LogTrace(cliConfig, fmt.Sprintf("\nCopying the local repo into temp directory '%s' ...", tempDir))
+
 	copyOptions := cp.Options{
-		// Preserve the atime and the mtime of the entries
-		// On linux we can preserve only up to 1 millisecond accuracy
 		PreserveTimes: false,
-
-		// Preserve the uid and the gid of all entries
 		PreserveOwner: false,
-
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
-
-		// Specials includes special files to be copied. default false.
-		Specials: true,
 	}
 
 	if err = cp.Copy(localRepoPath, tempDir, copyOptions); err != nil {
 		return nil, err
 	}
+
+	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into temp directory '%s' ...", tempDir))
 
 	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -267,6 +266,50 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	_, err = remoteRepo.Config()
 	if err != nil {
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
+	}
+
+	if ref != "" {
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
+
+		w, err := remoteRepo.Worktree()
+		if err != nil {
+			return nil, err
+		}
+
+		checkoutOptions := git.CheckoutOptions{
+			Branch: plumbing.ReferenceName(ref),
+			Create: false,
+			Force:  true,
+			Keep:   false,
+		}
+
+		err = w.Checkout(&checkoutOptions)
+		if err != nil {
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
+	} else if sha != "" {
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+
+		w, err := remoteRepo.Worktree()
+		if err != nil {
+			return nil, err
+		}
+
+		checkoutOptions := git.CheckoutOptions{
+			Hash:   plumbing.NewHash(sha),
+			Create: false,
+			Force:  true,
+			Keep:   false,
+		}
+
+		err = w.Checkout(&checkoutOptions)
+		if err != nil {
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
 	}
 
 	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
