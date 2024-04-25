@@ -252,7 +252,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s' ...\n", tempDir))
+	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
 
 	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -290,7 +290,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		u.LogTrace(cliConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
 	} else {
-		// If `ref` is not provided, use the HEAD of the origin
+		// If `ref` is not provided, use the HEAD of the remote origin
 		if ref == "" {
 			ref = "refs/remotes/origin/HEAD"
 		}
@@ -496,11 +496,13 @@ func executeDescribeAffected(
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
-	u.LogTrace(cliConfig, "\nAffected components and stacks:\n")
-
 	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(affected) > 0 {
+		u.LogTrace(cliConfig, "\nAffected components and stacks:\n")
 	}
 
 	return affected, nil
