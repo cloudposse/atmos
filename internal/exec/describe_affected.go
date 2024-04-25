@@ -89,10 +89,13 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	var affected []schema.Affected
+
 	if repoPath != "" {
 		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks)
+	} else if cloneTargetRef {
+		affected, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks)
 	} else {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoCloneOrCheckout(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, cloneTargetRef, includeSpaceliftAdminStacks)
+		affected, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks)
 	}
 
 	if err != nil {
