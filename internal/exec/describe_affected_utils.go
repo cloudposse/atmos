@@ -1,8 +1,8 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
-	cp "github.com/otiai10/copy"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,7 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
+	cp "github.com/otiai10/copy"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -51,18 +51,18 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Get the Git config of the local repo
 	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
@@ -216,18 +216,18 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the local repo
 	_, err = localRepo.Config()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
@@ -246,6 +246,13 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
+		// Skip specifies which files should be skipped
+		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+			if strings.Contains(src, "node_modules") {
+				return true, nil
+			}
+			return false, nil
+		},
 	}
 
 	if err = cp.Copy(localRepoPath, tempDir, copyOptions); err != nil {
@@ -259,13 +266,13 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
+		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the target ref
 	_, err = remoteRepo.Config()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
+		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	if sha != "" {
@@ -311,6 +318,12 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		err = w.Checkout(&checkoutOptions)
 		if err != nil {
+			if strings.Contains(err.Error(), "reference not found") {
+				errorMessage := fmt.Sprintf("the Git ref '%s' does not exist on the local filesystem"+
+					"\nmake sure it's correct and was cloned by Git from the remote, or use the '--clone-target-ref=true' flag to clone it"+
+					"\nrefer to https://atmos.tools/cli/commands/describe/affected for more details", ref)
+				err = errors.New(errorMessage)
+			}
 			return nil, err
 		}
 
@@ -341,18 +354,18 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the local repo
 	_, err = localRepo.Config()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
@@ -362,13 +375,13 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
+		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the remote target repo
 	_, err = remoteRepo.Config()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
+		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	affected, err := executeDescribeAffected(cliConfig, localRepoPath, targetRefPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
@@ -501,9 +514,7 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	if len(affected) > 0 {
-		u.LogTrace(cliConfig, "\nAffected components and stacks:\n")
-	}
+	u.LogTrace(cliConfig, "\nAffected components and stacks:\n")
 
 	return affected, nil
 }
