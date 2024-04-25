@@ -20,46 +20,60 @@ Use this command to show a list of the affected Atmos components and stacks give
 
 The command uses two different Git commits to produce a list of affected Atmos components and stacks.
 
-For the first commit, the command assumes that the current repo root is a Git checkout. An error will be thrown if the current repo is not a Git
-repository (the `.git/` folder does not exist or is configured incorrectly).
+For the first commit, the command assumes that the current repo root is a Git checkout. An error will be thrown if the
+current repo is not a Git repository (the `.git/` folder does not exist or is configured incorrectly).
 
 The second commit can be specified on the command line by using
 the `--ref` ([Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References)) or `--sha` (commit SHA) flags.
-
-Either `--ref` or `--sha` should be used. If both flags are provided at the same time, the command will first clone the remote branch pointed to by
-the `--ref` flag and then checkout the Git commit pointed to by the `--sha` flag (`--sha` flag overrides `--ref` flag).
+The `--sha` takes precedence over the `--ref` flag.
 
 :::tip
-If the flags are not provided, the `ref` will be set automatically to the reference to the default branch (e.g. `main`) and the commit SHA
-will point to the `HEAD` of the branch.
+If the flags are not provided, the `ref` will be set automatically to the reference to the default branch
+(`refs/remotes/origin/HEAD` Git ref, usually the `main` branch).
 :::
-
-If you specify the `--repo-path` flag with the path to the already cloned repository, the command will not clone the target
-repository, but instead will use the already cloned one to compare the current branch with. In this case, the `--ref`, `--sha`, `--ssh-key`
-and `--ssh-key-password` flags are not used, and an error will be thrown if the `--repo-path` flag and any of the `--ref`, `--sha`, `--ssh-key`
-or `--ssh-key-password` flags are provided at the same time.
 
 ## How does it work?
 
 The command performs the following:
 
-- Cloning the target branch (`--ref`) or checking out the commit (`--sha`) of the remote target branch, or using the already cloned target repository
-  specified by the `--repo-path` flag
+- If the `--repo-path` flag is passed, the command uses it as the path to the already cloned target repo with which to
+  compare the current working branch. I this case, the command will not clone and checkout the
+  target reference, but instead will use the already cloned one to compare the current branch with. In this case, the
+  `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` flags are not used, and an error will be thrown if the `--repo-path`
+  flag and any of the `--ref`, `--sha`, `--ssh-key` or `--ssh-key-password` flags are provided at the same time
 
-- Deep merging all stack configurations for both the current working branch and the remote target branch
+- Otherwise, if the `--clone-target-ref=true` flag is specified, the command clones (into a temp directory) the remote
+  target with which to compare the current working branch. If the `--ref` flag or the commit SHA flag `--sha` are provided,
+  the command uses them to clone and checkout the remote target. Otherwise, the `HEAD` of the remote origin is
+  used (`refs/remotes/origin/HEAD` Git ref, usually the `main` branch)
 
-- Looking for changes in the component directories
+- Otherwise, (if the `--repo-path` and `--clone-target-ref=true` flags are not passed), the command does not clone anything
+  from the remote origin, but instead just copies the current repo into a temp directory and checks out the target
+  reference with which to compare the current working branch. If the `--ref` flag or the commit SHA flag `--sha` are
+  provided, the command uses them to check out. Otherwise, the `HEAD` of the remote origin is used
+  (`refs/remotes/origin/HEAD` Git ref, usually the `main` branch). This requires that the target reference is already
+  cloned by Git, and the information about it exists in the `.git` directory. This is the recommended way to execute the
+  `atmos describe affected` command since it allows [working with private repositories](#working-with-private-repositories)
+  without providing the SSH credentials (`--ssh-key` and `--ssh-key-password) since in this case Atmos does not
+  access the remote origin and instead just checks out the target reference
 
-- Comparing each section of the stack configuration looking for differences
+- The command deep-merges all stack configurations from both sources: the current working branch and the target reference
 
-- Outputting a JSON or YAML document consisting of a list of the affected components and stacks and what caused it to be affected
+- The command searches for changes in the component directories
 
-Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related components and stacks as
-affected. Atmos will then skip evaluating those stacks for differences since we already know that they are affected.
+- The command compares each stack manifest section of the stack configurations from both sources looking for differences
+
+- And finally, the command outputs a JSON or YAML document consisting of a list of the affected components and stacks
+  and what caused it to be affected
+
+Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related
+components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
+knows that they are affected.
 
 <br/>
 :::tip Use our GitHub Action
-Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run `describe affected` and produce a GitHub matrix.
+Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run
+`describe affected` and produce a GitHub matrix.
 :::
 
 #
@@ -182,18 +196,18 @@ Affected components and stacks:
 
 ## Flags
 
-| Flag                               | Description                                                                                                                                                                                                                                                                                                            | Required |
-|:-----------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                          | no       |
-| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                        | no       |
-| `--file`                           | If specified, write the result to the file                                                                                                                                                                                                                                                                             | no       |
-| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                                                                                                                                                                        | no       |
-| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                       | no       |
-| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                             | no       |
-| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                       | no       |
-| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                       | no       |
-| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                  | no       |
-| `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>(this means that the target reference must be already cloned by Git<br/>in the `.git` directory) | no       |
+| Flag                               | Description                                                                                                                                                                                                                                                                                                                                              | Required |
+|:-----------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
+| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                            | no       |
+| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                          | no       |
+| `--file`                           | If specified, write the result to the file                                                                                                                                                                                                                                                                                                               | no       |
+| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                                                                                                                                                                                                          | no       |
+| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                         | no       |
+| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                               | no       |
+| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                         | no       |
+| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                         | no       |
+| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                    | no       |
+| `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git<br/>, and the information about it exists in the `.git` directory | no       |
 
 ## Output
 
