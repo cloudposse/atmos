@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	cp "github.com/otiai10/copy"
 	"os"
 	"path"
 	"path/filepath"
@@ -39,7 +40,9 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
-	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+	localPath := "."
+
+	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
 		DetectDotGit:          true,
 		EnableDotGitCommonDir: false,
 	})
@@ -198,7 +201,9 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
-	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+	localPath := "."
+
+	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
 		DetectDotGit:          true,
 		EnableDotGitCommonDir: false,
 	})
@@ -206,8 +211,8 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
 
-	// Get the Git config of the local repo
-	localRepoConfig, err := localRepo.Config()
+	// Check the Git config of the local repo
+	_, err = localRepo.Config()
 	if err != nil {
 		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
 	}
@@ -219,37 +224,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
 
-	// Get the remotes of the local repo
-	keys := []string{}
-	for k := range localRepoConfig.Remotes {
-		keys = append(keys, k)
-	}
-
-	if len(keys) == 0 {
-		return nil, localRepoIsNotGitRepoError
-	}
-
-	// Get the origin URL of the current remoteRepo
-	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
-	if len(remoteUrls) == 0 {
-		return nil, localRepoIsNotGitRepoError
-	}
-
-	repoUrl := remoteUrls[0]
-	if repoUrl == "" {
-		return nil, localRepoIsNotGitRepoError
-	}
-
-	// Clone the remote repo
-	// https://git-scm.com/book/en/v2/Git-Internals-Git-References
-	// https://git-scm.com/docs/git-show-ref
-	// https://github.com/go-git/go-git/tree/master/_examples
-	// https://stackoverflow.com/questions/56810719/how-to-checkout-a-specific-sha-in-a-git-repo-using-golang
-	// https://golang.hotexamples.com/examples/gopkg.in.src-d.go-git.v4.plumbing/-/ReferenceName/golang-referencename-function-examples.html
-	// https://stackoverflow.com/questions/58905690/how-to-identify-which-files-have-changed-between-git-commits
-	// https://github.com/src-d/go-git/issues/604
-
-	// Create a temp dir to clone the remote repo to
+	// Create a temp dir for the target ref
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
 		return nil, err
@@ -257,64 +232,41 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 	defer removeTempDir(cliConfig, tempDir)
 
-	u.LogTrace(cliConfig, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", repoUrl, tempDir))
+	// Copy the local repo into the temp directory
+	copyOptions := cp.Options{
+		// Preserve the atime and the mtime of the entries
+		// On linux we can preserve only up to 1 millisecond accuracy
+		PreserveTimes: false,
 
-	cloneOptions := git.CloneOptions{
-		URL:          repoUrl,
-		NoCheckout:   false,
-		SingleBranch: false,
+		// Preserve the uid and the gid of all entries
+		PreserveOwner: false,
+
+		// OnSymlink specifies what to do on symlink
+		// Override the destination file if it already exists
+		OnSymlink: func(src string) cp.SymlinkAction {
+			return cp.Deep
+		},
+
+		// Specials includes special files to be copied. default false.
+		Specials: true,
 	}
 
-	// If `ref` flag is not provided, it will clone the HEAD of the default branch
-	if ref != "" {
-		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...\n", ref))
-	} else {
-		u.LogTrace(cliConfig, "\nChecking out the HEAD of the default branch ...\n")
-	}
-
-	if verbose {
-		cloneOptions.Progress = os.Stdout
-	}
-
-	remoteRepo, err := git.PlainClone(tempDir, false, &cloneOptions)
-	if err != nil {
+	if err = cp.Copy(localRepoPath, tempDir, copyOptions); err != nil {
 		return nil, err
 	}
 
-	remoteRepoHead, err := remoteRepo.Head()
+	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
+		DetectDotGit:          false,
+		EnableDotGitCommonDir: false,
+	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
-	if ref != "" {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", ref))
-	} else {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", remoteRepoHead.Name()))
-	}
-
-	// Check if a commit SHA was provided and checkout the repo at that commit SHA
-	if sha != "" {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
-
-		w, err := remoteRepo.Worktree()
-		if err != nil {
-			return nil, err
-		}
-
-		checkoutOptions := git.CheckoutOptions{
-			Hash:   plumbing.NewHash(sha),
-			Create: false,
-			Force:  true,
-			Keep:   false,
-		}
-
-		err = w.Checkout(&checkoutOptions)
-		if err != nil {
-			return nil, err
-		}
-
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
+	// Check the Git config of the target ref
+	_, err = remoteRepo.Config()
+	if err != nil {
+		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
 	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
@@ -334,7 +286,9 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
-	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+	localPath := "."
+
+	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
 		DetectDotGit:          true,
 		EnableDotGitCommonDir: false,
 	})
