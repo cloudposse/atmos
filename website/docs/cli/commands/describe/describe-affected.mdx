@@ -54,8 +54,8 @@ The command performs the following:
   (`refs/remotes/origin/HEAD` Git ref, usually the `main` branch). This requires that the target reference is already
   cloned by Git, and the information about it exists in the `.git` directory. This is the recommended way to execute the
   `atmos describe affected` command since it allows [working with private repositories](#working-with-private-repositories)
-  without providing the SSH credentials (`--ssh-key` and `--ssh-key-password) since in this case Atmos does not
-  access the remote origin and instead just checks out the target reference
+  without providing the SSH credentials (`--ssh-key` and `--ssh-key-password`) since in this case Atmos does not
+  access the remote origin and instead just checks out the target reference (which is already on the local file system)
 
 - The command deep-merges all stack configurations from both sources: the current working branch and the target reference
 
