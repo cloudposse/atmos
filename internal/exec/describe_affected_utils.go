@@ -268,13 +268,8 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
-	remoteRepoHead, err := remoteRepo.Head()
-	if err != nil {
-		return nil, err
-	}
-
 	if ref == "" {
-		ref = remoteRepoHead.Name().String()
+		ref = "refs/remotes/origin/HEAD"
 	}
 
 	if sha != "" {
@@ -500,7 +495,7 @@ func executeDescribeAffected(
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
-	u.LogTrace(cliConfig, "")
+	u.LogTrace(cliConfig, "\nAffected components and stacks:\n")
 
 	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles, includeSpaceliftAdminStacks)
 	if err != nil {
