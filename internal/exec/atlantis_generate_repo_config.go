@@ -102,6 +102,11 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 
 	// If the flag `--affected-only=true` is passed, find the affected components and stacks
 	if affectedOnly {
+		cloneTargetRef, err := flags.GetBool("clone-target-ref")
+		if err != nil {
+			return err
+		}
+
 		return ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			cliConfig,
 			outputPath,
@@ -113,6 +118,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 			sshKeyPath,
 			sshKeyPassword,
 			verbose,
+			cloneTargetRef,
 		)
 	}
 
@@ -138,6 +144,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,
+	cloneTargetRef bool,
 ) error {
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
@@ -146,10 +153,10 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	var affected []schema.Affected
 	var err error
 
-	if repoPath == "" {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, false)
-	} else {
+	if repoPath != "" {
 		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, false)
+	} else {
+		affected, err = ExecuteDescribeAffectedWithTargetRepoCloneOrCheckout(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, cloneTargetRef, false)
 	}
 
 	if err != nil {

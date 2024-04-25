@@ -57,5 +57,10 @@ func init() {
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key>")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
 
+	atlantisGenerateCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: "+
+		"atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true\n"+
+		"The flag is only used when '--affected-only=true'\n"+
+		"If set to 'false' (default), the target reference will be checked out instead (this means that the target reference must be already cloned by Git in the '.git' directory)")
+
 	atlantisGenerateCmd.AddCommand(atlantisGenerateRepoConfigCmd)
 }

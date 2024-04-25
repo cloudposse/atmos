@@ -27,15 +27,16 @@ var (
 	remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 )
 
-// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, and processes stack configs
-// and returns a list of the affected Atmos components and stacks given two Git commits
-func ExecuteDescribeAffectedWithTargetRepoClone(
+// ExecuteDescribeAffectedWithTargetRepoCloneOrCheckout clones or checks out the remote repo using `ref` or `sha`,
+// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
+func ExecuteDescribeAffectedWithTargetRepoCloneOrCheckout(
 	cliConfig schema.CliConfiguration,
 	ref string,
 	sha string,
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,
+	cloneTargetRef bool,
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
@@ -192,7 +193,7 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoPath(
 	cliConfig schema.CliConfiguration,
-	repoPath string,
+	targetRepoPath string,
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
@@ -218,7 +219,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
 
-	remoteRepo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{
+	remoteRepo, err := git.PlainOpenWithOptions(targetRepoPath, &git.PlainOpenOptions{
 		DetectDotGit:          false,
 		EnableDotGitCommonDir: false,
 	})
@@ -232,7 +233,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, repoPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, targetRepoPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}

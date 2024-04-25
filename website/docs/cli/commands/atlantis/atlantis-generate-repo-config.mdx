@@ -5,6 +5,7 @@ sidebar_class_name: command
 id: generate-repo-config
 description: Use this command to generate a repository configuration for Atlantis.
 ---
+
 import Screengrab from '@site/src/components/Screengrab'
 
 :::info Purpose
@@ -13,7 +14,7 @@ Use this command to generate a repository configuration for Atlantis.
 
 <br/>
 
-<Screengrab title="atmos atlantis generate repo-config --help" slug="atmos-atlantis-generate-repo-config--help" />
+<Screengrab title="atmos atlantis generate repo-config --help" slug="atmos-atlantis-generate-repo-config--help"/>
 
 <br/>
 <br/>
@@ -64,24 +65,27 @@ atmos atlantis generate repo-config --affected-only=true --ref refs/tags/v1.2.0 
 atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key>
 
 atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key> --ssh-key-password <password>
+
+atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true
 ```
 
 ## Flags
 
-| Flag                 | Description                                                                                                                                                      | Required |
-|:---------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--config-template`  | Atlantis config template name                                                                                                                                    | no       |
-| `--project-template` | Atlantis project template name                                                                                                                                   | no       |
-| `--output-path`      | Output path to write `atlantis.yaml` file                                                                                                                        | no       |
-| `--stacks`           | Generate Atlantis projects for the specified stacks only (comma-separated values)                                                                                | no       |
-| `--components`       | Generate Atlantis projects for the specified components only (comma-separated values)                                                                            | no       |
-| `--affected-only`    | Generate Atlantis projects only for the Atmos components changed<br/>between two Git commits                                                                     | no       |
-| `--ref`              | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                    | no       |
-| `--sha`              | Git commit SHA with which to compare the current working branch                                                                                                  | no       |
-| `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                                                                 | no       |
-| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                       | no       |
-| `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password` | no       |
-| `--verbose`          | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                 | no       |
+| Flag                 | Description                                                                                                                                                                                                                                                                                                                                                                                                     | Required |
+|:---------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
+| `--config-template`  | Atlantis config template name                                                                                                                                                                                                                                                                                                                                                                                   | no       |
+| `--project-template` | Atlantis project template name                                                                                                                                                                                                                                                                                                                                                                                  | no       |
+| `--output-path`      | Output path to write `atlantis.yaml` file                                                                                                                                                                                                                                                                                                                                                                       | no       |
+| `--stacks`           | Generate Atlantis projects for the specified stacks only (comma-separated values)                                                                                                                                                                                                                                                                                                                               | no       |
+| `--components`       | Generate Atlantis projects for the specified components only (comma-separated values)                                                                                                                                                                                                                                                                                                                           | no       |
+| `--affected-only`    | Generate Atlantis projects only for the Atmos components changed<br/>between two Git commits                                                                                                                                                                                                                                                                                                                    | no       |
+| `--ref`              | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                                                                                   | no       |
+| `--sha`              | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                                                                                 | no       |
+| `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                                                                                | no       |
+| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                                                                                      | no       |
+| `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                                                                                | no       |
+| `--verbose`          | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                                                                                | no       |
+| `--clone-target-ref` | Clone the target reference with which to compare the current branch.<br/>`atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true`<br/><br/>The flag is only used when `--affected-only=true`.<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>(this means that the target reference must be already cloned by Git in the `.git` directory) | no       |
 
 <br/>
 

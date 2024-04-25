@@ -28,7 +28,7 @@ func TestDescribeAffectedWithTargetRepoClone(t *testing.T) {
 	ref := "refs/heads/master"
 	sha := ""
 
-	affected, err := e.ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, "", "", true, true)
+	affected, err := e.ExecuteDescribeAffectedWithTargetRepoCloneOrCheckout(cliConfig, ref, sha, "", "", true, true, true)
 	assert.Nil(t, err)
 
 	affectedYaml, err := yaml.Marshal(affected)
