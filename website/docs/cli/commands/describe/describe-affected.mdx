@@ -49,10 +49,13 @@ The command performs the following:
 
 - Otherwise, (if the `--repo-path` and `--clone-target-ref=true` flags are not passed), the command does not clone anything
   from the remote origin, but instead just copies the current repo into a temp directory and checks out the target
-  reference with which to compare the current working branch. If the `--ref` flag or the commit SHA flag `--sha` are
+  reference with which to compare the current working branch.
+  If the `--ref` flag or the commit SHA flag `--sha` are
   provided, the command uses them to check out. Otherwise, the `HEAD` of the remote origin is used
-  (`refs/remotes/origin/HEAD` Git ref, usually the `main` branch). This requires that the target reference is already
-  cloned by Git, and the information about it exists in the `.git` directory. This is the recommended way to execute the
+  (`refs/remotes/origin/HEAD` Git ref, usually the `main` branch).
+  This requires that the target reference is already cloned by Git, and the information about it exists in
+  the `.git` directory (Git deep clone was executed instead of a shallow clone).
+  This is the recommended way to execute the
   `atmos describe affected` command since it allows [working with private repositories](#working-with-private-repositories)
   without providing the SSH credentials (`--ssh-key` and `--ssh-key-password`) since in this case Atmos does not
   access the remote origin and instead just checks out the target reference (which is already on the local file system)
