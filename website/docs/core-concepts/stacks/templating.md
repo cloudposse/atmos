@@ -126,9 +126,13 @@ For example, the `env` function has the same name in [Sprig](https://masterminds
 If you use the `env` function from one templating engine and enable both [Sprig](https://masterminds.github.io/sprig/)
 and [Gomplate](https://docs.gomplate.ca/functions/), it will be invalid in the other templating engine, and an error will be thrown.
 
-For this reason, you can use the `templates.settings.sprig.enabled` and `templates.settings,gomplate.enabled` settings to selectively
-enable/disable the [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/)
-functions.
+To be able to use the `env` function from both templating engines, you can do one of the following:
+
+- Use the `env` function from one templating engine, and disable the other templating engine by using the
+  `templates.settings.sprig.enabled` and `templates.settings,gomplate.enabled` settings
+
+- Enable both engines and use the Gomplate's `env` function via its 
+  [`getenv`](https://docs.gomplate.ca/functions/env/#examples) alias
 
 :::
 
