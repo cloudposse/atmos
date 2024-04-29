@@ -53,7 +53,7 @@ terraform:
 
 Let's say we also have a read-only IAM role, and we want to use it to access the remote state instead of the read-write
 role, because accessing remote state is a read-only operation, and we don't want to give the role more permissions than
-it requires - this is the principle of least privileges.
+it requires - this is the [principle of least privilege](https://en.wikipedia.org/wiki/Principle_of_least_privilege).
 
 We can add the `remote_state_backend` and `remote_state_backend_type` to override the required attributes from the
 `backend` section:
@@ -75,7 +75,7 @@ terraform:
   remote_state_backend:
     s3:
       role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-only"
-      # Override the other attributes as needed
+      # Override the other attributes from the `backend.s3` section as needed
 ```
 
 <br/>
@@ -85,8 +85,7 @@ accessing the remote state of all components. All other attributes will be taken
 deep-merges the `remote_state_backend` section with the `backend` section).
 
 When working with Terraform backends and writing/updating the state, the `terraform-backend-read-write` role will be
-used.
-But when reading the remote state of components, the `terraform-backend-read-only` role will be used.
+used. But when reading the remote state of components, the `terraform-backend-read-only` role will be used.
 
 ## Brownfield Development
 
