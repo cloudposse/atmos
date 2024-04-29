@@ -15,13 +15,78 @@ the outputs as inputs to another Atmos component
 Atmos also supports Remote State Backends (in the `remote_state_backend` section), which can be used to configure the
 following:
 
-- Override [Terraform Backend](/core-concepts/components/terraform-backends) configuration when accessing the
+- Override [Terraform Backend](/core-concepts/components/terraform-backends) configuration to access the
   remote state of a component (e.g. override the IAM role to assume, which in this case can be a read-only role)
 
-- Configure a remote state of type `static` which can be used to provide configurations for Atmos components for
+- Configure a remote state of type `static` which can be used to provide configurations for
   [Brownfield development](https://en.wikipedia.org/wiki/Brownfield_(software_development))
 
-## Override Terraform Backend Configuration
+## Override Terraform Backend Configuration to Access Remote State
+
+Atmos supports the `remote_state_backend` section which can be used to provide configuration to access the remote state
+of components.
+
+To access the remote state of components, you can override
+any [Terraform Backend](/core-concepts/components/terraform-backends)
+configuration in the `backend` section using the `remote_state_backend` section. The `remote_state_backend` section
+is a first-class section, and it can be defined globally at any scope (organization, tenant, account, region), or per
+component, and then deep-merged using [Atmos Component Inheritance](/core-concepts/components/inheritance).
+
+For example, let's suppose we have the following S3 backend configuration for the entire organization
+(refer to [AWS S3 Backend](/core-concepts/components/terraform-backends#aws-s3-backend) for more details):
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      acl: "bucket-owner-full-control"
+      encrypt: true
+      bucket: "your-s3-bucket-name"
+      dynamodb_table: "your-dynamodb-table-name"
+      key: "terraform.tfstate"
+      region: "your-aws-region"
+      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
+```
+
+<br/>
+
+Let's say we also have a read-only IAM role, and we want to use it to access the remote state instead of the read-write
+role, because accessing remote state is a read-only operation, and we don't want to give the role more permissions than
+it requires - this is the principle of least privileges.
+
+We can add the `remote_state_backend` and `remote_state_backend_type` to override the required attributes from the
+`backend` section:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      acl: "bucket-owner-full-control"
+      encrypt: true
+      bucket: "your-s3-bucket-name"
+      dynamodb_table: "your-dynamodb-table-name"
+      key: "terraform.tfstate"
+      region: "your-aws-region"
+      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
+
+  remote_state_backend_type: s3
+  remote_state_backend:
+    s3:
+      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-only"
+      # Override the other attributes as needed
+```
+
+<br/>
+
+In the example above, we've overridden the `role_arn` attribute for the `s3` backend to use the read-only role when
+accessing the remote state of all components. All other attributes will be taken from the `backend` section (Atmos
+deep-merges the `remote_state_backend` section with the `backend` section).
+
+When working with Terraform backends and writing/updating the state, the `terraform-backend-read-write` role will be
+used.
+But when reading the remote state of components, the `terraform-backend-read-only` role will be used.
 
 ## Brownfield Development
 
