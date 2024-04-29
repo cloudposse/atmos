@@ -116,23 +116,6 @@ established systems. This can be challenging due to several factors:
 - **Compliance and Security**: Updating old systems often requires careful consideration of security and compliance
   issues, especially if the system handles sensitive data or must meet specific regulatory standards.
 
-Strategies for Successful Brownfield DevOps Development:
-
-- **Incremental Changes**: Instead of large-scale overhauls, implementing small, manageable changes can reduce risk and
-  help the team learn and adapt progressively.
-
-- **Automation**: Automating as many processes as possible, such as testing, deployments, and monitoring, can help
-  integrate DevOps practices without disrupting existing operations.
-
-- **Documentation and Training**: Proper documentation of new processes and extensive training for team members can
-  facilitate a smoother transition and adoption of DevOps methodologies.
-
-- **Tool Compatibility**: Choosing tools and technologies that can integrate well with the existing stack is essential
-  to avoid disruptions and compatibility issues.
-
-- **Continuous Feedback**: Encouraging continuous feedback from all stakeholders involved can help identify pain points
-  and areas for improvement early in the development process.
-
 ## Brownfield Development in Atmos
 
 In Atmos, brownfield development describes the process of configuring Atmos components and stacks for the
