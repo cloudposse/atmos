@@ -118,9 +118,22 @@ established systems. This can be challenging due to several factors:
 
 ## Brownfield Development in Atmos
 
+Atmos is easier for new organizations or "greenfield" environments because you need to architect Terraform according to
+our best practices to get all the benefits of Atmos. For example, when using
+our [Terraform components](https://github.com/cloudposse/terraform-aws-components), we frequently use
+[Terraform Remote State](/core-concepts/components/remote-state) to retrieve the outputs from other components.
+This works well when you use our components but less so when you operate in a "brownfield" environment, for example,
+with an existing VPC, S3 bucket, or IAM role.
+
+But what happens if those things weren't provisioned by Atmos or predates your infrastructure? For this reason, we
+support something we refer to as the `static` remote state backend. Using the static remote state backend, you can
+populate a virtual state backend with the outputs as though it had been provisioned with Terraform. You can use this
+technique anytime you want to use the remote state functionality in Atmos, but when the remote state was provisioned
+elsewhere.
+
 In Atmos, brownfield development describes the process of configuring Atmos components and stacks for the
-existing (already provisioned) resources, and working on and updating existing infrastructure rather than creating new
-ones from scratch (which is known as "greenfield development"). The process respects the existing systems' constraints
+existing (already provisioned) resources, and working on and updating existing infrastructure rather than creating a new
+one from scratch (which is known as "greenfield" development). The process respects the existing systems' constraints
 while progressively introducing improvements and modern practices. This can ultimately lead to more robust, flexible,
 and efficient systems.
 
