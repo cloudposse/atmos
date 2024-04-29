@@ -12,7 +12,7 @@ terraform:
       region: "{{ .vars.region }}"
       terraform_workspace: "{{ .workspace }}"
 
-  backend_type: s3 # s3, remote, vault, static, azurerm, gcs, cloud
+  backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud
 
   # https://developer.hashicorp.com/terraform/language/settings/backends/configuration
   backend:

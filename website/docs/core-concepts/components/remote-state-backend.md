@@ -60,7 +60,7 @@ We can add the `remote_state_backend` and `remote_state_backend_type` to overrid
 
 ```yaml title="stacks/orgs/acme/_defaults.yaml"
 terraform:
-  backend_type: s3
+  backend_type: s3  # s3, remote, vault, azurerm, gcs, cloud
   backend:
     s3:
       acl: "bucket-owner-full-control"
@@ -71,7 +71,7 @@ terraform:
       region: "your-aws-region"
       role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
 
-  remote_state_backend_type: s3
+  remote_state_backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud, static
   remote_state_backend:
     s3:
       role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-only"
@@ -133,10 +133,18 @@ Strategies for Successful Brownfield DevOps Development:
 - **Continuous Feedback**: Encouraging continuous feedback from all stakeholders involved can help identify pain points
   and areas for improvement early in the development process.
 
-## `static` Remote State for Brownfield Development
+## Brownfield Development in Atmos
 
 In Atmos, brownfield development describes the process of configuring Atmos components and stacks for the
 existing (already provisioned) resources, and working on and updating existing infrastructure rather than creating new
 ones from scratch (which is known as "greenfield development"). The process respects the existing systems' constraints
 while progressively introducing improvements and modern practices. This can ultimately lead to more robust, flexible,
 and efficient systems.
+
+Atmos supports brownfield configuration by using the `static` type of remote state.
+
+## `static` Remote State for Brownfield Development
+
+### Example 1
+
+### Example 2
