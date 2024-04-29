@@ -1,8 +1,8 @@
 ---
-title: Terraform Component Remote State
-sidebar_position: 14
-sidebar_label: Remote State
-id: remote-state
+title: Remote State Backend
+sidebar_position: 16
+sidebar_label: Remote State Backend
+id: remote-state-backend
 ---
 
 The Terraform Component Remote State is used when we need to get the outputs of a [Terraform component](/core-concepts/components),
