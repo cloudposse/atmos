@@ -141,10 +141,185 @@ ones from scratch (which is known as "greenfield development"). The process resp
 while progressively introducing improvements and modern practices. This can ultimately lead to more robust, flexible,
 and efficient systems.
 
-Atmos supports brownfield configuration by using the `static` type of remote state.
+Atmos supports brownfield configuration by using the remote state of type `static`.
 
 ## `static` Remote State for Brownfield Development
 
-### Example 1
+Suppose that we need to provision
+the [`vpc`](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc)
+Terraform component and, instead of provisioning an S3 bucket for VPC Flow Logs, we want to use an existing bucket.
 
-### Example 2
+The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
+configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html).
+
+Let's redesign the example with the `vpc` and `vpc-flow-logs-bucket` components described in
+[Terraform Component Remote State](/core-concepts/components/remote-state) and configure the `static` remote state for
+the `vpc-flow-logs-bucket` component to use an existing S3 bucket.
+
+### Configure the `vpc-flow-logs-bucket` Component
+
+In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following configuration for
+the `vpc-flow-logs-bucket/defaults` Atmos component:
+
+```yaml title="stacks/catalog/vpc-flow-logs-bucket.yaml"
+components:
+  terraform:
+    vpc-flow-logs-bucket/defaults:
+      metadata:
+        type: abstract
+    # Use `static` remote state to configure the attributes for an existing 
+    # S3 bucket for VPC Flow Logs
+    remote_state_backend_type: static
+    remote_state_backend:
+      static:
+        # ARN of the existing S3 bucket
+        # `vpc_flow_logs_bucket_arn` is used as an input for the `vpc` component
+        vpc_flow_logs_bucket_arn: "arn:aws:s3::/my-vpc-flow-logs-bucket"
+```
+
+<br/>
+
+In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket-1` Atmos
+component in the `ue2-dev` Atmos stack:
+
+```yaml title="stacks/ue2-dev.yaml"
+# Import the base Atmos component configuration from the `catalog`.
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+# File extensions are optional (if not specified, `.yaml` is used by default).
+import:
+  - catalog/vpc-flow-logs-bucket
+
+components:
+  terraform:
+    vpc-flow-logs-bucket-1:
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: infra/vpc-flow-logs-bucket
+        inherits:
+          # Inherit all settings and variables from the 
+          # `vpc-flow-logs-bucket/defaults` base Atmos component
+          - vpc-flow-logs-bucket/defaults
+```
+
+<br/>
+
+### Configure and Provision the `vpc` Component
+
+In the `components/terraform/infra/vpc/remote-state.tf` file, configure the
+[remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform
+module to obtain the remote state for the `vpc-flow-logs-bucket-1` Atmos component:
+
+```hcl title="components/terraform/infra/vpc/remote-state.tf"
+module "vpc_flow_logs_bucket" {
+  count = local.vpc_flow_logs_enabled ? 1 : 0
+
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  # Specify the Atmos component name (defined in YAML stack config files) 
+  # for which to get the remote state outputs
+  component = var.vpc_flow_logs_bucket_component_name
+
+  # `context` input is a way to provide the information about the stack (using the context
+  # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
+  context = module.this.context
+}
+```
+
+In the `components/terraform/infra/vpc/vpc-flow-logs.tf` file, configure the `aws_flow_log` resource for the `vpc`
+Terraform component to use the remote state output `vpc_flow_logs_bucket_arn` from the `vpc-flow-logs-bucket-1` Atmos
+component:
+
+```hcl title="components/terraform/infra/vpc/vpc-flow-logs.tf"
+locals {
+  enabled               = module.this.enabled
+  vpc_flow_logs_enabled = local.enabled && var.vpc_flow_logs_enabled
+}
+
+resource "aws_flow_log" "default" {
+  count = local.vpc_flow_logs_enabled ? 1 : 0
+
+  # Use the remote state output `vpc_flow_logs_bucket_arn` of the `vpc_flow_logs_bucket` component
+  log_destination = module.vpc_flow_logs_bucket[0].outputs.vpc_flow_logs_bucket_arn
+
+  log_destination_type = var.vpc_flow_logs_log_destination_type
+  traffic_type         = var.vpc_flow_logs_traffic_type
+  vpc_id               = module.vpc.vpc_id
+
+  tags = module.this.tags
+}
+```
+
+In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc/defaults` Atmos component:
+
+```yaml title="stacks/catalog/vpc.yaml"
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        # `metadata.type: abstract` makes the component `abstract`,
+        # explicitly prohibiting the component from being deployed.
+        # `atmos terraform apply` will fail with an error.
+        # If `metadata.type` attribute is not specified, it defaults to `real`.
+        # `real` components can be provisioned by `atmos` and CI/CD like Spacelift and Atlantis.
+        type: abstract
+      # Default variables, which will be inherited and can be overridden in the derived components
+      vars:
+        public_subnets_enabled: false
+        nat_gateway_enabled: false
+        nat_instance_enabled: false
+        max_subnet_count: 3
+        vpc_flow_logs_enabled: false
+        vpc_flow_logs_log_destination_type: s3
+        vpc_flow_logs_traffic_type: "ALL"
+```
+
+<br/>
+
+In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc/1` Atmos component in
+the `ue2-dev` stack:
+
+```yaml title="stacks/ue2-dev.yaml"
+# Import the base component configuration from the `catalog`.
+# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+# File extensions are optional (if not specified, `.yaml` is used by default).
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc/1:
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: infra/vpc
+        inherits:
+          # Inherit all settings and variables from the `vpc/defaults` base Atmos component
+          - vpc/defaults
+      vars:
+        # Define variables that are specific for this component
+        # and are not set in the base component
+        name: vpc-1
+        ipv4_primary_cidr_block: 10.8.0.0/18
+        # Override the default variables from the base component
+        vpc_flow_logs_enabled: true
+        vpc_flow_logs_traffic_type: "REJECT"
+
+        # Specify the name of the Atmos component that provides configuration
+        # for the `infra/vpc-flow-logs-bucket` Terraform component
+        vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket-1
+```
+
+<br/>
+
+Having the stacks configured as shown above, we can now provision the `vpc/1` Atmos component in the `ue2-dev` stack
+by executing the following Atmos commands:
+
+```shell
+atmos terraform plan vpc/1 -s ue2-dev
+atmos terraform apply vpc/1 -s ue2-dev
+```
+
+When the commands are executed, the `vpc_flow_logs_bucket` remote-state module detects that the `vpc-flow-logs-bucket-1`
+component has the `static` remote state configured, and instead of reading its remote state from the S3 state
+bucket, it just returns the static values from the `remote_state_backend.static` section.
+The `vpc_flow_logs_bucket_arn` is then used as an input for the `vpc` component.

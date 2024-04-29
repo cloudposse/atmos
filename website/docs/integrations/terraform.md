@@ -103,7 +103,7 @@ atmos terraform plan eks -s ue2-dev
 atmos terraform apply eks -s ue2-dev
 ```
 
-`terraform deploy` command executes `terraform apply -auto-approve` to provision components into stacks without user interaction:
+`terraform deploy` command executes `terraform apply -auto-approve` to provision components in stacks without user interaction:
 
 ```console
 atmos terraform deploy eks -s ue2-dev
