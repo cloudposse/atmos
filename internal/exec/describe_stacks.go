@@ -200,10 +200,6 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
-						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
-						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
-
 						if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection["component"] = componentName
 						}
@@ -234,6 +230,10 @@ func ExecuteDescribeStacks(
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
+
+						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
@@ -374,10 +374,6 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
-						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
-						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
-
 						if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection["component"] = componentName
 						}
@@ -408,6 +404,10 @@ func ExecuteDescribeStacks(
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
+
+						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {

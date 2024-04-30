@@ -311,7 +311,6 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 
-		configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 		configAndStacksInfo.StackFile = configAndStacksInfo.Stack
 
 		// Process context
@@ -344,8 +343,6 @@ func ProcessStacks(
 			if err != nil {
 				continue
 			}
-
-			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			if cliConfig.Stacks.NameTemplate != "" {
 				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
@@ -601,6 +598,9 @@ func ProcessStacks(
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
 		configAndStacksInfo.ComponentBackendType = i
 	}
+
+	// Process the ENV variables from the `env` section
+	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 	return configAndStacksInfo, nil
 }

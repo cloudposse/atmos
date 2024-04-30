@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -15,7 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
+	cp "github.com/otiai10/copy"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -27,9 +28,9 @@ var (
 	remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 )
 
-// ExecuteDescribeAffectedWithTargetRepoClone clones the remote repo using `ref` or `sha`, and processes stack configs
-// and returns a list of the affected Atmos components and stacks given two Git commits
-func ExecuteDescribeAffectedWithTargetRepoClone(
+// ExecuteDescribeAffectedWithTargetRefClone clones the remote reference,
+// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
+func ExecuteDescribeAffectedWithTargetRefClone(
 	cliConfig schema.CliConfiguration,
 	ref string,
 	sha string,
@@ -39,23 +40,29 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
-	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
+
+	localPath := "."
+
+	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
 		DetectDotGit:          true,
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Get the Git config of the local repo
 	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
@@ -109,9 +116,9 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	// If `ref` flag is not provided, it will clone the HEAD of the default branch
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...\n", ref))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nCloning Git ref '%s' ...\n", ref))
 	} else {
-		u.LogTrace(cliConfig, "\nChecking out the HEAD of the default branch ...\n")
+		u.LogTrace(cliConfig, "\nCloned the HEAD of the default branch ...\n")
 	}
 
 	if verbose {
@@ -151,9 +158,9 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	}
 
 	if ref != "" {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out Git ref '%s'\n", ref))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", ref))
 	} else {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out Git ref '%s'\n", remoteRepoHead.Name()))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", remoteRepoHead.Name()))
 	}
 
 	// Check if a commit SHA was provided and checkout the repo at that commit SHA
@@ -188,51 +195,196 @@ func ExecuteDescribeAffectedWithTargetRepoClone(
 	return affected, nil
 }
 
-// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
-// and returns a list of the affected Atmos components and stacks given two Git commits
-func ExecuteDescribeAffectedWithTargetRepoPath(
+// ExecuteDescribeAffectedWithTargetRefCheckout checks out the target reference,
+// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
+func ExecuteDescribeAffectedWithTargetRefCheckout(
 	cliConfig schema.CliConfiguration,
-	repoPath string,
+	ref string,
+	sha string,
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 ) ([]schema.Affected, error) {
 
-	localRepo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
+
+	localPath := "."
+
+	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
 		DetectDotGit:          true,
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the local repo
 	_, err = localRepo.Config()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", localRepoIsNotGitRepoError)
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
 
-	remoteRepo, err := git.PlainOpenWithOptions(repoPath, &git.PlainOpenOptions{
+	// Create a temp dir for the target ref
+	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+	if err != nil {
+		return nil, err
+	}
+
+	defer removeTempDir(cliConfig, tempDir)
+
+	// Copy the local repo into the temp directory
+	u.LogTrace(cliConfig, fmt.Sprintf("\nCopying the local repo into the temp directory '%s' ...", tempDir))
+
+	copyOptions := cp.Options{
+		PreserveTimes: false,
+		PreserveOwner: false,
+		// Skip specifies which files should be skipped
+		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+			if strings.Contains(src, "node_modules") {
+				return true, nil
+			}
+			return false, nil
+		},
+	}
+
+	if err = cp.Copy(localRepoPath, tempDir, copyOptions); err != nil {
+		return nil, err
+	}
+
+	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
+
+	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
+		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+	}
+
+	// Check the Git config of the target ref
+	_, err = remoteRepo.Config()
+	if err != nil {
+		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+	}
+
+	if sha != "" {
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+
+		w, err := remoteRepo.Worktree()
+		if err != nil {
+			return nil, err
+		}
+
+		checkoutOptions := git.CheckoutOptions{
+			Hash:   plumbing.NewHash(sha),
+			Create: false,
+			Force:  true,
+			Keep:   false,
+		}
+
+		err = w.Checkout(&checkoutOptions)
+		if err != nil {
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
+	} else {
+		// If `ref` is not provided, use the HEAD of the remote origin
+		if ref == "" {
+			ref = "refs/remotes/origin/HEAD"
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
+
+		w, err := remoteRepo.Worktree()
+		if err != nil {
+			return nil, err
+		}
+
+		checkoutOptions := git.CheckoutOptions{
+			Branch: plumbing.ReferenceName(ref),
+			Create: false,
+			Force:  true,
+			Keep:   false,
+		}
+
+		err = w.Checkout(&checkoutOptions)
+		if err != nil {
+			if strings.Contains(err.Error(), "reference not found") {
+				errorMessage := fmt.Sprintf("the Git ref '%s' does not exist on the local filesystem"+
+					"\nmake sure it's correct and was cloned by Git from the remote, or use the '--clone-target-ref=true' flag to clone it"+
+					"\nrefer to https://atmos.tools/cli/commands/describe/affected for more details", ref)
+				err = errors.New(errorMessage)
+			}
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
+	}
+
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
+	if err != nil {
+		return nil, err
+	}
+
+	return affected, nil
+}
+
+// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
+// and returns a list of the affected Atmos components and stacks given two Git commits
+func ExecuteDescribeAffectedWithTargetRepoPath(
+	cliConfig schema.CliConfiguration,
+	targetRefPath string,
+	verbose bool,
+	includeSpaceliftAdminStacks bool,
+) ([]schema.Affected, error) {
+
+	localPath := "."
+
+	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: false,
+	})
+	if err != nil {
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+	}
+
+	// Check the Git config of the local repo
+	_, err = localRepo.Config()
+	if err != nil {
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+	}
+
+	localRepoWorktree, err := localRepo.Worktree()
+	if err != nil {
+		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+	}
+
+	localRepoPath := localRepoWorktree.Filesystem.Root()
+
+	remoteRepo, err := git.PlainOpenWithOptions(targetRefPath, &git.PlainOpenOptions{
+		DetectDotGit:          false,
+		EnableDotGitCommonDir: false,
+	})
+	if err != nil {
+		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the remote target repo
 	_, err = remoteRepo.Config()
 	if err != nil {
-		return nil, errors.Wrapf(err, "%v", remoteRepoIsNotGitRepoError)
+		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, repoPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
+	affected, err := executeDescribeAffected(cliConfig, localRepoPath, targetRefPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
@@ -357,12 +509,12 @@ func executeDescribeAffected(
 		changedFiles = append(changedFiles, fileStat.Name)
 	}
 
-	u.LogTrace(cliConfig, "")
-
 	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles, includeSpaceliftAdminStacks)
 	if err != nil {
 		return nil, err
 	}
+
+	u.LogTrace(cliConfig, "\nAffected components and stacks:\n")
 
 	return affected, nil
 }

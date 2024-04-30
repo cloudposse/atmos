@@ -437,6 +437,7 @@
     "backend_type": {
       "type": "string",
       "enum": [
+        "local",
         "s3",
         "remote",
         "vault",
@@ -455,6 +456,7 @@
     "remote_state_backend_type": {
       "type": "string",
       "enum": [
+        "local",
         "s3",
         "remote",
         "vault",
