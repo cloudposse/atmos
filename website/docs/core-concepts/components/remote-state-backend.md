@@ -87,34 +87,21 @@ deep-merges the `remote_state_backend` section with the `backend` section).
 When working with Terraform backends and writing/updating the state, the `terraform-backend-read-write` role will be
 used. But when reading the remote state of components, the `terraform-backend-read-only` role will be used.
 
-## Brownfield Development
+## Brownfield Considerations
 
-[Brownfield development](https://en.wikipedia.org/wiki/Brownfield_(software_development)) is a term commonly used in the
-information technology industry to describe problem spaces needing the development and deployment of new software
-systems in the immediate presence of existing (legacy) software applications/systems. This implies that any new software
-architecture must take into account and coexist with the existing software. The term "brownfield" itself is borrowed
-from urban planning, where it describes the process of developing on previously used land that may require cleanup or
-modification.
+The term "brownfield" comes from urban planning and refers to the redevelopment of land that was previously used and may need cleaning or modification. As it relates to infrastructure, [Brownfield development](https://en.wikipedia.org/wiki/Brownfield_(software_development)) describes development and deployment of new software
+systems in the presence of existing (legacy) software applications/systems. Anytime this happens, new software architectures must take into account and coexist with the existing software. 
 
-In the context of DevOps, brownfield development involves integrating new tools, practices, and technologies into
+In the context of Atmos, brownfield development involves adopting some new techniques, practices, and integrating them into
 established systems. This can be challenging due to several factors:
 
-- **Legacy Systems**: These are older technologies or systems that are still in use. They might not support modern
-  practices or tools easily, and modifying them can be risky and time-consuming.
+- **Legacy Systems**: These are older systems that are still in use and may be harder to change. They might not even be managed with Terraform, or if they are, they might not provide outputs that are easily accessible in a conventional manner.
 
-- **Complex Integrations**: Existing systems often have a complex set of integrations and dependencies which need to be
-  understood and managed when new elements are introduced.
+- **Complex Integrations**: Existing systems might leverage entirely different toolchains, such as CloudFormation, CDK, or Pulumi. Managing integrations and dependencies across toolchains is complicated.
 
-- **Cultural Shifts**: DevOps emphasizes a culture of collaboration between development and operations teams. In
-  brownfield projects, shifting the organizational culture can be a significant hurdle as existing processes and
-  mindsets may be deeply ingrained.
 
-- **Technical Debt**: Over time, systems accumulate technical debt, which includes outdated code, lack of proper
-  documentation, and suboptimal previous decisions that were made for expediency. Addressing technical debt is crucial
-  when introducing DevOps practices to ensure that the system remains maintainable and scalable.
+- **Technical Debt**: Over time, systems naturally accumulate technical debt, which includes outdated code, inconsistent conventions or lack of naming conventions, and suboptimal decisions that were previously made for expediency. Addressing this technical debt is crucial when adopting Atmos, as it introduces practices that ensure your system remains maintainable and scalable.
 
-- **Compliance and Security**: Updating old systems often requires careful consideration of security and compliance
-  issues, especially if the system handles sensitive data or must meet specific regulatory standards.
 
 ## Brownfield Development in Atmos
 
