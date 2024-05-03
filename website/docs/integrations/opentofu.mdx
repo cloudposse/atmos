@@ -5,12 +5,13 @@ sidebar_label: OpenTofu
 ---
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
-<img width="250" align="right" src={useBaseUrl('/img/opentofu-icon.svg')} /> Atmos natively supports [OpenTofu](https://opentofu.org), similar to the way it supports [Terraform](/integrations/terraform).
-It's compatible with every version of `opentofu` and designed to work with multiple different versions of it concurrently,
-and can even work along side with [HashiCorp Terraform](/integrations/terraform). 
+<img width="250" align="right" src={useBaseUrl('/img/opentofu-icon.svg')} /> Atmos natively supports [OpenTofu](https://opentofu.org),
+similar to the way it supports [Terraform](/integrations/terraform). It's compatible with every version of `opentofu` and designed to
+work with multiple different versions of it concurrently, and can even work along side with [HashiCorp Terraform](/integrations/terraform). 
 
 Please see the complete configuration options for [Terraform](/integrations/terraform), as they are the same for OpenTofu. We'll focus
-only on what's different in this document, in order to utilize OpenTofu.
+only on what's different in this document, in order to utilize OpenTofu. Keep in mind that Atmos does not handle the downloading or installation
+of OpenTofu; it assumes that any required commands are already installed on your system.
 
 Additionally, if using Spacelift together with Atmos, make sure you review the [Spacelift Integration](/integrations/spacelift) to make any necessary changes.
 

@@ -4,8 +4,10 @@ sidebar_position: 8
 sidebar_label: Terraform
 ---
 
-Atmos natively supports opinionated workflows for Terraform. It's compatible with every version of terraform and designed to work with multiple
-different versions of Terraform concurrently. Note, it also supports [OpenTofu](/integrations/opentofu).
+Atmos natively supports opinionated workflows for Terraform and [OpenTofu](/integrations/opentofu).
+It's compatible with every version of terraform and designed to work with multiple different versions of Terraform concurrently.
+Keep in mind that Atmos does not handle the downloading or installation of Terraform; it assumes that any required commands are
+already installed on your system.
 
 Atmos provides many settings that are specific to Terraform.
 
