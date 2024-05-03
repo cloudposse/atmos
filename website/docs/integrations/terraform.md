@@ -5,29 +5,30 @@ sidebar_label: Terraform
 ---
 
 Atmos natively supports opinionated workflows for Terraform. It's compatible with every version of terraform and designed to work with multiple
-different versions of Terraform concurrently.
+different versions of Terraform concurrently. Note, it also supports [OpenTofu](/integrations/opentofu).
 
 Atmos provides many settings that are specific to Terraform.
 
-## Settings
+## CLI Configuration
 
-All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration), but can be overridden at any level of
-the [Stack](/core-concepts/stacks/#schema) configuration.
+All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration) found in `atmos.yaml`, but can also be overridden at any level of the [Stack](/core-concepts/stacks/#schema) configuration.
 
 ```yaml
-# The executable to be called by `atmos` when running terraform commands.
-command: "/usr/bin/terraform-1"
-# Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
-# Supports both absolute and relative paths
-base_path: "components/terraform"
-# Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
-apply_auto_approve: false
-# Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
-deploy_run_init: true
-# Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
-init_run_reconfigure: true
-# Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
-auto_generate_backend_file: false
+components:
+  terraform:
+    # The executable to be called by `atmos` when running terraform commands.
+    command: "/usr/bin/terraform-1"
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "components/terraform"
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
+    apply_auto_approve: false
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
+    deploy_run_init: true
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
+    init_run_reconfigure: true
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
+    auto_generate_backend_file: false
 ```
 
 ## Configuration
@@ -103,7 +104,7 @@ atmos terraform plan eks -s ue2-dev
 atmos terraform apply eks -s ue2-dev
 ```
 
-`terraform deploy` command executes `terraform apply -auto-approve` to provision components in stacks without user interaction:
+The `atmos terraform deploy` command executes `terraform apply -auto-approve` to provision components in stacks without user interaction:
 
 ```console
 atmos terraform deploy eks -s ue2-dev
