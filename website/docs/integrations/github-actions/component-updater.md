@@ -134,6 +134,14 @@ GitHub requires all GitHub Apps to have unique names. The name you select for th
 ```
 
 6. Generate a new private key [following the GitHub documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys).
+
+:::tip Private Key Token Value
+
+The private key token should start and end with `-----BEGIN RSA PRIVATE KEY-----` and `-----END RSA PRIVATE KEY-----` and include everything in between.
+When you click "Generate Private Key", you should automatically downloaded a `.pem` file. This file's content is the token value.
+
+:::
+
 7. Finally, save both the App ID and the new private key as secrets for GitHub Actions with `ATMOS_APP_ID` and `ATMOS_PRIVATE_KEY` respectively. Note, if using GitHub Enterprise, we recommend using "GitHub Environments" to scope the Secrets to protected branches. If that's not available, use repository-scoped GitHub Secrets instead.
 
 :::tip App ID
