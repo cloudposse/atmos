@@ -28,9 +28,17 @@ type Templates struct {
 }
 
 type TemplatesSettings struct {
-	Enabled  bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Sprig    TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
-	Gomplate TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+	Enabled  bool                              `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Sprig    TemplatesSettingsSprig            `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
+	Gomplate TemplatesSettingsGomplate         `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+	NumSteps int                               `yaml:"num_steps,omitempty" json:"num_steps,omitempty" mapstructure:"num_steps"`
+	Steps    map[int]TemplatesSettingsStepItem `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
+	Env      map[string]string                 `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+}
+
+type TemplatesSettingsStepItem struct {
+	LeftDelimiter  string `yaml:"left_delimiter,omitempty" json:"left_delimiter,omitempty" mapstructure:"left_delimiter"`
+	RightDelimiter string `yaml:"right_delimiter,omitempty" json:"right_delimiter,omitempty" mapstructure:"right_delimiter"`
 }
 
 type TemplatesSettingsSprig struct {
