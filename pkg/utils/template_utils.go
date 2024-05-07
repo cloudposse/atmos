@@ -154,7 +154,7 @@ func ProcessTmplWithDatasources(
 		rightDelimiter := "}}"
 
 		// Check if the processing steps override the default delimiters
-		if step, ok := templateSettings.Steps[i+1]; ok {
+		if step, ok := cliConfig.Templates.Settings.Steps[i+1]; ok {
 			leftDelimiter, _ = lo.Coalesce(step.LeftDelimiter, leftDelimiter)
 			rightDelimiter, _ = lo.Coalesce(step.RightDelimiter, rightDelimiter)
 		}
