@@ -4,13 +4,20 @@ vars:
 terraform:
   vars:
     tags:
-      atmos_component: "{{ .atmos_component }}"
+      # https://atmos.tools/core-concepts/stacks/templating
+      atmos_component: "{{\"{{`{{ .atmos_component }}`}}\"}}"
+      atmos_component2: "{{ .settings.test2 }}"
       atmos_stack: "{{ .atmos_stack }}"
       atmos_manifest: "{{ .atmos_stack_file }}"
+      terraform_workspace: "{{ .workspace }}"
+      # Examples of using the Sprig and Gomplate functions
+      # https://masterminds.github.io/sprig/os.html
+      provisioned_by_user: '{{ env "USER" }}'
+      # https://docs.gomplate.ca/functions/strings
+      atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
       spacelift_stack: "{{ .spacelift_stack }}"
       atlantis_project: "{{ .atlantis_project }}"
       region: "{{ .vars.region }}"
-      terraform_workspace: "{{ .workspace }}"
 
   backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud
 
@@ -73,15 +80,20 @@ terraform:
         atmos_stack: "{{ .atmos_stack }}"
 
 helmfile:
-  vars: { }
+  vars: {}
 
 components:
-  terraform: { }
-  helmfile: { }
+  terraform: {}
+  helmfile: {}
 
 settings:
+  # https://atmos.tools/core-concepts/stacks/templating
   templates:
     settings:
+      num_steps: 3
+      # https://masterminds.github.io/sprig
+      sprig: {}
+      # https://docs.gomplate.ca
       gomplate:
         timeout: 20  # 20 seconds timeout to execute the datasources
         # https://docs.gomplate.ca/datasources

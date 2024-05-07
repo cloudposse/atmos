@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"context"
+	"os"
 	"text/template"
 	"text/template/parse"
 	"time"
@@ -59,38 +60,38 @@ func ProcessTmplWithDatasources(
 		return tmplValue, nil
 	}
 
+	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
+	var cliConfigTemplateSettingsMap map[any]any
+	var stackManifestTemplateSettingsMap map[any]any
+	var templateSettings schema.TemplatesSettings
+
+	err := mapstructure.Decode(cliConfig.Templates.Settings, &cliConfigTemplateSettingsMap)
+	if err != nil {
+		return "", err
+	}
+
+	err = mapstructure.Decode(settingsSection.Templates.Settings, &stackManifestTemplateSettingsMap)
+	if err != nil {
+		return "", err
+	}
+
+	templateSettingsMerged, err := merge.Merge([]map[any]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
+	if err != nil {
+		return "", err
+	}
+
+	err = mapstructure.Decode(templateSettingsMerged, &templateSettings)
+	if err != nil {
+		return "", err
+	}
+
 	// Add Gomplate and Sprig functions and datasources
 	funcs := make(map[string]any)
 
 	// Gomplate functions and datasources
 	if cliConfig.Templates.Settings.Gomplate.Enabled {
-		// Merge the datasources from `atmos.yaml` and from the `settings.templates.settings` section in stack manifests
-		var cliConfigDatasources map[any]any
-		var stackManifestDatasources map[any]any
-
-		err := mapstructure.Decode(cliConfig.Templates.Settings.Gomplate.Datasources, &cliConfigDatasources)
-		if err != nil {
-			return "", err
-		}
-
-		err = mapstructure.Decode(settingsSection.Templates.Settings.Gomplate.Datasources, &stackManifestDatasources)
-		if err != nil {
-			return "", err
-		}
-
-		merged, err := merge.Merge([]map[any]any{cliConfigDatasources, stackManifestDatasources})
-		if err != nil {
-			return "", err
-		}
-
-		var datasources map[string]schema.TemplatesSettingsGomplateDatasource
-		err = mapstructure.Decode(merged, &datasources)
-		if err != nil {
-			return "", err
-		}
-
 		// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
-		timeoutSeconds, _ := lo.Coalesce(cliConfig.Templates.Settings.Gomplate.Timeout, settingsSection.Templates.Settings.Gomplate.Timeout, 5)
+		timeoutSeconds, _ := lo.Coalesce(templateSettings.Gomplate.Timeout, 5)
 
 		ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 		defer cancelFunc()
@@ -98,7 +99,7 @@ func ProcessTmplWithDatasources(
 		d := data.Data{}
 		d.Ctx = ctx
 
-		for k, v := range datasources {
+		for k, v := range templateSettings.Gomplate.Datasources {
 			_, err := d.DefineDatasource(k, v.Url)
 			if err != nil {
 				return "", err
@@ -118,11 +119,16 @@ func ProcessTmplWithDatasources(
 		funcs = lo.Assign(funcs, sprig.FuncMap())
 	}
 
-	// Process the template
-	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
-	if err != nil {
-		return "", err
+	// Process and add environment variables
+	for k, v := range templateSettings.Env {
+		err = os.Setenv(k, v)
+		if err != nil {
+			return "", err
+		}
 	}
+
+	// Process the template
+	t := template.New(tmplName).Funcs(funcs)
 
 	// Control the behavior during execution if a map is indexed with a key that is not present in the map
 	// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
@@ -137,14 +143,37 @@ func ProcessTmplWithDatasources(
 
 	t.Option(option)
 
-	// Execute the template
-	var res bytes.Buffer
-	err = t.Execute(&res, tmplData)
-	if err != nil {
-		return "", err
+	// Number of processing steps/passes
+	numSteps, _ := lo.Coalesce(templateSettings.NumSteps, 1)
+	result := tmplValue
+
+	for i := 0; i < numSteps; i++ {
+		// Default delimiters
+		leftDelimiter := "{{"
+		rightDelimiter := "}}"
+
+		// Check if the processing steps override the default delimiters
+		if step, ok := templateSettings.Steps[i+1]; ok {
+			leftDelimiter, _ = lo.Coalesce(step.LeftDelimiter, leftDelimiter)
+			rightDelimiter, _ = lo.Coalesce(step.RightDelimiter, rightDelimiter)
+		}
+
+		t, err = t.Delims(leftDelimiter, rightDelimiter).Parse(result)
+		if err != nil {
+			return "", err
+		}
+
+		// Execute the template
+		var res bytes.Buffer
+		err = t.Execute(&res, tmplData)
+		if err != nil {
+			return "", err
+		}
+
+		result = res.String()
 	}
 
-	return res.String(), nil
+	return result, nil
 }
 
 // IsGolangTemplate checks if the provided string is a Go template
