@@ -334,7 +334,7 @@ schemas:
 templates:
   settings:
     enabled: true
-    num_steps: 4
+    num_steps: 3
     steps:
       1:
         left_delimiter: "${"
