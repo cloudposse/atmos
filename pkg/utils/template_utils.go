@@ -14,6 +14,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
+	"github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -171,11 +172,20 @@ func ProcessTmplWithDatasources(
 		}
 
 		result = res.String()
-		var resultMap map[string]any
-
-		err = mapstructure.Decode(result, &resultMap)
+		resultMap, err := convert.YAMLToMapOfInterfaces(result)
 		if err != nil {
 			return "", err
+		}
+
+		if resultMapSettings, ok := resultMap["settings"].(map[any]any); ok {
+			if resultMapSettingsTemplates, ok := resultMapSettings["templates"].(map[any]any); ok {
+				if resultMapSettingsTemplatesSettings, ok := resultMapSettingsTemplates["settings"].(map[any]any); ok {
+					err = mapstructure.Decode(resultMapSettingsTemplatesSettings, &templateSettings)
+					if err != nil {
+						return "", err
+					}
+				}
+			}
 		}
 	}
 
