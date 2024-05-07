@@ -18,7 +18,6 @@ All of these settings are defined by default in the [Atmos CLI Configuration](/c
 ```yaml
 components:
   terraform:
-    # The executable to be called by `atmos` when running terraform commands.
     command: "/usr/bin/terraform-1"
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
     # Supports both absolute and relative paths
