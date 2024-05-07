@@ -88,66 +88,66 @@ func ProcessTmplWithDatasources(
 	// Add Gomplate and Sprig functions and datasources
 	funcs := make(map[string]any)
 
-	// Gomplate functions and datasources
-	if cliConfig.Templates.Settings.Gomplate.Enabled {
-		// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
-		timeoutSeconds, _ := lo.Coalesce(templateSettings.Gomplate.Timeout, 5)
-
-		ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
-		defer cancelFunc()
-
-		d := data.Data{}
-		d.Ctx = ctx
-
-		for k, v := range templateSettings.Gomplate.Datasources {
-			_, err := d.DefineDatasource(k, v.Url)
-			if err != nil {
-				return "", err
-			}
-
-			// Add datasource headers
-			if len(v.Headers) > 0 {
-				d.Sources[k].Header = v.Headers
-			}
-		}
-
-		funcs = lo.Assign(funcs, gomplate.CreateFuncs(ctx, &d))
-	}
-
-	// Sprig functions
-	if cliConfig.Templates.Settings.Sprig.Enabled {
-		funcs = lo.Assign(funcs, sprig.FuncMap())
-	}
-
-	// Process and add environment variables
-	for k, v := range templateSettings.Env {
-		err = os.Setenv(k, v)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	// Process the template
-	t := template.New(tmplName).Funcs(funcs)
-
-	// Control the behavior during execution if a map is indexed with a key that is not present in the map
-	// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
-	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
-	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
-
-	option := "missingkey=error"
-
-	if ignoreMissingTemplateValues {
-		option = "missingkey=default"
-	}
-
-	t.Option(option)
-
 	// Number of processing steps/passes
-	numSteps, _ := lo.Coalesce(templateSettings.NumSteps, 1)
+	numSteps, _ := lo.Coalesce(cliConfig.Templates.Settings.NumSteps, 1)
 	result := tmplValue
 
 	for i := 0; i < numSteps; i++ {
+		// Gomplate functions and datasources
+		if cliConfig.Templates.Settings.Gomplate.Enabled {
+			// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
+			timeoutSeconds, _ := lo.Coalesce(templateSettings.Gomplate.Timeout, 5)
+
+			ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
+			defer cancelFunc()
+
+			d := data.Data{}
+			d.Ctx = ctx
+
+			for k, v := range templateSettings.Gomplate.Datasources {
+				_, err := d.DefineDatasource(k, v.Url)
+				if err != nil {
+					return "", err
+				}
+
+				// Add datasource headers
+				if len(v.Headers) > 0 {
+					d.Sources[k].Header = v.Headers
+				}
+			}
+
+			funcs = lo.Assign(funcs, gomplate.CreateFuncs(ctx, &d))
+		}
+
+		// Sprig functions
+		if cliConfig.Templates.Settings.Sprig.Enabled {
+			funcs = lo.Assign(funcs, sprig.FuncMap())
+		}
+
+		// Process and add environment variables
+		for k, v := range templateSettings.Env {
+			err = os.Setenv(k, v)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		// Process the template
+		t := template.New(tmplName).Funcs(funcs)
+
+		// Control the behavior during execution if a map is indexed with a key that is not present in the map
+		// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
+		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
+		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
+
+		option := "missingkey=error"
+
+		if ignoreMissingTemplateValues {
+			option = "missingkey=default"
+		}
+
+		t.Option(option)
+
 		// Default delimiters
 		leftDelimiter := "{{"
 		rightDelimiter := "}}"
@@ -171,6 +171,12 @@ func ProcessTmplWithDatasources(
 		}
 
 		result = res.String()
+		var resultMap map[string]any
+
+		err = mapstructure.Decode(result, &resultMap)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	return result, nil
