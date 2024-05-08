@@ -826,7 +826,7 @@ use the default delimiters `{{ }}`.
 Template steps are useful in the following scenarios:
 
 - Combining templates from different sections in Atmos stack manifests
-- Using templates inside templates at eny level of nesting
+- Using templates inside templates with any level of nesting
 - Using templates in the URLs of `datasources`
 
 ### Combining templates from different sections in Atmos stack manifests
@@ -891,31 +891,51 @@ it's not easy to read and understand the entire flow.
 
 <br/>
 
-### Using templates inside templates at eny level of nesting
+### Using templates inside templates with any level of nesting
+
+You can define more than one step of template processing and use templates inside templates with any level of nesting.
+Each step uses different delimiters.
+
+For example:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    enabled: true
+    # Number of steps/passes to process `Go` templates
+    num_steps: 2
+    steps:
+      1:
+        left_delimiter: "${"
+        right_delimiter: "}"
+      2:
+        left_delimiter: "{{"
+        right_delimiter: "}}"
+```
 
 ```yaml
 settings:
   test: "{{ .atmos_component }}"
-  test2: "{{ .settings.test }}"
 
-  templates:
-    settings:
-      # Enable `Go` templates in Atmos stack manifests
-      enabled: true
-      # Number of steps/passes to process `Go` templates
-      num_steps: 3
-      steps:
-        1:
-          left_delimiter: "${"
-          right_delimiter: "}"
-        2:
-          left_delimiter: "{{"
-          right_delimiter: "}}"
-
-terraform:
-  vars:
-    tags:
-      test_tag: "{{ .settings.test2 }}"
+components:
+  terraform:
+    vpc:
+      vars:
+        tags:
+          tag1: "{{ ${ .settings.test } }}"
 ```
+
+When executing an Atmos command like `atmos terraform plan vpc -s <stack>`, the above template will be processed
+in two steps, using different left and right delimiters defined for each step:
+
+- Step #1
+
+  - `settings.test` is set to `vpc`
+  - `vpc.vars.tags.tag1` is set to `{{ .atmos_component }}`. The internal template with the delimiters `${ }` is processed first
+
+- Step #2
+
+  - `settings.test` is `vpc`
+  - `vpc.vars.tags.tag1` is set to `vpc`. The external template with the delimiters `{{ }}` is processed second
 
 ### Using templates in the URLs of `datasources`
