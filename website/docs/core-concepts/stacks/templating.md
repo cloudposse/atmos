@@ -824,3 +824,13 @@ If `templates.settings.steps` are not configured, all steps/passes (defined by `
 use the default delimiters `{{ }}`.
 
 Template steps are useful in the following scenarios:
+
+- Combining template strings from different sections in Atmos stack manifests
+- Using templates inside templates (at eny level of nesting)
+- Using templates in the URLs of `datasources`
+
+### Combining template strings from different sections in Atmos stack manifests
+
+### Using templates inside templates (at eny level of nesting)
+
+### Using templates in the URLs of `datasources`
