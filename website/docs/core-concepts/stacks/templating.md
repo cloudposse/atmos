@@ -137,7 +137,8 @@ templates:
 - `templates.settings.env` - a map of environment variables to use when executing the templates
 
 - `templates.settings.num_steps` - number of steps/passes to process `Go` templates. If not defined, `num_steps` 
-  is automatically set to `1`
+  is automatically set to `1`. For more details, refer to 
+  [Template Steps and Template Processing Pipelines](#template-steps-and-template-processing-pipelines)
 
 - `templates.settings.steps` - a map of step configurations to process `Go` templates. The keys of the map are the step
   numbers. The values of the map are objects with the following schema:
@@ -147,8 +148,9 @@ templates:
   - `right_delimiter` - the right delimiter to use to process the templates in this step/pass. If not defined, the default
     delimiter `}}` will be used
 
-  If `templates.settings.num_steps` is not configured, all steps/passes (defined by `templates.settings.num_steps`) will 
-  use the default delimiters `{{ }}`.
+  If `templates.settings.steps` are not configured, all steps/passes (defined by `templates.settings.num_steps`) will 
+  use the default delimiters `{{ }}`. For more details, refer to
+  [Template Steps and Template Processing Pipelines](#template-steps-and-template-processing-pipelines).
 
 - `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
   in Atmos stack manifests
@@ -572,7 +574,7 @@ terraform:
 
 The tags will be processed and automatically added to all the resources provisioned in the infrastructure.
 
-## Excluding templates in stack manifest from processing by Atmos
+## Excluding Templates in Stack Manifest from Processing by Atmos
 
 If you need to provide `Go` templates to external systems (e.g. ArgoCD or Datadog) verbatim and prevent Atmos from
 processing the templates, use **double curly braces + backtick + double curly braces** instead of just **double curly braces**:
@@ -674,7 +676,7 @@ chart_values:
     message: '{{ printf "Application {{ .app.metadata.name }} is now running new version." }}'
 ```
 
-## Excluding templates in imports from processing by Atmos
+## Excluding Templates in Imports from Processing by Atmos
 
 If you are using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and `Go` templates
 in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go` 
@@ -778,5 +780,47 @@ components:
           terraform_workspace: plat-ue2-prod
 ```
 
-
 ## Template Steps and Template Processing Pipelines
+
+Atmos supports configuring the number of steps/passes for template processing in `atmos.yaml` [CLI config file](/cli/configuration).
+It effectively allows you to implicitly define template processing pipelines and workflows.
+
+For example:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    # Enable `Go` templates in Atmos stack manifests
+    enabled: true
+    # Number of steps/passes to process `Go` templates
+    # If not defined, `num_steps` is automatically set to `1`
+    num_steps: 2
+    # Optional steps configuration
+    steps:
+      1:
+        # Left delimiter for step #1
+        left_delimiter: "${"
+        # Right delimiter for step #1
+        right_delimiter: "}"
+      2:
+        # Left delimiter for step #2
+        left_delimiter: "{{"
+        # Right delimiter for step #2
+        right_delimiter: "}}"
+```
+
+- `templates.settings.num_steps` - number of steps/passes to process `Go` templates. If not defined, `num_steps`
+  is automatically set to `1`
+
+- `templates.settings.steps` - a map of step configurations to process `Go` templates. The keys of the map are the step
+  numbers. The values of the map are objects with the following schema:
+
+  - `left_delimiter` - the left delimiter to use to process the templates in this step/pass. If not defined, the default
+    delimiter `{{` will be used
+  - `right_delimiter` - the right delimiter to use to process the templates in this step/pass. If not defined, the default
+    delimiter `}}` will be used
+
+If `templates.settings.steps` are not configured, all steps/passes (defined by `templates.settings.num_steps`) will
+use the default delimiters `{{ }}`.
+
+Template steps are useful in the following scenarios:
