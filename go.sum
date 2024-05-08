@@ -793,8 +793,8 @@ github.com/hashicorp/memberlist v0.5.0 h1:EtYPN8DpAURiapus508I4n9CzHs2W+8NZGbmmR
 github.com/hashicorp/memberlist v0.5.0/go.mod h1:yvyXLpo0QaGE59Y7hDTsTzDD25JYBZ4mHgHUZ8lrOI0=
 github.com/hashicorp/serf v0.10.1 h1:Z1H2J60yRKvfDYAOZLd2MU0ND4AH/WDz7xYHDWQsIPY=
 github.com/hashicorp/serf v0.10.1/go.mod h1:yL2t6BqATOLGc5HF7qbFkTfXoPIY0WZdWHfEvMqbG+4=
-github.com/hashicorp/terraform-config-inspect v0.0.0-20231204233900-a34142ec2a72 h1:nZ5gGjbe5o7XUu1d7j+Y5Ztcxlp+yaumTKH9i0D3wlg=
-github.com/hashicorp/terraform-config-inspect v0.0.0-20231204233900-a34142ec2a72/go.mod h1:l8HcFPm9cQh6Q0KSWoYPiePqMvRFenybP1CH2MjKdlg=
+github.com/hashicorp/terraform-config-inspect v0.0.0-20240507135902-21dcc2942448 h1:rrpMPsKdq+AO9+dMOQDzTO1IBHYEGcYwF1/roaSDy2Y=
+github.com/hashicorp/terraform-config-inspect v0.0.0-20240507135902-21dcc2942448/go.mod h1:l8HcFPm9cQh6Q0KSWoYPiePqMvRFenybP1CH2MjKdlg=
 github.com/hashicorp/vault/api v1.6.0 h1:B8UUYod1y1OoiGHq9GtpiqSnGOUEWHaA26AY8RQEDY4=
 github.com/hashicorp/vault/api v1.6.0/go.mod h1:h1K70EO2DgnBaTz5IsL6D5ERsNt5Pce93ueVS2+t0Xc=
 github.com/hashicorp/vault/sdk v0.5.0 h1:EED7p0OCU3OY5SAqJwSANofY1YKMytm+jDHDQ2EzGVQ=

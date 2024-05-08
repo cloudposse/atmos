@@ -30,13 +30,31 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
 # https://pkg.go.dev/text/template
 templates:
   settings:
+    # Enable `Go` templates in Atmos stack manifests
     enabled: true
+    # Number of steps/passes to process `Go` templates
+    # If not defined, `num_steps` is automatically set to `1`
+    num_steps: 2
+    # Optional steps configuration
+    steps:
+      1:
+        # Left delimiter for step #1
+        left_delimiter: "${"
+        # Right delimiter for step #1
+        right_delimiter: "}"
+      2:
+        # Left delimiter for step #2
+        left_delimiter: "{{"
+        # Right delimiter for step #2
+        right_delimiter: "}}"
     # https://masterminds.github.io/sprig
     sprig:
+      # Enable Sprig functions in `Go` templates in Atmos stack manifests
       enabled: true
     # https://docs.gomplate.ca
     # https://docs.gomplate.ca/functions
     gomplate:
+      # Enable Gomplate functions and datasources in `Go` templates in Atmos stack manifests
       enabled: true
       # Timeout in seconds to execute the datasources
       timeout: 5
@@ -51,6 +69,12 @@ templates:
           headers:
             accept:
               - "application/json"
+        # This `random` datasource uses `Go` templates in the `url`
+        # and will be processed in two steps:
+        # 1) process the template tokens using the delimiters `${ }` configured in step #1
+        # 2) execute the datasource itself using the delimiters `{{ }}` configured in step #2
+        random:
+          url: "http://www.randomnumberapi.com/api/v1.0/randomstring?min=${ .settings.random.min }&max=${ .settings.random.max }&count=1"
         # 'file' datasources
         # https://docs.gomplate.ca/datasources/#using-file-datasources
         config-1:
@@ -183,6 +207,14 @@ gomplate:
       headers:
         accept:
           - "application/json"
+    random:
+      url: "http://www.randomnumberapi.com/api/v1.0/randomstring?min=${ .settings.random.min }&max=${ .settings.random.max }&count=1"
+    secret-1:
+      url: "aws+smp:///path/to/secret"
+    secret-2:
+      url: "aws+sm:///path/to/secret"
+    s3-config:
+      url: "s3://mybucket/config/config.json"
     config-1:
       url: "./my-config1.json"
     config-2:
