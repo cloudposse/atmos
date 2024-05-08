@@ -22,12 +22,12 @@ These templates are processed in different phases and use different context:
 
 - [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) are used in imported stack 
   manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static 
-  `context` section. Atmos processes `Go` templates in imports as the very first phase of the stack processing pipeline.
+  `context` section. Atmos processes `Go` templates in imports as the **very first** phase of the stack processing pipeline.
   When executing the [CLI commands](/cli/commands), Atmos parses and executes the templates using the provided static 
   `context`, processes all imports, and finds stacks and components
 
-- `Go` templates in Atmos stack manifests, on the other hand, are processed as the very last phase of the stack processing 
-  pipeline (after all imports are processed, all stack configurations are deep-merged, and the stack and component are found).
+- `Go` templates in Atmos stack manifests, on the other hand, are processed as the **very last** phase of the stack processing 
+  pipeline (after all imports are processed, all stack configurations are deep-merged, and the component in the stack is found).
   For the context (template variables), it uses all the component's attributes returned from the 
   [`atmos describe component`](/cli/commands/describe/component) command
 
@@ -825,12 +825,95 @@ use the default delimiters `{{ }}`.
 
 Template steps are useful in the following scenarios:
 
-- Combining template strings from different sections in Atmos stack manifests
-- Using templates inside templates (at eny level of nesting)
+- Combining templates from different sections in Atmos stack manifests
+- Using templates inside templates at eny level of nesting
 - Using templates in the URLs of `datasources`
 
-### Combining template strings from different sections in Atmos stack manifests
+### Combining templates from different sections in Atmos stack manifests
 
-### Using templates inside templates (at eny level of nesting)
+You can define more than one step/pass of template processing to use and combine the results from each step.
+
+For example:
+
+```yaml
+settings:
+  test: "{{ .atmos_component }}"
+  test2: "{{ .settings.test }}"
+
+  templates:
+    settings:
+      enabled: true
+      # Number of steps/passes to process `Go` templates
+      num_steps: 3
+
+components:
+  terraform:
+    my-component:
+      vars:
+        tags:
+          tag1: "{{ .settings.test }}-{{ .settings.test2 }}"
+          tag2: "{{\"{{`{{ .atmos_component }}`}}\"}}"
+```
+
+When executing an Atmos command like `atmos terraform plan my-component -s <stack>`, the above template wil be processed 
+in three steps, all using the default delimiters `{{ }}`:
+
+- Step #1
+
+  - `settings.test` is set to `my-component`
+  - `settings.test2` is set to `{{ .atmos_component }}`
+  - `my-component.vars.tags.tag1` is set to `{{ .atmos_component }}-{{ .settings.test }}`
+  - `my-component.vars.tags.tag2` is set to `{{<backtick>{{ .atmos_component }}<backtick>}}`
+
+- Step #2
+
+  - `settings.test` is `my-component`
+  - `settings.test2` is set to `my-component`
+  - `my-component.vars.tags.tag1` is set to `my-component-my-component`
+  - `my-component.vars.tags.tag2` is set to `{{ .atmos_component }}`
+
+- Step #3
+
+  - `settings.test` is `my-component`
+  - `settings.test2` is `my-component`
+  - `my-component.vars.tags.tag1` is `my-component-my-component`
+  - `my-component.vars.tags.tag2` is set to `my-component`
+
+<br/>
+
+:::warning
+The above example just shows the supported functionality in Atmos templating.
+You can use it for some use-cases, but it does not mean that you should use it just for the sake of using it since 
+it's difficult to read and understand the entire flow.
+:::
+
+<br/>
+
+### Using templates inside templates at eny level of nesting
+
+```yaml
+settings:
+  test: "{{ .atmos_component }}"
+  test2: "{{ .settings.test }}"
+
+  templates:
+    settings:
+      # Enable `Go` templates in Atmos stack manifests
+      enabled: true
+      # Number of steps/passes to process `Go` templates
+      num_steps: 3
+      steps:
+        1:
+          left_delimiter: "${"
+          right_delimiter: "}"
+        2:
+          left_delimiter: "{{"
+          right_delimiter: "}}"
+
+terraform:
+  vars:
+    tags:
+      test_tag: "{{ .settings.test2 }}"
+```
 
 ### Using templates in the URLs of `datasources`
