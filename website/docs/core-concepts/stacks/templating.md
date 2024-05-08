@@ -134,6 +134,22 @@ templates:
 - `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
   If set to `false`, Atmos will not process `Go` templates in stack manifests
 
+- `templates.settings.env` - a map of environment variables to use when executing the templates
+
+- `templates.settings.num_steps` - number of steps/passes to process `Go` templates. If not defined, `num_steps` 
+  is automatically set to `1`
+
+- `templates.settings.steps` - a map of step configurations to process `Go` templates. The keys of the map are the step
+  numbers. The values of the map are objects with the following schema:
+
+  - `left_delimiter` - the left delimiter to use to process the templates in this step/pass. If not defined, the default
+    delimiter `{{` will be used
+  - `right_delimiter` - the right delimiter to use to process the templates in this step/pass. If not defined, the default
+    delimiter `}}` will be used
+
+  If `templates.settings.num_steps` is not configured, all steps/passes (defined by `templates.settings.num_steps`) will 
+  use the default delimiters `{{ }}`.
+
 - `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
   in Atmos stack manifests
 
@@ -200,31 +216,29 @@ To be able to use the `env` function from both templating engines, you can do on
 
 ### Configuring templating in Atmos stack manifests
 
+Templating in Atmos can also be configured in the `settings.templates.settings` section in stack manifests.
+
 The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component.
 Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/components/inheritance).
 
-For example, define [Gomplate Datasources](https://docs.gomplate.ca/datasources/) for the entire organization in the
+The schema is the same as `templates.settings` in the `atmos.yaml` [CLI config file](/cli/configuration),
+except the following settings are not supported in the `settings.templates.settings` section:
+
+- `settings.templates.settings.enabled`
+- `settings.templates.settings.num_steps`
+- `settings.templates.settings.steps`
+
+The reason these settings are not supported is that if you define the `left_delimiter` and `right_delimiter` in the
+`settings.templates.settings` section in stack manifests, the `Go` templating engine will think that the delimiters 
+specify the beginning and the end of template strings, will try to evaluate it, which will result in an error.
+
+As an example, let's define [Gomplate Datasources](https://docs.gomplate.ca/datasources/) for the entire organization in the
 `stacks/orgs/acme/_defaults.yaml` stack manifest:
 
 ```yaml title="stacks/orgs/acme/_defaults.yaml"
 settings:
   templates:
     settings:
-      # Number of steps/passes to process `Go` templates
-      # If not defined, `num_steps` is automatically set to `1`
-      num_steps: 2
-      # Optional steps configuration
-      steps:
-        1:
-          # Left delimiter for step #1
-          left_delimiter: "${"
-          # Right delimiter for step #1
-          right_delimiter: "}"
-        2:
-          # Left delimiter for step #2
-          left_delimiter: "{{"
-          # Right delimiter for step #2
-          right_delimiter: "}}"
       # Environment variables to use when executing templates
       # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
