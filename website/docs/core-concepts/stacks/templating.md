@@ -11,7 +11,32 @@ Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifes
 and [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
 are supported as well.
 
-## Configuration
+## Important Note
+
+Atmos supports two different ways of configuring and using `Go` templates:
+
+- In [Imports]((/core-concepts/stacks/imports#go-templates-in-imports))
+- In stack manifests
+
+These templates are processed in different phases and use different context:
+
+- [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) are used in imported stack 
+  manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static 
+  `context` section. Atmos processes `Go` templates in imports as the very first phase of the stack processing pipeline.
+  When executing the [CLI commands](/cli/commands), Atmos parses and executes the templates using the provided static 
+  `context`, processes all imports, and finds stacks and components
+
+- `Go` templates in Atmos stack manifests, on the other hand, are processed as the very last phase of the stack processing 
+  pipeline. For the context (template variables), it uses all the component's attributes returned from the 
+  [`atmos describe component`](/cli/commands/describe/component) command
+
+For more details, refer to:
+
+- [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports)
+- [Excluding templates in imports from processing by Atmos](#excluding-templates-in-stack-manifest-from-processing-by-atmos)
+
+
+## Stack Manifest Templating Configuration
 
 Templating in Atmos stack manifests can be configured in the following places:
 
@@ -47,6 +72,13 @@ templates:
         left_delimiter: "{{"
         # Right delimiter for step #2
         right_delimiter: "}}"
+    # Environment variables to use when executing templates
+    # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+    # https://docs.gomplate.ca/functions/aws/#configuring-aws
+    # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+    env:
+      AWS_PROFILE: "<AWS profile>"
+      AWS_TIMEOUT: 2000
     # https://masterminds.github.io/sprig
     sprig:
       # Enable Sprig functions in `Go` templates in Atmos stack manifests
@@ -189,6 +221,13 @@ settings:
           left_delimiter: "{{"
           # Right delimiter for step #2
           right_delimiter: "}}"
+      # Environment variables to use when executing templates
+      # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+      # https://docs.gomplate.ca/functions/aws/#configuring-aws
+      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      env:
+        AWS_PROFILE: "<AWS profile>"
+        AWS_TIMEOUT: 2000
       gomplate:
         # 7 seconds timeout to execute the datasources
         timeout: 7
