@@ -225,6 +225,8 @@ The schema is the same as `templates.settings` in the `atmos.yaml` [CLI config f
 except the following settings are not supported in the `settings.templates.settings` section:
 
 - `settings.templates.settings.enabled`
+- `settings.templates.settings.sprig.enabled`
+- `settings.templates.settings.gomplate.enabled`
 - `settings.templates.settings.num_steps`
 - `settings.templates.settings.steps`
 
@@ -414,6 +416,36 @@ vars:
     region: us-east-2
     terraform_workspace: plat-ue2-dev
 ```
+
+## Environment Variables
+
+Environment variables to use when processing and executing templates can be defined in the `env` map.
+It's supported in both the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) and in the 
+`settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks).
+
+For example:
+
+```yaml
+settings:
+  templates:
+    settings:
+      # Environment variables to use when executing templates
+      # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+      # https://docs.gomplate.ca/functions/aws/#configuring-aws
+      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      env:
+        AWS_PROFILE: "<AWS profile>"
+        AWS_TIMEOUT: 2000
+```
+
+This is useful when executing the `datasources` that need to authenticate to cloud APIs. 
+
+For more details, refer to:
+
+- [Configuring AWS](https://docs.gomplate.ca/functions/aws/#configuring-aws)
+- [Configuring GCP](https://docs.gomplate.ca/functions/gcp/#configuring-gcp)
+
+## Datasources
 
 ## Use-cases
 
@@ -644,3 +676,6 @@ components:
           atmos_stack: plat-ue2-prod
           terraform_workspace: plat-ue2-prod
 ```
+
+
+## Template Steps and Template Processing Pipelines
