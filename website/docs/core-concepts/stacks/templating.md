@@ -230,7 +230,7 @@ except the following settings are not supported in the `settings.templates.setti
 - `settings.templates.settings.num_steps`
 - `settings.templates.settings.steps`
 
-The reasons these settings are not supported are:
+These settings are not supported for the following reasons:
 
 - You can't disable templating in the stack manifests which are being processed by Atmos as `Go` templates 
 
@@ -238,8 +238,8 @@ The reasons these settings are not supported are:
   the `Go` templating engine will think that the delimiters specify the beginning and the end of template strings, will 
   try to evaluate it, which will result in an error
 
-As an example, let's define [Gomplate Datasources](https://docs.gomplate.ca/datasources/) for the entire organization in the
-`stacks/orgs/acme/_defaults.yaml` stack manifest:
+As an example, let's define templating configuration for the entire organization in the `stacks/orgs/acme/_defaults.yaml` 
+stack manifest:
 
 ```yaml title="stacks/orgs/acme/_defaults.yaml"
 settings:
