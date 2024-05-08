@@ -174,6 +174,21 @@ For example, define [Gomplate Datasources](https://docs.gomplate.ca/datasources/
 settings:
   templates:
     settings:
+      # Number of steps/passes to process `Go` templates
+      # If not defined, `num_steps` is automatically set to `1`
+      num_steps: 2
+      # Optional steps configuration
+      steps:
+        1:
+          # Left delimiter for step #1
+          left_delimiter: "${"
+          # Right delimiter for step #1
+          right_delimiter: "}"
+        2:
+          # Left delimiter for step #2
+          left_delimiter: "{{"
+          # Right delimiter for step #2
+          right_delimiter: "}}"
       gomplate:
         # 7 seconds timeout to execute the datasources
         timeout: 7
