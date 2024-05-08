@@ -232,7 +232,7 @@ except the following settings are not supported in the `settings.templates.setti
 
 The reasons these settings are not supported are:
 
-- You can't disable templating in the stack manifests which Atmos needs to process as `Go` templates 
+- You can't disable templating in the stack manifests which are being processed by Atmos as `Go` templates 
 
 - If you define the `left_delimiter` and `right_delimiter` in the `settings.templates.settings` section in stack manifests, 
   the `Go` templating engine will think that the delimiters specify the beginning and the end of template strings, will 
