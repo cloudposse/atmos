@@ -50,7 +50,7 @@ Templating in Atmos stack manifests can be configured in the following places:
   The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component.
   Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/components/inheritance).
 
-### Configuring templating in `atmos.yaml` CLI config file
+### Configuring Templating in `atmos.yaml` CLI Config File
 
 Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI config file](/cli/configuration) in the
 `templates.settings` section:
@@ -106,7 +106,7 @@ templates:
             accept:
               - "application/json"
         # This `random` datasource uses `Go` templates in the `url`
-        # and will be processed in two steps:
+        # and will be processed in two steps/passes:
         # 1) process the template tokens using the delimiters `${ }` configured in step #1
         # 2) execute the datasource itself using the delimiters `{{ }}` configured in step #2
         random:
@@ -160,7 +160,7 @@ templates:
 
 - `templates.settings.gomplate.datasources` - a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions:
 
-  - The keys of the map are the datasource names, which are used in `Go` templates in Atmos stack manifests.
+  - The keys of the map are the datasource names (aliases), which are used in `Go` templates in Atmos stack manifests.
     For example:
 
     ```yaml
@@ -214,7 +214,7 @@ To be able to use the `env` function from both templating engines, you can do on
 
 <br/>
 
-### Configuring templating in Atmos stack manifests
+### Configuring Templating in Atmos Stack Manifests
 
 Templating in Atmos can also be configured in the `settings.templates.settings` section in stack manifests.
 
@@ -446,6 +446,103 @@ For more details, refer to:
 - [Configuring GCP](https://docs.gomplate.ca/functions/gcp/#configuring-gcp)
 
 ## Datasources
+
+Currently, Atmos supports all the [Gomplate Datasources](https://docs.gomplate.ca/datasources).
+More datasources will be added in the future (and this doc will be updated).
+
+The [Gomplate Datasources](https://docs.gomplate.ca/datasources) can be configured in the 
+`templates.settings.gomplate.datasources` section in `atmos.yaml` 
+[CLI config file](/cli/configuration) and in the `settings.templates.settings` section in 
+[Atmos stack manifests](/core-concepts/stacks).
+
+The `templates.settings.gomplate.datasources` section is a map of objects.
+
+The keys of the map are the datasource names (aliases).
+
+The values of the map are the datasource definitions with the following schema:
+
+  - `url` - the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
+
+  - `headers` - a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
+    the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers).
+    The keys of the map are the header names. The values of the map are lists of values for the header.
+
+    The following configuration will result in the
+    [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
+    being sent with the HTTP request to the datasource:
+
+       ```yaml
+       headers:
+         accept:
+           - "application/json"
+      ```
+
+For example, let's define the following Gomplate datasources in the global `settings` section (this will apply to all
+components in all stacks in the infrastructure):
+
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        # Timeout in seconds to execute the datasources
+        timeout: 5
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          # 'http' datasource
+          # https://docs.gomplate.ca/datasources/#using-file-datasources
+          ip:
+            url: "https://api.ipify.org?format=json"
+            # https://docs.gomplate.ca/datasources/#sending-http-headers
+            # https://docs.gomplate.ca/usage/#--datasource-header-h
+            headers:
+              accept:
+                - "application/json"
+          # This `random` datasource uses `Go` templates in the `url`
+          # and will be processed in two steps/passes:
+          # 1) process the template tokens using the delimiters `${ }` configured in step #1
+          # 2) execute the datasource itself using the delimiters `{{ }}` configured in step #2
+          random:
+            url: "http://www.randomnumberapi.com/api/v1.0/randomstring?min=${ .settings.random.min }&max=${ .settings.random.max }&count=1"
+          # 'file' datasources
+          # https://docs.gomplate.ca/datasources/#using-file-datasources
+          config-1:
+            url: "./config1.json"
+          config-2:
+            url: "file:///config2.json"
+          # `aws+smp` AWS Systems Manager Parameter Store datasource
+          # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+          secret-1:
+            url: "aws+smp:///path/to/secret"
+          # `aws+sm` AWS Secrets Manager datasource
+          # https://docs.gomplate.ca/datasources/#using-awssm-datasource
+          secret-2:
+            url: "aws+sm:///path/to/secret"
+          # `s3` datasource
+          # https://docs.gomplate.ca/datasources/#using-s3-datasources
+          s3-config:
+            url: "s3://mybucket/config/config.json"
+```
+
+After the above `datasources` are defined, you can use them in Atmos stack manifests like this:
+
+```yaml
+terraform:
+ vars:
+   tags:
+     tag1: '{{ (datasource "config-1").tag }}'
+     service_name2: '{{ (datasource "config-2").service.name }}'
+     service_name3: '{{ (datasource "s3-config").config.service_name }}'
+
+components:
+  terraform:
+    my-component-1:
+     settings:
+       provisioned_by_ip: '{{ (datasource "ip").ip }}'
+       secret-1: '{{ (datasource "secret-1").secret1.value }}'
+     vars:
+       enabled: '{{ (datasource "config-2").config.enabled }}'
+```
 
 ## Use-cases
 
