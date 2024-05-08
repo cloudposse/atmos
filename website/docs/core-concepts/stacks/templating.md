@@ -15,8 +15,8 @@ are supported as well.
 
 Atmos supports two different ways of configuring and using `Go` templates:
 
-- In [Imports]((/core-concepts/stacks/imports#go-templates-in-imports))
-- In stack manifests
+- In [Imports](/core-concepts/stacks/imports)
+- In [Stack Manifests](/core-concepts/stacks)
 
 These templates are processed in different phases and use different context:
 
