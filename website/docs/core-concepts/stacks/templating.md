@@ -542,7 +542,7 @@ terraform:
 
 components:
   terraform:
-    my-component-1:
+    vpc-1:
      settings:
        provisioned_by_ip: '{{ (datasource "ip").ip }}'
        secret-1: '{{ (datasource "secret-1").secret1.value }}'
@@ -835,56 +835,58 @@ You can define more than one step/pass of template processing to use and combine
 
 For example:
 
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    enabled: true
+    # Number of steps/passes to process `Go` templates
+    num_steps: 3
+```
+
 ```yaml
 settings:
   test: "{{ .atmos_component }}"
   test2: "{{ .settings.test }}"
 
-  templates:
-    settings:
-      enabled: true
-      # Number of steps/passes to process `Go` templates
-      num_steps: 3
-
 components:
   terraform:
-    my-component:
+    vpc:
       vars:
         tags:
           tag1: "{{ .settings.test }}-{{ .settings.test2 }}"
           tag2: "{{\"{{`{{ .atmos_component }}`}}\"}}"
 ```
 
-When executing an Atmos command like `atmos terraform plan my-component -s <stack>`, the above template wil be processed 
+When executing an Atmos command like `atmos terraform plan vpc -s <stack>`, the above template will be processed 
 in three steps, all using the default delimiters `{{ }}`:
 
 - Step #1
 
-  - `settings.test` is set to `my-component`
+  - `settings.test` is set to `vpc`
   - `settings.test2` is set to `{{ .atmos_component }}`
-  - `my-component.vars.tags.tag1` is set to `{{ .atmos_component }}-{{ .settings.test }}`
-  - `my-component.vars.tags.tag2` is set to `{{<backtick>{{ .atmos_component }}<backtick>}}`
+  - `vpc.vars.tags.tag1` is set to `{{ .atmos_component }}-{{ .settings.test }}`
+  - `vpc.vars.tags.tag2` is set to `{{<backtick>{{ .atmos_component }}<backtick>}}`
 
 - Step #2
 
-  - `settings.test` is `my-component`
-  - `settings.test2` is set to `my-component`
-  - `my-component.vars.tags.tag1` is set to `my-component-my-component`
-  - `my-component.vars.tags.tag2` is set to `{{ .atmos_component }}`
+  - `settings.test` is `vpc`
+  - `settings.test2` is set to `vpc`
+  - `vpc.vars.tags.tag1` is set to `vpc-vpc`
+  - `vpc.vars.tags.tag2` is set to `{{ .atmos_component }}`
 
 - Step #3
 
-  - `settings.test` is `my-component`
-  - `settings.test2` is `my-component`
-  - `my-component.vars.tags.tag1` is `my-component-my-component`
-  - `my-component.vars.tags.tag2` is set to `my-component`
+  - `settings.test` is `vpc`
+  - `settings.test2` is `vpc`
+  - `vpc.vars.tags.tag1` is `vpc-vpc`
+  - `vpc.vars.tags.tag2` is set to `vpc`
 
 <br/>
 
 :::warning
 The above example just shows the supported functionality in Atmos templating.
-You can use it for some use-cases, but it does not mean that you should use it just for the sake of using it since 
-it's difficult to read and understand the entire flow.
+You can use it for some use-cases, but it does not mean that you should use it just for the sake of using, since 
+it's not easy to read and understand the entire flow.
 :::
 
 <br/>
