@@ -230,9 +230,13 @@ except the following settings are not supported in the `settings.templates.setti
 - `settings.templates.settings.num_steps`
 - `settings.templates.settings.steps`
 
-The reason these settings are not supported is that if you define the `left_delimiter` and `right_delimiter` in the
-`settings.templates.settings` section in stack manifests, the `Go` templating engine will think that the delimiters 
-specify the beginning and the end of template strings, will try to evaluate it, which will result in an error.
+The reasons these settings are not supported are:
+
+- You can't disable templating in the stack manifests which Atmos needs to process as `Go` templates 
+
+- If you define the `left_delimiter` and `right_delimiter` in the `settings.templates.settings` section in stack manifests, 
+  the `Go` templating engine will think that the delimiters specify the beginning and the end of template strings, will 
+  try to evaluate it, which will result in an error
 
 As an example, let's define [Gomplate Datasources](https://docs.gomplate.ca/datasources/) for the entire organization in the
 `stacks/orgs/acme/_defaults.yaml` stack manifest:
