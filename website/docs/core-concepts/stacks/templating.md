@@ -27,8 +27,12 @@ These templates are processed in different phases and use different context:
   `context`, processes all imports, and finds stacks and components
 
 - `Go` templates in Atmos stack manifests, on the other hand, are processed as the very last phase of the stack processing 
-  pipeline. For the context (template variables), it uses all the component's attributes returned from the 
+  pipeline (after all imports are processed, all stack configurations are deep-merged, and the stack and component are found).
+  For the context (template variables), it uses all the component's attributes returned from the 
   [`atmos describe component`](/cli/commands/describe/component) command
+
+These two mechanisms, although both using `Go` templates, serve different purposes, use different contexts, and are executed 
+in different phases of the stack processing pipeline.
 
 For more details, refer to:
 
