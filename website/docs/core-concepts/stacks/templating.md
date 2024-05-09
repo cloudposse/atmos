@@ -876,14 +876,10 @@ templates:
     evaluations: 2
 ```
 
-In an Atmos stack manifest, we define the environment variables in the `env` section 
-(AWS profile with permissions to access the S3 bucket), and the `s3-tags` Gomplate datasource.
+In an Atmos stack manifest, we define the environment variables in the `env` section (AWS profile with permissions to 
+access the S3 bucket), and the `s3-tags` Gomplate datasource.
 
-The `url` of the `s3-tags` datasource uses a `Go` template with the delimiters `${ }`, which is processed as the first 
-step in the template processing pipeline.
-
-And finally, in the `terraform.vars.tags` section, we define all the tags that are returned from the call to the 
-S3 datasource.
+In the `terraform.vars.tags` section, we define all the tags that are returned from the call to the S3 datasource.
 
 ```yaml
 import:
