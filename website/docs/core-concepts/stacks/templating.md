@@ -13,12 +13,26 @@ are supported as well.
 
 ## Important Note
 
-Atmos supports two different ways of configuring and using `Go` templates:
+Atmos supports many different ways of configuring and using `Go` templates:
 
+- In [Atmos Custom Commands](/core-concepts/custom-commands)
+- In [Atmos Vendoring](/core-concepts/vendoring)
+- In [Atmos Component Vendoring](/core-concepts/components/vendoring)
 - In [Imports](/core-concepts/stacks/imports)
 - In [Stack Manifests](/core-concepts/stacks)
 
 These templates are processed in different phases and use different context:
+
+- `Go` templates in [Atmos Custom Commands](/core-concepts/custom-commands) are processed when the custom commands are
+  executed. The execution context can be specified by using the `component_config` section. If a custom command defines 
+  a `component_config` section with `component` and `stack`, Atmos generates the config for the component in the stack
+  and makes it available in the `{{ .ComponentConfig.xxx.yyy.zzz }}` template variables,
+  exposing all the component sections that are returned by the `atmos describe component <component> -s <stack>` CLI 
+  command
+
+- `Go` templates in [Atmos Vendoring](/core-concepts/vendoring) and [Atmos Component Vendoring](/core-concepts/components/vendoring)
+  are processed when the CLI command [`atmos vendor pull`](/cli/commands/vendor/pull) is executed. The templates in 
+  the vendoring manifests support the `{{.Version}}` variable, and the execution context is provided in the `version` attribute
 
 - [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) are used in imported stack 
   manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static 
@@ -29,9 +43,9 @@ These templates are processed in different phases and use different context:
 - `Go` templates in Atmos stack manifests, on the other hand, are processed as the **very last** phase of the stack processing 
   pipeline (after all imports are processed, all stack configurations are deep-merged, and the component in the stack is found).
   For the context (template variables), it uses all the component's attributes returned from the 
-  [`atmos describe component`](/cli/commands/describe/component) command
+  [`atmos describe component`](/cli/commands/describe/component) CLI command
 
-These two mechanisms, although both using `Go` templates, serve different purposes, use different contexts, and are executed 
+These mechanisms, although all using `Go` templates, serve different purposes, use different contexts, and are executed 
 in different phases of the stack processing pipeline.
 
 For more details, refer to:
@@ -67,7 +81,7 @@ templates:
     # Optional template delimiters
     # The `{{ }}` delimiters are the default, no need to specify/redefine them
     delimiters: ["{{", "}}"]
-    # Environment variables to use when executing templates
+    # Environment variables passed to datasources when evaluating templates
     # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
     # https://docs.gomplate.ca/functions/aws/#configuring-aws
     # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
@@ -223,7 +237,7 @@ stack manifest:
 settings:
   templates:
     settings:
-      # Environment variables to use when executing templates
+      # Environment variables passed to datasources when evaluating templates
       # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
       # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
@@ -411,7 +425,7 @@ For example:
 settings:
   templates:
     settings:
-      # Environment variables to use when executing templates
+      # Environment variables passed to datasources when evaluating templates
       # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
       # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
@@ -887,7 +901,7 @@ import:
 settings:
   templates:
     settings:
-      # Environment variables to use when executing templates
+      # Environment variables passed to datasources when evaluating templates
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
       # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
       env:
