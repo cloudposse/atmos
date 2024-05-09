@@ -997,6 +997,7 @@ import:
   # Import the default configuration for all VPCs in the infrastructure
   - catalog/vpc/defaults
 
+# Global settings
 settings:
   templates:
     settings:
@@ -1018,7 +1019,9 @@ settings:
             # which is processed as first step in the template processing pipeline
             url: "s3://mybucket/${ .vars.stage }/tags.json"
 
+# Global Terraform config
 terraform:
+  # Global variables that are used by all Atmos components
   vars:
     tags:
       atmos_component: "{{ .atmos_component }}"
@@ -1029,6 +1032,7 @@ terraform:
       billing_team: '{{ (datasource "s3-tags").tags.billing_team }}'
       service: '{{ (datasource "s3-tags").tags.service }}'
 
+# Atmos component configurations
 components:
   terraform:
     vpc/1:
