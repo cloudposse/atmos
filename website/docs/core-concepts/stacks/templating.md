@@ -11,7 +11,50 @@ Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifes
 and [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
 are supported as well.
 
-## Configuration
+## Important Note
+
+Atmos supports many different ways of configuring and using `Go` templates:
+
+- In [Atmos Custom Commands](/core-concepts/custom-commands)
+- In [Atmos Vendoring](/core-concepts/vendoring)
+- In [Atmos Component Vendoring](/core-concepts/components/vendoring)
+- In [Imports](/core-concepts/stacks/imports)
+- In [Stack Manifests](/core-concepts/stacks)
+
+These templates are processed in different phases and use different context:
+
+- `Go` templates in [Atmos Custom Commands](/core-concepts/custom-commands) are processed when the custom commands are
+  executed. The execution context can be specified by using the `component_config` section. If a custom command defines 
+  a `component_config` section with `component` and `stack`, Atmos generates the config for the component in the stack
+  and makes it available in the `{{ .ComponentConfig.xxx.yyy.zzz }}` template variables,
+  exposing all the component sections that are returned by the `atmos describe component <component> -s <stack>` CLI 
+  command
+
+- `Go` templates in [Atmos Vendoring](/core-concepts/vendoring) and [Atmos Component Vendoring](/core-concepts/components/vendoring)
+  are processed when the CLI command [`atmos vendor pull`](/cli/commands/vendor/pull) is executed. The templates in 
+  the vendoring manifests support the `{{.Version}}` variable, and the execution context is provided in the `version` attribute
+
+- [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) are used in imported stack 
+  manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static 
+  `context` section. Atmos processes `Go` templates in imports as the **very first** phase of the stack processing pipeline.
+  When executing the [CLI commands](/cli/commands), Atmos parses and executes the templates using the provided static 
+  `context`, processes all imports, and finds stacks and components
+
+- `Go` templates in Atmos stack manifests, on the other hand, are processed as the **very last** phase of the stack processing 
+  pipeline (after all imports are processed, all stack configurations are deep-merged, and the component in the stack is found).
+  For the context (template variables), it uses all the component's attributes returned from the 
+  [`atmos describe component`](/cli/commands/describe/component) CLI command
+
+These mechanisms, although all using `Go` templates, serve different purposes, use different contexts, and are executed 
+in different phases of the stack processing pipeline.
+
+For more details, refer to:
+
+- [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports)
+- [Excluding templates in imports from processing by Atmos](#excluding-templates-in-stack-manifest-from-processing-by-atmos)
+
+
+## Stack Manifest Templating Configuration
 
 Templating in Atmos stack manifests can be configured in the following places:
 
@@ -21,7 +64,7 @@ Templating in Atmos stack manifests can be configured in the following places:
   The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component.
   Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/components/inheritance).
 
-### Configuring templating in `atmos.yaml` CLI config file
+### Configuring Templating in `atmos.yaml` CLI Config File
 
 Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI config file](/cli/configuration) in the
 `templates.settings` section:
@@ -30,13 +73,29 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
 # https://pkg.go.dev/text/template
 templates:
   settings:
+    # Enable `Go` templates in Atmos stack manifests
     enabled: true
+    # Number of evaluations/passes to process `Go` templates
+    # If not defined, `evaluations` is automatically set to `1`
+    evaluations: 2
+    # Optional template delimiters
+    # The `{{ }}` delimiters are the default, no need to specify/redefine them
+    delimiters: ["{{", "}}"]
+    # Environment variables passed to datasources when evaluating templates
+    # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+    # https://docs.gomplate.ca/functions/aws/#configuring-aws
+    # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+    env:
+      AWS_PROFILE: "<AWS profile>"
+      AWS_TIMEOUT: 2000
     # https://masterminds.github.io/sprig
     sprig:
+      # Enable Sprig functions in `Go` templates in Atmos stack manifests
       enabled: true
     # https://docs.gomplate.ca
     # https://docs.gomplate.ca/functions
     gomplate:
+      # Enable Gomplate functions and datasources in `Go` templates in Atmos stack manifests
       enabled: true
       # Timeout in seconds to execute the datasources
       timeout: 5
@@ -74,6 +133,15 @@ templates:
 - `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
   If set to `false`, Atmos will not process `Go` templates in stack manifests
 
+- `templates.settings.env` - a map of environment variables to use when executing the templates
+
+- `templates.settings.evaluations` - number of evaluations/passes to process `Go` templates. If not defined, `evaluations` 
+  is automatically set to `1`. For more details, refer to 
+  [Template Evaluations and Template Processing Pipelines](#template-evaluations-and-template-processing-pipelines)
+
+- `templates.settings.delimiters` - a list of left and right delimiters to use to process the templates. 
+   If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used
+
 - `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
   in Atmos stack manifests
 
@@ -84,7 +152,7 @@ templates:
 
 - `templates.settings.gomplate.datasources` - a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions:
 
-  - The keys of the map are the datasource names, which are used in `Go` templates in Atmos stack manifests.
+  - The keys of the map are the datasource names (aliases), which are used in `Go` templates in Atmos stack manifests.
     For example:
 
     ```yaml
@@ -138,18 +206,44 @@ To be able to use the `env` function from both templating engines, you can do on
 
 <br/>
 
-### Configuring templating in Atmos stack manifests
+### Configuring Templating in Atmos Stack Manifests
+
+Templating in Atmos can also be configured in the `settings.templates.settings` section in stack manifests.
 
 The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component.
 Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/components/inheritance).
 
-For example, define [Gomplate Datasources](https://docs.gomplate.ca/datasources/) for the entire organization in the
-`stacks/orgs/acme/_defaults.yaml` stack manifest:
+The schema is the same as `templates.settings` in the `atmos.yaml` [CLI config file](/cli/configuration),
+except the following settings are not supported in the `settings.templates.settings` section:
+
+- `settings.templates.settings.enabled`
+- `settings.templates.settings.sprig.enabled`
+- `settings.templates.settings.gomplate.enabled`
+- `settings.templates.settings.evaluations`
+- `settings.templates.settings.delimiters`
+
+These settings are not supported for the following reasons:
+
+- You can't disable templating in the stack manifests which are being processed by Atmos as `Go` templates 
+
+- If you define the `delimiters` in the `settings.templates.settings` section in stack manifests, 
+  the `Go` templating engine will think that the delimiters specify the beginning and the end of template strings, will 
+  try to evaluate it, which will result in an error
+
+As an example, let's define templating configuration for the entire organization in the `stacks/orgs/acme/_defaults.yaml` 
+stack manifest:
 
 ```yaml title="stacks/orgs/acme/_defaults.yaml"
 settings:
   templates:
     settings:
+      # Environment variables passed to datasources when evaluating templates
+      # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+      # https://docs.gomplate.ca/functions/aws/#configuring-aws
+      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      env:
+        AWS_PROFILE: "<AWS profile>"
+        AWS_TIMEOUT: 2000
       gomplate:
         # 7 seconds timeout to execute the datasources
         timeout: 7
@@ -183,6 +277,14 @@ gomplate:
       headers:
         accept:
           - "application/json"
+    random:
+      url: "http://www.randomnumberapi.com/api/v1.0/randomstring?min=${ .settings.random.min }&max=${ .settings.random.max }&count=1"
+    secret-1:
+      url: "aws+smp:///path/to/secret"
+    secret-2:
+      url: "aws+sm:///path/to/secret"
+    s3-config:
+      url: "s3://mybucket/config/config.json"
     config-1:
       url: "./my-config1.json"
     config-2:
@@ -311,6 +413,127 @@ vars:
     terraform_workspace: plat-ue2-dev
 ```
 
+## Environment Variables
+
+Some data sources might need environment variables that are different from the environment variables in Stack configuration. Environment variables may be passed to data soruces when processing and executing templates by defining `env` map.
+It's supported in both the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) and in the 
+`settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks).
+
+For example:
+
+```yaml
+settings:
+  templates:
+    settings:
+      # Environment variables passed to datasources when evaluating templates
+      # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+      # https://docs.gomplate.ca/functions/aws/#configuring-aws
+      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      env:
+        AWS_PROFILE: "<AWS profile>"
+        AWS_TIMEOUT: 2000
+```
+
+This is useful when executing the `datasources` that need to authenticate to cloud APIs. 
+
+For more details, refer to:
+
+- [Configuring AWS](https://docs.gomplate.ca/functions/aws/#configuring-aws)
+- [Configuring GCP](https://docs.gomplate.ca/functions/gcp/#configuring-gcp)
+
+## Datasources
+
+Currently, Atmos supports all the [Gomplate Datasources](https://docs.gomplate.ca/datasources).
+More datasources will be added in the future (and this doc will be updated).
+
+The [Gomplate Datasources](https://docs.gomplate.ca/datasources) can be configured in the 
+`templates.settings.gomplate.datasources` section in `atmos.yaml` 
+[CLI config file](/cli/configuration) and in the `settings.templates.settings` section in 
+[Atmos stack manifests](/core-concepts/stacks).
+
+The `templates.settings.gomplate.datasources` section is a map of objects.
+
+The keys of the map are the datasource names (aliases).
+
+The values of the map are the datasource definitions with the following schema:
+
+  - `url` - the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
+
+  - `headers` - a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
+    the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers).
+    The keys of the map are the header names. The values of the map are lists of values for the header.
+
+    The following configuration will result in the
+    [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
+    being sent with the HTTP request to the datasource:
+
+       ```yaml
+       headers:
+         accept:
+           - "application/json"
+      ```
+
+For example, let's define the following Gomplate datasources in the global `settings` section (this will apply to all
+components in all stacks in the infrastructure):
+
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        # Timeout in seconds to execute the datasources
+        timeout: 5
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          # 'http' datasource
+          # https://docs.gomplate.ca/datasources/#using-file-datasources
+          ip:
+            url: "https://api.ipify.org?format=json"
+            # https://docs.gomplate.ca/datasources/#sending-http-headers
+            # https://docs.gomplate.ca/usage/#--datasource-header-h
+            headers:
+              accept:
+                - "application/json"
+          # 'file' datasources
+          # https://docs.gomplate.ca/datasources/#using-file-datasources
+          config-1:
+            url: "./config1.json"
+          config-2:
+            url: "file:///config2.json"
+          # `aws+smp` AWS Systems Manager Parameter Store datasource
+          # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+          secret-1:
+            url: "aws+smp:///path/to/secret"
+          # `aws+sm` AWS Secrets Manager datasource
+          # https://docs.gomplate.ca/datasources/#using-awssm-datasource
+          secret-2:
+            url: "aws+sm:///path/to/secret"
+          # `s3` datasource
+          # https://docs.gomplate.ca/datasources/#using-s3-datasources
+          s3-config:
+            url: "s3://mybucket/config/config.json"
+```
+
+After the above `datasources` are defined, you can use them in Atmos stack manifests like this:
+
+```yaml
+terraform:
+ vars:
+   tags:
+     tag1: '{{ (datasource "config-1").tag }}'
+     service_name2: '{{ (datasource "config-2").service.name }}'
+     service_name3: '{{ (datasource "s3-config").config.service_name }}'
+
+components:
+  terraform:
+    vpc-1:
+     settings:
+       provisioned_by_ip: '{{ (datasource "ip").ip }}'
+       secret-1: '{{ (datasource "secret-1").secret1.value }}'
+     vars:
+       enabled: '{{ (datasource "config-2").config.enabled }}'
+```
+
 ## Use-cases
 
 While `Go` templates in Atmos stack manifests offer great flexibility for various use-cases, one of the obvious use-cases
@@ -335,7 +558,7 @@ terraform:
 
 The tags will be processed and automatically added to all the resources provisioned in the infrastructure.
 
-## Excluding templates in stack manifest from processing by Atmos
+## Excluding Templates in Stack Manifest from Processing by Atmos
 
 If you need to provide `Go` templates to external systems (e.g. ArgoCD or Datadog) verbatim and prevent Atmos from
 processing the templates, use **double curly braces + backtick + double curly braces** instead of just **double curly braces**:
@@ -437,7 +660,7 @@ chart_values:
     message: '{{ printf "Application {{ .app.metadata.name }} is now running new version." }}'
 ```
 
-## Excluding templates in imports from processing by Atmos
+## Excluding Templates in Imports from Processing by Atmos
 
 If you are using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and `Go` templates
 in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go` 
@@ -540,3 +763,223 @@ components:
           atmos_stack: plat-ue2-prod
           terraform_workspace: plat-ue2-prod
 ```
+
+## Template Evaluations and Template Processing Pipelines
+
+Atmos supports configuring the number of evaluations/passes for template processing in `atmos.yaml` [CLI config file](/cli/configuration).
+It effectively allows you to define template processing pipelines.
+
+For example:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    # Enable `Go` templates in Atmos stack manifests
+    enabled: true
+    # Number of evaluations/passes to process `Go` templates
+    # If not defined, `evaluations` is automatically set to `1`
+    evaluations: 2
+```
+
+- `templates.settings.evaluations` - number of evaluations to process `Go` templates. If not defined, `evaluations`
+  is automatically set to `1`
+
+Template evaluations are useful in the following scenarios:
+
+- Combining templates from different sections in Atmos stack manifests
+- Using templates in the URLs of `datasources`
+
+### Combining templates from different sections in Atmos stack manifests
+
+You can define more than one step/pass of template processing to use and combine the results from each step.
+
+For example:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    enabled: true
+    # Number of evaluations to process `Go` templates
+    evaluations: 3
+```
+
+```yaml
+settings:
+  test: "{{ .atmos_component }}"
+  test2: "{{ .settings.test }}"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        tags:
+          tag1: "{{ .settings.test }}-{{ .settings.test2 }}"
+          tag2: "{{\"{{`{{ .atmos_component }}`}}\"}}"
+```
+
+When executing an Atmos command like `atmos terraform plan vpc -s <stack>`, the above template will be processed 
+in three phases:
+
+- Evaluation 1
+
+  - `settings.test` is set to `vpc`
+  - `settings.test2` is set to `{{ .atmos_component }}`
+  - `vpc.vars.tags.tag1` is set to `{{ .atmos_component }}-{{ .settings.test }}`
+  - `vpc.vars.tags.tag2` is set to `{{<backtick>{{ .atmos_component }}<backtick>}}`
+
+- Evaluation 2
+
+  - `settings.test` is `vpc`
+  - `settings.test2` is set to `vpc`
+  - `vpc.vars.tags.tag1` is set to `vpc-vpc`
+  - `vpc.vars.tags.tag2` is set to `{{ .atmos_component }}`
+
+- Evaluation 3
+
+  - `settings.test` is `vpc`
+  - `settings.test2` is `vpc`
+  - `vpc.vars.tags.tag1` is `vpc-vpc`
+  - `vpc.vars.tags.tag2` is set to `vpc`
+
+<br/>
+
+:::warning
+
+The above example shows the supported functionality in Atmos templating.
+You can use it for some use-cases, but it does not mean that you **should** use it just for the sake of using, since
+it's not easy to read and understand what data we have after each evaluation step.
+
+The following use-case describes a practical approach to using evaluation steps in Atmos templates to work 
+with `datasources`.
+
+:::
+
+### Using templates in the URLs of `datasources`
+
+Let's suppose that your company uses a centralized software catalog to consolidate all tags for tagging all the cloud
+resources. The tags can include tags per account, per team, per service, billing tags, etc.
+
+:::note
+An example of such a centralized software catalog could be https://backstage.io
+:::
+
+<br/>
+
+Let's also suppose that you have a service to read the tags from the centralized catalog and write them into an S3
+bucket in one of your accounts. The bucket serves as a cache to not hit the external system's API with too many requests 
+and not to trigger rate limiting.
+
+And finally, let's say that in the bucket, you have folders per account (`dev`, `prod`, `staging`). Each folder has a JSON
+file with all the tags defined for all the cloud resources in the accounts.
+
+We can then use the [Gomplate S3 datasource](https://docs.gomplate.ca/datasources/#using-s3-datasources) to read the JSON
+file with the tags for each account and assign the tags to all cloud resources.
+
+In `atmos.yaml`, we figure two evaluations steps of template processing:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    enabled: true
+    # Number of evaluations to process `Go` templates
+    evaluations: 2
+    gomplate:
+      enabled: true
+```
+
+In an Atmos stack manifest, we define the environment variables in the `env` section (AWS profile with permissions to 
+access the S3 bucket), and the `s3-tags` Gomplate datasource.
+
+In the `terraform.vars.tags` section, we define all the tags that are returned from the call to the S3 datasource.
+
+```yaml
+import:
+  # Import the default configuration for all VPCs in the infrastructure
+  - catalog/vpc/defaults
+
+# Global settings
+settings:
+  templates:
+    settings:
+      # Environment variables passed to datasources when evaluating templates
+      # https://docs.gomplate.ca/functions/aws/#configuring-aws
+      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      env:
+        # AWS profile with permissions to access the S3 bucket
+        AWS_PROFILE: "<AWS profile>"
+      gomplate:
+        # Timeout in seconds to execute the datasources
+        timeout: 5
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          # `s3` datasource
+          # https://docs.gomplate.ca/datasources/#using-s3-datasources
+          s3-tags:
+            # The `url` uses a `Go` template with the delimiters `${ }`,
+            # which is processed as first step in the template processing pipeline
+            url: "s3://mybucket/{{ .vars.stage }}/tags.json"
+
+# Global Terraform config
+terraform:
+  # Global variables that are used by all Atmos components
+  vars:
+    tags:
+      atmos_component: "{{ .atmos_component }}"
+      atmos_stack: "{{ .atmos_stack }}"
+      terraform_component: "{{ .component }}"
+      terraform_workspace: "{{ .workspace }}"
+      devops_team: '{{`{{ (datasource "s3-tags").tags.devops_team }}`}}'
+      billing_team: '{{`{{ (datasource "s3-tags").tags.billing_team }}`}}'
+      service: '{{`{{ (datasource "s3-tags").tags.service }}`}}'
+
+# Atmos component configurations
+components:
+  terraform:
+    vpc/1:
+      metadata:
+        component: vpc  # Point to the Terraform component in `components/terraform/vpc` folder
+        inherits:
+          # Inherit from the `vpc/defaults` base Atmos component, which defines the default 
+          # configuration for all VPCs in the infrastructure.
+          # The `vpc/defaults` base component is defined in the `catalog/vpc/defaults` 
+          # manifest (which is imported above).
+          # This inheritance makes the `vpc/1` Atmos component config DRY.
+          - "vpc/defaults"
+      vars:
+        name: "vpc-1"
+```
+
+When executing an Atmos command like `atmos terraform apply vpc/1 -s plat-ue2-dev`, the above template will be processed
+in two evaluation steps:
+
+- Evaluation 1: 
+
+  - `datasources.s3-tags.url` is set to `s3://mybucket/dev/tags.json`
+  
+  - the tags that use the `datasource` templates are set to the following:
+
+    ```yaml
+    devops_team: '{{ (datasource "s3-tags").tags.devops_team }}'
+    billing_team: '{{ (datasource "s3-tags").tags.billing_team }}'
+    service: '{{ (datasource "s3-tags").tags.service }}'
+    ```
+
+- Evaluation 2: 
+    - all `s3-tags` datasources get executed, the JSON file `s3://mybucket/dev/tags.json` with the tags 
+      for the `dev` account is downloaded from the S3 bucket, and the tags are parsed and assigned in the 
+      `terraform.vars.tags` section 
+
+After executing the two evaluation steps, the resulting tags for the Atmos component `vpc/1` in the stack `plat-ue2-dev` 
+would look like this:
+
+```yaml
+atmos_component: vpc/1
+atmos_stack: plat-ue2-dev
+terraform_component: vpc
+terraform_workspace: plat-ue2-dev-vpc-1
+devops_team: dev_networking
+billing_team: billing_net
+service: net
+```
+
+The tags will be added to all the AWS resources provisioned by the `vpc` Terraform component in the `plat-ue2-dev` stack.

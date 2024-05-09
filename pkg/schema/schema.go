@@ -28,9 +28,12 @@ type Templates struct {
 }
 
 type TemplatesSettings struct {
-	Enabled  bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Sprig    TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
-	Gomplate TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+	Enabled     bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Sprig       TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
+	Gomplate    TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
+	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
+	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 }
 
 type TemplatesSettingsSprig struct {

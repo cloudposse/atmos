@@ -249,6 +249,7 @@ schemas:
 templates:
   settings:
     enabled: true
+    evaluations: 1
     # https://masterminds.github.io/sprig
     sprig:
       enabled: true
