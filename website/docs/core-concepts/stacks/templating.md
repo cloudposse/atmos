@@ -864,7 +864,7 @@ file with all the tags defined for all the cloud resources in the accounts.
 We can then use the [Gomplate S3 datasource](https://docs.gomplate.ca/datasources/#using-s3-datasources) to read the JSON
 file with the tags for each account and assign the tags to all cloud resources.
 
-In `atmos.yaml`, we can figure 2 steps of template processing pipeline, each step using different delimiters:
+In `atmos.yaml`, we figure two evaluations steps of template processing:
 
 ```yaml title="atmos.yaml"
 templates:
@@ -962,8 +962,8 @@ in two evaluation steps:
       for the `dev` account is downloaded from the S3 bucket, and the tags are parsed and assigned in the 
       `terraform.vars.tags` section 
 
-After executing the two evaluation steps in the template processing pipeline, the resulting tags for the Atmos 
-component `vpc/1` in the stack `plat-ue2-dev` would look like this:
+After executing the two evaluation steps, the resulting tags for the Atmos component `vpc/1` in the stack `plat-ue2-dev` 
+would look like this:
 
 ```yaml
 atmos_component: vpc/1
