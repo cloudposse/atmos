@@ -993,6 +993,10 @@ And finally, in the `terraform.vars.tags` section, we define all the tags that a
 S3 datasource.
 
 ```yaml
+import:
+  # Import the default configuration for all VPCs in the infrastructure
+  - catalog/vpc/defaults
+
 settings:
   templates:
     settings:
@@ -1030,6 +1034,13 @@ components:
     vpc/1:
       metadata:
         component: vpc  # Point to the Terraform component
+        inherits:
+          # Inherit from the `vpc/defaults` base Atmos component, which defines the default 
+          # configuration for all VPCs in the infrastructure.
+          # The `vpc/defaults` base component is defined in the `catalog/vpc/defaults` 
+          # manifest (which is imported above).
+          # This inheritance makes the `vpc/1` Atmos component config DRY.
+          - "vpc/defaults"
       vars:
         name: "vpc/1"
 ```
@@ -1051,7 +1062,7 @@ in the stack `plat-ue2-dev` would look like this:
 atmos_component: vpc/1
 atmos_stack: plat-ue2-dev
 terraform_component: vpc
-terraform_workspace: plat-ue2-dev
+terraform_workspace: plat-ue2-dev-vpc-1
 devops_team: dev_networking
 billing_team: billing_net
 service: net
