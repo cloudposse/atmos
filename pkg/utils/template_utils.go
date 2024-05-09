@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"text/template"
 	"text/template/parse"
@@ -136,8 +137,32 @@ func ProcessTmplWithDatasources(
 		// Process the template
 		t := template.New(tmplName).Funcs(funcs)
 
-		leftDelimiter, _ := lo.Coalesce(cliConfig.Templates.Settings.LeftDelimiter, "{{")
-		rightDelimiter, _ := lo.Coalesce(cliConfig.Templates.Settings.RightDelimiter, "}}")
+		// Template delimiters
+		leftDelimiter := "{{"
+		rightDelimiter := "}}"
+
+		if len(cliConfig.Templates.Settings.Delimiters) > 0 {
+			if len(cliConfig.Templates.Settings.Delimiters) != 2 {
+				return "", fmt.Errorf("invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
+					"'delimiters' must be an array with two string items: left and right delimiter\n"+
+					"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters)
+			}
+
+			if cliConfig.Templates.Settings.Delimiters[0] == "" {
+				return "", fmt.Errorf("invalid or empty left delimiter in the 'templates.settings.delimiters' config in 'atmos.yaml': %s\n"+
+					"'delimiters' must be an array with two string items: left and right delimiter\n"+
+					"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters[0])
+			}
+
+			if cliConfig.Templates.Settings.Delimiters[1] == "" {
+				return "", fmt.Errorf("invalid or empty right delimiter in the 'templates.settings.delimiters' config in 'atmos.yaml': %s\n"+
+					"'delimiters' must be an array with two string items: left and right delimiter\n"+
+					"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters[1])
+			}
+
+			leftDelimiter = cliConfig.Templates.Settings.Delimiters[0]
+			rightDelimiter = cliConfig.Templates.Settings.Delimiters[1]
+		}
 
 		t.Delims(leftDelimiter, rightDelimiter)
 

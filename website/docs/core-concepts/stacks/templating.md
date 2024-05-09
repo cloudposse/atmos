@@ -64,10 +64,9 @@ templates:
     # Number of evaluations/passes to process `Go` templates
     # If not defined, `evaluations` is automatically set to `1`
     evaluations: 2
-    # Optional template delimiters configuration
+    # Optional template delimiters
     # The `{{ }}` delimiters are the default, no need to specify/redefine them
-    left_delimiter: "{{"
-    right_delimiter: "}}"
+    delimiters: ["{{", "}}"]
     # Environment variables to use when executing templates
     # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
     # https://docs.gomplate.ca/functions/aws/#configuring-aws
@@ -126,11 +125,8 @@ templates:
   is automatically set to `1`. For more details, refer to 
   [Template Evaluations and Template Processing Pipelines](#template-evaluations-and-template-processing-pipelines)
 
-- `templates.settings.left_delimiter` - the left delimiter to use to process the templates. If not defined, the default 
-  delimiter `{{` will be used
-
-- `templates.settings.right_delimiter` - the right delimiter to use to process the templates. If not defined, the default 
-  delimiter `}}` will be used
+- `templates.settings.delimiters` - a list of left and right delimiters to use to process the templates. 
+   If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used
 
 - `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
   in Atmos stack manifests
@@ -210,12 +206,13 @@ except the following settings are not supported in the `settings.templates.setti
 - `settings.templates.settings.sprig.enabled`
 - `settings.templates.settings.gomplate.enabled`
 - `settings.templates.settings.evaluations`
+- `settings.templates.settings.delimiters`
 
 These settings are not supported for the following reasons:
 
 - You can't disable templating in the stack manifests which are being processed by Atmos as `Go` templates 
 
-- If you define the `left_delimiter` and `right_delimiter` in the `settings.templates.settings` section in stack manifests, 
+- If you define the `delimiters` in the `settings.templates.settings` section in stack manifests, 
   the `Go` templating engine will think that the delimiters specify the beginning and the end of template strings, will 
   try to evaluate it, which will result in an error
 
@@ -870,10 +867,10 @@ In `atmos.yaml`, we figure two evaluations steps of template processing:
 templates:
   settings:
     enabled: true
-    gomplate:
-      enabled: true
     # Number of evaluations to process `Go` templates
     evaluations: 2
+    gomplate:
+      enabled: true
 ```
 
 In an Atmos stack manifest, we define the environment variables in the `env` section (AWS profile with permissions to 

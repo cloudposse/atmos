@@ -28,13 +28,12 @@ type Templates struct {
 }
 
 type TemplatesSettings struct {
-	Enabled        bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Sprig          TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
-	Gomplate       TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
-	LeftDelimiter  string                    `yaml:"left_delimiter,omitempty" json:"left_delimiter,omitempty" mapstructure:"left_delimiter"`
-	RightDelimiter string                    `yaml:"right_delimiter,omitempty" json:"right_delimiter,omitempty" mapstructure:"right_delimiter"`
-	Evaluations    int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
-	Env            map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Enabled     bool                      `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Sprig       TemplatesSettingsSprig    `yaml:"sprig" json:"sprig" mapstructure:"sprig"`
+	Gomplate    TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
+	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
+	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
+	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 }
 
 type TemplatesSettingsSprig struct {

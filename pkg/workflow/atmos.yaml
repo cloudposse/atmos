@@ -334,17 +334,7 @@ schemas:
 templates:
   settings:
     enabled: true
-    num_steps: 3
-    steps:
-      1:
-        left_delimiter: "${"
-        right_delimiter: "}"
-      2:
-        left_delimiter: "{{"
-        right_delimiter: "}}"
-      3:
-        left_delimiter: "{{"
-        right_delimiter: "}}"
+    evaluations: 1
     # https://masterminds.github.io/sprig
     sprig:
       enabled: true
