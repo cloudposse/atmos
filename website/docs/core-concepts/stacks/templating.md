@@ -992,7 +992,7 @@ step in the template processing pipeline.
 And finally, in the `terraform.vars.tags` section, we define all the tags that are returned from the call to the 
 S3 datasource.
 
-```yaml title="_defaults.yaml"
+```yaml
 settings:
   templates:
     settings:
