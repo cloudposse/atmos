@@ -401,7 +401,7 @@ vars:
 
 ## Environment Variables
 
-Environment variables to use when processing and executing templates can be defined in the `env` map.
+Some data sources might need environment variables that are different from the environment variables in Stack configuration. Environment variables may be passed to data soruces when processing and executing templates by defining `env` map.
 It's supported in both the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) and in the 
 `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks).
 
