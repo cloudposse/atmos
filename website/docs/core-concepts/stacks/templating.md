@@ -61,21 +61,13 @@ templates:
   settings:
     # Enable `Go` templates in Atmos stack manifests
     enabled: true
-    # Number of steps/passes to process `Go` templates
-    # If not defined, `num_steps` is automatically set to `1`
-    num_steps: 2
-    # Optional steps configuration
-    steps:
-      1:
-        # Left delimiter for step #1
-        left_delimiter: "${"
-        # Right delimiter for step #1
-        right_delimiter: "}"
-      2:
-        # Left delimiter for step #2
-        left_delimiter: "{{"
-        # Right delimiter for step #2
-        right_delimiter: "}}"
+    # Number of evaluations/passes to process `Go` templates
+    # If not defined, `evaluations` is automatically set to `1`
+    evaluations: 2
+    # Optional template delimiters configuration
+    # The `{{ }}` delimiters are the default, no need to specify/redefine them
+    left_delimiter: "{{"
+    right_delimiter: "}}"
     # Environment variables to use when executing templates
     # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
     # https://docs.gomplate.ca/functions/aws/#configuring-aws
@@ -105,12 +97,6 @@ templates:
           headers:
             accept:
               - "application/json"
-        # This `random` datasource uses `Go` templates in the `url`
-        # and will be processed in two steps/passes:
-        # 1) process the template tokens using the delimiters `${ }` configured in step #1
-        # 2) execute the datasource itself using the delimiters `{{ }}` configured in step #2
-        random:
-          url: "http://www.randomnumberapi.com/api/v1.0/randomstring?min=${ .settings.random.min }&max=${ .settings.random.max }&count=1"
         # 'file' datasources
         # https://docs.gomplate.ca/datasources/#using-file-datasources
         config-1:
@@ -136,21 +122,15 @@ templates:
 
 - `templates.settings.env` - a map of environment variables to use when executing the templates
 
-- `templates.settings.num_steps` - number of steps/passes to process `Go` templates. If not defined, `num_steps` 
+- `templates.settings.evaluations` - number of evaluations/passes to process `Go` templates. If not defined, `evaluations` 
   is automatically set to `1`. For more details, refer to 
-  [Template Steps and Template Processing Pipelines](#template-steps-and-template-processing-pipelines)
+  [Template Evaluations and Template Processing Pipelines](#template-evaluations-and-template-processing-pipelines)
 
-- `templates.settings.steps` - a map of step configurations to process `Go` templates. The keys of the map are the step
-  numbers. The values of the map are objects with the following schema:
+- `templates.settings.left_delimiter` - the left delimiter to use to process the templates. If not defined, the default 
+  delimiter `{{` will be used
 
-  - `left_delimiter` - the left delimiter to use to process the templates in this step/pass. If not defined, the default
-    delimiter `{{` will be used
-  - `right_delimiter` - the right delimiter to use to process the templates in this step/pass. If not defined, the default
-    delimiter `}}` will be used
-
-  If `templates.settings.steps` are not configured, all steps/passes (defined by `templates.settings.num_steps`) will 
-  use the default delimiters `{{ }}`. For more details, refer to
-  [Template Steps and Template Processing Pipelines](#template-steps-and-template-processing-pipelines).
+- `templates.settings.right_delimiter` - the right delimiter to use to process the templates. If not defined, the default 
+  delimiter `}}` will be used
 
 - `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
   in Atmos stack manifests
@@ -229,8 +209,7 @@ except the following settings are not supported in the `settings.templates.setti
 - `settings.templates.settings.enabled`
 - `settings.templates.settings.sprig.enabled`
 - `settings.templates.settings.gomplate.enabled`
-- `settings.templates.settings.num_steps`
-- `settings.templates.settings.steps`
+- `settings.templates.settings.evaluations`
 
 These settings are not supported for the following reasons:
 
@@ -504,12 +483,6 @@ settings:
             headers:
               accept:
                 - "application/json"
-          # This `random` datasource uses `Go` templates in the `url`
-          # and will be processed in two steps/passes:
-          # 1) process the template tokens using the delimiters `${ }` configured in step #1
-          # 2) execute the datasource itself using the delimiters `{{ }}` configured in step #2
-          random:
-            url: "http://www.randomnumberapi.com/api/v1.0/randomstring?min=${ .settings.random.min }&max=${ .settings.random.max }&count=1"
           # 'file' datasources
           # https://docs.gomplate.ca/datasources/#using-file-datasources
           config-1:
@@ -780,10 +753,10 @@ components:
           terraform_workspace: plat-ue2-prod
 ```
 
-## Template Steps and Template Processing Pipelines
+## Template Evaluations and Template Processing Pipelines
 
-Atmos supports configuring the number of steps/passes for template processing in `atmos.yaml` [CLI config file](/cli/configuration).
-It effectively allows you to implicitly define template processing pipelines and workflows.
+Atmos supports configuring the number of evaluations/passes for template processing in `atmos.yaml` [CLI config file](/cli/configuration).
+It effectively allows you to define template processing pipelines.
 
 For example:
 
@@ -792,41 +765,17 @@ templates:
   settings:
     # Enable `Go` templates in Atmos stack manifests
     enabled: true
-    # Number of steps/passes to process `Go` templates
-    # If not defined, `num_steps` is automatically set to `1`
-    num_steps: 2
-    # Optional steps configuration
-    steps:
-      1:
-        # Left delimiter for step #1
-        left_delimiter: "${"
-        # Right delimiter for step #1
-        right_delimiter: "}"
-      2:
-        # Left delimiter for step #2
-        left_delimiter: "{{"
-        # Right delimiter for step #2
-        right_delimiter: "}}"
+    # Number of evaluations/passes to process `Go` templates
+    # If not defined, `evaluations` is automatically set to `1`
+    evaluations: 2
 ```
 
-- `templates.settings.num_steps` - number of steps/passes to process `Go` templates. If not defined, `num_steps`
+- `templates.settings.evaluations` - number of evaluations to process `Go` templates. If not defined, `evaluations`
   is automatically set to `1`
 
-- `templates.settings.steps` - a map of step configurations to process `Go` templates. The keys of the map are the step
-  numbers. The values of the map are objects with the following schema:
-
-  - `left_delimiter` - the left delimiter to use to process the templates in this step/pass. If not defined, the default
-    delimiter `{{` will be used
-  - `right_delimiter` - the right delimiter to use to process the templates in this step/pass. If not defined, the default
-    delimiter `}}` will be used
-
-If `templates.settings.steps` are not configured, all steps/passes (defined by `templates.settings.num_steps`) will
-use the default delimiters `{{ }}`.
-
-Template steps are useful in the following scenarios:
+Template evaluations are useful in the following scenarios:
 
 - Combining templates from different sections in Atmos stack manifests
-- Using templates inside templates with any level of nesting
 - Using templates in the URLs of `datasources`
 
 ### Combining templates from different sections in Atmos stack manifests
@@ -839,8 +788,8 @@ For example:
 templates:
   settings:
     enabled: true
-    # Number of steps/passes to process `Go` templates
-    num_steps: 3
+    # Number of evaluations to process `Go` templates
+    evaluations: 3
 ```
 
 ```yaml
@@ -858,85 +807,38 @@ components:
 ```
 
 When executing an Atmos command like `atmos terraform plan vpc -s <stack>`, the above template will be processed 
-in three steps, all using the default delimiters `{{ }}`:
+in three phases:
 
-- Step #1
+- Evaluation 1
 
   - `settings.test` is set to `vpc`
   - `settings.test2` is set to `{{ .atmos_component }}`
   - `vpc.vars.tags.tag1` is set to `{{ .atmos_component }}-{{ .settings.test }}`
   - `vpc.vars.tags.tag2` is set to `{{<backtick>{{ .atmos_component }}<backtick>}}`
 
-- Step #2
+- Evaluation 2
 
   - `settings.test` is `vpc`
   - `settings.test2` is set to `vpc`
   - `vpc.vars.tags.tag1` is set to `vpc-vpc`
   - `vpc.vars.tags.tag2` is set to `{{ .atmos_component }}`
 
-- Step #3
+- Evaluation 3
 
   - `settings.test` is `vpc`
   - `settings.test2` is `vpc`
   - `vpc.vars.tags.tag1` is `vpc-vpc`
   - `vpc.vars.tags.tag2` is set to `vpc`
 
-### Using templates inside templates with any level of nesting
-
-You can define more than one step of template processing and use templates inside templates with any level of nesting.
-Each step uses different delimiters.
-
-For example:
-
-```yaml title="atmos.yaml"
-templates:
-  settings:
-    enabled: true
-    # Number of steps/passes to process `Go` templates
-    num_steps: 2
-    steps:
-      1:
-        left_delimiter: "${"
-        right_delimiter: "}"
-      2:
-        left_delimiter: "{{"
-        right_delimiter: "}}"
-```
-
-```yaml
-settings:
-  test: "{{ .atmos_component }}"
-
-components:
-  terraform:
-    vpc:
-      vars:
-        tags:
-          tag1: "{{ ${ .settings.test } }}"
-```
-
-When executing an Atmos command like `atmos terraform plan vpc -s <stack>`, the above template will be processed
-in two steps, using different left and right delimiters defined for each step:
-
-- Step #1
-
-  - `settings.test` is set to `vpc`
-  - `vpc.vars.tags.tag1` is set to `{{ .atmos_component }}`. The internal template with the delimiters `${ }` is processed first
-
-- Step #2
-
-  - `settings.test` is `vpc`
-  - `vpc.vars.tags.tag1` is set to `vpc`. The external template with the delimiters `{{ }}` is processed second
-
 <br/>
 
 :::warning
 
-The above two examples show the supported functionality in Atmos templating.
+The above example show the supported functionality in Atmos templating.
 You can use it for some use-cases, but it does not mean that you **should** use it just for the sake of using, since
-it's not easy to read and understand the entire flow.
+it's not easy to read and understand what data we have after each evaluation step.
 
-The following use-case describes a practical approach to using steps and pipelines in Atmos templates to work 
+The following use-case describes a practical approach to using evaluation steps in Atmos templates to work 
 with `datasources`.
 
 :::
@@ -970,17 +872,8 @@ templates:
     enabled: true
     gomplate:
       enabled: true
-    # Number of steps/passes to process `Go` templates
-    num_steps: 2
-    steps:
-      1:
-        left_delimiter: "${"
-        right_delimiter: "}"
-      # Configuring step #2 is optional since Atmos uses the default delimiters `{{ }}` 
-      # if they are not defined in the step
-      2:
-        left_delimiter: "{{"
-        right_delimiter: "}}"
+    # Number of evaluations to process `Go` templates
+    evaluations: 2
 ```
 
 In an Atmos stack manifest, we define the environment variables in the `env` section 
@@ -1017,7 +910,7 @@ settings:
           s3-tags:
             # The `url` uses a `Go` template with the delimiters `${ }`,
             # which is processed as first step in the template processing pipeline
-            url: "s3://mybucket/${ .vars.stage }/tags.json"
+            url: "s3://mybucket/{{ .vars.stage }}/tags.json"
 
 # Global Terraform config
 terraform:
@@ -1028,9 +921,9 @@ terraform:
       atmos_stack: "{{ .atmos_stack }}"
       terraform_component: "{{ .component }}"
       terraform_workspace: "{{ .workspace }}"
-      devops_team: '{{ (datasource "s3-tags").tags.devops_team }}'
-      billing_team: '{{ (datasource "s3-tags").tags.billing_team }}'
-      service: '{{ (datasource "s3-tags").tags.service }}'
+      devops_team: '{{`{{ (datasource "s3-tags").tags.devops_team }}`}}'
+      billing_team: '{{`{{ (datasource "s3-tags").tags.billing_team }}`}}'
+      service: '{{`{{ (datasource "s3-tags").tags.service }}`}}'
 
 # Atmos component configurations
 components:
@@ -1050,17 +943,27 @@ components:
 ```
 
 When executing an Atmos command like `atmos terraform apply vpc/1 -s plat-ue2-dev`, the above template will be processed
-in two steps, using different left and right delimiters defined for each step:
+in two evaluation steps:
 
-- Step #1: `datasources.s3-tags.url` is set to `s3://mybucket/dev/tags.json`. The template with the delimiters 
-  `${ }` is processed first
+- Evaluation 1: 
 
-- Step #2: All `datasource "s3-tags"` datasources get executed, the JSON file `s3://mybucket/dev/tags.json` with the tags 
-  for the `dev` account is downloaded from the S3 bucket, and the tags are parsed and assigned in the `terraform.vars.tags` 
-  section 
+  - `datasources.s3-tags.url` is set to `s3://mybucket/dev/tags.json`
+  
+  - the tags that use the `datasource` templates are set to the following:
 
-After executing the two steps in the template processing pipeline, the resulting tags for the Atmos component `vpc/1` 
-in the stack `plat-ue2-dev` would look like this:
+    ```yaml
+    devops_team: '{{ (datasource "s3-tags").tags.devops_team }}'
+    billing_team: '{{ (datasource "s3-tags").tags.billing_team }}'
+    service: '{{ (datasource "s3-tags").tags.service }}'
+    ```
+
+- Evaluation 2: 
+    - all `s3-tags` datasources get executed, the JSON file `s3://mybucket/dev/tags.json` with the tags 
+      for the `dev` account is downloaded from the S3 bucket, and the tags are parsed and assigned in the 
+      `terraform.vars.tags` section 
+
+After executing the two evaluation steps in the template processing pipeline, the resulting tags for the Atmos 
+component `vpc/1` in the stack `plat-ue2-dev` would look like this:
 
 ```yaml
 atmos_component: vpc/1
