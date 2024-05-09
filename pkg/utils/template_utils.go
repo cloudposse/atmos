@@ -142,22 +142,20 @@ func ProcessTmplWithDatasources(
 		rightDelimiter := "}}"
 
 		if len(cliConfig.Templates.Settings.Delimiters) > 0 {
+			delimiterError := fmt.Errorf("invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
+				"'delimiters' must be an array with two string items: left and right delimiter\n"+
+				"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters)
+
 			if len(cliConfig.Templates.Settings.Delimiters) != 2 {
-				return "", fmt.Errorf("invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
-					"'delimiters' must be an array with two string items: left and right delimiter\n"+
-					"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters)
+				return "", delimiterError
 			}
 
 			if cliConfig.Templates.Settings.Delimiters[0] == "" {
-				return "", fmt.Errorf("invalid or empty left delimiter in the 'templates.settings.delimiters' config in 'atmos.yaml': %s\n"+
-					"'delimiters' must be an array with two string items: left and right delimiter\n"+
-					"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters[0])
+				return "", delimiterError
 			}
 
 			if cliConfig.Templates.Settings.Delimiters[1] == "" {
-				return "", fmt.Errorf("invalid or empty right delimiter in the 'templates.settings.delimiters' config in 'atmos.yaml': %s\n"+
-					"'delimiters' must be an array with two string items: left and right delimiter\n"+
-					"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters[1])
+				return "", delimiterError
 			}
 
 			leftDelimiter = cliConfig.Templates.Settings.Delimiters[0]
