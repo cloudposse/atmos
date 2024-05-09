@@ -834,7 +834,7 @@ in three phases:
 
 :::warning
 
-The above example show the supported functionality in Atmos templating.
+The above example shows the supported functionality in Atmos templating.
 You can use it for some use-cases, but it does not mean that you **should** use it just for the sake of using, since
 it's not easy to read and understand what data we have after each evaluation step.
 
