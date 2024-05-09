@@ -1033,7 +1033,7 @@ components:
   terraform:
     vpc/1:
       metadata:
-        component: vpc  # Point to the Terraform component
+        component: vpc  # Point to the Terraform component in `components/terraform/vpc` folder
         inherits:
           # Inherit from the `vpc/defaults` base Atmos component, which defines the default 
           # configuration for all VPCs in the infrastructure.
