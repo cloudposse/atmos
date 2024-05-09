@@ -1007,6 +1007,8 @@ settings:
         timeout: 5
         # https://docs.gomplate.ca/datasources
         datasources:
+          # `s3` datasource
+          # https://docs.gomplate.ca/datasources/#using-s3-datasources
           s3-tags:
             # The `url` uses a `Go` template with the delimiters `${ }`,
             # which is processed as first step in the template processing pipeline
