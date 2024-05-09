@@ -89,11 +89,11 @@ func ProcessTmplWithDatasources(
 	// Add Gomplate and Sprig functions and datasources
 	funcs := make(map[string]any)
 
-	// Number of processing steps/passes
-	numSteps, _ := lo.Coalesce(cliConfig.Templates.Settings.NumSteps, 1)
+	// Number of processing evaluations/passes
+	evaluations, _ := lo.Coalesce(cliConfig.Templates.Settings.Evaluations, 1)
 	result := tmplValue
 
-	for i := 0; i < numSteps; i++ {
+	for i := 0; i < evaluations; i++ {
 		// Gomplate functions and datasources
 		if cliConfig.Templates.Settings.Gomplate.Enabled {
 			// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
@@ -136,6 +136,11 @@ func ProcessTmplWithDatasources(
 		// Process the template
 		t := template.New(tmplName).Funcs(funcs)
 
+		leftDelimiter, _ := lo.Coalesce(cliConfig.Templates.Settings.LeftDelimiter, "{{")
+		rightDelimiter, _ := lo.Coalesce(cliConfig.Templates.Settings.RightDelimiter, "}}")
+
+		t.Delims(leftDelimiter, rightDelimiter)
+
 		// Control the behavior during execution if a map is indexed with a key that is not present in the map
 		// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
 		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
@@ -149,17 +154,8 @@ func ProcessTmplWithDatasources(
 
 		t.Option(option)
 
-		// Default delimiters
-		leftDelimiter := "{{"
-		rightDelimiter := "}}"
-
-		// Check if the processing steps override the default delimiters
-		if step, ok := cliConfig.Templates.Settings.Steps[i+1]; ok {
-			leftDelimiter, _ = lo.Coalesce(step.LeftDelimiter, leftDelimiter)
-			rightDelimiter, _ = lo.Coalesce(step.RightDelimiter, rightDelimiter)
-		}
-
-		t, err = t.Delims(leftDelimiter, rightDelimiter).Parse(result)
+		// Parse the template
+		t, err = t.Parse(result)
 		if err != nil {
 			return "", err
 		}
