@@ -1042,7 +1042,7 @@ components:
           # This inheritance makes the `vpc/1` Atmos component config DRY.
           - "vpc/defaults"
       vars:
-        name: "vpc/1"
+        name: "vpc-1"
 ```
 
 When executing an Atmos command like `atmos terraform apply vpc/1 -s plat-ue2-dev`, the above template will be processed
