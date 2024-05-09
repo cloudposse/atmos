@@ -881,16 +881,6 @@ in three steps, all using the default delimiters `{{ }}`:
   - `vpc.vars.tags.tag1` is `vpc-vpc`
   - `vpc.vars.tags.tag2` is set to `vpc`
 
-<br/>
-
-:::warning
-The above example just shows the supported functionality in Atmos templating.
-You can use it for some use-cases, but it does not mean that you should use it just for the sake of using, since 
-it's not easy to read and understand the entire flow.
-:::
-
-<br/>
-
 ### Using templates inside templates with any level of nesting
 
 You can define more than one step of template processing and use templates inside templates with any level of nesting.
@@ -938,4 +928,131 @@ in two steps, using different left and right delimiters defined for each step:
   - `settings.test` is `vpc`
   - `vpc.vars.tags.tag1` is set to `vpc`. The external template with the delimiters `{{ }}` is processed second
 
+<br/>
+
+:::warning
+
+The above two examples show the supported functionality in Atmos templating.
+You can use it for some use-cases, but it does not mean that you **should** use it just for the sake of using, since
+it's not easy to read and understand the entire flow.
+
+The following use-case describes a practical approach to using steps and pipelines in Atmos templates to work 
+with `datasources`.
+
+:::
+
 ### Using templates in the URLs of `datasources`
+
+Let's suppose that your company uses a centralized software catalog to consolidate all tags for tagging all the cloud
+resources. The tags can include tags per account, per team, per service, billing tags, etc.
+
+:::note
+An example of such a centralized software catalog could be https://backstage.io
+:::
+
+<br/>
+
+Let's also suppose that you have a service to read the tags from the centralized catalog and write them into an S3
+bucket in one of your accounts. The bucket serves as a cache to not hit the external system's API with too many requests 
+and not to trigger rate limiting.
+
+And finally, let's say that in the bucket, you have folders per account (`dev`, `prod`, `staging`). Each folder has a JSON
+file with all the tags defined for all the cloud resources in the accounts.
+
+We can then use the [Gomplate S3 datasource](https://docs.gomplate.ca/datasources/#using-s3-datasources) to read the JSON
+file with the tags for each account and assign the tags to all cloud resources.
+
+In `atmos.yaml`, we can figure 2 steps of template processing pipeline, each step using different delimiters:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    enabled: true
+    gomplate:
+      enabled: true
+    # Number of steps/passes to process `Go` templates
+    num_steps: 2
+    steps:
+      1:
+        left_delimiter: "${"
+        right_delimiter: "}"
+      # Configuring step #2 is optional since Atmos uses the default delimiters `{{ }}` 
+      # if they are not defined in the step
+      2:
+        left_delimiter: "{{"
+        right_delimiter: "}}"
+```
+
+In an Atmos stack manifest, we define the environment variables in the `env` section 
+(AWS profile with permissions to access the S3 bucket), and the `s3-tags` Gomplate datasource.
+
+The `url` of the `s3-tags` datasource uses a `Go` template with the delimiters `${ }`, which is processed as the first 
+step in the template processing pipeline.
+
+And finally, in the `terraform.vars.tags` section, we define all the tags that are returned from the call to the 
+S3 datasource.
+
+```yaml title="_defaults.yaml"
+settings:
+  templates:
+    settings:
+      # Environment variables to use when executing templates
+      # https://docs.gomplate.ca/functions/aws/#configuring-aws
+      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      env:
+        # AWS profile with permissions to access the S3 bucket
+        AWS_PROFILE: "<AWS profile>"
+      gomplate:
+        # Timeout in seconds to execute the datasources
+        timeout: 5
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          s3-tags:
+            # The `url` uses a `Go` template with the delimiters `${ }`,
+            # which is processed as first step in the template processing pipeline
+            url: "s3://mybucket/${ .vars.stage }/tags.json"
+
+terraform:
+  vars:
+    tags:
+      atmos_component: "{{ .atmos_component }}"
+      atmos_stack: "{{ .atmos_stack }}"
+      terraform_component: "{{ .component }}"
+      terraform_workspace: "{{ .workspace }}"
+      devops_team: '{{ (datasource "s3-tags").tags.devops_team }}'
+      billing_team: '{{ (datasource "s3-tags").tags.billing_team }}'
+      service: '{{ (datasource "s3-tags").tags.service }}'
+
+components:
+  terraform:
+    vpc/1:
+      metadata:
+        component: vpc  # Point to the Terraform component
+      vars:
+        name: "vpc/1"
+```
+
+When executing an Atmos command like `atmos terraform apply vpc/1 -s plat-ue2-dev`, the above template will be processed
+in two steps, using different left and right delimiters defined for each step:
+
+- Step #1: `datasources.s3-tags.url` is set to `s3://mybucket/dev/tags.json`. The template with the delimiters 
+  `${ }` is processed first
+
+- Step #2: All `datasource "s3-tags"` datasources get executed, the JSON file `s3://mybucket/dev/tags.json` with the tags 
+  for the `dev` account is downloaded from the S3 bucket, and the tags are parsed and assigned in the `terraform.vars.tags` 
+  section 
+
+After executing the two steps in the template processing pipeline, the resulting tags for the Atmos component `vpc/1` 
+in the stack `plat-ue2-dev` would look like this:
+
+```yaml
+atmos_component: vpc/1
+atmos_stack: plat-ue2-dev
+terraform_component: vpc
+terraform_workspace: plat-ue2-dev
+devops_team: dev_networking
+billing_team: billing_net
+service: net
+```
+
+The tags will be added to all the AWS resources provisioned by the `vpc` Terraform component in the `plat-ue2-dev` stack.
