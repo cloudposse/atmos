@@ -310,6 +310,7 @@ You can use `Go` templates in the following Atmos sections to refer to values in
   - `overrides`
   - `backend`
   - `backend_type`
+  - `component`
 
 <br/>
 

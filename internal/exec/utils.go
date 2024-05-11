@@ -599,6 +599,10 @@ func ProcessStacks(
 		configAndStacksInfo.ComponentBackendType = i
 	}
 
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
+		configAndStacksInfo.Component = i
+	}
+
 	// Process the ENV variables from the `env` section
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 

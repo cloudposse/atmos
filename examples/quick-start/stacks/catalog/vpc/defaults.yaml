@@ -3,8 +3,9 @@ components:
     vpc:
       metadata:
         # Point to the Terraform component
-        component: vpc
+        component: "{{ .settings.component }}"
       settings:
+        component: vpc
         # Validation
         # Supports JSON Schema and OPA policies
         # All validation steps must succeed to allow the component to be provisioned

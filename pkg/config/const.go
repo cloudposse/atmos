@@ -48,6 +48,7 @@ const (
 	BackendSectionName     = "backend"
 	BackendTypeSectionName = "backend_type"
 	MetadataSectionName    = "metadata"
+	ComponentSectionName   = "component"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
