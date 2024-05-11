@@ -848,7 +848,7 @@ func ProcessStackConfig(
 				var baseComponents []string
 
 				// Inheritance using the top-level `component` attribute
-				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
+				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
 					baseComponentName, ok = baseComponent.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.component' attribute in the file '%s'", component, stackName)
@@ -893,7 +893,7 @@ func ProcessStackConfig(
 				// will deep-merge all the base components of `componentA` (each component overriding its base),
 				// then all the base components of `componentB` (each component overriding its base),
 				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
-				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"]; baseComponentFromMetadataExist {
+				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
 					baseComponentName, ok = baseComponentFromMetadata.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.metadata.component' attribute in the file '%s'", component, stackName)
@@ -1162,7 +1162,7 @@ func ProcessStackConfig(
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
 
 				if baseComponentName != "" {
-					comp["component"] = baseComponentName
+					comp[cfg.ComponentSectionName] = baseComponentName
 				}
 
 				terraformComponents[component] = comp
@@ -1277,7 +1277,7 @@ func ProcessStackConfig(
 				var baseComponents []string
 
 				// Inheritance using the top-level `component` attribute
-				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
+				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
 					baseComponentName, ok = baseComponent.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.component' attribute in the file '%s'", component, stackName)
@@ -1317,7 +1317,7 @@ func ProcessStackConfig(
 				// will deep-merge all the base components of `componentA` (each component overriding its base),
 				// then all the base components of `componentB` (each component overriding its base),
 				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
-				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"]; baseComponentFromMetadataExist {
+				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
 					baseComponentName, ok = baseComponentFromMetadata.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.metadata.component' attribute in the file '%s'", component, stackName)
@@ -1428,7 +1428,7 @@ func ProcessStackConfig(
 				comp[cfg.OverridesSectionName] = componentOverrides
 
 				if baseComponentName != "" {
-					comp["component"] = baseComponentName
+					comp[cfg.ComponentSectionName] = baseComponentName
 				}
 
 				helmfileComponents[component] = comp

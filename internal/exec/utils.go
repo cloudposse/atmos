@@ -480,8 +480,8 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
-	if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
-		configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
+	if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+		configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = configAndStacksInfo.ComponentFromArg
 	}
 
 	// Spacelift stack
