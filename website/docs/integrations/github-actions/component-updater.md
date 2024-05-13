@@ -107,11 +107,11 @@ Enabling these action settings at an Organization level will enable the same set
 You may notice that we pass a generated token from a GitHub App to `github-access-token` instead of using the native `GITHUB_TOKEN`. We do this because Pull Requests will only trigger other GitHub Action Workflows if the Pull Request is created by a GitHub App or PAT. For reference, see [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
 
 1. Create a new GitHub App
-2. Name this new app whatever you prefer. For example, `Atmos Component Updater - <YOUR NAMESPACE>`.
+2. Name this new app whatever you prefer. For example, `Atmos Component Updater [<YOUR NAMESPACE>]`.
 
 :::tip GitHub Requires Unique App Names
 
-GitHub requires all GitHub Apps to have unique names. The name you select for this GitHub App can be whatever you'd prefer. For example, an `acme` organization might name their GitHub App `Atmos Component Updater - acme`.
+GitHub requires all GitHub Apps to have unique names. The name you select for this GitHub App can be whatever you'd prefer. For example, an `acme` organization might name their GitHub App `Atmos Component Updater [ACME]`.
 
 :::
 
