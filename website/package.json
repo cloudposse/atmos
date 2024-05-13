@@ -15,14 +15,14 @@
     "build:site": "npm run build"
   },
   "dependencies": {
-    "@docusaurus/core": "^3.2.1",
-    "@docusaurus/plugin-client-redirects": "^3.2.1",
-    "@docusaurus/preset-classic": "^3.2.1",
-    "@docusaurus/theme-mermaid": "^3.2.1",
-    "@docusaurus/plugin-google-tag-manager": "^3.2.1",
+    "@docusaurus/core": "^3.3.2",
+    "@docusaurus/plugin-client-redirects": "^3.3.2",
+    "@docusaurus/preset-classic": "^3.3.2",
+    "@docusaurus/theme-mermaid": "^3.3.2",
+    "@docusaurus/plugin-google-tag-manager": "^3.3.2",
     "@grnet/docusaurus-terminology": "^2.0.0-rc.1",
     "@mdx-js/react": "^3.0.1",
-    "clsx": "^2.1.0",
+    "clsx": "^2.1.1",
     "custom-loaders": "file:plugins/custom-loaders",
     "docusaurus-plugin-image-zoom": "^2.0.0",
     "html-loader": "^5.0.0",
@@ -38,7 +38,7 @@
     "unified": "^11.0.4"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.2.1"
+    "@docusaurus/module-type-aliases": "^3.3.2"
   },
   "browserslist": {
     "production": [
