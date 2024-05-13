@@ -138,7 +138,7 @@ GitHub requires all GitHub Apps to have unique names. The name you select for th
 :::tip Private Key Token Value
 
 The private key token should start and end with `-----BEGIN RSA PRIVATE KEY-----` and `-----END RSA PRIVATE KEY-----` respectively, and include everything in between.
-When you click "Generate Private Key", you should automatically downloaded a `.pem` file. This file's content is the token value.
+When you click "Generate Private Key", a `.pem` file is automatically downloaded. This file's content is the token value.
 
 :::
 
