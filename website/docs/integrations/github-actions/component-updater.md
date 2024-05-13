@@ -107,7 +107,14 @@ Enabling these action settings at an Organization level will enable the same set
 You may notice that we pass a generated token from a GitHub App to `github-access-token` instead of using the native `GITHUB_TOKEN`. We do this because Pull Requests will only trigger other GitHub Action Workflows if the Pull Request is created by a GitHub App or PAT. For reference, see [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
 
 1. Create a new GitHub App
-2. Name this new app whatever you prefer. For example, `Atmos Component Updater`.
+2. Name this new app whatever you prefer. For example, `Atmos Component Updater [<YOUR NAMESPACE>]`.
+
+:::tip GitHub Requires Unique App Names
+
+GitHub requires all GitHub Apps to have unique names. The name you select for this GitHub App can be whatever you'd prefer. For example, an `acme` organization might name their GitHub App `Atmos Component Updater [ACME]`.
+
+:::
+
 3. List a Homepage URL of your choosing. This is required by GitHub, but you can use any URL. For example use our documentation page: `https://atmos.tools/integrations/github-actions/component-updater/`
 4. (Optional) Add an icon for your new app (See below)
 
@@ -127,6 +134,14 @@ You may notice that we pass a generated token from a GitHub App to `github-acces
 ```
 
 6. Generate a new private key [following the GitHub documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps#generating-private-keys).
+
+:::tip Private Key Token Value
+
+The private key token should start and end with `-----BEGIN RSA PRIVATE KEY-----` and `-----END RSA PRIVATE KEY-----` respectively, and include everything in between.
+When you click "Generate Private Key", a `.pem` file is automatically downloaded. This file's content is the token value.
+
+:::
+
 7. Finally, save both the App ID and the new private key as secrets for GitHub Actions with `ATMOS_APP_ID` and `ATMOS_PRIVATE_KEY` respectively. Note, if using GitHub Enterprise, we recommend using "GitHub Environments" to scope the Secrets to protected branches. If that's not available, use repository-scoped GitHub Secrets instead.
 
 :::tip App ID
