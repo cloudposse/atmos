@@ -77,7 +77,7 @@ func ProcessComponentMetadata(
 		}
 		// Find base component in the `metadata.component` attribute
 		// `metadata.component` overrides `component`
-		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata["component"].(string); componentMetadataComponentExists {
+		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata[cfg.ComponentSectionName].(string); componentMetadataComponentExists {
 			baseComponentName = componentMetadataComponent
 		}
 	}
@@ -155,7 +155,7 @@ func BuildComponentPath(
 
 	var componentPath string
 
-	if stackComponentSection, ok := componentSectionMap["component"].(string); ok {
+	if stackComponentSection, ok := componentSectionMap[cfg.ComponentSectionName].(string); ok {
 		if componentType == "terraform" {
 			componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
 		} else if componentType == "helmfile" {

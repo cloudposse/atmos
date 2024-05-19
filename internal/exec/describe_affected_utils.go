@@ -805,7 +805,7 @@ func findAffected(
 							}
 
 							// Check the Helmfile configuration of the component
-							if component, ok := componentSection["component"].(string); ok && component != "" {
+							if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
 								// Check if any files in the component's folder have changed
 								changed, err := isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles)
 								if err != nil {
