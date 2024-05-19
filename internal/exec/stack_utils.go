@@ -64,7 +64,7 @@ func ProcessComponentMetadata(
 	var componentMetadata map[any]any
 
 	// Find base component in the `component` attribute
-	if base, ok := componentSection["component"].(string); ok {
+	if base, ok := componentSection[cfg.ComponentSectionName].(string); ok {
 		baseComponentName = base
 	}
 
