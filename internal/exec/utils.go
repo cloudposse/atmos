@@ -467,6 +467,15 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["deps"] = componentDeps
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
+	// Terraform workspace
+	workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	configAndStacksInfo.TerraformWorkspace = workspace
+	configAndStacksInfo.ComponentSection["workspace"] = workspace
+
 	// Process `Go` templates in Atmos manifest sections
 	componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
 	if err != nil {
@@ -537,15 +546,6 @@ func ProcessStacks(
 		configAndStacksInfo.Component = i
 	}
 
-	// Terraform workspace
-	workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	configAndStacksInfo.TerraformWorkspace = workspace
-	configAndStacksInfo.ComponentSection["workspace"] = workspace
-
 	// Spacelift stack
 	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
 	if err != nil {
@@ -571,6 +571,10 @@ func ProcessStacks(
 
 	// Process the ENV variables from the `env` section
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
+
+	// Process component metadata
+	_, baseComponentName, _ := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
+	configAndStacksInfo.BaseComponentPath = baseComponentName
 
 	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""
