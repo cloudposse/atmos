@@ -111,7 +111,7 @@ func ProcessComponentConfig(
 	if componentImportsSection, ok = stackSection["imports"].([]string); !ok {
 		componentImportsSection = nil
 	}
-	if command, ok = componentSection["command"].(string); !ok {
+	if command, ok = componentSection[cfg.CommandSectionName].(string); !ok {
 		command = ""
 	}
 	if componentEnvSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
@@ -565,9 +565,9 @@ func ProcessStacks(
 	}
 
 	// Process `command`
-	if len(configAndStacksInfo.Command) == 0 {
-		configAndStacksInfo.Command = configAndStacksInfo.ComponentType
-	}
+	//if len(configAndStacksInfo.Command) == 0 {
+	//	configAndStacksInfo.Command = configAndStacksInfo.ComponentType
+	//}
 
 	// Process the ENV variables from the `env` section
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)

@@ -97,6 +97,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		// Process and validate the stack manifest
 		componentStackMap := map[string]map[string][]string{}
 		_, err = s.ProcessStackConfig(
+			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
 			cliConfig.TerraformDirAbsolutePath,
 			cliConfig.HelmfileDirAbsolutePath,
