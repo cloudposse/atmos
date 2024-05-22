@@ -98,6 +98,7 @@ func ProcessYAMLConfigFiles(
 			componentStackMap := map[string]map[string][]string{}
 
 			finalConfig, err := ProcessStackConfig(
+				cliConfig,
 				stackBasePath,
 				terraformComponentsBasePath,
 				helmfileComponentsBasePath,
@@ -462,6 +463,7 @@ func ProcessYAMLConfigFile(
 // ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends,
 // and returns the final stack configuration for all Terraform and helmfile components
 func ProcessStackConfig(
+	cliConfig schema.CliConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
@@ -548,7 +550,7 @@ func ProcessStackConfig(
 	}
 
 	// Terraform section
-	if i, ok := globalTerraformSection["command"]; ok {
+	if i, ok := globalTerraformSection[cfg.CommandSectionName]; ok {
 		terraformCommand, ok = i.(string)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.command' section in the file '%s'", stackName)
@@ -635,7 +637,7 @@ func ProcessStackConfig(
 	}
 
 	// Helmfile section
-	if i, ok := globalHelmfileSection["command"]; ok {
+	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'helmfile.command' section in the file '%s'", stackName)
@@ -781,7 +783,7 @@ func ProcessStackConfig(
 				}
 
 				componentTerraformCommand := ""
-				if i, ok := componentMap["command"]; ok {
+				if i, ok := componentMap[cfg.CommandSectionName]; ok {
 					componentTerraformCommand, ok = i.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.command' attribute in the file '%s'", component, stackName)
@@ -819,7 +821,7 @@ func ProcessStackConfig(
 						}
 					}
 
-					if i, ok = componentOverrides["command"]; ok {
+					if i, ok = componentOverrides[cfg.CommandSectionName]; ok {
 						if componentOverridesTerraformCommand, ok = i.(string); !ok {
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.command' in the manifest '%s'", component, stackName)
 						}
@@ -848,7 +850,7 @@ func ProcessStackConfig(
 				var baseComponents []string
 
 				// Inheritance using the top-level `component` attribute
-				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
+				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
 					baseComponentName, ok = baseComponent.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.component' attribute in the file '%s'", component, stackName)
@@ -893,7 +895,7 @@ func ProcessStackConfig(
 				// will deep-merge all the base components of `componentA` (each component overriding its base),
 				// then all the base components of `componentB` (each component overriding its base),
 				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
-				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"]; baseComponentFromMetadataExist {
+				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
 					baseComponentName, ok = baseComponentFromMetadata.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.metadata.component' attribute in the file '%s'", component, stackName)
@@ -1111,17 +1113,26 @@ func ProcessStackConfig(
 				}
 
 				// Final binary to execute
+				// Check for the binary in the following order:
+				// - `components.terraform.command` section in `atmos.yaml` CLI config file
+				// - global `terraform.command` section
+				// - base component(s) `command` section
+				// - component `command` section
+				// - `overrides.command` section
 				finalComponentTerraformCommand := "terraform"
-				if len(terraformCommand) > 0 {
+				if cliConfig.Components.Terraform.Command != "" {
+					finalComponentTerraformCommand = cliConfig.Components.Terraform.Command
+				}
+				if terraformCommand != "" {
 					finalComponentTerraformCommand = terraformCommand
 				}
-				if len(baseComponentTerraformCommand) > 0 {
+				if baseComponentTerraformCommand != "" {
 					finalComponentTerraformCommand = baseComponentTerraformCommand
 				}
-				if len(componentTerraformCommand) > 0 {
+				if componentTerraformCommand != "" {
 					finalComponentTerraformCommand = componentTerraformCommand
 				}
-				if len(componentOverridesTerraformCommand) > 0 {
+				if componentOverridesTerraformCommand != "" {
 					finalComponentTerraformCommand = componentOverridesTerraformCommand
 				}
 
@@ -1155,14 +1166,14 @@ func ProcessStackConfig(
 				comp[cfg.BackendSectionName] = finalComponentBackend
 				comp["remote_state_backend_type"] = finalComponentRemoteStateBackendType
 				comp["remote_state_backend"] = finalComponentRemoteStateBackend
-				comp["command"] = finalComponentTerraformCommand
+				comp[cfg.CommandSectionName] = finalComponentTerraformCommand
 				comp["inheritance"] = componentInheritanceChain
 				comp[cfg.MetadataSectionName] = componentMetadata
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
 
 				if baseComponentName != "" {
-					comp["component"] = baseComponentName
+					comp[cfg.ComponentSectionName] = baseComponentName
 				}
 
 				terraformComponents[component] = comp
@@ -1222,7 +1233,7 @@ func ProcessStackConfig(
 				}
 
 				componentHelmfileCommand := ""
-				if i, ok := componentMap["command"]; ok {
+				if i, ok := componentMap[cfg.CommandSectionName]; ok {
 					componentHelmfileCommand, ok = i.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.command' attribute in the file '%s'", component, stackName)
@@ -1259,7 +1270,7 @@ func ProcessStackConfig(
 						}
 					}
 
-					if i, ok = componentOverrides["command"]; ok {
+					if i, ok = componentOverrides[cfg.CommandSectionName]; ok {
 						if componentOverridesHelmfileCommand, ok = i.(string); !ok {
 							return nil, fmt.Errorf("invalid 'components.helmfile.%s.overrides.command' in the manifest '%s'", component, stackName)
 						}
@@ -1277,7 +1288,7 @@ func ProcessStackConfig(
 				var baseComponents []string
 
 				// Inheritance using the top-level `component` attribute
-				if baseComponent, baseComponentExist := componentMap["component"]; baseComponentExist {
+				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
 					baseComponentName, ok = baseComponent.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.component' attribute in the file '%s'", component, stackName)
@@ -1317,7 +1328,7 @@ func ProcessStackConfig(
 				// will deep-merge all the base components of `componentA` (each component overriding its base),
 				// then all the base components of `componentB` (each component overriding its base),
 				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
-				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata["component"]; baseComponentFromMetadataExist {
+				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
 					baseComponentName, ok = baseComponentFromMetadata.(string)
 					if !ok {
 						return nil, fmt.Errorf("invalid 'components.helmfile.%s.metadata.component' attribute in the file '%s'", component, stackName)
@@ -1404,17 +1415,26 @@ func ProcessStackConfig(
 				}
 
 				// Final binary to execute
+				// Check for the binary in the following order:
+				// - `components.helmfile.command` section in `atmos.yaml` CLI config file
+				// - global `helmfile.command` section
+				// - base component(s) `command` section
+				// - component `command` section
+				// - `overrides.command` section
 				finalComponentHelmfileCommand := "helmfile"
-				if len(helmfileCommand) > 0 {
+				if cliConfig.Components.Helmfile.Command != "" {
+					finalComponentHelmfileCommand = cliConfig.Components.Helmfile.Command
+				}
+				if helmfileCommand != "" {
 					finalComponentHelmfileCommand = helmfileCommand
 				}
-				if len(baseComponentHelmfileCommand) > 0 {
+				if baseComponentHelmfileCommand != "" {
 					finalComponentHelmfileCommand = baseComponentHelmfileCommand
 				}
-				if len(componentHelmfileCommand) > 0 {
+				if componentHelmfileCommand != "" {
 					finalComponentHelmfileCommand = componentHelmfileCommand
 				}
-				if len(componentOverridesHelmfileCommand) > 0 {
+				if componentOverridesHelmfileCommand != "" {
 					finalComponentHelmfileCommand = componentOverridesHelmfileCommand
 				}
 
@@ -1422,13 +1442,13 @@ func ProcessStackConfig(
 				comp[cfg.VarsSectionName] = finalComponentVars
 				comp[cfg.SettingsSectionName] = finalComponentSettings
 				comp[cfg.EnvSectionName] = finalComponentEnv
-				comp["command"] = finalComponentHelmfileCommand
+				comp[cfg.CommandSectionName] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
 				comp[cfg.MetadataSectionName] = componentMetadata
 				comp[cfg.OverridesSectionName] = componentOverrides
 
 				if baseComponentName != "" {
-					comp["component"] = baseComponentName
+					comp[cfg.ComponentSectionName] = baseComponentName
 				}
 
 				helmfileComponents[component] = comp

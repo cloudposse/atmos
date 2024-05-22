@@ -135,8 +135,8 @@ func ExecuteDescribeStacks(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
-						if comp, ok := componentSection["component"].(string); !ok || comp == "" {
-							componentSection["component"] = componentName
+						if comp, ok := componentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Find all derived components of the provided components and include them in the output
@@ -200,8 +200,8 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
-							configAndStacksInfo.ComponentSection["component"] = componentName
+						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Stack name
@@ -309,8 +309,8 @@ func ExecuteDescribeStacks(
 							return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
-						if comp, ok := componentSection["component"].(string); !ok || comp == "" {
-							componentSection["component"] = componentName
+						if comp, ok := componentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Find all derived components of the provided components and include them in the output
@@ -374,8 +374,8 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
-							configAndStacksInfo.ComponentSection["component"] = componentName
+						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Stack name

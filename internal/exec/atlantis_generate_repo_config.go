@@ -308,7 +308,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				// If 'component' attribute is present, it's the terraform component
 				// Otherwise, the Atmos component name is the terraform component (by default)
 				terraformComponent := componentName
-				if componentAttribute, ok := componentSection["component"].(string); ok {
+				if componentAttribute, ok := componentSection[cfg.ComponentSectionName].(string); ok {
 					terraformComponent = componentAttribute
 				}
 

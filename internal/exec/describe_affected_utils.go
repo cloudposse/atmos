@@ -572,7 +572,7 @@ func findAffected(
 							}
 
 							// Check the Terraform configuration of the component
-							if component, ok := componentSection["component"].(string); ok && component != "" {
+							if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
 								// Check if the component uses some external modules (on the local filesystem) that have changed
 								changed, err := areTerraformComponentModulesChanged(component, cliConfig, changedFiles)
 								if err != nil {
@@ -805,7 +805,7 @@ func findAffected(
 							}
 
 							// Check the Helmfile configuration of the component
-							if component, ok := componentSection["component"].(string); ok && component != "" {
+							if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
 								// Check if any files in the component's folder have changed
 								changed, err := isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles)
 								if err != nil {

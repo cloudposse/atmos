@@ -11,7 +11,9 @@ const (
 	// https://github.com/roboll/helmfile#cli-reference
 	GlobalOptionsFlag = "--global-options"
 
+	TerraformCommandFlag        = "--terraform-command"
 	TerraformDirFlag            = "--terraform-dir"
+	HelmfileCommandFlag         = "--helmfile-command"
 	HelmfileDirFlag             = "--helmfile-dir"
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
@@ -48,6 +50,8 @@ const (
 	BackendSectionName     = "backend"
 	BackendTypeSectionName = "backend_type"
 	MetadataSectionName    = "metadata"
+	ComponentSectionName   = "component"
+	CommandSectionName     = "command"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"

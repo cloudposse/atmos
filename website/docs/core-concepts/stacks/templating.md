@@ -305,11 +305,12 @@ You can use `Go` templates in the following Atmos sections to refer to values in
   - `vars`
   - `settings`
   - `env`
-  - `metadata`
   - `providers`
   - `overrides`
   - `backend`
   - `backend_type`
+  - `component`
+  - `metadata.component`
 
 <br/>
 

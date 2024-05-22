@@ -21,6 +21,7 @@ terraform:
       atmos_stack: "{{ .atmos_stack }}"
       atmos_manifest: "{{ .atmos_stack_file }}"
       terraform_workspace: "{{ .workspace }}"
+      terraform_component: "{{ .component }}"
       # Examples of using the Sprig and Gomplate functions
       # https://masterminds.github.io/sprig/os.html
       provisioned_by_user: '{{ env "USER" }}'

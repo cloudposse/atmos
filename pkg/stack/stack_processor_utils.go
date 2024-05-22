@@ -285,6 +285,7 @@ func CreateComponentStackMap(
 				}
 
 				finalConfig, err := ProcessStackConfig(
+					cliConfig,
 					stacksBasePath,
 					terraformComponentsBasePath,
 					helmfileComponentsBasePath,
@@ -533,7 +534,7 @@ func ProcessBaseComponentConfig(
 		}
 
 		// Base component `command`
-		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
+		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap[cfg.CommandSectionName]; baseComponentCommandSectionExist {
 			baseComponentCommand, ok = baseComponentCommandSection.(string)
 			if !ok {
 				return fmt.Errorf("invalid '%s.command' section in the stack '%s'", baseComponent, stack)
@@ -627,7 +628,7 @@ func FindComponentsDerivedFromBaseComponents(
 			return nil, fmt.Errorf("invalid '%s' component section in the file '%s'", component, stack)
 		}
 
-		if base, baseComponentExist := componentSection["component"]; baseComponentExist {
+		if base, baseComponentExist := componentSection[cfg.ComponentSectionName]; baseComponentExist {
 			baseComponent, ok := base.(string)
 			if !ok {
 				return nil, fmt.Errorf("invalid 'component' attribute in the component '%s' in the file '%s'", component, stack)
