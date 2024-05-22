@@ -19,7 +19,7 @@ base_path: "./examples/quick-start"
 
 components:
   terraform:
-    # Optional `command` specifies the binary to execute
+    # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
     # If not defined, `terraform` is used
     # Examples:
     # command: terraform

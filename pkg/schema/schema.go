@@ -113,7 +113,9 @@ type ArgsAndFlagsInfo struct {
 	SubCommand2             string
 	ComponentFromArg        string
 	GlobalOptions           []string
+	TerraformCommand        string
 	TerraformDir            string
+	HelmfileCommand         string
 	HelmfileDir             string
 	ConfigDir               string
 	StacksDir               string
@@ -163,7 +165,9 @@ type ConfigAndStacksInfo struct {
 	AdditionalArgsAndFlags        []string
 	GlobalOptions                 []string
 	BasePath                      string
+	TerraformCommand              string
 	TerraformDir                  string
+	HelmfileCommand               string
 	HelmfileDir                   string
 	ConfigDir                     string
 	StacksDir                     string

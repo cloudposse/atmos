@@ -26,7 +26,9 @@ var (
 		cfg.DryRunFlag,
 		cfg.SkipInitFlag,
 		cfg.KubeConfigConfigFlag,
+		cfg.TerraformCommandFlag,
 		cfg.TerraformDirFlag,
+		cfg.HelmfileCommandFlag,
 		cfg.HelmfileDirFlag,
 		cfg.CliConfigDirFlag,
 		cfg.StackDirFlag,
@@ -192,7 +194,9 @@ func processCommandLineArgs(
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
 	configAndStacksInfo.BasePath = argsAndFlagsInfo.BasePath
+	configAndStacksInfo.TerraformCommand = argsAndFlagsInfo.TerraformCommand
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
+	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
@@ -632,6 +636,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			globalOptionsFlagIndex = i
 		}
 
+		if arg == cfg.TerraformCommandFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.TerraformCommand = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.TerraformCommandFlag) {
+			var terraformCommandFlagParts = strings.Split(arg, "=")
+			if len(terraformCommandFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.TerraformCommand = terraformCommandFlagParts[1]
+		}
+
 		if arg == cfg.TerraformDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -643,6 +660,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.TerraformDir = terraformDirFlagParts[1]
+		}
+
+		if arg == cfg.HelmfileCommandFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.HelmfileCommand = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.HelmfileCommandFlag) {
+			var helmfileCommandFlagParts = strings.Split(arg, "=")
+			if len(helmfileCommandFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.HelmfileCommand = helmfileCommandFlagParts[1]
 		}
 
 		if arg == cfg.HelmfileDirFlag {

@@ -186,6 +186,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.Stacks.NameTemplate = stacksNameTemplate
 	}
 
+	componentsTerraformCommand := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND")
+	if len(componentsTerraformCommand) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_COMMAND=%s", componentsTerraformCommand))
+		cliConfig.Components.Terraform.Command = componentsTerraformCommand
+	}
+
 	componentsTerraformBasePath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
 	if len(componentsTerraformBasePath) > 0 {
 		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=%s", componentsTerraformBasePath))
@@ -230,6 +236,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 			return err
 		}
 		cliConfig.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
+	}
+
+	componentsHelmfileCommand := os.Getenv("ATMOS_COMPONENTS_HELMFILE_COMMAND")
+	if len(componentsHelmfileCommand) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_COMMAND=%s", componentsHelmfileCommand))
+		cliConfig.Components.Helmfile.Command = componentsHelmfileCommand
 	}
 
 	componentsHelmfileBasePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
@@ -328,9 +340,17 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 		cliConfig.BasePath = configAndStacksInfo.BasePath
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
 	}
+	if len(configAndStacksInfo.TerraformCommand) > 0 {
+		cliConfig.Components.Terraform.Command = configAndStacksInfo.TerraformCommand
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as terraform executable", configAndStacksInfo.TerraformCommand))
+	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		cliConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
+	}
+	if len(configAndStacksInfo.HelmfileCommand) > 0 {
+		cliConfig.Components.Helmfile.Command = configAndStacksInfo.HelmfileCommand
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as helmfile executable", configAndStacksInfo.HelmfileCommand))
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		cliConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
