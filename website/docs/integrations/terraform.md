@@ -39,7 +39,7 @@ components:
 The settings for terraform can be defined in multiple places and support inheritance. This ensures that projects can
 override the behavior.
 
-The defaults everything are defined in the `atmos.yaml`.
+The defaults for everything are defined in the `atmos.yaml`.
 
 ```yaml
 components:
