@@ -708,9 +708,10 @@ With `logs.level: Trace`, and `logs.file: "/dev/stdout"`, all the messages and t
 to the console to the `/dev/stdout` standard output.
 
 This behavior might be undesirable when you execute the command `atmos describe affected` in CI/CD (e.g. GitHub Actions).
-For example, you want to log all the Atmos messages (by setting `logs.level: Trace`) for debugging purposes, and also want
-to parse the JSON output of the command (e.g. by using `jq`) for further processing. In this case, `jq` will not be able
-to parse the JSON output because all the other messages make the output an invalid JSON document.
+
+For example, you might want to log all the Atmos messages (by setting `logs.level: Trace`) for debugging purposes,
+and also want to parse the JSON output of the command (e.g. by using `jq`) for further processing. In this case, `jq`
+will not be able to parse the JSON output because all the other messages make the output an invalid JSON document.
 
 To deal with that, you can set `logs.file` to `/dev/stderr` in `atmos.yaml`:
 
