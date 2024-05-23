@@ -514,8 +514,6 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	u.LogTrace(cliConfig, "\nAffected components and stacks:\n")
-
 	return affected, nil
 }
 
