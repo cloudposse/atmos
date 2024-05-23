@@ -715,8 +715,6 @@ logs:
 
 <Terminal title="atmos describe affected">
 ```console
-> atmos describe affected
-
 Checking out Git ref 'refs/remotes/origin/HEAD' ...
 Checked out Git ref 'refs/remotes/origin/HEAD'
 
@@ -777,10 +775,8 @@ logs:
 Now when the `atmos describe affected` command is executed, the additional messages are printed to `/dev/stderr`,
 but the command's JSON output is printed to `/dev/stdout`, allowing `jq` to parse it without errors.
 
-<Terminal title="'atmos describe affected' output with log level 'Trace'">
+<Terminal title="atmos describe affected">
 ```console
-> atmos describe affected
-
 # NOTE: These messages are printed to `/dev/stderr`
 
 Checking out Git ref 'refs/remotes/origin/HEAD' ...
