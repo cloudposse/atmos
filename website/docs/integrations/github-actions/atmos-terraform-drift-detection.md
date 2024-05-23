@@ -84,67 +84,91 @@ We can quickly see a complete list of all drift components in the "Issues" tab i
 
 #### Example Usage
 
+The action expects the atmos configuration file `atmos.yaml` to be present in the repository.
+The config should have the following structure:
+
 ```yaml
-  name: 👽 Atmos Terraform Drift Detection
+# ./rootfs/usr/local/etc/atmos/atmos.yaml
+integrations:
+  github:
+    gitops:
+      terraform-version: 1.5.2
+      infracost-enabled: false
+      artifact-storage:
+        region: us-east-2
+        bucket: cptest-core-ue2-auto-gitops
+        table: cptest-core-ue2-auto-gitops-plan-storage
+        role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
+      role:
+        plan: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+        apply: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+      matrix:
+        sort-by: .stack_slug
+        group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
+```
 
-  on:
-    schedule:
-      - cron: "0 * * * *"
+> [!IMPORTANT]
+> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v0` version](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0).
 
-  permissions:
-    id-token: write
-    contents: write
-    issues: write
 
-  jobs:
-    select-components:
-      runs-on: ubuntu-latest
-      name: Select Components
-      outputs:
-        matrix: ${{ steps.components.outputs.matrix }}
-      steps:
-        - name: Selected Components
-          id: components
-          uses: cloudposse/github-action-atmos-terraform-select-components@v0
-          with:
-            jq-query: 'to_entries[] | .key as $parent | .value.components.terraform | to_entries[] | select(.value.settings.github.actions_enabled // false) | [$parent, .key] | join(",")'
-            debug: ${{ env.DEBUG_ENABLED }}
+```yaml
+name: 👽 Atmos Terraform Drift Detection
 
-    plan-atmos-components:
-      needs:
-        - select-components
-      runs-on: ubuntu-latest
-      if: ${{ needs.select-components.outputs.matrix != '{"include":[]}' }}
-      strategy:
-        fail-fast: false # Don't fail fast to avoid locking TF State
-        matrix: ${{ fromJson(needs.select-components.outputs.matrix) }}
-      name: ${{ matrix.stack_slug }}
-      env:
-        GITHUB_TOKEN: "${{ github.token }}"
-      steps:
-        - name: Plan Atmos Component
-          id: atmos-plan
-          uses: cloudposse/github-action-atmos-terraform-plan@v0
-          with:
-            component: ${{ matrix.component }}
-            stack: ${{ matrix.stack }}
-            component-path: ${{ matrix.component_path }}
-            drift-detection-mode-enabled: "true"
-            terraform-plan-role: "arn:aws:iam::111111111111:role/acme-core-gbl-identity-gitops"
-            terraform-state-bucket: "acme-core-ue2-auto-gitops"
-            terraform-state-role: "arn:aws:iam::999999999999:role/acme-core-ue2-auto-gitops-gha"
-            terraform-state-table: "acme-core-ue2-auto-gitops"
-            aws-region: "us-east-2"
+on:
+  schedule:
+    - cron: "0 * * * *"
 
-    drift-detection:
-      needs:
-        - plan-atmos-components
-      runs-on: ubuntu-latest
-      steps:
-        - name: Drift Detection
-          uses: cloudposse/github-action-atmos-terraform-drift-detection@v0
-          with:
-            max-opened-issues: '3'
+permissions:
+  id-token: write
+  contents: write
+  issues: write
+
+jobs:
+  select-components:
+    name: Select Components
+    runs-on: ubuntu-latest
+    steps:
+      - name: Selected Components
+        id: components
+        uses: cloudposse/github-action-atmos-terraform-select-components@v2
+        with:
+          select-filter: '.settings.github.actions_enabled and .metadata.type != "abstract"'
+          atmos-config-path: ./rootfs/usr/local/etc/atmos/
+          atmos-version: 1.63.0
+    outputs:
+      stacks: ${{ steps.components.outputs.matrix }}
+      has-selected-components: ${{ steps.components.outputs.has-selected-components }}
+
+  plan-atmos-components:
+    needs: ["select-components"]
+    runs-on: ubuntu-latest
+    if: ${{ needs.select-components.outputs.has-selected-components == 'true' }}
+    name: Detect Drift (${{ matrix.name }})
+    uses: ./.github/workflows/atmos-terraform-plan-matrix.yaml
+    strategy:
+      max-parallel: 1 # This is important to avoid ddos GHA API
+      fail-fast: false # Don't fail fast to avoid locking TF State
+      matrix: ${{ fromJson(needs.select-components.outputs.stacks) }}
+    with:
+      stacks: ${{ matrix.items }}
+      sha: ${{ github.sha }}
+      drift-detection-mode-enabled: "true"
+      continue-on-error: true
+      atmos-config-path: ./rootfs/usr/local/etc/atmos/
+      atmos-version: 1.63.0
+    secrets: inherit
+
+  drift-detection:
+    needs: ["plan-atmos-components"]
+    if: always()
+    name: Reconcile issues
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drift Detection
+        uses: cloudposse/github-action-atmos-terraform-drift-detection@v1
+        with:
+          max-opened-issues: '4'
+          process-all: 'true'
 ```
 
 #### 256 Matrix Limitation
@@ -201,6 +225,9 @@ Once we have an open Issue for a drifted component, we can trigger another workf
 
 #### Example Usage
 
+> [!IMPORTANT]
+> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v1` version](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1).
+
 ```yaml
 name: 👽 Atmos Terraform Drift Remediation
 run-name: 👽 Atmos Terraform Drift Remediation
@@ -224,11 +251,12 @@ jobs:
       contains(join(github.event.issue.labels.*.name, ','), 'apply')
     steps:
       - name: Remediate Drift
-        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v1
+        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v2
         with:
           issue-number: ${{ github.event.issue.number }}
           action: remediate
-          atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
+          atmos-config-path: ./rootfs/usr/local/etc/atmos/
+          atmos-version: 1.63.0
 
   discard-drift:
     runs-on: ubuntu-latest
@@ -238,11 +266,12 @@ jobs:
       !contains(join(github.event.issue.labels.*.name, ','), 'remediated')
     steps:
       - name: Discard Drift
-        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v1
+        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v2
         with:
           issue-number: ${{ github.event.issue.number }}
           action: discard
-          atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
+          atmos-config-path: ./rootfs/usr/local/etc/atmos/
+          atmos-version: 1.63.0
 ```
 
 ## Requirements

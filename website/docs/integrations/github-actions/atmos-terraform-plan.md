@@ -45,50 +45,59 @@ We recommend combining this action with the [`affected-stacks`](/integrations/gi
 
 :::
 
+The action expects the atmos configuration file `atmos.yaml` to be present in the repository.
+The config should have the following structure:
 
 ```yaml
-  # .github/workflows/atmos-terraform-plan.yaml
-  name: "atmos-terraform-plan"
-  on:
-    pull_request:
-      types:
-        - opened
-        - synchronize
-        - reopened
-      branches:
-        - main
-  # These permissions are required for GitHub to assume roles in AWS
-  permissions:
-    id-token: write
-    contents: read
-  jobs:
-    plan:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Plan Atmos Component
-          uses: cloudposse/github-action-atmos-terraform-plan@v1
-          with:
-            component: "foobar"
-            stack: "plat-ue2-sandbox"
-            atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
+# ./rootfs/usr/local/etc/atmos/atmos.yaml
+integrations:
+  github:
+    gitops:
+      terraform-version: 1.5.2
+      infracost-enabled: false
+      artifact-storage:
+        region: us-east-2
+        bucket: cptest-core-ue2-auto-gitops
+        table: cptest-core-ue2-auto-gitops-plan-storage
+        role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
+      role:
+        plan: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+        apply: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+      matrix:
+        sort-by: .stack_slug
+        group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
 ```
 
-with the following configuration as an example:
+> [!IMPORTANT]
+> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v1` version](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v1).
 
 ```yaml
-  # .github/config/atmos-gitops.yaml
-  atmos-config-path: ./rootfs/usr/local/etc/atmos/
-  atmos-version: 1.65.0
-  aws-region: us-east-2
-  enable-infracost: false
-  group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
-  sort-by: .stack_slug
-  terraform-apply-role: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
-  terraform-plan-role: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
-  terraform-state-bucket: cptest-core-ue2-auto-gitops
-  terraform-state-role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
-  terraform-state-table: cptest-core-ue2-auto-gitops
-  terraform-version: 1.65.0
+# .github/workflows/atmos-terraform-plan.yaml
+name: "atmos-terraform-plan"
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+# These permissions are required for GitHub to assume roles in AWS
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Plan Atmos Component
+        uses: cloudposse/github-action-atmos-terraform-plan@v2
+        with:
+          component: "foobar"
+          stack: "plat-ue2-sandbox"
+          sha: ${{ github.sha }}
+          atmos-config-path: ./rootfs/usr/local/etc/atmos/
+          atmos-version: 1.63.0
 ```
 
 ## Requirements
