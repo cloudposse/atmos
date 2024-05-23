@@ -646,18 +646,115 @@ logs:
 ```
 
 - `logs.file` - the file to write Atmos logs to. Logs can be written to any file or any standard file descriptor,
-  including `/dev/stdout`, `/dev/stderr` and `/dev/null`. If omitted, `/dev/stdout` will be used. The ENV variable `ATMOS_LOGS_FILE` can also be used
-  to specify the log file
+  including `/dev/stdout`, `/dev/stderr` and `/dev/null`. If omitted, `/dev/stdout` will be used.
+  The environment variable `ATMOS_LOGS_FILE` can also be used to specify the log file
 
 - `logs.level` - Log level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log
-  any messages (note that this does not prevent other tools like Terraform from logging). The ENV variable `ATMOS_LOGS_LEVEL` can also be used
-  to specify the log level
+  any messages (note that this does not prevent other tools like Terraform from logging).
+  The environment variable `ATMOS_LOGS_LEVEL` can also be used to specify the log level
 
-To prevent Atmos from logging any messages, you can do one of the following:
+To prevent Atmos from logging any messages (except for the outputs of the executed commands), you can do one of the following:
 
 - Set `logs.file` or the ENV variable `ATMOS_LOGS_FILE` to `/dev/null`
 
 - Set `logs.level` or the ENV variable `ATMOS_LOGS_LEVEL` to `Off`
+
+Note that when you set the log level to `Debug` or `Trace`, Atmos will log additional messages before printing the output
+of an executed command. For example, let's consider the `atmos describe affected` command:
+
+```yaml title="atmos.yaml"
+logs:
+  file: "/dev/stdout"
+  level: Trace
+```
+
+```console title="'atmos describe affected' output with log level 'Trace'"
+> atmos describe affected
+
+Checking out Git ref 'refs/remotes/origin/HEAD' ...
+Checked out Git ref 'refs/remotes/origin/HEAD'
+
+Current working repo HEAD: ffd2154e1daa32357b75460b9f45d268922b51e1 refs/heads/update-logs
+Remote repo HEAD: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
+
+Changed files:
+
+examples/quick-start/Dockerfile
+examples/quick-start/atmos.yaml
+
+Affected components and stacks:
+
+[
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start/components/terraform/vpc",
+      "stack": "plat-uw2-prod",
+      "stack_slug": "plat-uw2-prod-vpc",
+      "affected": "stack.vars"
+   },
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start/components/terraform/vpc",
+      "stack": "plat-ue2-prod",
+      "stack_slug": "plat-ue2-prod-vpc",
+      "affected": "stack.vars"
+   }
+]
+````
+
+With `logs.level: Trace`, and `logs.file: "/dev/stdout"`, all the messages and the command's JSON output will be printed
+to the console to the `/dev/stdout` standard output.
+
+This behaviour might be undesirable when you execute the command `atmos describe affected` in CI/CD (e.g. GitHub Actions).
+For example, you want to log all the Atmos messages (by setting `logs.level: Trace`) for debugging purposes, and also want
+to parse the JSON output of the command (e.g. by using `jq`) for further processing. In this case, `jq` will not be able
+to parse the JSON output because all the other messages make the output an invalid JSON document.
+
+To deal with that, you can set `logs.file` to `/dev/stderr` in `atmos.yaml`:
+
+```yaml title="atmos.yaml"
+logs:
+  file: "/dev/stderr"
+  level: Trace
+```
+
+Now when the `atmos describe affected` command is executed, the additional massages are printed to `/dev/stderr`,
+but the command's JSON output is printed to `/dev/stdout`, allowing `jq` to parse it without errors.
+
+```console title="'atmos describe affected' output with log level 'Trace'"
+> atmos describe affected
+
+# NOTE: These messages are printed to `/dev/stderr`
+
+Checking out Git ref 'refs/remotes/origin/HEAD' ...
+Checked out Git ref 'refs/remotes/origin/HEAD'
+Current working repo HEAD: ffd2154e1daa32357b75460b9f45d268922b51e1 refs/heads/update-logs
+Remote repo HEAD: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
+
+
+# NOTE: This JSON output is printed to `/dev/stdout`
+
+[
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start/components/terraform/vpc",
+      "stack": "plat-uw2-prod",
+      "stack_slug": "plat-uw2-prod-vpc",
+      "affected": "stack.vars"
+   },
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start/components/terraform/vpc",
+      "stack": "plat-ue2-prod",
+      "stack_slug": "plat-ue2-prod-vpc",
+      "affected": "stack.vars"
+   }
+]
+````
 
 ## Aliases
 
