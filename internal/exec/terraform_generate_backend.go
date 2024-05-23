@@ -60,7 +60,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	u.LogDebug(cliConfig, "Component backend config:\n\n")
 
 	if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsJSON(componentBackendConfig)
+		err = u.PrintAsJSONToFileDescriptor(cliConfig, componentBackendConfig)
 		if err != nil {
 			return err
 		}

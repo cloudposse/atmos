@@ -296,7 +296,7 @@ func ProcessStacks(
 			msg = "\nFound stack manifests:"
 		}
 		u.LogTrace(cliConfig, msg)
-		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAMLToFileDescriptor(cliConfig, cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
