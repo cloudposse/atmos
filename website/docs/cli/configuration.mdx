@@ -721,7 +721,7 @@ logs:
   level: Trace
 ```
 
-Now when the `atmos describe affected` command is executed, the additional massages are printed to `/dev/stderr`,
+Now when the `atmos describe affected` command is executed, the additional messages are printed to `/dev/stderr`,
 but the command's JSON output is printed to `/dev/stdout`, allowing `jq` to parse it without errors.
 
 ```console title="'atmos describe affected' output with log level 'Trace'"
