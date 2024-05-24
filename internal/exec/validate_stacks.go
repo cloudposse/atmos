@@ -36,6 +36,20 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		cliConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
 	}
 
+	// 1. Process top-level stack manifests and detect duplicate components
+	stacksMap, _, err := FindStacksMap(cliConfig, false)
+	if err != nil {
+		return err
+	}
+
+	err = u.PrintAsYAML(u.StringKeysFromMap(stacksMap))
+	if err != nil {
+		return err
+	}
+
+	// 2. Check all YAML stack manifests defined in the infrastructure
+	// It will check YAML syntax and all the Atmos sections defined in the manifests
+
 	// Check if the Atmos manifest JSON Schema is configured and the file exists
 	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
 	var atmosManifestJsonSchemaFilePath string
@@ -95,7 +109,6 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		}
 
 		// Process and validate the stack manifest
-		componentStackMap := map[string]map[string][]string{}
 		_, err = s.ProcessStackConfig(
 			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
@@ -106,9 +119,10 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 			false,
 			true,
 			"",
-			componentStackMap,
+			map[string]map[string][]string{},
 			importsConfig,
-			false)
+			false,
+		)
 		if err != nil {
 			errorMessages = append(errorMessages, err.Error())
 		}
