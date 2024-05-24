@@ -492,7 +492,7 @@ func executeDescribeAffected(
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Got remote repo commit tree"))
-	u.LogTrace(cliConfig, fmt.Sprintf("Finding diff between the current working branch and remote target branch ..."))
+	u.LogTrace(cliConfig, fmt.Sprintf("Finding difference between the current working branch and remote target branch ..."))
 
 	// Find a slice of Patch objects with all the changes between the current working and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -500,13 +500,19 @@ func executeDescribeAffected(
 		return nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Found diff between the current working branch and remote target branch"))
-	u.LogTrace(cliConfig, "\nChanged files:\n")
-
 	var changedFiles []string
-	for _, fileStat := range patch.Stats() {
-		u.LogTrace(cliConfig, fileStat.Name)
-		changedFiles = append(changedFiles, fileStat.Name)
+
+	if len(patch.Stats()) > 0 {
+		u.LogTrace(cliConfig, fmt.Sprintf("Found difference between the current working branch and remote target branch"))
+		u.LogTrace(cliConfig, "\nChanged files:\n")
+
+		for _, fileStat := range patch.Stats() {
+			u.LogTrace(cliConfig, fileStat.Name)
+			changedFiles = append(changedFiles, fileStat.Name)
+		}
+		u.LogTrace(cliConfig, "")
+	} else {
+		u.LogTrace(cliConfig, fmt.Sprintf("The current working branch and remote target branch are the same"))
 	}
 
 	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles, includeSpaceliftAdminStacks)
