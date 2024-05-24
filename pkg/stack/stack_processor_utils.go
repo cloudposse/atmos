@@ -447,7 +447,7 @@ func ProcessBaseComponentConfig(
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
 						if checkBaseComponentExists {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
+							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
 								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
 								component,
 								stack,
