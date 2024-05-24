@@ -102,6 +102,10 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
+
 	u.LogTrace(cliConfig, fmt.Sprintf("\nAffected components and stacks: \n"))
 
 	err = printOrWriteToFile(format, file, affected)
