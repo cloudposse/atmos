@@ -27,9 +27,11 @@ html[data-theme='dark'] nav.navbar {
 div.atmos__effect, html[data-theme='dark'] div.navbar__logo {
     position: relative;
     display: inline-block;
-    overflow:hidden;
+    overflow: hidden;
     background: var(--ifm-background-color);
     border-radius: 14px;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
@@ -47,13 +49,17 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
 }
 
 .atmos__text, html[data-theme='dark'] b.navbar__title  {
+    color: transparent;
     background: -webkit-linear-gradient(-45deg, #eb1a1a, #583ce7, #2ec8ff, #23d5ab);
     animation: gradient 15s ease infinite;
     background-size: 300% 300%;
     background-clip: text;
-    color: transparent;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    line-height: 1.4em;
+    border-radius: 18px;
+    padding-left: 10px;
+    padding-right: 10px;
 }
 
 .menu__list-item-collapsible {
