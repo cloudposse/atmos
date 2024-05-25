@@ -6,7 +6,12 @@
 
 .navbar__title {
     font-size: 2em;
-        backdrop-filter: blur(6px) saturate(180%);
+    backdrop-filter: blur(6px) saturate(180%);
+}
+
+html[data-theme='dark'] nav.navbar {
+    backdrop-filter: blur(5px);
+    background: transparent;
 }
 
 .navbar__title {
@@ -23,6 +28,7 @@ div.atmos__effect, html[data-theme='dark'] div.navbar__logo {
     position: relative;
     display: inline-block;
     overflow:hidden;
+    background: var(--ifm-background-color);
 }
 
 div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
