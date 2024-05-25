@@ -37,6 +37,11 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		cliConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
 	}
 
+	return ValidateStacks(cliConfig)
+}
+
+// ValidateStacks validates Atmos stack configuration
+func ValidateStacks(cliConfig schema.CliConfiguration) error {
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack

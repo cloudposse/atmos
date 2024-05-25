@@ -23,6 +23,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	err = ValidateStacks(cliConfig)
+	if err != nil {
+		return err
+	}
+
 	// Process flags
 	flags := cmd.Flags()
 
