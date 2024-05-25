@@ -27,6 +27,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	err = ValidateStacks(cliConfig)
+	if err != nil {
+		return err
+	}
+
 	flags := cmd.Flags()
 
 	filterByStack, err := flags.GetString("stack")

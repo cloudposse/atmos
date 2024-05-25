@@ -33,7 +33,9 @@ the `components/terraform/vpc/providers.tf` file:
     ```hcl
       provider "aws" {
         region = "us-east-2"
-        assume_role = "IAM Role ARN"
+        assume_role {
+          role_arn: "IAM Role ARN"
+        }
       }
    ```
 </File>
@@ -59,7 +61,8 @@ For example, the `providers` section at the global scope can look like this:
       providers:
         aws:
           region: "us-east-2"
-          assume_role: "IAM Role ARN"
+          assume_role:
+            role_arn: "IAM Role ARN"
     ```
 </File>
 
@@ -78,7 +81,8 @@ section. For example, the following config can be used to override the `assume_r
         vpc:
           providers:
             aws:
-             assume_role: "IAM Role ARN for VPC"
+              assume_role:
+                role_arn: "IAM Role ARN for VPC"
     ```
 </File>
 
@@ -135,7 +139,9 @@ The generated `providers_override.tf.json` file would look like this:
     {
         "provider": {
           "aws": {
-            "assume_role": "IAM Role ARN for VPC"
+            "assume_role": {
+              "role_arn": "IAM Role ARN for VPC"
+            }
           }
         }
     }
@@ -147,7 +153,53 @@ The generated `providers_override.tf.json` file would look like this:
 Terraform then uses the values in the generated `providers_override.tf.json` to
 [override](https://developer.hashicorp.com/terraform/language/files/override) the parameters for all the providers in the file.
 
+## `alias`: Multiple Provider Configuration in Atmos Manifests
+
+Atmos allows you to define multiple configurations for the same provider using a list of provider blocks and the
+`alias` meta-argument.
+
+The generated `providers_override.tf.json` file will have a list of provider configurations, and Terraform/OpenTofu
+will use and override the providers as long as the aliased providers are defined in the Terraform component.
+
+For example:
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          providers:
+            aws:
+              - region: us-west-2
+                assume_role:
+                  role_arn: "role-1"
+              - region: us-west-2
+                alias: "account-2"
+                assume_role:
+                  role_arn: "role-2"
+    ```
+</File>
+
+<br/>
+
+:::warning
+
+The above example uses a list of configuration blocks for the `aws` provider.
+
+Since it's a list, it doesn't currently work with deep-merging of stacks in the
+[inheritance](/core-concepts/components/inheritance) chain (list are not deep-merged, they are replaced).
+
+This configuration will work for a single component.
+
+In the future Atmos releases, we'll consider an alternative syntax to describe multiple provider configurations using
+maps (maps support deep-merging at all scopes in the inheritance chain).
+
+:::
+
+<br/>
+
 ## References
 
 - [Terraform Providers](https://developer.hashicorp.com/terraform/language/providers)
 - [Terraform Override Files](https://developer.hashicorp.com/terraform/language/files/override)
+- [alias: Multiple Provider Configurations](https://developer.hashicorp.com/terraform/language/providers/configuration#alias-multiple-provider-configurations)
