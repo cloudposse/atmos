@@ -4,6 +4,8 @@ sidebar_position: 7
 sidebar_label: Inheritance
 id: inheritance
 ---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 
 Component Inheritance is one of the principles of [Component-Oriented Programming (COP)](/core-concepts/components/component-oriented-programming)
 supported by Atmos.
@@ -82,7 +84,8 @@ Let's say we want to provision two VPCs with different settings into the same AW
 
 In the `stacks/catalog/vpc.yaml` file, add the following config for the VPC component:
 
-```yaml title="stacks/catalog/vpc.yaml"
+<File title="stacks/catalog/vpc.yaml">
+```yaml
 components:
   terraform:
     vpc-defaults:
@@ -101,6 +104,7 @@ components:
         max_subnet_count: 3
         vpc_flow_logs_enabled: true
 ```
+</File>
 
 <br/>
 
@@ -116,7 +120,8 @@ In the configuration above, the following **Component-Oriented Programming** con
 
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the derived VPC components in the `ue2-dev` stack:
 
-```yaml title="stacks/ue2-dev.yaml"
+<File title="stacks/ue2-dev.yaml">
+```yaml 
 # Import the base component configuration from the `catalog`.
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 # File extensions are optional (if not specified, `.yaml` is used by default).
@@ -153,6 +158,7 @@ components:
         max_subnet_count: 2
         vpc_flow_logs_enabled: false
 ```
+</File>
 
 <br/>
 
@@ -271,6 +277,7 @@ Here is a concrete example:
 
 <br/>
 
+<File title="stack.yaml">
 ```yaml
 # Import all the base components and mixins we want to inherit from.
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
@@ -300,6 +307,7 @@ components:
           - "mixin/test-1"
           - "mixin/test-2"
 ```
+</File>
 
 <br/>
 
@@ -514,6 +522,7 @@ For `ComponentG`:
 Let's consider the following configuration for Atmos components `base-component-1`, `base-component-2`, `derived-component-1`
 and `derived-component-2`:
 
+<File title="stack.yaml">
 ```yaml
 components:
   terraform:
@@ -545,6 +554,7 @@ components:
           - derived-component-1
       vars: {}
 ```
+</File>
 
 <br/>
 
@@ -610,14 +620,9 @@ The `derived-component-2` component is processed in the following order:
 
 - And finally, `derived-component-2` is processed, and it overrides `derived-component-1`, `base-component-1` and `base-component-2`
 
-When we run the following command to provision the `derived-component-2` component:
+When we run the following command to provision the `derived-component-2` component, Atmos will show the following console output:
 
-```shell
-atmos terraform plan derived-component-2 -s tenant1-ue2-test-1
-```
-
-Atmos will show the following output:
-
+<Terminal title="atmos terraform plan derived-component-2 -s tenant1-ue2-test-1">
 ```console
 Variables for the component 'derived-component-2' in the stack 'tenant1-ue2-test-1':
 environment: ue2
@@ -634,6 +639,7 @@ Component: derived-component-2
 Terraform component: test/test-component
 Inheritance: derived-component-2 -> derived-component-1 -> base-component-1 -> base-component-2
 ```
+</Terminal>
 
 Note that the `hierarchical_inheritance_test` variable was inherited from `base-component-1` because it overrode the configuration
 from `base-component-2`.
@@ -642,6 +648,7 @@ from `base-component-2`.
 
 If we change the order of the components in the `inherits` list for `derived-component-2`:
 
+<File title="stack.yaml">
 ```yaml
 components:
   terraform:
@@ -654,6 +661,7 @@ components:
           - base-component-2
       vars: {}
 ```
+</File>
 
 `base-component-2` will be processed after `base-component-1` and `derived-component-1`, and the `hierarchical_inheritance_test` variable
 will be inherited from `base-component-2`:
