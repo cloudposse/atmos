@@ -7,6 +7,7 @@ description: Use the `atmos.yaml` configuration file to control the behavior of 
 
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 
 # CLI Configuration
 
@@ -41,7 +42,7 @@ names/paths (double-star/globstar `**` is supported as well)
 
 If `atmos.yaml` is not found in any of the searched locations, Atmos will use the following default CLI configuration:
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 base_path: "."
 components:
@@ -100,7 +101,7 @@ templates:
     gomplate:
       enabled: true
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -137,7 +138,7 @@ base_path: "."
 
 Specify the default behaviors for components.
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 components:
   terraform:
@@ -194,13 +195,13 @@ components:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
     cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
 ```
-</Terminal>
+</File>
 
 ## Stacks
 
 Define the stack name pattern or template and specify where to find stacks.
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
@@ -228,7 +229,7 @@ stacks:
   # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
   # name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 ```
-</Terminal>
+</File>
 
 - `stacks.base_path` specifies the path to the folder where **all** Atmos stack config files (stack manifests) are defined.
   If the global `base_path` is not provided or is an empty string, `stacks.base_path` is an independent setting that supports both absolute and
@@ -337,14 +338,14 @@ Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to co
 
 ## Workflows
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
   # Supports both absolute and relative paths
   base_path: "stacks/workflows"
 ```
-</Terminal>
+</File>
 
 ## Custom CLI Commands
 
@@ -357,7 +358,7 @@ Then developers can just run `atmos help` and discover all available commands.
 
 Here are some examples to play around with to get started.
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 # Custom CLI commands
 commands:
@@ -542,7 +543,7 @@ commands:
       - chmod 600 ${KUBECONFIG}
       - echo ${KUBECONFIG}
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -554,7 +555,7 @@ commands:
 
 Atmos supports many native Atmos integrations. They extend the core functionality of Atmos.
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 # Integrations
 integrations:
@@ -618,7 +619,7 @@ integrations:
           steps:
             - run: terraform apply $PLANFILE
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -632,7 +633,7 @@ For more information, refer to [Atmos Integrations](/integrations)
 
 Configure the paths where to find OPA and JSON Schema files to validate Atmos stack manifests and components.
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 # Validation schemas (for validating atmos stacks and components)
 schemas:
@@ -657,7 +658,7 @@ schemas:
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -673,7 +674,7 @@ For more information, refer to:
 
 Logs are configured in the `logs` section:
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 logs:
   # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
@@ -684,7 +685,7 @@ logs:
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
 ```
-</Terminal>
+</File>
 
 - `logs.file` - the file to write Atmos logs to. Logs can be written to any file or any standard file descriptor,
   including `/dev/stdout`, `/dev/stderr` and `/dev/null`. If omitted, `/dev/stdout` will be used.
@@ -703,13 +704,13 @@ To prevent Atmos from logging any messages (except for the outputs of the execut
 Note that when you set the log level to `Debug` or `Trace`, Atmos will log additional messages before printing the output
 of an executed command. For example, let's consider the `atmos describe affected` command:
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 logs:
   file: "/dev/stdout"
   level: Trace
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -762,13 +763,13 @@ will not be able to parse the JSON output because all the other messages make th
 
 To deal with that, you can set `logs.file` to `/dev/stderr` in `atmos.yaml`:
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 logs:
   file: "/dev/stderr"
   level: Trace
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -819,7 +820,7 @@ native commands like `terraform apply` or `describe stacks`, as well as [Atmos C
 
 For example:
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 # CLI command aliases
 aliases:
@@ -834,7 +835,7 @@ aliases:
   ls: list stacks
   lc: list components
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -887,7 +888,7 @@ For more details, refer to [Atmos Stack Manifest Templating](/core-concepts/stac
 
 <br/>
 
-<Terminal title="atmos.yaml">
+<File title="atmos.yaml">
 ```yaml
 # https://pkg.go.dev/text/template
 templates:
@@ -920,7 +921,7 @@ templates:
         config-2:
           url: "file:///config2.json"
 ```
-</Terminal>
+</File>
 
 <br/>
 

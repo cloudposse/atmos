@@ -5,6 +5,7 @@ sidebar_label: Stacks
 description: Stacks are a way to express the complete infrastructure needed for an environment
 id: stacks
 ---
+import File from '@site/src/components/File'
 
 Stacks are a way to express the complete infrastructure needed for an environment. Think of a Stack like an architectural "Blueprint" composed
 of one or more [Components](/core-concepts/components) and defined using a [standardized YAML configuration](#schema).
@@ -53,6 +54,7 @@ various [design patterns](/design-patterns/).
 
 A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and use [inheritance](/core-concepts/components/inheritance) to achieve DRY configuration.
 
+<File title="stack.yaml">
 ```yaml
 # Configurations that should get deep-merged into this one
 import:
@@ -96,6 +98,7 @@ components:
       vars:
         installed: true
 ```
+</File>
 
 ### Stack Attributes
 
