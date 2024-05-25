@@ -3,6 +3,7 @@ title: Configure Terraform Backend
 sidebar_position: 10
 sidebar_label: Configure Terraform Backend
 ---
+import File from '@site/src/components/File'
 
 In the previous steps, we've configured the `vpc-flow-logs-bucket` and `vpc` Terraform components to be provisioned into three AWS accounts
 (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
@@ -73,6 +74,7 @@ using the Terraform S3 backend:
 To configure Terraform to use an S3 backend, you typically provide the S3 bucket name and an optional key prefix in your Terraform configuration.
 Here's a simplified example:
 
+<File title="backend.tf" type="hcl">
 ```hcl
 terraform {
   backend "s3" {
@@ -85,6 +87,7 @@ terraform {
   }
 }
 ```
+</File>
 
 In the example, `terraform_locks` is a DynamoDB table used for state locking. DynamoDB is recommended for locking when using the S3 backend to ensure
 safe concurrent access.
@@ -102,7 +105,8 @@ can be provisioned with Atmos.
 
 Here's an example of an Atmos manifest to configure the `tfstate-backend` Terraform component:
 
-```yaml title="stacks/catalog/tfstate-backend/defaults.yaml"
+<File title="stacks/catalog/tfstate-backend/defaults.yaml" type="stack">
+```yaml 
 components:
   terraform:
     tfstate-backend:
@@ -113,6 +117,7 @@ components:
         name: tfstate
         prevent_unencrypted_uploads: true
 ```
+</File>
 
 ## Configure Terraform S3 Backend
 
@@ -120,7 +125,7 @@ Once the S3 bucket and DynamoDB table are provisioned, you can start using them 
 There are two ways of doing this:
 
 - Manually create `backend.tf` file in each component's folder with the following content:
-
+  <File title="backend.tf" type="hcl">
   ```hcl
   terraform {
     backend "s3" {
@@ -135,6 +140,7 @@ There are two ways of doing this:
     }
   }
   ```
+  </File>
 
 - Configure Terraform S3 backend with Atmos to automatically generate a backend file for each Atmos component. This is the recommended way
   of configuring Terraform state backend since it offers many advantages and will save you from manually creating a backend configuration file for
@@ -145,13 +151,14 @@ There are two ways of doing this:
 Configuring Terraform S3 backend with Atmos consists of the three steps:
 
 - Set `auto_generate_backend_file` to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section:
-
-  ```yaml title="atmos.yaml"
+  <File title="atmos.yaml" type="config">
+  ```yaml 
   components:
     terraform:
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
     auto_generate_backend_file: true
   ```
+  </File>
 
   Refer to [Quick Start: Configure CLI](/quick-start/configure-cli) and [CLI Configurtion](/cli/configuration) for more details.
 
@@ -166,7 +173,8 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
 
   To configure the S3 backend for the entire Organization, add the following config in `stacks/orgs/acme/_defaults.yaml`:
 
-  ```yaml title="stacks/orgs/acme/_defaults.yaml"
+  <File title="stacks/orgs/acme/_defaults.yaml" type="stack">
+  ```yaml
   terraform:
     backend_type: s3
     backend:
@@ -179,12 +187,13 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
         region: "your-aws-region"
         role_arn: "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
   ```
+  </File>
 
 <br/>
 
 - (This step is optional) For each component, you can add `workspace_key_prefix` similar to the following:
-
-  ```yaml title="stacks/catalog/vpc.yaml"
+  <File title="stacks/catalog/vpc.yaml" type="stack">
+  ```yaml
   components:
     terraform:
       # `vpc` is the Atmos component name
@@ -200,6 +209,7 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
         vars: {}
         env: {}
   ```
+  </File>
 
   Note that this is optional. If you don’t add `backend.s3.workspace_key_prefix` to the component manifest, the Atmos component name will be used
   automatically (which is this example is `vpc`). `/` (slash) in the Atmos component name will be replaced with `-` (dash).
@@ -213,6 +223,7 @@ or `atmos terraform apply vpc -s <stack>`, before executing the Terraform comman
 the `_defaults.yaml` manifest and from the component itself, and will generate a backend config JSON file `backend.tf.json` in the component's folder,
 similar to the following example:
 
+<File title="backend.tf.json" type="json">
 ```json
 {
   "terraform": {
@@ -231,6 +242,7 @@ similar to the following example:
   }
 }
 ```
+</File>
 
 <br/>
 
@@ -254,8 +266,8 @@ and [Inheritance](/core-concepts/components/inheritance), which makes the backen
 We'll split the backend config between the Organization and the accounts.
 
 Add the following config to the Organization stack manifest in `stacks/orgs/acme/_defaults.yaml`:
-
-  ```yaml title="stacks/orgs/acme/_defaults.yaml"
+  <File title="stacks/orgs/acme/_defaults.yaml" type="stack">
+  ```yaml
   terraform:
     backend_type: s3
     backend:
@@ -265,10 +277,12 @@ Add the following config to the Organization stack manifest in `stacks/orgs/acme
         key: "terraform.tfstate"
         region: "your-aws-region"
   ```
+  </File>
 
 Add the following config to the `dev` stack manifest in `stacks/orgs/acme/plat/dev/_defaults.yaml`:
 
-  ```yaml title="stacks/orgs/acme/plat/dev/_defaults.yaml"
+  <File title="stacks/orgs/acme/plat/dev/_defaults.yaml" type="stack">
+  ```yaml
   terraform:
     backend_type: s3
     backend:
@@ -277,10 +291,11 @@ Add the following config to the `dev` stack manifest in `stacks/orgs/acme/plat/d
         dynamodb_table: "your-dev-dynamodb-table-name"
         role_arn: "<IAM Role with permissions to access the `dev` Terraform backend>"
   ```
+  </File>
 
 Add the following config to the `staging` stack manifest in `stacks/orgs/acme/plat/staging/_defaults.yaml`:
-
-  ```yaml title="stacks/orgs/acme/plat/staging/_defaults.yaml"
+  <File title="stacks/orgs/acme/plat/staging/_defaults.yaml" type="stack">
+  ```yaml
   terraform:
     backend_type: s3
     backend:
@@ -289,10 +304,12 @@ Add the following config to the `staging` stack manifest in `stacks/orgs/acme/pl
         dynamodb_table: "your-staging-dynamodb-table-name"
         role_arn: "<IAM Role with permissions to access the `staging` Terraform backend>"
   ```
+  </File>
 
 Add the following config to the `prod` stack manifest in `stacks/orgs/acme/plat/prod/_defaults.yaml`:
 
-  ```yaml title="stacks/orgs/acme/plat/prod/_defaults.yaml"
+  <File title="stacks/orgs/acme/plat/prod/_defaults.yaml" type="stack">
+  ```yaml
   terraform:
     backend_type: s3
     backend:
@@ -301,11 +318,13 @@ Add the following config to the `prod` stack manifest in `stacks/orgs/acme/plat/
         dynamodb_table: "your-prod-dynamodb-table-name"
         role_arn: "<IAM Role with permissions to access the `prod` Terraform backend>"
   ```
+  </File>
 
 When you provision the `vpc` component into the `dev` account (by executing the command `atmos terraform apply vpc -s plat-ue2-dev`), Atmos will
 deep-merge the backend configuration from the Organization-level manifest with the configuration from the `dev` manifest, and will automatically
 add `workspace_key_prefix` for the component, generating the following final deep-merged backend config for the `vpc` component in the `dev` account:
 
+<File title="backend.tf.json" type="json">
 ```json
 {
   "terraform": {
@@ -324,6 +343,7 @@ add `workspace_key_prefix` for the component, generating the following final dee
   }
 }
 ```
+</File>
 
 <br/>
 
@@ -352,6 +372,7 @@ refer to [Multiple Component Instances Atmos Design Patterns](/design-patterns/m
 For example, the following config shows how to define two Atmos components, `vpc/1` and `vpc/2`, which both point to 
 the same Terraform component `vpc`:
 
+<File title="stack.yaml" type="stack">
 ```yaml
 import:
   # Import the defaults for all VPC components
@@ -395,6 +416,7 @@ components:
         s3:
           workspace_key_prefix: vpc-2
 ```
+</File>
 
 If we manually create a `backend.tf` file for the `vpc` Terraform component in the `components/terraform/vpc` folder
 using `workspace_key_prefix: "vpc"`, then both `vpc/1` and `vpc/2` Atmos components will use the same `workspace_key_prefix`, and they will
@@ -407,6 +429,7 @@ in the component manifest in the `backend.s3.workspace_key_prefix` section).
 For example, when the command `atmos terraform apply vpc/1 -s plat-ue2-dev` is executed, the following `backend.tf.json` file is generated in the
 `components/terraform/vpc` folder:
 
+<File title="backend.tf.json" type="json">
 ```json
 {
   "terraform": {
@@ -425,10 +448,12 @@ For example, when the command `atmos terraform apply vpc/1 -s plat-ue2-dev` is e
   }
 }
 ```
+</File>
 
 Similarly, when the command `atmos terraform apply vpc/2 -s plat-ue2-dev` is executed, the following `backend.tf.json` file is generated in the
 `components/terraform/vpc` folder:
 
+<File title="backend.tf.json" type="json">
 ```json
 {
   "terraform": {
@@ -447,6 +472,7 @@ Similarly, when the command `atmos terraform apply vpc/2 -s plat-ue2-dev` is exe
   }
 }
 ```
+</File>
 
 The generated files will have different `workspace_key_prefix` attribute auto-generated by Atmos.
 

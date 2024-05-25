@@ -4,6 +4,8 @@ sidebar_position: 7
 sidebar_label: Templating
 id: templating
 ---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 
 Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
 
@@ -69,7 +71,8 @@ Templating in Atmos stack manifests can be configured in the following places:
 Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI config file](/cli/configuration) in the
 `templates.settings` section:
 
-```yaml title="atmos.yaml"
+<File title="atmos.yaml">
+```yaml
 # https://pkg.go.dev/text/template
 templates:
   settings:
@@ -129,6 +132,7 @@ templates:
         s3-config:
           url: "s3://mybucket/config/config.json"
 ```
+</File>
 
 - `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
   If set to `false`, Atmos will not process `Go` templates in stack manifests
@@ -154,7 +158,7 @@ templates:
 
   - The keys of the map are the datasource names (aliases), which are used in `Go` templates in Atmos stack manifests.
     For example:
-
+    <File title="stack.yaml">
     ```yaml
      terraform:
        vars:
@@ -163,6 +167,7 @@ templates:
            config1_tag: '{{ (datasource "config-1").tag }}'
            config2_service_name: '{{ (datasource "config-2").service.name }}'
     ```
+    </File>
 
   - The values of the map are the datasource definitions with the following schema:
 
@@ -233,7 +238,8 @@ These settings are not supported for the following reasons:
 As an example, let's define templating configuration for the entire organization in the `stacks/orgs/acme/_defaults.yaml` 
 stack manifest:
 
-```yaml title="stacks/orgs/acme/_defaults.yaml"
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
 settings:
   templates:
     settings:
@@ -256,6 +262,7 @@ settings:
           config-3:
             url: "file:///config3.json"
 ```
+</File>
 
 Atmos deep-merges the configurations from the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks)
 with the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) using [inheritance](/core-concepts/components/inheritance).
@@ -268,6 +275,7 @@ tenant, account, or per component.
 For example, taking into account the configurations described above in `atmos.yaml` [CLI config file](/cli/configuration) 
 and in the `stacks/orgs/acme/_defaults.yaml` stack manifest, the final `datasources` map will look like this:
 
+<File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
 gomplate:
   timeout: 7
@@ -292,6 +300,7 @@ gomplate:
     config-3:
       url: "file:///config3.json"
 ```
+</File>
 
 Note that the `config-1` datasource from `atmos.yaml` was overridden with the `config-1` datasource from the 
 `stacks/orgs/acme/_defaults.yaml` stack manifest. The `timeout` attribute was overridden as well.
@@ -323,6 +332,7 @@ In the template tokens, you can refer to any value in any section that the Atmos
 
 For example, let's say we have the following component configuration using `Go` templates:
 
+<File title="stack.yaml">
 ```yaml
 component:
   terraform:
@@ -370,11 +380,13 @@ component:
           config2_service_name: '{{ (datasource "config-2").service.name }}'
           config3_team_name: '{{ (datasource "config-3").team.name }}'
 ```
+</File>
 
 When executing Atmos commands like `atmos describe component` and `atmos terraform plan/apply`, Atmos processes all the template tokens 
 in the manifest and generates the final configuration for the component in the stack:
 
-```yaml title="atmos describe component vpc -s plat-ue2-dev"
+<Terminal title="atmos describe component vpc -s plat-ue2-dev">
+```yaml 
 settings:
   setting1: 1
   setting2: 2
@@ -413,6 +425,7 @@ vars:
     region: us-east-2
     terraform_workspace: plat-ue2-dev
 ```
+</Terminal>
 
 ## Environment Variables
 
@@ -422,6 +435,7 @@ It's supported in both the `templates.settings` section in `atmos.yaml` [CLI con
 
 For example:
 
+<File title="atmos.yaml">
 ```yaml
 settings:
   templates:
@@ -434,6 +448,7 @@ settings:
         AWS_PROFILE: "<AWS profile>"
         AWS_TIMEOUT: 2000
 ```
+</File>
 
 This is useful when executing the `datasources` that need to authenticate to cloud APIs. 
 
@@ -477,6 +492,7 @@ The values of the map are the datasource definitions with the following schema:
 For example, let's define the following Gomplate datasources in the global `settings` section (this will apply to all
 components in all stacks in the infrastructure):
 
+<File title="atmos.yaml">
 ```yaml
 settings:
   templates:
@@ -514,6 +530,7 @@ settings:
           s3-config:
             url: "s3://mybucket/config/config.json"
 ```
+</File>
 
 After the above `datasources` are defined, you can use them in Atmos stack manifests like this:
 
@@ -772,7 +789,8 @@ It effectively allows you to define template processing pipelines.
 
 For example:
 
-```yaml title="atmos.yaml"
+<File title="atmos.yaml">
+```yaml
 templates:
   settings:
     # Enable `Go` templates in Atmos stack manifests
@@ -781,6 +799,7 @@ templates:
     # If not defined, `evaluations` is automatically set to `1`
     evaluations: 2
 ```
+</File>
 
 - `templates.settings.evaluations` - number of evaluations to process `Go` templates. If not defined, `evaluations`
   is automatically set to `1`
@@ -796,13 +815,15 @@ You can define more than one step/pass of template processing to use and combine
 
 For example:
 
-```yaml title="atmos.yaml"
+<File title="atmos.yaml">
+```yaml
 templates:
   settings:
     enabled: true
     # Number of evaluations to process `Go` templates
     evaluations: 3
 ```
+</File>
 
 ```yaml
 settings:
@@ -878,7 +899,8 @@ file with the tags for each account and assign the tags to all cloud resources.
 
 In `atmos.yaml`, we figure two evaluations steps of template processing:
 
-```yaml title="atmos.yaml"
+<File title="atmos.yaml">
+```yaml
 templates:
   settings:
     enabled: true
@@ -887,6 +909,7 @@ templates:
     gomplate:
       enabled: true
 ```
+</File>
 
 In an Atmos stack manifest, we define the environment variables in the `env` section (AWS profile with permissions to 
 access the S3 bucket), and the `s3-tags` Gomplate datasource.
