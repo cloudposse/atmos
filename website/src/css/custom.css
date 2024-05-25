@@ -11,7 +11,7 @@
 
 html[data-theme='dark'] nav.navbar {
     backdrop-filter: blur(5px);
-    background: transparent;
+    background: rgba(0, 0, 0, .8);
 }
 
 .navbar__title {
@@ -29,6 +29,7 @@ div.atmos__effect, html[data-theme='dark'] div.navbar__logo {
     display: inline-block;
     overflow:hidden;
     background: var(--ifm-background-color);
+    border-radius: 14px;
 }
 
 div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
