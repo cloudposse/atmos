@@ -272,7 +272,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 	for componentName, componentSection := range componentStackMap {
 		for stackName, stackManifests := range componentSection {
 			if len(stackManifests) > 1 {
-				m := fmt.Sprintf("the Atmos component '%s' in the stack '%s' is defined in more than one top-level stack manifest files: %s.\n"+
+				m := fmt.Sprintf("the Atmos component '%s' in the stack '%s' is defined in more than one top-level stack manifest file: %s.\n"+
 					"Atmos can't decide which stack manifest to use to get configuration for the component in the stack.\n"+
 					"This is a stack misconfiguration.",
 					componentName,

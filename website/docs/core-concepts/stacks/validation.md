@@ -27,7 +27,7 @@ The command checks and validates the following:
 
   ```console
   the Atmos component 'vpc' in the stack 'plat-ue2-dev' is defined in more than one top-level stack
-  manifest files: orgs/acme/plat/dev/us-east-2, orgs/acme/plat/dev/us-east-2-extras.
+  manifest file: orgs/acme/plat/dev/us-east-2, orgs/acme/plat/dev/us-east-2-extras.
   Atmos can't decide which stack manifest to use to get configuration for the component
   in the stack. This is a stack misconfiguration.
   ```
