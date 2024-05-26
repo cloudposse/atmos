@@ -65,5 +65,5 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
 func Merge(inputs []map[any]any) (map[any]any, error) {
-	return MergeWithOptions(inputs, false, false)
+	return MergeWithOptions(inputs, false, true)
 }
