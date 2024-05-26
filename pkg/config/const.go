@@ -58,4 +58,6 @@ const (
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
+
+	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 )

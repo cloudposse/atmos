@@ -320,6 +320,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.Logs.Level = logsLevel
 	}
 
+	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
+	if len(listMergeStrategy) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_SETTINGS_LIST_MERGE_STRATEGY=%s", listMergeStrategy))
+		cliConfig.Settings.ListMergeStrategy = listMergeStrategy
+	}
+
 	return nil
 }
 
@@ -415,6 +421,10 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 	if len(configAndStacksInfo.LogsFile) > 0 {
 		cliConfig.Logs.File = configAndStacksInfo.LogsFile
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
+	}
+	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
+		cliConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy))
 	}
 
 	return nil
