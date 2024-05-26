@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestMergeBasic(t *testing.T) {
@@ -13,7 +15,7 @@ func TestMergeBasic(t *testing.T) {
 	inputs := []map[any]any{map1, map2}
 	expected := map[any]any{"foo": "bar", "baz": "bat"}
 
-	result, err := Merge(inputs)
+	result, err := Merge(schema.CliConfiguration{}, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 }
@@ -26,7 +28,7 @@ func TestMergeBasicOverride(t *testing.T) {
 	inputs := []map[any]any{map1, map2, map3}
 	expected := map[any]any{"foo": "ood", "baz": "bat"}
 
-	result, err := Merge(inputs)
+	result, err := Merge(schema.CliConfiguration{}, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 }
