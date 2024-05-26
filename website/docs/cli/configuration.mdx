@@ -134,6 +134,40 @@ If `base_path` is provided, `components.terraform.base_path`, `components.helmfi
 base_path: "."
 ```
 
+## Settings
+
+The `settings` section configures Atmos global settings.
+
+<File title="atmos.yaml">
+    ```yaml
+    settings:
+      # `list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
+      # Can also be set using 'ATMOS_SETTINGS_LIST_MERGE_STRATEGY' environment variable, or '--settings-list-merge-strategy' command-line argument
+      # The following strategies are supported:
+      # `replace`: Most recent list imported wins (the default behavior).
+      # `append`:  The sequence of lists is appended in the same order as imports.
+      # `merge`:   The items in the destination list are deep-merged with the items in the source list.
+      #            The items in the source list take precedence.
+      #            The items are processed starting from the first up to the length of the source list (the remaining items are not processed).
+      #            If the source and destination lists have the same length, all items in the destination lists are
+      #            depp-merged with all items in the source list.
+      list_merge_strategy: replace
+    ```
+</File>
+
+- `settings.list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
+  The following strategies are supported:
+
+  -   `replace` - Most recent list imported wins (the default behavior).
+
+  -   `append` - The sequence of lists is appended in the same order as imports.
+
+  -   `merge` - The items in the destination list are deep-merged with the items in the source list.
+               The items in the source list take precedence.
+               The items are processed starting from the first up to the length of the source list (the remaining items are not processed).
+               If the source and destination lists have the same length, all items in the destination lists are
+               depp-merged with all items in the source list.
+
 ## Components
 
 Specify the default behaviors for components.
