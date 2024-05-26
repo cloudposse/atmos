@@ -1,8 +1,8 @@
 package merge
 
 import (
+	"dario.cat/mergo"
 	"github.com/fatih/color"
-	"github.com/imdario/mergo"
 	"gopkg.in/yaml.v2"
 )
 
