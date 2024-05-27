@@ -11,7 +11,9 @@ const (
 	// https://github.com/roboll/helmfile#cli-reference
 	GlobalOptionsFlag = "--global-options"
 
+	TerraformCommandFlag        = "--terraform-command"
 	TerraformDirFlag            = "--terraform-dir"
+	HelmfileCommandFlag         = "--helmfile-command"
 	HelmfileDirFlag             = "--helmfile-dir"
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
@@ -39,9 +41,23 @@ const (
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor.yaml"
 
-	ImportSectionName    = "import"
-	OverridesSectionName = "overrides"
+	ImportSectionName      = "import"
+	OverridesSectionName   = "overrides"
+	ProvidersSectionName   = "providers"
+	VarsSectionName        = "vars"
+	SettingsSectionName    = "settings"
+	EnvSectionName         = "env"
+	BackendSectionName     = "backend"
+	BackendTypeSectionName = "backend_type"
+	MetadataSectionName    = "metadata"
+	ComponentSectionName   = "component"
+	ComponentsSectionName  = "components"
+	CommandSectionName     = "command"
+	TerraformSectionName   = "terraform"
+	HelmfileSectionName    = "helmfile"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
+
+	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 )

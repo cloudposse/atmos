@@ -12,7 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestDescribeAffectedWithTargetRepoClone(t *testing.T) {
+func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -28,7 +28,7 @@ func TestDescribeAffectedWithTargetRepoClone(t *testing.T) {
 	ref := "refs/heads/master"
 	sha := ""
 
-	affected, err := e.ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, "", "", true, true)
+	affected, err := e.ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, "", "", true, true)
 	assert.Nil(t, err)
 
 	affectedYaml, err := yaml.Marshal(affected)

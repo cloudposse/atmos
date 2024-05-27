@@ -1,7 +1,10 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
+	c "github.com/cloudposse/atmos/pkg/convert"
+	"github.com/mitchellh/mapstructure"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,6 +23,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+
+	err = ValidateStacks(cliConfig)
 	if err != nil {
 		return err
 	}
@@ -109,6 +117,12 @@ func ExecuteDescribeStacks(
 	finalStacksMap := make(map[string]any)
 	var varsSection map[any]any
 	var metadataSection map[any]any
+	var settingsSection map[any]any
+	var envSection map[any]any
+	var providersSection map[any]any
+	var overridesSection map[any]any
+	var backendSection map[any]any
+	var backendTypeSection string
 	var stackName string
 	context := schema.Context{}
 
@@ -126,8 +140,8 @@ func ExecuteDescribeStacks(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
-						if comp, ok := componentSection["component"].(string); !ok || comp == "" {
-							componentSection["component"] = componentName
+						if comp, ok := componentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Find all derived components of the provided components and include them in the output
@@ -136,18 +150,78 @@ func ExecuteDescribeStacks(
 							return nil, err
 						}
 
-						// Component vars
-						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
-							context = cfg.GetContextFromVars(varsSection)
-							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
+						if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
+							varsSection = map[any]any{}
+						}
+
+						if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); !ok {
+							metadataSection = map[any]any{}
+						}
+
+						if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
+							settingsSection = map[any]any{}
+						}
+
+						if envSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
+							envSection = map[any]any{}
+						}
+
+						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
+							providersSection = map[any]any{}
+						}
+
+						if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
+							overridesSection = map[any]any{}
+						}
+
+						if backendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
+							backendSection = map[any]any{}
+						}
+
+						if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
+							backendTypeSection = ""
+						}
+
+						configAndStacksInfo := schema.ConfigAndStacksInfo{
+							ComponentFromArg:          componentName,
+							Stack:                     stackName,
+							ComponentMetadataSection:  metadataSection,
+							ComponentVarsSection:      varsSection,
+							ComponentSettingsSection:  settingsSection,
+							ComponentEnvSection:       envSection,
+							ComponentProvidersSection: providersSection,
+							ComponentOverridesSection: overridesSection,
+							ComponentBackendSection:   backendSection,
+							ComponentBackendType:      backendTypeSection,
+							ComponentSection: map[string]any{
+								cfg.VarsSectionName:        varsSection,
+								cfg.MetadataSectionName:    metadataSection,
+								cfg.SettingsSectionName:    settingsSection,
+								cfg.EnvSectionName:         envSection,
+								cfg.ProvidersSectionName:   providersSection,
+								cfg.OverridesSectionName:   overridesSection,
+								cfg.BackendSectionName:     backendSection,
+								cfg.BackendTypeSectionName: backendTypeSection,
+							},
+						}
+
+						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
+						}
+
+						// Stack name
+						if cliConfig.Stacks.NameTemplate != "" {
+							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
-						}
-
-						// Component metadata
-						if metadataSection, ok = componentSection["metadata"].(map[any]any); !ok {
-							metadataSection = map[any]any{}
+						} else {
+							context = cfg.GetContextFromVars(varsSection)
+							configAndStacksInfo.Context = context
+							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+							if err != nil {
+								return nil, err
+							}
 						}
 
 						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
@@ -162,6 +236,10 @@ func ExecuteDescribeStacks(
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
+						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
 								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
@@ -173,35 +251,54 @@ func ExecuteDescribeStacks(
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
+							// Terraform workspace
+							workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+							if err != nil {
+								return nil, err
+							}
+							componentSection["workspace"] = workspace
+							configAndStacksInfo.ComponentSection["workspace"] = workspace
+
+							// Atmos component, stack, and stack manifest file
+							componentSection["atmos_component"] = componentName
+							componentSection["atmos_stack"] = stackName
+							componentSection["atmos_stack_file"] = stackFileName
+
+							// Process `Go` templates
+							componentSectionStr, err := u.ConvertToYAML(componentSection)
+							if err != nil {
+								return nil, err
+							}
+
+							var settingsSectionStruct schema.Settings
+							err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+							if err != nil {
+								return nil, err
+							}
+
+							componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							if err != nil {
+								return nil, err
+							}
+
+							componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+							if err != nil {
+								if !cliConfig.Templates.Settings.Enabled {
+									if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+										errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+											"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+										err = errors.Join(err, errors.New(errorMessage))
+									}
+								}
+								u.LogErrorAndExit(err)
+							}
+
+							componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+
+							// Add sections
 							for sectionName, section := range componentSection {
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
-								}
-
-								// Terraform workspace
-								if len(sections) == 0 || u.SliceContainsString(sections, "workspace") {
-									workspace, err := BuildTerraformWorkspace(
-										stackName,
-										cliConfig.Stacks.NamePattern,
-										metadataSection,
-										context,
-									)
-									if err != nil {
-										return nil, err
-									}
-
-									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["workspace"] = workspace
-								}
-
-								// Atmos component, stack, and stack manifest file
-								if len(sections) == 0 || u.SliceContainsString(sections, "atmos_component") {
-									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["atmos_component"] = componentName
-								}
-								if len(sections) == 0 || u.SliceContainsString(sections, "atmos_stack") {
-									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["atmos_stack"] = stackName
-								}
-								if len(sections) == 0 || u.SliceContainsString(sections, "atmos_stack_file") {
-									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)["atmos_stack_file"] = stackFileName
 								}
 							}
 						}
@@ -217,8 +314,8 @@ func ExecuteDescribeStacks(
 							return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
-						if comp, ok := componentSection["component"].(string); !ok || comp == "" {
-							componentSection["component"] = componentName
+						if comp, ok := componentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Find all derived components of the provided components and include them in the output
@@ -227,10 +324,75 @@ func ExecuteDescribeStacks(
 							return nil, err
 						}
 
-						// Component vars
-						if varsSection, ok = componentSection["vars"].(map[any]any); ok {
-							context := cfg.GetContextFromVars(varsSection)
-							stackName, err = cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
+						if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
+							varsSection = map[any]any{}
+						}
+
+						if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); !ok {
+							metadataSection = map[any]any{}
+						}
+
+						if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
+							settingsSection = map[any]any{}
+						}
+
+						if envSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
+							envSection = map[any]any{}
+						}
+
+						if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
+							providersSection = map[any]any{}
+						}
+
+						if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
+							overridesSection = map[any]any{}
+						}
+
+						if backendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
+							backendSection = map[any]any{}
+						}
+
+						if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
+							backendTypeSection = ""
+						}
+
+						configAndStacksInfo := schema.ConfigAndStacksInfo{
+							ComponentFromArg:          componentName,
+							Stack:                     stackName,
+							ComponentMetadataSection:  metadataSection,
+							ComponentVarsSection:      varsSection,
+							ComponentSettingsSection:  settingsSection,
+							ComponentEnvSection:       envSection,
+							ComponentProvidersSection: providersSection,
+							ComponentOverridesSection: overridesSection,
+							ComponentBackendSection:   backendSection,
+							ComponentBackendType:      backendTypeSection,
+							ComponentSection: map[string]any{
+								cfg.VarsSectionName:        varsSection,
+								cfg.MetadataSectionName:    metadataSection,
+								cfg.SettingsSectionName:    settingsSection,
+								cfg.EnvSectionName:         envSection,
+								cfg.ProvidersSectionName:   providersSection,
+								cfg.OverridesSectionName:   overridesSection,
+								cfg.BackendSectionName:     backendSection,
+								cfg.BackendTypeSectionName: backendTypeSection,
+							},
+						}
+
+						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
+						}
+
+						// Stack name
+						if cliConfig.Stacks.NameTemplate != "" {
+							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							if err != nil {
+								return nil, err
+							}
+						} else {
+							context = cfg.GetContextFromVars(varsSection)
+							configAndStacksInfo.Context = context
+							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
@@ -248,6 +410,10 @@ func ExecuteDescribeStacks(
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
+						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
 								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
@@ -259,20 +425,46 @@ func ExecuteDescribeStacks(
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
+							// Atmos component, stack, and stack manifest file
+							componentSection["atmos_component"] = componentName
+							componentSection["atmos_stack"] = stackName
+							componentSection["atmos_stack_file"] = stackFileName
+
+							// Process `Go` templates
+							componentSectionStr, err := u.ConvertToYAML(componentSection)
+							if err != nil {
+								return nil, err
+							}
+
+							var settingsSectionStruct schema.Settings
+							err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+							if err != nil {
+								return nil, err
+							}
+
+							componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							if err != nil {
+								return nil, err
+							}
+
+							componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+							if err != nil {
+								if !cliConfig.Templates.Settings.Enabled {
+									if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+										errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+											"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+										err = errors.Join(err, errors.New(errorMessage))
+									}
+								}
+								u.LogErrorAndExit(err)
+							}
+
+							componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+
+							// Add sections
 							for sectionName, section := range componentSection {
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
-
-									// Atmos component, stack, and stack manifest file
-									if len(sections) == 0 || u.SliceContainsString(sections, "atmos_component") {
-										finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)["atmos_component"] = componentName
-									}
-									if len(sections) == 0 || u.SliceContainsString(sections, "atmos_stack") {
-										finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)["atmos_stack"] = stackName
-									}
-									if len(sections) == 0 || u.SliceContainsString(sections, "atmos_stack_file") {
-										finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)["atmos_stack_file"] = stackFileName
-									}
 								}
 							}
 						}

@@ -235,6 +235,7 @@ func sectionContainsAnyNotEmptySections(section map[any]any, sectionsToCheck []s
 
 // CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
 func CreateComponentStackMap(
+	cliConfig schema.CliConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
@@ -266,6 +267,7 @@ func CreateComponentStackMap(
 
 			if !isDirectory && isYaml {
 				config, _, _, err := ProcessYAMLConfigFile(
+					cliConfig,
 					stacksBasePath,
 					p,
 					map[string]map[any]any{},
@@ -283,6 +285,7 @@ func CreateComponentStackMap(
 				}
 
 				finalConfig, err := ProcessStackConfig(
+					cliConfig,
 					stacksBasePath,
 					terraformComponentsBasePath,
 					helmfileComponentsBasePath,
@@ -361,6 +364,7 @@ func getFileContent(filePath string) (string, error) {
 
 // ProcessBaseComponentConfig processes base component(s) config
 func ProcessBaseComponentConfig(
+	cliConfig schema.CliConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[any]any,
 	component string,
@@ -378,6 +382,7 @@ func ProcessBaseComponentConfig(
 	var baseComponentVars map[any]any
 	var baseComponentSettings map[any]any
 	var baseComponentEnv map[any]any
+	var baseComponentProviders map[any]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[any]any
@@ -410,6 +415,7 @@ func ProcessBaseComponentConfig(
 			}
 
 			err := ProcessBaseComponentConfig(
+				cliConfig,
 				baseComponentConfig,
 				allComponentsMap,
 				baseComponent,
@@ -443,7 +449,7 @@ func ProcessBaseComponentConfig(
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
 						if checkBaseComponentExists {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
+							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
 								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
 								component,
 								stack,
@@ -455,6 +461,7 @@ func ProcessBaseComponentConfig(
 
 					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
 					err := ProcessBaseComponentConfig(
+						cliConfig,
 						baseComponentConfig,
 						allComponentsMap,
 						component,
@@ -492,6 +499,13 @@ func ProcessBaseComponentConfig(
 			}
 		}
 
+		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
+			baseComponentProviders, ok = baseComponentProvidersSection.(map[any]any)
+			if !ok {
+				return fmt.Errorf("invalid '%s.providers' section in the stack '%s'", baseComponent, stack)
+			}
+		}
+
 		// Base component backend
 		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
 			baseComponentBackendType, ok = i.(string)
@@ -523,7 +537,7 @@ func ProcessBaseComponentConfig(
 		}
 
 		// Base component `command`
-		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap["command"]; baseComponentCommandSectionExist {
+		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap[cfg.CommandSectionName]; baseComponentCommandSectionExist {
 			baseComponentCommand, ok = baseComponentCommandSection.(string)
 			if !ok {
 				return fmt.Errorf("invalid '%s.command' section in the stack '%s'", baseComponent, stack)
@@ -535,25 +549,32 @@ func ProcessBaseComponentConfig(
 		}
 
 		// Base component `vars`
-		merged, err := m.Merge([]map[any]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
+		merged, err := m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentVars = merged
 
 		// Base component `settings`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentSettings = merged
 
 		// Base component `env`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentEnv = merged
+
+		// Base component `providers`
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentProviders = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
@@ -562,7 +583,7 @@ func ProcessBaseComponentConfig(
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
 		// Base component `backend`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
 		if err != nil {
 			return err
 		}
@@ -572,7 +593,7 @@ func ProcessBaseComponentConfig(
 		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 
 		// Base component `remote_state_backend`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
 		if err != nil {
 			return err
 		}
@@ -610,7 +631,7 @@ func FindComponentsDerivedFromBaseComponents(
 			return nil, fmt.Errorf("invalid '%s' component section in the file '%s'", component, stack)
 		}
 
-		if base, baseComponentExist := componentSection["component"]; baseComponentExist {
+		if base, baseComponentExist := componentSection[cfg.ComponentSectionName]; baseComponentExist {
 			baseComponent, ok := base.(string)
 			if !ok {
 				return nil, fmt.Errorf("invalid 'component' attribute in the component '%s' in the file '%s'", component, stack)
