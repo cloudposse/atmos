@@ -3,6 +3,7 @@ module github.com/cloudposse/atmos
 go 1.21
 
 require (
+	dario.cat/mergo v1.0.0
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/alecthomas/chroma v0.10.0
 	github.com/arsham/figurine v1.3.0
@@ -21,7 +22,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.20.1
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20240509232506-4708120f8f30
-	github.com/imdario/mergo v0.3.13
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
@@ -48,7 +48,6 @@ require (
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	cloud.google.com/go/iam v1.1.6 // indirect
 	cloud.google.com/go/storage v1.36.0 // indirect
-	dario.cat/mergo v1.0.0 // indirect
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.0 // indirect
@@ -155,6 +154,7 @@ require (
 	github.com/hashicorp/vault/sdk v0.5.0 // indirect
 	github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87 // indirect
 	github.com/huandu/xstrings v1.3.3 // indirect
+	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect

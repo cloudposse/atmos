@@ -134,6 +134,40 @@ If `base_path` is provided, `components.terraform.base_path`, `components.helmfi
 base_path: "."
 ```
 
+## Settings
+
+The `settings` section configures Atmos global settings.
+
+<File title="atmos.yaml">
+    ```yaml
+    settings:
+      # `list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
+      # Can also be set using 'ATMOS_SETTINGS_LIST_MERGE_STRATEGY' environment variable, or '--settings-list-merge-strategy' command-line argument
+      # The following strategies are supported:
+      # `replace`: Most recent list imported wins (the default behavior).
+      # `append`:  The sequence of lists is appended in the same order as imports.
+      # `merge`:   The items in the destination list are deep-merged with the items in the source list.
+      #            The items in the source list take precedence.
+      #            The items are processed starting from the first up to the length of the source list (the remaining items are not processed).
+      #            If the source and destination lists have the same length, all items in the destination lists are
+      #            deep-merged with all items in the source list.
+      list_merge_strategy: replace
+    ```
+</File>
+
+- `settings.list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
+  The following strategies are supported:
+
+  -   `replace` - Most recent list imported wins (the default behavior).
+
+  -   `append` - The sequence of lists is appended in the same order as imports.
+
+  -   `merge` - The items in the destination list are deep-merged with the items in the source list.
+               The items in the source list take precedence.
+               The items are processed starting from the first up to the length of the source list (the remaining items are not processed).
+               If the source and destination lists have the same length, all items in the destination lists are
+               deep-merged with all items in the source list.
+
 ## Components
 
 Specify the default behaviors for components.
@@ -341,7 +375,7 @@ Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to co
 <File title="atmos.yaml">
 ```yaml
 workflows:
-  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
+  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
   # Supports both absolute and relative paths
   base_path: "stacks/workflows"
 ```
@@ -639,12 +673,12 @@ Configure the paths where to find OPA and JSON Schema files to validate Atmos st
 schemas:
   # https://json-schema.org
   jsonschema:
-    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line arguments
+    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/jsonschema"
   # https://www.openpolicyagent.org
   opa:
-    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line arguments
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
   # JSON Schema to validate Atmos manifests
@@ -654,7 +688,7 @@ schemas:
   # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
   atmos:
-    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line arguments
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
@@ -1021,3 +1055,4 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_SCHEMAS_ATMOS_MANIFEST                          | schemas.atmos.manifest                          | Path to JSON Schema to validate Atmos stack manifests. For more details, refer to [Atmos Manifest JSON Schema](/reference/schemas)                                                                                           |
 | ATMOS_LOGS_FILE                                       | logs.file                                       | The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`). If omitted, `/dev/stdout` will be used                            |
 | ATMOS_LOGS_LEVEL                                      | logs.level                                      | Logs level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging) |
+| ATMOS_SETTINGS_LIST_MERGE_STRATEGY                    | settings.list_merge_strategy                    | Specifies how lists are merged in Atmos stack manifests. The following strategies are supported: `replace`, `append`, `merge`                                                                                                |

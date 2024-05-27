@@ -216,6 +216,7 @@ func processCommandLineArgs(
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
+	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
@@ -883,6 +884,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.LogsFile = logsFileFlagParts[1]
+		}
+
+		if arg == cfg.SettingsListMergeStrategyFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.SettingsListMergeStrategy = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.SettingsListMergeStrategyFlag) {
+			var settingsListMergeStrategyParts = strings.Split(arg, "=")
+			if len(settingsListMergeStrategyParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
 		}
 
 		if arg == cfg.FromPlanFlag {

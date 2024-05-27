@@ -77,7 +77,7 @@ func ProcessTmplWithDatasources(
 		return "", err
 	}
 
-	templateSettingsMerged, err := merge.Merge([]map[any]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
+	templateSettingsMerged, err := merge.Merge(cliConfig, []map[any]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
 	if err != nil {
 		return "", err
 	}

@@ -186,13 +186,13 @@ For example:
 
 The above example uses a list of configuration blocks for the `aws` provider.
 
-Since it's a list, it doesn't currently work with deep-merging of stacks in the
-[inheritance](/core-concepts/components/inheritance) chain (list are not deep-merged, they are replaced).
+Since it's a list, by default it doesn't work with deep-merging of stacks in the
+[inheritance](/core-concepts/components/inheritance) chain since list are not deep-merged, they are replaced.
 
-This configuration will work for a single component.
+If you want to use the above configuration in the inheritance chain and allow appending or merging of lists, consider
+configuring the `settings.list_merge_strategy` in the `atmos.yaml` CLI config file.
 
-In the future Atmos releases, we'll consider an alternative syntax to describe multiple provider configurations using
-maps (maps support deep-merging at all scopes in the inheritance chain).
+For more details, refer to [Atmos CLI Settings](/cli/configuration#settings).
 
 :::
 
