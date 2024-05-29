@@ -84,7 +84,8 @@ We can quickly see a complete list of all drift components in the "Issues" tab i
 
 #### Example Usage
 
-The action expects the atmos configuration file `atmos.yaml` to be present in the repository.
+The action expects the Atmos configuration file `atmos.yaml` to be present in the repository. 
+Usually, the configuration placed in `./rootfs/usr/local/etc/atmos/atmos.yaml`.
 The config should have the following structure:
 
 ```yaml
