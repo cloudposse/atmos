@@ -305,13 +305,27 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				}
 
 				if !componentConfigsEqual {
-					m := fmt.Sprintf("the Atmos component '%s' in the stack '%s' is defined in more than one top-level stack manifest file: %s.\n"+
-						"The component configurations in the stack manifests are different.\n"+
-						"Atmos can't decide which stack manifest to use to get configuration for the component in the stack.\n"+
-						"This is a stack misconfiguration.",
+					var m1 string
+					for _, stackManifestName := range stackManifests {
+						m1 = m1 + "\n" + fmt.Sprintf("- atmos describe component %s -s %s", componentName, stackManifestName)
+					}
+
+					m := fmt.Sprintf("The Atmos component '%[1]s' in the stack '%[2]s' is defined in more than one top-level stack manifest file: %[3]s.\n\n"+
+						"The component configurations in the stack manifests are different.\n\n"+
+						"To check and compare the component configurations in the stack manifests, run the following commands: %[4]s\n\n"+
+						"You can use the '--file' flag to write the results of the above commands to files (refer to https://atmos.tools/cli/commands/describe/component).\n"+
+						"You can then use the Linux 'diff' command to compare the files line by line and show the differences (refer to https://man7.org/linux/man-pages/man1/diff.1.html)\n\n"+
+						"When searching for the component '%[1]s' in the stack '%[2]s', Atmos can't decide which stack "+
+						"manifest file to use to get configuration for the component.\n"+
+						"This is a stack misconfiguration.\n\n"+
+						"Consider the following solutions to fix the issue:\n"+
+						"- Adjust the stack configurations so that the '%[1]s' component in the stack '%[2]s' is only defined once (in one stack manifest file)\n"+
+						"- Use multiple-inheritance to combine multiple configuratoins together (refer to https://atmos.tools/core-concepts/components/inheritance)\n\n",
 						componentName,
 						stackName,
-						strings.Join(stackManifests, ", "))
+						strings.Join(stackManifests, ", "),
+						m1,
+					)
 					res = append(res, m)
 				}
 			}
