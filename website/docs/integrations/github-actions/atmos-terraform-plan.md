@@ -68,8 +68,11 @@ integrations:
         group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
 ```
 
-> [!IMPORTANT]
-> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v1` version](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v1).
+:::tip Important!
+
+**Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v1` version](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v1).
+
+:::
 
 ```yaml
 # .github/workflows/atmos-terraform-plan.yaml

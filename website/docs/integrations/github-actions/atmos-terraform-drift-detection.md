@@ -107,9 +107,11 @@ integrations:
         group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
 ```
 
-> [!IMPORTANT]
-> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v0` version](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0).
+:::tip Important!
 
+**Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v0` version](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0).
+
+:::
 
 ```yaml
 name: 👽 Atmos Terraform Drift Detection
@@ -225,8 +227,11 @@ Once we have an open Issue for a drifted component, we can trigger another workf
 
 #### Example Usage
 
-> [!IMPORTANT]
-> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v1` version](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1).
+:::tip Important!
+
+**Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v1` version](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1).
+
+:::
 
 ```yaml
 name: 👽 Atmos Terraform Drift Remediation

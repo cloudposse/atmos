@@ -48,8 +48,11 @@ integrations:
         group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
 ```
 
-> [!IMPORTANT]
-> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v2` version](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v2).
+:::tip Important!
+
+**Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v2` version](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v2).
+
+:::
 
 ### Workflow example
 
