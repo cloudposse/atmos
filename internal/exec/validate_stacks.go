@@ -274,14 +274,24 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 		for stackName, stackManifests := range componentSection {
 			if len(stackManifests) > 1 {
 				// We have the same Atmos component in the same stack configured (or imported) in more than one stack manifest files
-				// Check if the component config is the same in those stack manifests.
-				// If the config is different, show the error
+				// Check if the component configs are the same (deep-equal) in those stack manifests.
+				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
 					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName)
 					if err != nil {
 						return nil, err
 					}
+
+					// Hide the sections that should not be compared
+					componentConfig["atmos_cli_config"] = nil
+					componentConfig["atmos_stack"] = nil
+					componentConfig["atmos_stack_file"] = nil
+					componentConfig["sources"] = nil
+					componentConfig["imports"] = nil
+					componentConfig["deps_all"] = nil
+					componentConfig["deps"] = nil
+
 					componentConfigs = append(componentConfigs, componentConfig)
 				}
 
@@ -310,8 +320,3 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 
 	return res, nil
 }
-
-//if !reflect.DeepEqual(baseComponentSection, importOfStackImportBaseComponentSection) {
-//deps = append(deps, stackImportName)
-//break
-//}
