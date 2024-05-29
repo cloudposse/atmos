@@ -326,6 +326,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 						strings.Join(stackManifests, ", "),
 						m1,
 					)
+
 					res = append(res, m)
 				}
 			}
