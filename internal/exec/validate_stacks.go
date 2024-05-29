@@ -320,7 +320,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 						"This is a stack misconfiguration.\n\n"+
 						"Consider the following solutions to fix the issue:\n"+
 						"- Adjust the stack configurations so that the '%[1]s' component in the stack '%[2]s' is only defined once (in one stack manifest file)\n"+
-						"- Use multiple-inheritance to combine multiple configuratoins together (refer to https://atmos.tools/core-concepts/components/inheritance)\n\n",
+						"- Use multiple-inheritance to combine multiple configurations together (refer to https://atmos.tools/core-concepts/components/inheritance)\n\n",
 						componentName,
 						stackName,
 						strings.Join(stackManifests, ", "),

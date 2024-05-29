@@ -35,14 +35,34 @@ This command validates Atmos stack manifests and checks the following:
 - Schema: if all sections in all YAML manifest files are correctly configured and have valid data types
 
 - Misconfiguration and duplication of components in stacks. If the same Atmos component in the same Atmos stack is
-  defined in more than one stack manifest file, an error message will be displayed similar to the following:
+  defined in more than one stack manifest file, and the component configurations are different, an error message will
+  be displayed similar to the following:
 
-  ```console
-  the Atmos component 'vpc' in the stack 'plat-ue2-dev' is defined in more than one top-level stack
-  manifest file: orgs/acme/plat/dev/us-east-2, orgs/acme/plat/dev/us-east-2-extras.
-  Atmos can't decide which stack manifest to use to get configuration for the component
-  in the stack. This is a stack misconfiguration.
-  ```
+    <Terminal title="atmos validate stacks">
+        ```console
+        The Atmos component 'vpc' in the stack 'plat-ue2-dev' is defined in more than one
+        top-level stack manifest file: orgs/acme/plat/dev/us-east-2-extras, orgs/acme/plat/dev/us-east-2.
+
+        The component configurations in the stack manifests are different.
+
+        To check and compare the component configurations in the stack manifests, run the following commands:
+        - atmos describe component vpc -s orgs/acme/plat/dev/us-east-2-extras
+        - atmos describe component vpc -s orgs/acme/plat/dev/us-east-2
+
+        You can use the '--file' flag to write the results of the above commands to files
+        (refer to https://atmos.tools/cli/commands/describe/component).
+
+        You can then use the Linux 'diff' command to compare the files line by line and show the differences
+        (refer to https://man7.org/linux/man-pages/man1/diff.1.html)
+
+        When searching for the component 'vpc' in the stack 'plat-ue2-dev', Atmos can't decide which
+        stack manifest file to use to get configuration for the component. This is a stack misconfiguration.
+
+        Consider the following solutions to fix the issue:
+        - Adjust the stack configurations so that the 'vpc' component in the stack 'plat-ue2-dev' is only defined once (in one stack manifest file)
+        - Use multiple-inheritance to combine multiple configurations together (refer to https://atmos.tools/core-concepts/components/inheritance)
+        ```
+    </Terminal>
 
 <br/>
 
