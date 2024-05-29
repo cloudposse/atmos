@@ -49,8 +49,12 @@ The command checks and validates the following:
     stack manifest file to use to get configuration for the component. This is a stack misconfiguration.
     
     Consider the following solutions to fix the issue:
-    - Adjust the stack configurations so that the Atmos 'vpc' component in the stack 'plat-ue2-dev' is only defined once
-      (in one YAML stack manifest file)
+
+    - Ensure that the same instance of the Atmos 'vpc' component in the stack 'plat-ue2-dev'
+      is only defined once (in one YAML stack manifest file)
+
+    - When defining multiple instances of the same component in the stack,
+      ensure each has a unique name
 
     - Use multiple-inheritance to combine multiple configurations together
       (refer to https://atmos.tools/core-concepts/components/inheritance)

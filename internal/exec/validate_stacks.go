@@ -319,7 +319,8 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 						"manifest file to use to get configuration for the component.\n"+
 						"This is a stack misconfiguration.\n\n"+
 						"Consider the following solutions to fix the issue:\n"+
-						"- Adjust the stack configurations so that the Atmos '%[1]s' component in the stack '%[2]s' is only defined once (in one YAML stack manifest file)\n"+
+						"- Ensure that the same instance of the Atmos '%[1]s' component in the stack '%[2]s' is only defined once (in one YAML stack manifest file)\n"+
+						"- When defining multiple instances of the same component in the stack, ensure each has a unique name\n"+
 						"- Use multiple-inheritance to combine multiple configurations together (refer to https://atmos.tools/core-concepts/components/inheritance)\n\n",
 						componentName,
 						stackName,
