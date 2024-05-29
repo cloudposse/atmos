@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"path"
+	"reflect"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -272,16 +273,45 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 	for componentName, componentSection := range componentStackMap {
 		for stackName, stackManifests := range componentSection {
 			if len(stackManifests) > 1 {
-				m := fmt.Sprintf("the Atmos component '%s' in the stack '%s' is defined in more than one top-level stack manifest file: %s.\n"+
-					"Atmos can't decide which stack manifest to use to get configuration for the component in the stack.\n"+
-					"This is a stack misconfiguration.",
-					componentName,
-					stackName,
-					strings.Join(stackManifests, ", "))
-				res = append(res, m)
+				// We have the same Atmos component in the same stack configured (or imported) in more than one stack manifest files
+				// Check if the component config is the same in those stack manifests.
+				// If the config is different, show the error
+				var componentConfigs []map[string]any
+				for _, stackManifestName := range stackManifests {
+					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName)
+					if err != nil {
+						return nil, err
+					}
+					componentConfigs = append(componentConfigs, componentConfig)
+				}
+
+				componentConfigsEqual := true
+
+				for i := 0; i < len(componentConfigs)-1; i++ {
+					if !reflect.DeepEqual(componentConfigs[i], componentConfigs[i+1]) {
+						componentConfigsEqual = false
+						break
+					}
+				}
+
+				if !componentConfigsEqual {
+					m := fmt.Sprintf("the Atmos component '%s' in the stack '%s' is defined in more than one top-level stack manifest file: %s.\n"+
+						"The component configurations in the stack manifests are different.\n"+
+						"Atmos can't decide which stack manifest to use to get configuration for the component in the stack.\n"+
+						"This is a stack misconfiguration.",
+						componentName,
+						stackName,
+						strings.Join(stackManifests, ", "))
+					res = append(res, m)
+				}
 			}
 		}
 	}
 
 	return res, nil
 }
+
+//if !reflect.DeepEqual(baseComponentSection, importOfStackImportBaseComponentSection) {
+//deps = append(deps, stackImportName)
+//break
+//}
