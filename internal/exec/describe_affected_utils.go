@@ -1380,17 +1380,19 @@ func addAffectedSpaceliftAdminStack(
 }
 
 // Add dependent components and stacks for each affected component
-func addDependents(cliConfig schema.CliConfiguration, affected []schema.Affected) ([]schema.Affected, error) {
-	for _, i := range affected {
-		dependents, err := ExecuteDescribeDependents(cliConfig, i.Component, i.Stack)
+func addDependents(cliConfig schema.CliConfiguration, affected *[]schema.Affected) error {
+	for i := 0; i < len(*affected); i++ {
+		a := &(*affected)[i]
+
+		dependents, err := ExecuteDescribeDependents(cliConfig, a.Component, a.Stack)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if len(dependents) > 0 {
-			i.Dependents = dependents
+			a.Dependents = dependents
 		}
 	}
 
-	return affected, nil
+	return nil
 }
