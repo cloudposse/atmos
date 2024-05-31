@@ -1378,3 +1378,8 @@ func addAffectedSpaceliftAdminStack(
 
 	return affectedList, nil
 }
+
+// Add dependent components and stacks for each affected component
+func addDependents(affected []schema.Affected) []schema.Affected {
+	return nil
+}

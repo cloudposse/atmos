@@ -84,6 +84,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	includeDependents, err := flags.GetBool("include-dependents")
+	if err != nil {
+		return err
+	}
+
 	cloneTargetRef, err := flags.GetBool("clone-target-ref")
 	if err != nil {
 		return err
@@ -105,6 +110,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	if err != nil {
 		return err
+	}
+
+	// Add dependent components and stacks for each affected component
+	if includeDependents {
+		affected = addDependents(affected)
 	}
 
 	if verbose {
