@@ -187,10 +187,8 @@ func createComponentStackMap(
 					}
 
 					// Don't check abstract components (they are never provisioned)
-					if metadataType, ok := metadataSection["type"].(string); ok {
-						if metadataType == "abstract" {
-							continue
-						}
+					if IsComponentAbstract(metadataSection) {
+						continue
 					}
 
 					if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
