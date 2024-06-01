@@ -9,7 +9,7 @@ In the previous step, we've decided on the following:
 
 - Use a monorepo to configure and provision two Terraform components into three AWS accounts and two AWS regions
 - The filesystem layout for the infrastructure monorepo
-- To be able to use [Component Remote State](/core-concepts/components/remote-state), we put the `atmos.yaml` CLI config file
+- To be able to use [Component Remote State](/core-concepts/components/terraform/remote-state), we put the `atmos.yaml` CLI config file
   into `/usr/local/etc/atmos/atmos.yaml` folder and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo
 
 Next step is to configure `atmos.yaml`.
@@ -106,7 +106,7 @@ schemas:
   # JSON Schema to validate Atmos manifests
   # https://atmos.tools/cli/schemas/
   # https://atmos.tools/cli/commands/validate/stacks/
-  # https://atmos.tools/quick-start/configure-validation/
+  # https://atmos.tools/quick-start/advanced/configure-validation/
   # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
   atmos:
@@ -127,7 +127,7 @@ to [CLI Configuration](/cli/configuration).
   var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo
 
 - `components.terraform.base_path` - the base path to the Terraform components (Terraform root modules). As described in
-  [Configure Repository](/quick-start/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory,
+  [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory,
   and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
   with `components.terraform.base_path` to calculate the final path to the Terraform components
 
@@ -144,7 +144,7 @@ to [CLI Configuration](/cli/configuration).
   configuration when executing `terraform plan` and `terraform apply` commands
 
 - `stacks.base_path` - the base path to the Atmos stacks. As described in
-  [Configure Repository](/quick-start/configure-repository), we've decided to put the stack configurations into the `stacks` directory,
+  [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the stack configurations into the `stacks` directory,
   and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
   with `stacks.base_path` to calculate the final path to the stacks
 
@@ -172,4 +172,4 @@ to [CLI Configuration](/cli/configuration).
 
 - `schemas` - [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for:
   - [Atmos Manifests Validation](/cli/schemas)
-  - [Atmos Components Validation](/core-concepts/components/validation)
+  - [Atmos Components Validation](/core-concepts/validating/components)

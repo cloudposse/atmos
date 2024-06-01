@@ -3,7 +3,7 @@ title: Terraform Backends
 sidebar_position: 11
 sidebar_label: Terraform Backends
 description: Configure Terraform Backends.
-id: terraform-backends
+id: backends
 ---
 
 import Terminal from '@site/src/components/Terminal'
@@ -437,7 +437,7 @@ terraform:
 <br/>
 
 :::tip
-Refer to [Terraform Workspaces in Atmos](/core-concepts/components/terraform-workspaces) for more information on how
+Refer to [Terraform Workspaces in Atmos](/core-concepts/components/terraform/workspaces) for more information on how
 Atmos calculates Terraform workspaces for components, and how workspaces can be overridden for each component.
 :::
 
@@ -448,7 +448,7 @@ Each account needs to have a separate S3 bucket, DynamoDB table, and IAM role wi
 (for example, the `development` Team should be able to access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
 
 Atmos supports this use-case by using deep-merging of stack manifests, [Imports](/core-concepts/stacks/imports)
-and [Inheritance](/core-concepts/components/inheritance), which makes the backend configuration reusable and DRY.
+and [Inheritance](/core-concepts/stacks/inheritance), which makes the backend configuration reusable and DRY.
 
 We'll split the backend config between the Organization and the accounts.
 

@@ -29,7 +29,7 @@ terraform:
       atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
 
   # Terraform backend configuration
-  # https://atmos.tools/core-concepts/components/terraform-backends
+  # https://atmos.tools/core-concepts/components/terraform/backends
   # https://developer.hashicorp.com/terraform/language/settings/backends/configuration
   #  backend_type: cloud  # s3, cloud
   #  backend:

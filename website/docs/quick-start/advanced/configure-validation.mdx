@@ -4,7 +4,7 @@ sidebar_position: 7
 sidebar_label: Configure Validation
 ---
 
-Atmos supports [Atmos Manifests Validation](/cli/schemas) and [Atmos Components Validation](/core-concepts/components/validation)
+Atmos supports [Atmos Manifests Validation](/cli/schemas) and [Atmos Components Validation](/core-concepts/validating/components)
 using [JSON Schema](https://json-schema.org/) and [OPA Policies](https://www.openpolicyagent.org/).
 
 :::tip
@@ -45,7 +45,7 @@ schemas:
   # JSON Schema to validate Atmos manifests
   # https://atmos.tools/cli/schemas/
   # https://atmos.tools/cli/commands/validate/stacks/
-  # https://atmos.tools/quick-start/configure-validation/
+  # https://atmos.tools/quick-start/advanced/configure-validation/
   # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
   atmos:
@@ -60,7 +60,7 @@ schemas:
 
 For more information, refer to:
 
-- [Quick-Start: Configure CLI](/quick-start/configure-cli)
+- [Quick-Start: Configure CLI](/quick-start/advanced/configure-cli)
 - [Atmos CLI Configuration](/cli/configuration)
 
 :::
@@ -122,7 +122,7 @@ Atmos component validation allows:
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   [OPA Policies](https://www.openpolicyagent.org/)
 
-To configure Atmos components validation, complete the steps described in [Atmos Components Validation](/core-concepts/components/validation).
+To configure Atmos components validation, complete the steps described in [Atmos Components Validation](/core-concepts/validating/components).
 
 <br/>
 
@@ -130,7 +130,7 @@ To configure Atmos components validation, complete the steps described in [Atmos
 
 For more information, refer to:
 
-- [Atmos Components Validation](/core-concepts/components/validation)
+- [Atmos Components Validation](/core-concepts/validating/components)
 - [atmos validate component](/cli/commands/validate/component)
 
 :::

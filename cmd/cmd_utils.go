@@ -383,5 +383,5 @@ func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	u.PrintMessage("https://github.com/cloudposse/atmos/releases\n")
 
 	u.PrintMessageInColor("Install Atmos:\n", c2)
-	u.PrintMessage("https://atmos.tools/quick-start/install-atmos\n")
+	u.PrintMessage("https://atmos.tools/install\n")
 }

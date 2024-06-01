@@ -1,15 +1,15 @@
 ---
 title: Atmos Stacks
-sidebar_position: 2
-sidebar_label: Stacks
+sidebar_position: 1
+sidebar_label: Configure Stacks
 description: Stacks are a way to express the complete infrastructure needed for an environment
 id: stacks
 ---
 
 import File from '@site/src/components/File'
 
-Stacks are a way to express the complete infrastructure needed for an environment. Think of a Stack like an architectural "Blueprint" composed
-of one or more [Components](/core-concepts/components) and defined using a [standardized YAML configuration](#schema).
+Stacks define the complete configuration of an environment. Think of a Stack like an architectural "Blueprint" composed
+of one or more [Components](/core-concepts/components) configurations and defined using a [standardized YAML configuration](#schema).
 
 This abstraction layer helps to automate the orchestration and deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. They enable scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks)
 by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., Terraform components).
@@ -53,7 +53,7 @@ various [design patterns](/design-patterns/).
 
 ## Schema
 
-A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and use [inheritance](/core-concepts/components/inheritance) to achieve DRY configuration.
+A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and use [inheritance](/core-concepts/stacks/inheritance) to achieve DRY configuration.
 
 <File title="stack.yaml">
 ```yaml

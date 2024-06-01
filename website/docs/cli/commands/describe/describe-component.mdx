@@ -102,7 +102,7 @@ The output contains the following sections:
 
 - `env` - a map of ENV variables defined for the Atmos component
 
-- `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
+- `inheritance` - component's [inheritance chain](/core-concepts/stacks/inheritance)
 
 - `metadata` - component's metadata config
 
@@ -129,7 +129,7 @@ The output contains the following sections:
 - `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
   (after the deep-merging and processing all the inheritance chains and all the base components)
 
-- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/components/overrides) for more details
+- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/stacks/overrides) for more details
 
 - `providers` - a map of provider configurations for the component
 
@@ -138,10 +138,10 @@ The output contains the following sections:
 The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
 
 - `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and 
-   in [OPA validation policies](/core-concepts/components/validation) to check whether an import is allowed in the stack or not
+   in [OPA validation policies](/core-concepts/validating/components) to check whether an import is allowed in the stack or not
 
 - `deps_all` shows all component stack dependencies (imports and root-level stacks) where any configuration for the component is present.
-  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/components/validation) to check whether a user or a team 
+  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/validating/components) to check whether a user or a team 
   is allowed to import a particular config file for the component in the stack
 
 - `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined
@@ -149,7 +149,7 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
   to detect only the affected files that the component depends on. `deps` is usually a much smaller list than `deps_all` and can 
   differ from it in the following ways:
 
-  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/components/inheritance), and 
+  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/stacks/inheritance), and 
     import those base component configurations
 
   - The component can override all the default variables from the base components, and the final values are not dependent on the base component 

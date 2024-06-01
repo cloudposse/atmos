@@ -4,13 +4,54 @@ sidebar_label: Alternatives
 sidebar_position: 3
 ---
 
-To better understand where Atmos fits in, it may be helpful to understand some of the alternative tooling it seeks to replace. There are lots of great
-tools out there and we're going through a bit of a "DevOps Rennisance" when it comes to creativity on how to automate systems.
+To better understand where Atmos fits in, it may be helpful to understand some of the alternative tooling it seeks to replace. 
+There are lots of great tools out there and we're going through a bit of a "DevOps Rennisance" when it comes to creativity
+on how to automate systems.
+
+## Conceptual Inspiration
+
+Atmos is inspired by the follow frameworks or tooling.
+
+### React for JavaScript
+
+https://react.dev/
+
+[React’s](https://react.dev/) component-based architecture serves as a key inspiration for Atmos. By breaking down UIs into reusable components, React simplifies the development of complex applications. Similarly, Atmos promotes modularity in infrastructure as code, allowing components to be reused across different environments and projects. For example, in Atmos, any Terraform "root module" may be used as a component.
+
+### Kustomize for Kubernetes
+
+https://kustomize.io/
+
+[Kustomize](https://kustomize.io/) introduces a template-free way to customize Kubernetes configurations, focusing on overlays and inheritance to manage configuration variations. Atmos adopts a similar approach, enabling users to import, overlay, and override configurations efficiently, thereby simplifying the management of complex infrastructure setups, all without relying on templating.
+
+However, due to popular demand, Atmos now supports advanced templating and data sources in addition to the original template-free configurations. Templating complicates configurations and should be used solely as an escape hatch for when the first-class concepts of imports and inheritance are insufficient.
+
+### Helmfile for Helm Charts
+
+https://helmfile.com
+
+[Helmfile](https://helmfile.com) manages collections of Helm charts with a declarative syntax, combining them into a "stack" for deployment to Kubernetes. It handles environmental configuration, deep merging it and evaluating templates with a Go template engine before passing the values files to Helm. 
+
+Atmos draws from Helmfile’s ability to orchestrate multiple Helm charts, applying the concept to Terraform root modules to manage interdependencies and deployment order. It supports environmental configuration through stack configurations that define all the environmental configuration for Terraform root modules. Atmos generates the necessary Terraform `.tfvar` files, much like Helmfile generates Helm values files, ensuring consistent and efficient deployment of Terraform infrastructure.
+
+### Helm Charts for Configuration
+
+https://helm.sh/
+
+[Helm Charts](https://helm.sh/) provide a packaging format for deploying applications on Kubernetes, simplifying the processes of defining, installing, and upgrading even the most complex applications. Similarly, Atmos organizes Terraform configurations into reusable, versioned modules, facilitating consistent and repeatable infrastructure deployments.
+
+The concept is that if your root modules are sufficiently parameterized, they function much like Helm charts. You only need to supply the appropriate values to achieve the desired configuration.
+
+### Vendir by Tanzu
+
+https://github.com/carvel-dev/vendir
+
+Atmos Vendoring was heavily inspired by [Vendir from VMWare Tanzu](https://github.com/carvel-dev/vendir), which served as the basis for our initial implementation. However, after using it, we realized we only needed a simpler subset of Vendir’s full functionality. Therefore, we implemented our own version using [HashiCorp’s GoGetter (MPL-2.0) library](https://github.com/hashicorp/go-getter). Additionally, we’ve added support for OCI, allowing Vendoring to pull configurations from anywhere. This advanced feature enables consistent and declarative pulling of configurations not just for components, but also for stack configurations or any dependencies you have.
 
 ## General Alternatives
 
-There are many tools in the general category of "task runners" or "workflow automation". Here are some of the alternatives to Atmos, many of which
-inspired core functionality in Atmos.
+There are many tools in the general category of "task runners" or "workflow automation". 
+Here are some of the alternatives to Atmos, many of which inspired core functionality in Atmos.
 
 ### Make (Makefile) by Free Software Foundation
 
@@ -64,7 +105,7 @@ Atmos is heavily inspired by the excellent schema provided by AppBuilder and has
 our [Custom Commands](/core-concepts/custom-commands).
 :::
 
-## Terraform Alternatives
+## Terraform-specific Tooling Alternatives
 
 There are many tools explicitly designed around how to deploy with Terraform.
 

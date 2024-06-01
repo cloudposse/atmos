@@ -40,11 +40,11 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
-                    /*
+                    
                     {
-                        from: '/cli',
-                        to: '/cli/configuration'
-                    }*/
+                        from: '/reference/terraform-limitations',
+                        to: '/core-concepts/components/terraform/journey'
+                    }
                 ],
             },
         ],

@@ -2,6 +2,9 @@
 title: Quick Start Introduction
 sidebar_position: 1
 sidebar_label: Introduction
+sidebar_class_name: hidden
+id: quick-start
+slug: /quick-start
 ---
 
 # Introduction
@@ -24,36 +27,10 @@ are [Terraform root modules](https://developer.hashicorp.com/terraform/language/
 
 In many cases, with enterprise-grade infrastructures (multi-org, multi-tenant, multi-account, multi-region, multi-team), the configuration is much
 more complicated than the code. That's what Atmos is trying to solve - to make the configuration manageable, reusable (by
-using [Imports](/core-concepts/stacks/imports), [Inheritance](/core-concepts/components/inheritance), and other
+using [Imports](/core-concepts/stacks/imports), [Inheritance](/core-concepts/stacks/inheritance), and other
 Atmos features) and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself), and to make the code completely generic.
 
 In this Quick Start guide, we describe how to provision infrastructure managed by Terraform into different AWS environments.
 The configurations for the environments are managed by Atmos.
 
 <br/>
-
-:::tip
-
-This Quick Start guide describes the steps to configure and provision the infrastructure
-from this [Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start) repository.
-
-You can clone it and configure to your own needs. The repository should be a good start to get yourself familiar with Atmos.
-
-:::
-
-<br/>
-
-The steps to configure and provision the infrastructure are as follows:
-
-- [Install Atmos](/quick-start/install-atmos)
-- [Configure Repository](/quick-start/configure-repository)
-- [Configure CLI](/quick-start/configure-cli)
-- [Vendor Components](/quick-start/vendor-components)
-- [Create Atmos Stacks](/quick-start/create-atmos-stacks)
-- [Configure Validation](/quick-start/configure-validation)
-- [Create Workflows](/quick-start/create-workflows)
-- [Add Custom Commands](/quick-start/add-custom-commands)
-- [Configure Terraform Backend](/quick-start/configure-terraform-backend)
-- [Provision](/quick-start/provision)
-- [Final Notes](/quick-start/final-notes)
-- [Next Steps](/quick-start/next-steps)

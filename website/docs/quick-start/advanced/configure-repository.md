@@ -42,7 +42,7 @@ Atmos separates code from configuration (separation of concerns). The code is in
 
 :::note
 While it's recommended to use the directory names as shown above, the `stacks` and `components` directory names and filesystem locations are
-configurable in the `atmos.yaml` CLI config file. Refer to [Configure CLI](/quick-start/configure-cli) for more details.
+configurable in the `atmos.yaml` CLI config file. Refer to [Configure CLI](/quick-start/advanced/configure-cli) for more details.
 :::
 
 <br/>
@@ -78,7 +78,7 @@ The following example provides the simplest filesystem layout that Atmos can wor
 ## `atmos.yaml` CLI Config File Location
 
 While placing `atmos.yaml` at the root of the repository will work for the `atmos` CLI, it will not work
-for [Component Remote State](/core-concepts/components/remote-state) because it uses
+for [Component Remote State](/core-concepts/components/terraform/remote-state) because it uses
 the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider. Terraform executes the provider from the
 component's folder (e.g. `components/terraform/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
 

@@ -1,72 +1,26 @@
 ---
-title: Overcoming Terraform Limitations with Atmos
-description: Overcoming Terraform Limitations with Atmos
-sidebar_label: Overcoming Terraform Limitations
+title: The Typical Terraform Journey
+description: Learn about the typical Terraform journey when not using Atmos.
+sidebar_label: Maturity Path
 sidebar_position: 6
+id: journey
 ---
 
-# Overcoming Terraform Limitations with Atmos
+# The Path to Atmos
 
-To better understand the rationale behind Atmos's design, it may be helpful to hear about our experiences with Terraform—a tool integral to our development processes. Let's explore the challenges and constraints we faced using Terraform, which paved the way for creating Atmos.
+To better understand the rationale behind Atmos's design, it may be helpful to hear about our experiences with Terraform—a tool
+integral to our development processes at [Cloud Posse](https://cloudposse.com). Let's explore the challenges and constraints
+we faced using Terraform, which paved the way for creating Atmos.
 
-## What is Terraform?
+Every team has a natural progression of Terraform adoption that follows a similar path and matures along the way.
 
-Terraform is a command-line utility that processes infrastructure configurations in ["HashiCorp's Configuration Language" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning. Its chief role is to delineate and structure infrastructure definitions.
-  
-Terraform's HCL started strictly as a configuration language, not a markup or programming language, although has evolved considerably over the years. HCL is backward compatible with JSON, although it's not a strict superset of JSON. HCL is more human-friendly and readable, while JSON is often used for machine-generated configurations. This means you can write Terraform configurations in HCL or JSON, and Terraform will understand them. This feature is particularly useful for generating configurations programmatically or integration with systems that already use JSON.
+Every advancement in tool adoption is accompanied by new challenges, introducing complexities that are justified by the evolution's benefits. 
+Indeed, the true value of these evolutions often only becomes clear once we're faced with the intricate challenges they address. 
+Here's what a typical path of adoption looks like for organizations adopting Terraform.
 
-## How has Terraform HCL Evolved?
-
-As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating fetatures typical of programming languages (albeit without a debugger!). This shift enriched infrastructure definitions, positioning HCL more as a [domain-specific programming language](https://en.wikipedia.org/wiki/Domain-specific_language) for defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result, the complexity of configuring Terraform projects has risen, while Terraform's inherent capabilities to be configured haven't evolved at the same pace.
-
-- **Rich Expressions:** Introduced a richer expression syntax, removing the need for interpolations.
-
-- **For Loops and Conditionals:** Added for expressions and conditional expressions.
-
-- **Type System:** Introduced a more explicit type system for input and output values.
-
-## Why is additional tooling needed when using Terraform?
-
-**Every foundational tool begins simply.**
-
-As users grow more advanced and their ambitions expand, the need for advanced tooling emerges. These shifts demonstrate that core technologies naturally progress, spawning more advanced constructs to tackle increased intricacies and enhance efficiency -- all while retaining their core essence. Just as CSS, JavaScript, Docker, Helm, and many other tools have evolved to include higher-order utilities, Terraform, too, benefits from additional orchestration tools, given the complexities and challenges users face at different stages of adoption.
-
-Examples of tools like these are numerous, like
-
-- **CSS has Sass:** Sass provides more expressive styling capabilities, variables, and functions, making stylesheets more maintainable and organized, especially for large projects.
-- **JavaScript has TypeScript:** TypeScript brings static typing to JavaScript, improving code robustness, aiding in catching errors at compile-time, and better supporting large-scale applications.
-- **Docker has Docker Compose:** Docker Compose simplifies the management and orchestration of multi-container Docker applications, making it easier to define, run, and scale services collectively.
-- **Helm charts have Helmfiles.** While Helm charts define the blueprints of Kubernetes services, Helmfiles enable better orchestration, management, and deployment of multiple charts, similar to coordinating various instruments in a symphony.
-- **Kubernetes manifests have Kustomize:** Kustomize allows customization of Kubernetes manifests without changing their original form, facilitating dynamic configurations tailored to specific deployment scenarios.
-
-When considering Terraform in the context of large-scale organizations or enterprises, it's clear that Terraform and its inherent language don't address all challenges. With thousands of components spread across hundreds of accounts, cloud providers and managed by a vast number of DevOps engineers and developers, the complexity becomes overwhelming and difficult to manage.
-
-A lot of the same challenges faced by CSS, Javascript, Docker, Helm and Kubernetes also exist in Terraform as well.
-
-- Making modules more maintainable and organized, especially for large projects
-- Better support for large-scale service-oriented architectures
-- Easier ways to define, run, and scale services collectively
-- Better orchestration, management, and deployment of multiple services
-
-Here's a more exhaustive list:
-
-- **Lack of DRY Configurations**: Terraform does not inherently support hierarchical configurations. There's no support for [deep merging configurations](https://github.com/hashicorp/terraform/issues/24987), making manual `varfile` maintenance unscalable. This makes it more difficult to enforce organizational standards, security controls, tagging, and policies.
-- **State Management**: Managing Terraform's state, especially at scale, lacks inherent strategies for handling complexities such as access controls, multi-region, and Disaster Recovery (DR).
-- **Limited Modularization**: Structuring configurations modularly while promoting code reuse is cumbersome.
-- **Manual Initialization**: Backend initialization, module downloads, and other setup tasks require manual steps before executing `terraform apply`. This ties into the need for some kind of workflow tool.
-- **Dependency Management**: Community edition of Terraform doesn't provide any mechanisms for orchestrating dependencies among root modules.
-- **Absence of Stack Management**: Organizing configurations into structured stacks isn't a built-in feature of the community edition.
-- **Lack of Automatic Dependency Ordering**: Standalone Terraform doesn't inherently determine execution order based on inter-stack dependencies.
-- **No Native Workflow Automation and Standardization**: Dynamic workflow executions, such as having a unified workflow both in CI/CD platforms like GitHub Actions (GHA) and locally, are not inherently supported. Workflow standardization and automation capabilities do not exist, making provisioning and management tasks more manual, or relying on custom scripts, Makefiles, or other tooling.
-- **Basic Environment Management**: Managing configurations across multiple environments can become complex without higher-level tooling.
-
-For each of these challenges, a tailored solution is essential. Ultimately, the goal is to make Terraform more scalable, maintainable, and developer-friendly, especially in complex and large-scale environments.
-
-HashiCorp primarily offers foundational guidance on Terraform and pushes companies instead toward Terraform Enterprise. In fact, it's held back features from entering into the Terraform core that would make it more standalone. HashiCorp does not thoroughly address how to solve the above challenges using Terraform. While suitable for some, it may not meet the scalability demands of enterprise, especially as they embark on their Terraform adoption journey.
-
-## What is the natural progression of Terraform adoption?
-
-Every advancement in tool adoption is accompanied by new challenges, introducing complexities that are justified by the evolution's benefits. Indeed, the true value of these evolutions often only becomes clear once we're faced with the intricate challenges they address. Here's what a typical path of adoption looks like for organizations adopting Terraform.
+:::tip
+**TL;DR:** [You can shortcuit this entire process by using Atmos from the start.](#whats-the-solution-hello-atmos-) 😎
+:::
 
 ### **Stage 1:** Introduction to Terraform, *Hello World!*
 

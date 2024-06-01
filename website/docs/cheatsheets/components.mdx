@@ -1,7 +1,8 @@
 ---
-id: cheatsheet
-title:  Component Cheatsheet
-sidebar_label: Cheatsheet
+id: components
+title:  Components Cheatsheet
+descriptions: Cheatsheet for managing components in Atmos
+sidebar_label: Using Components
 sidebar_position: 2
 ---
 import Link from '@docusaurus/Link'
@@ -25,43 +26,6 @@ import CardGroup from '@site/src/components/CardGroup'
           ├── prod.yaml
           └── staging.yaml
   ```
-  </Card>
-  <Card title="Stack Schema">
-  ```yaml
-  import:
-  - catalog/something
-  vars:
-    key: value
-  components:
-    terraform:
-      $component:
-        vars:
-          foo: "bar"
-  ```
-  </Card>
-
-  <Card title="Stack Overrides">
-    ```yaml
-    terraform:
-      overrides:
-        env: {}
-        settings: {}
-        vars: {}
-        command: "opentofu"
-    ```
-  </Card>
-  <Card title="Spacelift Settings">
-    ```yaml
-    terraform:
-      components:
-        $component:
-          settings:
-            spacelift:
-              # The `autodeploy` setting was overridden with the value 
-              # from `terraform.overrides.settings.spacelift.autodeploy`
-              autodeploy: true
-              workspace_enabled: true
-    ```
   </Card>
 </CardGroup>
 
@@ -104,4 +68,3 @@ import CardGroup from '@site/src/components/CardGroup'
     ```
     </Card>
 </CardGroup>
-

@@ -3,7 +3,7 @@ title: Terraform Providers
 sidebar_position: 12
 sidebar_label: Terraform Providers
 description: Configure and override Terraform Providers.
-id: terraform-providers
+id: providers
 ---
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
@@ -98,7 +98,7 @@ deep-merge and override all the `providers` configurations for a component in th
 <br/>
 
 :::tip
-Refer to [Atmos Component Inheritance](/core-concepts/components/inheritance) for more information on all types of component inheritance
+Refer to [Atmos Component Inheritance](/core-concepts/stacks/inheritance) for more information on all types of component inheritance
 supported by Atmos
 :::
 
@@ -187,7 +187,7 @@ For example:
 The above example uses a list of configuration blocks for the `aws` provider.
 
 Since it's a list, by default it doesn't work with deep-merging of stacks in the
-[inheritance](/core-concepts/components/inheritance) chain since list are not deep-merged, they are replaced.
+[inheritance](/core-concepts/stacks/inheritance) chain since list are not deep-merged, they are replaced.
 
 If you want to use the above configuration in the inheritance chain and allow appending or merging of lists, consider
 configuring the `settings.list_merge_strategy` in the `atmos.yaml` CLI config file.

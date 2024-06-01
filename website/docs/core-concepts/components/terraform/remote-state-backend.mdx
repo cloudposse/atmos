@@ -5,9 +5,9 @@ sidebar_label: Remote State Backend
 id: remote-state-backend
 ---
 
-Atmos supports configuring [Terraform Backends](/core-concepts/components/terraform-backends) to define where
+Atmos supports configuring [Terraform Backends](/core-concepts/components/terraform/backends) to define where
 Terraform stores its [state](https://developer.hashicorp.com/terraform/language/state),
-and [Remote State](/core-concepts/components/remote-state) to get the outputs
+and [Remote State](/core-concepts/components/terraform/remote-state) to get the outputs
 of a [Terraform component](/core-concepts/components), provisioned in the same or a
 different [Atmos stack](/core-concepts/stacks), and use
 the outputs as inputs to another Atmos component
@@ -15,7 +15,7 @@ the outputs as inputs to another Atmos component
 Atmos also supports Remote State Backends (in the `remote_state_backend` section), which can be used to configure the
 following:
 
-- Override [Terraform Backend](/core-concepts/components/terraform-backends) configuration to access the
+- Override [Terraform Backend](/core-concepts/components/terraform/backends) configuration to access the
   remote state of a component (e.g. override the IAM role to assume, which in this case can be a read-only role)
 
 - Configure a remote state of type `static` which can be used to provide configurations for
@@ -27,13 +27,13 @@ Atmos supports the `remote_state_backend` section which can be used to provide c
 of components.
 
 To access the remote state of components, you can override
-any [Terraform Backend](/core-concepts/components/terraform-backends)
+any [Terraform Backend](/core-concepts/components/terraform/backends)
 configuration in the `backend` section using the `remote_state_backend` section. The `remote_state_backend` section
 is a first-class section, and it can be defined globally at any scope (organization, tenant, account, region), or per
-component, and then deep-merged using [Atmos Component Inheritance](/core-concepts/components/inheritance).
+component, and then deep-merged using [Atmos Component Inheritance](/core-concepts/stacks/inheritance).
 
 For example, let's suppose we have the following S3 backend configuration for the entire organization
-(refer to [AWS S3 Backend](/core-concepts/components/terraform-backends#aws-s3-backend) for more details):
+(refer to [AWS S3 Backend](/core-concepts/components/terraform/backends#aws-s3-backend) for more details):
 
 ```yaml title="stacks/orgs/acme/_defaults.yaml"
 terraform:
@@ -108,7 +108,7 @@ established systems. This can be challenging due to several factors:
 Atmos is easier for new organizations or "greenfield" environments because you need to architect Terraform according to
 our best practices to get all the benefits of Atmos. For example, when using
 our [Terraform components](https://github.com/cloudposse/terraform-aws-components), we frequently use
-[Terraform Remote State](/core-concepts/components/remote-state) to retrieve the outputs from other components.
+[Terraform Remote State](/core-concepts/components/terraform/remote-state) to retrieve the outputs from other components.
 This works well when you use our components but less so when you operate in a "brownfield" environment, for example,
 with an existing VPC, S3 bucket, or IAM role.
 
@@ -136,7 +136,7 @@ The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` 
 configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html).
 
 Let's redesign the example with the `vpc` and `vpc-flow-logs-bucket` components described in
-[Terraform Component Remote State](/core-concepts/components/remote-state) and configure the `static` remote state for
+[Terraform Component Remote State](/core-concepts/components/terraform/remote-state) and configure the `static` remote state for
 the `vpc-flow-logs-bucket` component to use an existing S3 bucket.
 
 ### Configure the `vpc-flow-logs-bucket` Component

@@ -322,7 +322,7 @@ schemas:
   # JSON Schema to validate Atmos manifests
   # https://atmos.tools/cli/schemas/
   # https://atmos.tools/cli/commands/validate/stacks/
-  # https://atmos.tools/quick-start/configure-validation/
+  # https://atmos.tools/quick-start/advanced/configure-validation/
   # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
   # https://www.schemastore.org/json

@@ -32,7 +32,7 @@ Its strength in managing [DRY configurations at scale](https://atmos.tools/core-
 [design patterns](https://atmos.tools/design-patterns/), comprehensive [documentation](https://atmos.tools/), and a
 [passionate community](https://slack.cloudposse.com/), making it a versatile [tool for both startups and enterprises](https://cloudposse.com/).
 Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes
-[policy controls](https://atmos.tools/core-concepts/components/validation), [vendoring](https://atmos.tools/core-concepts/vendoring/),
+[policy controls](https://atmos.tools/core-concepts/validating/components), [vendoring](https://atmos.tools/core-concepts/vendoring/),
 and [GitOps capabilities](https://atmos.tools/integrations/github-actions) out of the box. Everything is open source and free.
 
 ## Screenshots
@@ -105,11 +105,11 @@ strength in the cloud infrastructure and DevOps domains:
   configuration, bypassing the need for further code development.
 - **Efficient Multi-Region Deployments:** Atmos facilitates streamlined multi-region deployments by enabling businesses to define baseline
   configurations with [stacks](https://atmos.tools/core-concepts/stacks/) and extend them across regions with DRY principles through
-  [imports](https://atmos.tools/core-concepts/stacks/imports) and [inheritance](https://atmos.tools/core-concepts/components/inheritance).
+  [imports](https://atmos.tools/core-concepts/stacks/imports) and [inheritance](https://atmos.tools/core-concepts/stacks/inheritance).
 - **Compliant Infrastructure for Regulated Industries:** Atmos empowers DevOps and SecOps teams to create vetted configurations that comply
   with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations can then be efficiently shared and reused across the
   organization via [service catalogs](https://atmos.tools/core-concepts/stacks/catalogs), [component libraries](https://atmos.tools/core-concepts/components/library),
-  [vendoring](https://atmos.tools/core-concepts/vendoring), and [OPA policies](https://atmos.tools/core-concepts/components/validation),
+  [vendoring](https://atmos.tools/core-concepts/vendoring), and [OPA policies](https://atmos.tools/core-concepts/validating/components),
   simplifying the process of achieving and maintaining rigorous compliance.
 - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using
   predefined templates and policies.

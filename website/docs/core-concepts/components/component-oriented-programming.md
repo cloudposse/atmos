@@ -10,10 +10,10 @@ implementing and composing loosely-coupled independent components into systems.
 
 Atmos supports the following concepts and principles of **Component-Oriented Programming (COP)**:
 
-- [Single Inheritance](/core-concepts/components/inheritance#single-inheritance) - when an Atmos component inherits the configuration properties from
+- [Single Inheritance](/core-concepts/stacks/inheritance#single-inheritance) - when an Atmos component inherits the configuration properties from
   another Atmos component
 
-- [Multiple Inheritance](/core-concepts/components/inheritance#multiple-inheritance) - when an Atmos component inherits from more than one Atmos
+- [Multiple Inheritance](/core-concepts/stacks/inheritance#multiple-inheritance) - when an Atmos component inherits from more than one Atmos
   component
 
 - Dynamic Polymorphism - ability to use and override base component(s) properties

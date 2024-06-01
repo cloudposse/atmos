@@ -48,7 +48,7 @@ atmos terraform apply vpc -s plat-uw2-prod
 
 <br/>
 
-Alternatively, you can execute the configured [Atmos workflow](/quick-start/create-workflows) to provision all the components in all the stacks:
+Alternatively, you can execute the configured [Atmos workflow](/quick-start/advanced/create-workflows) to provision all the components in all the stacks:
 
 ```shell
 # Execute the workflow `apply-all-components` from the workflow manifest `networking`
@@ -61,7 +61,7 @@ Looking at the commands above, you might have a question "How does Atmos find th
 
 Let's consider what Atmos does when executing the command `atmos terraform apply vpc -s plat-ue2-prod`:
 
-- Atmos uses the [CLI config](/quick-start/configure-cli) `stacks.name_pattern: "{tenant}-{environment}-{stage}"` to figure out that the first part of
+- Atmos uses the [CLI config](/quick-start/advanced/configure-cli) `stacks.name_pattern: "{tenant}-{environment}-{stage}"` to figure out that the first part of
   the stack name is `tenant`, the second part is `environment`, and the third part is `stage`
 
 - Atmos searches for the stack configuration file (in the `stacks` folder and all sub-folders) where `tenant: plat`, `environment: ue2`
