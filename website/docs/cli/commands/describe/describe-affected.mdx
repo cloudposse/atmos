@@ -269,7 +269,7 @@ where:
   hierarchical - each component in the list will also contain a `dependents` property if that component has dependent
   components as well
 
-- `included_in_other_dependents` - a boolean flag indicating if the affected component is also present in any of the `dependents`
+- `included_in_other_dependents` - a boolean flag indicating if the affected component in the stack is also present in any of the `dependents`
   properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
   is passed. If `included_in_other_dependents` is set to `true`, it indicates that the affected component in the stack is also
   present in any of the `dependents` lists in the dependency hierarchy of the other affected components.

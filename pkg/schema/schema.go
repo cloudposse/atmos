@@ -420,22 +420,22 @@ type Validation map[string]ValidationItem
 // Affected Atmos components and stacks given two Git commits
 
 type Affected struct {
-	Component            string      `yaml:"component" json:"component" mapstructure:"component"`
-	ComponentType        string      `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
-	ComponentPath        string      `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
-	Namespace            string      `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
-	Tenant               string      `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
-	Environment          string      `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
-	Stage                string      `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
-	Stack                string      `yaml:"stack" json:"stack" mapstructure:"stack"`
-	StackSlug            string      `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
-	SpaceliftStack       string      `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
-	AtlantisProject      string      `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
-	Affected             string      `yaml:"affected" json:"affected" mapstructure:"affected"`
-	File                 string      `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
-	Folder               string      `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
-	Dependents           []Dependent `yaml:"dependents,omitempty" json:"dependents,omitempty" mapstructure:"dependents"`
-	IncludedInDependents bool        `yaml:"included_in_dependents,omitempty" json:"included_in_dependents,omitempty" mapstructure:"included_in_dependents"`
+	Component                 string      `yaml:"component" json:"component" mapstructure:"component"`
+	ComponentType             string      `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
+	ComponentPath             string      `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Namespace                 string      `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
+	Tenant                    string      `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
+	Environment               string      `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Stage                     string      `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
+	Stack                     string      `yaml:"stack" json:"stack" mapstructure:"stack"`
+	StackSlug                 string      `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
+	SpaceliftStack            string      `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
+	AtlantisProject           string      `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
+	Affected                  string      `yaml:"affected" json:"affected" mapstructure:"affected"`
+	File                      string      `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	Folder                    string      `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
+	Dependents                []Dependent `yaml:"dependents,omitempty" json:"dependents,omitempty" mapstructure:"dependents"`
+	IncludedInOtherDependents bool        `yaml:"included_in_other_dependents,omitempty" json:"included_in_other_dependents,omitempty" mapstructure:"included_in_other_dependents"`
 }
 
 type BaseComponentConfig struct {
