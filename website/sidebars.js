@@ -175,7 +175,7 @@ module.exports = {
         },
         {
             type: 'category',
-            label: 'Reference',
+            label: 'Resources',
             className: 'sidebar-title',
             collapsible: false,
             collapsed: false,

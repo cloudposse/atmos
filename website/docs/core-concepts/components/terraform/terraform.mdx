@@ -7,15 +7,13 @@ id: terraform
 slug: /terraform
 ---
 import DocCardList from "@theme/DocCardList";
- 
-# Terraform Core Concepts
 
 Atmos can change how you think about the Terraform modules that you use to build your infrastructure. 
 
-When you design a cloud architectures with Atmos, you will first break it apart into pieces called components. 
+When you design cloud architectures with Atmos, you will first break it apart into pieces called components. 
 Then, you will define the terraform "root modules" for each of your components. 
 To make them highly reusable, they should serve a "single purpose" so that they are the smallest possible 
-unit of infrastructure managed in the software development lifecycle.
+unit of infrastructure managed in the software development lifecycle (SDLC).
 Finally, you will connect your components together with stacks, so that everything comes together. 
 
 In this tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components.
