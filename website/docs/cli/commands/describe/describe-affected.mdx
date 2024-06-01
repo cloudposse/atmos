@@ -596,17 +596,15 @@ For example, suppose that we have the following configuration for the Atmos comp
           vars: {}
           settings:
             depends_on:
-             1:
-               # If the `context` is not provided,
-               # the `component` is from the same Atmos stack as this component
-               component: "component-2"
-               context: {}
+              1:
+                component: "component-2"
+                context: {}
   ```
 </File>
 
 <br/>
 
-In the above configuration, `component-3` depends on `component-2`, and `component-2` depends on `component-1`.
+In the above configuration, `component-3` depends on `component-2`, whereas `component-2` depends on `component-1`.
 
 <br/>
 
