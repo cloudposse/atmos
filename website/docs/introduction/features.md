@@ -2,7 +2,7 @@
 slug: /features
 title: Atmos Features
 sidebar_label: Features
-sidebar_position: 1
+sidebar_position: 2
 ---
 
 Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a set of

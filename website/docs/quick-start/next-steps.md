@@ -21,4 +21,4 @@ Here are some of the major differentiators of Atmos:
 * [Custom Commands](/core-concepts/custom-commands)
 * [Component Inheritance & Multiple Inheritance](/core-concepts/components/inheritance)
 * [JSON Schema & OPA Policy Enforcement](/core-concepts/components/validation)
-* [Atmos Manifest JSON Schema](/reference/schemas)
+* [Atmos Manifest JSON Schema](/cli/schemas)

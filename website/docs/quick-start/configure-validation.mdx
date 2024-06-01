@@ -4,7 +4,7 @@ sidebar_position: 7
 sidebar_label: Configure Validation
 ---
 
-Atmos supports [Atmos Manifests Validation](/reference/schemas) and [Atmos Components Validation](/core-concepts/components/validation)
+Atmos supports [Atmos Manifests Validation](/cli/schemas) and [Atmos Components Validation](/core-concepts/components/validation)
 using [JSON Schema](https://json-schema.org/) and [OPA Policies](https://www.openpolicyagent.org/).
 
 :::tip
@@ -43,7 +43,7 @@ schemas:
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
   # JSON Schema to validate Atmos manifests
-  # https://atmos.tools/reference/schemas/
+  # https://atmos.tools/cli/schemas/
   # https://atmos.tools/cli/commands/validate/stacks/
   # https://atmos.tools/quick-start/configure-validation/
   # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
@@ -78,7 +78,7 @@ Complete the following steps to configure Atmos manifest validation:
   in  [`stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
 
 - Configure the `schemas.atmos.manifest` section in the `atmos.yaml` [CLI config file](/cli/configuration) as described
-  in [Atmos Manifests Validation using JSON Schema](/reference/schemas)
+  in [Atmos Manifests Validation using JSON Schema](/cli/schemas)
 
   ```yaml title="atmos.yaml"
   # Validation schemas (for validating atmos stacks and components)
@@ -106,7 +106,7 @@ Complete the following steps to configure Atmos manifest validation:
 
 For more information, refer to:
 
-- [Atmos Manifests Validation using JSON Schema](/reference/schemas)
+- [Atmos Manifests Validation using JSON Schema](/cli/schemas)
 - [atmos validate stacks](/cli/commands/validate/stacks)
 
 :::

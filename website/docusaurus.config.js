@@ -117,37 +117,34 @@ const config = {
                         type: 'doc',
                         docId: 'introduction/index',
                         position: 'left',
-                        label: 'Docs',
+                        label: 'Learn',
                     },
                     {
                         to: '/cli',
                         position: 'left',
-                        label: 'CLI'
+                        label: 'Reference'
                     },
                     {
                         type: 'dropdown',
                         label: 'Community',
-                        position: 'right',
+                        position: 'left',
                         items: [
                             {
-                                label: 'GitHub Discussions',
-                                href: 'https://ask.sweetops.com/',
+                                label: 'Weekly Office Hours',
+                                href: 'https://cloudposse.com/office-hours/',
                             },
                             {
-                                label: 'Community',
-                                href: 'https://sweetops.com/',
-                            },
-                            {
-                                label: 'Slack',
-                                href: 'https://slack.sweetops.com/',
+                                label: 'Slack Community',
+                                href: 'https://slack.cloudposse.com/',
                             },
                             {
                                 label: 'Slack Archives',
                                 href: 'https://archive.sweetops.com/atmos/',
                             },
                             {
-                                label: 'Office Hours',
-                                href: 'https://cloudposse.com/office-hours/',
+                                label: 'Contributing',
+                                type: 'doc',
+                                docId: 'contributing/contributing',
                             },
                         ],
                     },
