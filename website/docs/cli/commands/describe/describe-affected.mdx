@@ -559,7 +559,7 @@ as blueprints for other Atmos components and are not meant to be provisioned.
 
 ## Affected Components with Dependencies
 
-The output of the `atmos describe affected` command can include dependencies for all the affected components.
+The output of the `atmos describe affected` command can include dependencies for the affected components.
 
 If the command-line flag `--include-dependents=true` is passed to the `atmos describe affected` command, and there are
 other components that depend on the affected components in the stack, the command will include a `dependents`
@@ -567,9 +567,9 @@ property (list) for each affected component. The `dependents` property is hierar
 also contain a `dependents` property if that component has dependent components as well.
 
 For example, suppose that we have the following configuration for the Atmos components `component-1`, `component-2` and
-`component-3`:
+`component-3` in the stack `plat-ue2-dev`:
 
-<File title="stack.yaml">
+<File title="stacks/orgs/acme/plat/dev/us-east-2.yaml">
   ```yaml
     components:
       terraform:
@@ -585,11 +585,8 @@ For example, suppose that we have the following configuration for the Atmos comp
           settings:
             depends_on:
               1:
-                # If the `context` is not provided,
-                # the `component` is from the same Atmos stack as this component
                 component: "component-1"
-                context: {}
-    
+
         component-3:
           metadata:
             component: "terraform-component-3"
@@ -598,19 +595,79 @@ For example, suppose that we have the following configuration for the Atmos comp
             depends_on:
               1:
                 component: "component-2"
-                context: {}
   ```
 </File>
-
-<br/>
-
-In the above configuration, `component-3` depends on `component-2`, whereas `component-2` depends on `component-1`.
 
 <br/>
 
 :::tip
 For more details on how to configure component dependencies, refer to [`atmos describe dependents`](/cli/commands/describe/dependents)
 :::
+
+<br/>
+
+In the above configuration, `component-3` depends on `component-2`, whereas `component-2` depends on `component-1`.
+
+If all the components are affected (modified) in the current working branch,
+the `atmos describe affected --include-dependents=true` command will produce the following result:
+
+<br/>
+
+<Terminal title="atmos describe affected --include-dependents=true">
+ ```json
+  [
+    {
+      "component": "component-1",
+      "stack": "plat-ue2-dev",
+      "stack_slug": "plat-ue2-dev-component-1",
+      "included_in_other_dependents": false,
+      "dependents": [
+        {
+          "component": "component-2",
+          "stack": "plat-ue2-dev",
+          "stack_slug": "plat-ue2-dev-component-2",
+          "dependents": [
+            {
+              "component": "component-3",
+              "stack": "plat-ue2-dev",
+              "stack_slug": "plat-ue2-dev-component-3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "component": "component-2",
+      "stack": "plat-ue2-dev",
+      "stack_slug": "plat-ue2-dev-component-2",
+      "included_in_other_dependents": true,
+      "dependents": [
+        {
+          "component": "component-3",
+          "stack": "plat-ue2-dev",
+          "stack_slug": "plat-ue2-dev-component-3"
+        }
+      ]
+    },
+    {
+      "component": "component-3",
+      "stack": "plat-ue2-dev",
+      "stack_slug": "plat-ue2-dev-component-3",
+      "included_in_other_dependents": true
+    }
+  ]
+ ```
+</Terminal>
+
+<br/>
+
+The `component-1` component does not depend on any other component, and therefore it has the `included_in_other_dependents`
+attribute set to `false`. The `component-2` and `component-3` components depend on other components and are included in
+the `dependents` property of the other components, and hence the `included_in_other_dependents` attribute is set to `true`.
+
+When processing the above output, you might decide to not plan/apply the `component-2` and `component-3` components
+separately since they are in the `dependents` property of the `component-1` component. Instead, you might just
+trigger `component-1` and then `component-2` and `component-3` in the order of dependencies.
 
 ## Working with Private Repositories
 
