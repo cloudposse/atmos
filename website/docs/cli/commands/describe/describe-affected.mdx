@@ -234,7 +234,7 @@ Each object has the following schema:
   "file": ".....",
   "folder": ".....",
   "dependents": [],
-  "included_in_dependents": "true | false"
+  "included_in_other_dependents": "true | false"
 }
 ```
 
@@ -270,11 +270,11 @@ where:
   hierarchical - each component in the list will also contain a `dependents` property if that component also has dependent
   components
 
-- `included_in_dependents` - a boolean flag indicating if the affected component is also present in any of the `dependents`
+- `included_in_other_dependents` - a boolean flag indicating if the affected component is also present in any of the `dependents`
   properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
-  is passed. If `included_in_dependents` is set to `true`, it indicates that the affected component in the stack is also
+  is passed. If `included_in_other_dependents` is set to `true`, it indicates that the affected component in the stack is also
   present in any of the `dependents` lists in the dependency hierarchy of the other affected components.
-  This flag can be used to decide whether to plan/apply the affected component - you can skip planning/applying the component
+  This flag can be used to decide whether to plan/apply the affected component - you might skip planning/applying the component
   since it's also a dependency of another affected component and will be triggered in the dependency order of the other
   affected component
 
