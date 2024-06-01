@@ -112,6 +112,7 @@ atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password
 atmos describe affected --repo-path <path_to_already_cloned_repo>
 atmos describe affected --include-spacelift-admin-stacks=true
 atmos describe affected --clone-target-ref=true
+atmos describe affected --include-dependents=true
 ```
 
 
@@ -212,6 +213,7 @@ Affected components and stacks:
 | `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                        | no       |
 | `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                   | no       |
 | `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory | no       |
+| `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                    | no       |
 
 ## Output
 
@@ -230,7 +232,9 @@ Each object has the following schema:
   "atlantis_project": ".....",
   "affected": ".....",
   "file": ".....",
-  "folder": "....."
+  "folder": ".....",
+  "dependents": [],
+  "included_in_dependents": "true | false"
 }
 ```
 
@@ -258,6 +262,21 @@ where:
 
 - `folder` - if the Atmos component depends on an external folder, and any file in the folder was changed (see `affected.folder` below),
   the `folder` attributes shows the modified folder
+
+- `dependents` - list of components that depend on the current affected component. It will be included only if the
+  command-line flag `--include-dependents=true` is passed (to take dependencies into account) and there are other components
+  that depend on the current component in the stack.
+  Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` list is
+  hierarchical - each component in the list will also contain a `dependents` property if that component also has dependent
+  components
+
+- `included_in_dependents` - a boolean flag indicating if the affected component is also present in any of the `dependents`
+  properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
+  is passed. If `included_in_dependents` is set to `true`, it indicates that the affected component in the stack is also
+  present in any of the `dependents` lists in the dependency hierarchy of the other affected components.
+  This flag can be used to decide whether to plan/apply the affected component - you can skip planning/applying the component
+  since it's also a dependency of another affected component and will be triggered in the dependency order of the other
+  affected component
 
 - `affected` - shows what was changed for the component. The possible values are:
 
