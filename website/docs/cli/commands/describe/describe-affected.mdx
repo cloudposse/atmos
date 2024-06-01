@@ -6,6 +6,7 @@ id: affected
 description: This command produces a list of the affected Atmos components and stacks given two Git commits.
 ---
 import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
@@ -79,8 +80,6 @@ knows that they are affected.
 Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run
 `describe affected` and produce a GitHub matrix.
 :::
-
-#
 
 <br/>
 
@@ -265,10 +264,10 @@ where:
 
 - `dependents` - list of components that depend on the current affected component. It will be included only if the
   command-line flag `--include-dependents=true` is passed (to take dependencies into account) and there are other components
-  that depend on the current component in the stack.
-  Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` list is
-  hierarchical - each component in the list will also contain a `dependents` property if that component also has dependent
-  components
+  that depend on the affected component in the stack.
+  Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` property is
+  hierarchical - each component in the list will also contain a `dependents` property if that component has dependent
+  components as well
 
 - `included_in_other_dependents` - a boolean flag indicating if the affected component is also present in any of the `dependents`
   properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
@@ -473,8 +472,8 @@ where:
 
 :::note
 
-Abstract Atmos components (`metadata.type` is set to `abstract`) are not included in the output since they serve as blueprints for other
-Atmos components and are not meant to be provisioned.
+Abstract Atmos components (where `metadata.type` is set to `abstract`) are not included in the output since they serve
+as blueprints for other Atmos components and are not meant to be provisioned.
 
 :::
 
@@ -557,6 +556,63 @@ Atmos components and are not meant to be provisioned.
 </Terminal>
 
 <br/>
+
+## Affected Components with Dependencies
+
+The output of the `atmos describe affected` command can include dependencies for all the affected components.
+
+If the command-line flag `--include-dependents=true` is passed to the `atmos describe affected` command, and there are
+other components that depend on the affected components in the stack, the command will include a `dependents`
+property (list) for each affected component. The `dependents` property is hierarchical - each component in the list will
+also contain a `dependents` property if that component has dependent components as well.
+
+For example, suppose that we have the following configuration for the Atmos components `component-1`, `component-2` and
+`component-3`:
+
+<File title="stack.yaml">
+  ```yaml
+    components:
+      terraform:
+        component-1:
+          metadata:
+            component: "terraform-component-1"
+          vars: {}
+
+        component-2:
+          metadata:
+            component: "terraform-component-2"
+          vars: {}
+          settings:
+            depends_on:
+              1:
+                # If the `context` is not provided,
+                # the `component` is from the same Atmos stack as this component
+                component: "component-1"
+                context: {}
+    
+        component-3:
+          metadata:
+            component: "terraform-component-3"
+          vars: {}
+          settings:
+            depends_on:
+             1:
+               # If the `context` is not provided,
+               # the `component` is from the same Atmos stack as this component
+               component: "component-2"
+               context: {}
+  ```
+</File>
+
+<br/>
+
+In the above configuration, `component-3` depends on `component-2`, and `component-2` depends on `component-1`.
+
+<br/>
+
+:::tip
+For more details on how to configure component dependencies, refer to [`atmos describe dependents`](/cli/commands/describe/dependents)
+:::
 
 ## Working with Private Repositories
 
