@@ -1440,10 +1440,6 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 
 		a := &(*affected)[i]
 
-		if a.StackSlug == stackSlug {
-			return true
-		}
-
 		if len(a.Dependents) > 0 {
 			return processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
 		}
@@ -1451,9 +1447,9 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 	return false
 }
 
-func processIncludedInDependenciesForDependents(dependent *[]schema.Dependent, stackSlug string) bool {
-	for i := 0; i < len(*dependent); i++ {
-		d := &(*dependent)[i]
+func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, stackSlug string) bool {
+	for i := 0; i < len(*dependents); i++ {
+		d := &(*dependents)[i]
 
 		if d.StackSlug == stackSlug {
 			return true
