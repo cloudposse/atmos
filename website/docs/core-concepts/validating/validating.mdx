@@ -1,0 +1,33 @@
+---
+title: Validating Stack Configurations
+sidebar_position: 2
+sidebar_label: Validating Configurations
+description: Use JSON Schema and OPA policies to validate Components.
+id: validating
+---
+import Terminal from '@site/src/components/Terminal'
+
+Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute 
+to the development and deployment processes. Atmos enhances this validation process in two significant ways with [JSON Schema](https://json-schema.org/) and [OPA](https://www.openpolicyagent.org/) policies.
+
+:::tip
+
+Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
+
+:::
+
+Atmos supports two types of native validation.
+
+## JSON Schema
+
+Atmos supports [JSON Schema](https://json-schema.org/) validation, which can validate the schema of configurations such as stacks, workflows, and vendoring manifests.
+JSON Schema is an industry standard and provides a vocabulary to annotate and validate JSON documents for correctness.
+
+## Open Policy Agent (OPA)
+
+The [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA, pronounced “oh-pa”) is another open-source industry standard that provides
+a general-purpose policy engine to unify policy enforcement across your stacks. The OPA language (Rego) is a high-level declarative language for
+specifying policy as code. Atmos has native support for the OPA decision-making engine to enforce policies across all the components in your stacks
+(e.g. for microservice configurations).
+
+This is powerful stuff: because you can define many policies, it's possible to validate components differently for different environments or teams.

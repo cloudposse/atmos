@@ -195,8 +195,13 @@ article h1 {
 }
 
 [data-theme='dark'] .alert--secondary {
-    --ifm-color-secondary-contrast-background: #000;
-    --ifm-alert-background-color: #000;
+    --ifm-color-secondary-contrast-background: rgb(67 67 67 / 31%);
+    --ifm-alert-background-color: rgb(67 67 67 / 31%);
+}
+
+[data-theme='dark'] .alert--info {
+    --ifm-color-info-contrast-background: rgb(25, 60, 71, 0.50);
+    --ifm-alert-background-color: rgb(25, 60, 71, 0.50);
 }
 
 .alert--secondary {
