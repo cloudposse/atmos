@@ -1398,7 +1398,7 @@ func addDependentsToAffected(cliConfig schema.CliConfiguration, affected *[]sche
 		}
 	}
 
-	processIncludedInOtherDependencies(affected)
+	processIncludedInDependencies(affected)
 	return nil
 }
 
@@ -1424,23 +1424,43 @@ func addDependentsToDependents(cliConfig schema.CliConfiguration, dependents *[]
 	return nil
 }
 
-func processIncludedInOtherDependencies(affected *[]schema.Affected) bool {
+func processIncludedInDependencies(affected *[]schema.Affected) bool {
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
-		a.IncludedInOtherDependents = processIsIncludedInOtherDependenciesForAffected(affected, a.StackSlug, i)
+		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
 	}
 	return false
 }
 
-func processIsIncludedInOtherDependenciesForAffected(affected *[]schema.Affected, stackSlug string, affectedIndex int) bool {
+func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stackSlug string, affectedIndex int) bool {
 	for i := 0; i < len(*affected); i++ {
 		if i == affectedIndex {
 			continue
 		}
 
 		a := &(*affected)[i]
+
 		if a.StackSlug == stackSlug {
 			return true
+		}
+
+		if len(a.Dependents) > 0 {
+			return processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
+		}
+	}
+	return false
+}
+
+func processIncludedInDependenciesForDependents(dependent *[]schema.Dependent, stackSlug string) bool {
+	for i := 0; i < len(*dependent); i++ {
+		d := &(*dependent)[i]
+
+		if d.StackSlug == stackSlug {
+			return true
+		}
+
+		if len(d.Dependents) > 0 {
+			return processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
 		}
 	}
 	return false

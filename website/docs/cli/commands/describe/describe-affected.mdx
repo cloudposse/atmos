@@ -233,7 +233,7 @@ Each object has the following schema:
   "file": ".....",
   "folder": ".....",
   "dependents": [],
-  "included_in_other_dependents": "true | false"
+  "included_in_dependents": "true | false"
 }
 ```
 
@@ -269,9 +269,9 @@ where:
   hierarchical - each component in the list will also contain a `dependents` property if that component has dependent
   components as well
 
-- `included_in_other_dependents` - a boolean flag indicating if the affected component in the stack is also present in any of the `dependents`
+- `included_in_dependents` - a boolean flag indicating if the affected component in the stack is also present in any of the `dependents`
   properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
-  is passed. If `included_in_other_dependents` is set to `true`, it indicates that the affected component in the stack is also
+  is passed. If `included_in_dependents` is set to `true`, it indicates that the affected component in the stack is also
   present in any of the `dependents` lists in the dependency hierarchy of the other affected components.
   This flag can be used to decide whether to plan/apply the affected component - you might skip planning/applying the component
   since it's also a dependency of another affected component and will be triggered in the dependency order of the other
@@ -620,7 +620,7 @@ the `atmos describe affected --include-dependents=true` command will produce the
       "component": "component-1",
       "stack": "plat-ue2-dev",
       "stack_slug": "plat-ue2-dev-component-1",
-      "included_in_other_dependents": false,
+      "included_in_dependents": false,
       "dependents": [
         {
           "component": "component-2",
@@ -640,7 +640,7 @@ the `atmos describe affected --include-dependents=true` command will produce the
       "component": "component-2",
       "stack": "plat-ue2-dev",
       "stack_slug": "plat-ue2-dev-component-2",
-      "included_in_other_dependents": true,
+      "included_in_dependents": true,
       "dependents": [
         {
           "component": "component-3",
@@ -653,7 +653,7 @@ the `atmos describe affected --include-dependents=true` command will produce the
       "component": "component-3",
       "stack": "plat-ue2-dev",
       "stack_slug": "plat-ue2-dev-component-3",
-      "included_in_other_dependents": true
+      "included_in_dependents": true
     }
   ]
  ```
@@ -661,12 +661,12 @@ the `atmos describe affected --include-dependents=true` command will produce the
 
 <br/>
 
-The `component-1` component does not depend on any other component, and therefore it has the `included_in_other_dependents`
+The `component-1` component does not depend on any other component, and therefore it has the `included_in_dependents`
 attribute set to `false`. The `component-2` and `component-3` components depend on other components and are included in
-the `dependents` property of the other components, and hence the `included_in_other_dependents` attribute is set to `true`.
+the `dependents` property of the other components, and hence the `included_in_dependents` attribute is set to `true`.
 
 When processing the above output, you might decide to not plan/apply the `component-2` and `component-3` components
-separately since they are in the `dependents` property of the `component-1` component. Instead, you might just
+since they are in the `dependents` property of the `component-1` component. Instead, you might just
 trigger `component-1` and then `component-2` and `component-3` in the order of dependencies.
 
 ## Working with Private Repositories
