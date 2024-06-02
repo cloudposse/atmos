@@ -90,7 +90,7 @@ where:
 
 - `workflows.base_path` - the base path to Atmos workflow files
 
-### Create Workflow Files and Define Workflows
+### Create Workflow Files
 
 In `atmos.yaml`, we set `workflows.base_path` to `stacks/workflows`. The folder is relative to the root of the repository.
 
@@ -107,6 +107,8 @@ account.
 
 You can segregate the workflow files even further, e.g. per account and service. For example, in the workflow
 file `stacks/workflows/workflows-dev-eks.yaml` you can define all EKS-related workflows for the `dev` account.
+
+### Use Workflow Schema
 
 Workflow files must confirm to the following schema:
 
@@ -348,17 +350,17 @@ To run this workflow, execute the following command:
 atmos workflow terraform-plan-test-component-override-3-all-stacks -f workflow1
 ```
 
-## Atmos Stacks in Workflows
+## Working with Atmos Stacks in Workflows
 
-Atmos stack for the workflow commands of type `atmos` can be specified in four different ways:
+The Atmos stack used by the workflow commands of type `atmos` can be specified in four different ways:
 
-- Inline in the command itself
+### Inline in the command itself
   ```yaml
   steps:
     - command: terraform plan test/test-component-override-2 -s tenant1-ue2-dev
   ```
 
-- In the workflow-level `stack` attribute
+### In the workflow-level `stack` attribute
   ```yaml
   workflows:
     my-workflow:
@@ -367,19 +369,21 @@ Atmos stack for the workflow commands of type `atmos` can be specified in four d
         - command: terraform plan test/test-component
   ```
 
-- In the step-level `stack` attribute
+### In the step-level `stack` attribute
   ```yaml
   steps:
     - command: terraform plan test/test-component
       stack: tenant1-ue2-dev
   ```
 
-- On the command line
+### On the command line
   ```console
   atmos workflow my-workflow -f workflow1 -s tenant1-ue2-dev
   ```
 
 <br/>
+
+### Stack Presedence
 
 The stack defined inline in the command itself has the lowest priority, it can and will be overridden by any other stack definition.
 The step-level stack will override the workflow-level stack. The command line `--stack` option will override all other stacks defined in the workflow

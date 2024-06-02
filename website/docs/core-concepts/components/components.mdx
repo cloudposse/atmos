@@ -8,8 +8,8 @@ description: Components are opinionated building blocks of infrastructure as cod
 Components are opinionated, self-contained building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case. 
 Those Components are then configured inside of one or more [Stacks](/core-concepts/stacks).
 
-Atmos was designed to be tool-agnostic, but also supports several native integrations with tools like [`terraform`](/cli/commands/terraform/usage) and [`helmfile`](/cli/commands/helmfile/usage). 
-A common use-case for Atmos is implementing components for [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module).
+The most common use-case for Atmos is using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module) as components in stacks.
+But Atmos was designed to be tool-agnostic, and [custom commands](/core-concepts/custom-commands) can be made to work with Atmos.
 
 :::tip
 Components are things like [Terraform "root" modules](https://developer.hashicorp.com/terraform/language/modules#the-root-module), Helm Charts, Dockerfiles, or any fundamental building block of infrastructure.
@@ -51,25 +51,6 @@ scalable, and reliable systems, ensuring a smooth and effective infrastructure m
 - **Use a Monorepo for Your Components.** <br/> For streamlined development and simplified dependency management, smaller companies should consolidate stacks and components in a single monorepo, facilitating easier updates and unified versioning. Larger companies and enterprises with multiple monorepos can benefit from a central repository for upstream components, and then use vendoring to easily pull in these shared components to team-specific monorepos.
 - **Maintain Loose Coupling Between Components.** <br/> Avoid directly invoking one component from within another to ensure components remain loosely coupled. Specifically for Terraform components (root modules), this practice is unsupported due to the inability to define a backend in a child module, potentially leading to unexpected outcomes. It's crucial to steer clear of this approach to maintain system integrity.
 - **Reserve Code Generation for Emergencies.** <br/> We generally advise against using code generation for application logic (components), because it's challenging to ensure good test coverage (e.g. with `terratest`) and no one likes to code review machine-generated boilerplate in Pull Requests.
-
-## Component Schema
-
-To configure a Component in a [Stack](/core-concepts/stacks), A Component consists of the infrastructure as code business logic (e.g. a Terraform "root" module) as well as the configuration of that
-component. The configuration of a component is stored in a Stack configuration.
-
-<br/>
-
-:::info Disambiguation
-
-- **Terraform Component** is a simply a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module)
-  that consists of the resources defined in the `.tf` files in a working directory
-  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/tests/components/terraform/infra/vpc))
-
-- **Component Configuration** provides configuration (variables and other settings) for a type of component (e.g. a Terraform component) 
-  and is defined in one or more YAML stack config files (which are called [Atmos stacks](/core-concepts/stacks))
-:::
-
-<br/>
 
 
 ## Flavors of Components

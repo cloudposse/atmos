@@ -104,7 +104,7 @@ module.exports = {
                 },
                 {
                     type: 'category',
-                    label: 'Trouble Shooting',
+                    label: 'Troubleshooting',
                     collapsible: true,
                     collapsed: true,
                     items: [
