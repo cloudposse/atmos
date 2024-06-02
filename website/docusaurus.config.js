@@ -136,40 +136,26 @@ const config = {
                         label: 'Reference'
                     },
                     {
-                        type: 'dropdown',
                         label: 'Community',
                         position: 'left',
-                        items: [
-                            {
-                                label: 'Weekly Office Hours',
-                                href: 'https://cloudposse.com/office-hours/',
-                            },
-                            {
-                                label: 'Slack Community',
-                                href: 'https://slack.cloudposse.com/',
-                            },
-                            {
-                                label: 'Slack Archives',
-                                href: 'https://archive.sweetops.com/atmos/',
-                            },
-                            {
-                                label: 'Contributing',
-                                type: 'doc',
-                                docId: 'contributing/contributing',
-                            },
-                        ],
+                        to: '/community'
                     },
+                    // Algolia search configuration
                     {
-                        to: 'https://cloudposse.com/services/',
-                        label: 'Get Help',
+                        type: 'search',
                         position: 'right',
-                        className: 'button button--primary navbar-cta-button'
                     },
                     {
                         href: 'https://github.com/cloudposse/atmos',
                         position: 'right',
                         className: 'header-github-link',
                         'aria-label': 'GitHub repository',
+                    },
+                    {
+                        to: 'https://cloudposse.com/services/',
+                        label: 'Get Help',
+                        position: 'right',
+                        className: 'button button--primary navbar-cta-button'
                     }
                 ],
             },

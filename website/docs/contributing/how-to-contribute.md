@@ -1,7 +1,7 @@
 ---
 title: How to Contribute
-sidebar_position: 2
-sidebar_label: Contributing
+sidebar_position: 3
+sidebar_label: How to Contribute
 ---
 
 Thanks for the interest in contributing to the Atmos project!

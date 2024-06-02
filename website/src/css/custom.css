@@ -203,7 +203,12 @@ article h1 {
     --ifm-card-background-color: #eeeeee14;
     --ifm-button-color: #ccc;
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+
     
+}
+
+html[data-theme='dark'] {
+    --docsearch-searchbox-background: #121526 !important;
 }
 
 [data-theme='dark'] .alert--secondary {
@@ -297,6 +302,10 @@ li.menu__list-item.hidden {
     border-radius: 32px;
 }
 
+.DocSearch-Button-Placeholder {
+  min-width: 200px;
+}
+
 .aa-Autocomplete {
     min-width: 150px;
 }
@@ -308,6 +317,11 @@ li.menu__list-item.hidden {
 .navbar-cta-button {
     color: var(--ifm-button-color);
     font-weight: bolder;
+    order: 2;
+}
+
+.navbar-sidebar__item menu .navbar-cta-button {
+    margin-left: 2em;
 }
 
 .navbar-cta-button:hover {
