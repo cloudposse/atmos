@@ -5,8 +5,11 @@
 // https://docusaurus.io/docs/markdown-features/code-blocks#line-highlighting
 // https://github.com/FormidableLabs/prism-react-renderer/tree/master/packages/prism-react-renderer/src/themes
 
+const path = require('path');
+
 const lightCodeTheme = require('prism-react-renderer').themes.vsDark;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
+const latestReleasePlugin = require('./plugins/fetch-latest-release');
 
 const BASE_URL = '';
 
@@ -64,6 +67,9 @@ const config = {
                 containerId: 'GTM-KQ62MGX9',
             },
         ],
+        [
+            path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
+        ]
     ],
 
     presets: [
@@ -93,7 +99,6 @@ const config = {
             }),
         ],
     ],
-
     themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
         ({
@@ -113,6 +118,12 @@ const config = {
                     height: 36
                 },
                 items: [
+                    {
+                        label: `Latest Release`,
+                        href: `https://github.com/cloudposse/atmos/releases/latest`,
+                        position: 'left',
+                        className: 'latest-release-link'  // Add a class to identify this link
+                    },
                     {
                         type: 'doc',
                         docId: 'introduction/index',
@@ -197,6 +208,10 @@ const config = {
                 respectPrefersColorScheme: false,
               },
         }),
+
+    customFields: {
+        latestRelease: 'v0.0.0', // initial placeholder
+        },
 
     markdown: {
         mermaid: true,

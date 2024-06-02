@@ -15,7 +15,7 @@ Here are some of the major differentiators of Atmos:
 * [Atmos Design Patterns](/design-patterns)
 * [Third-party Integrations](/integrations)
 * [Atmos Vendoring](/core-concepts/vendoring)
-* [Component Vendoring](/core-concepts/vendoring/components)
+* [Component Vendoring](/core-concepts/vendoring/component-manifest)
 * [Imports](/core-concepts/stacks/imports) (mixins, catalogs)
 * [Workflow Automation](/core-concepts/workflows)
 * [Custom Commands](/core-concepts/custom-commands)
