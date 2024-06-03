@@ -28,7 +28,7 @@ export default function Typewriter({ className, children }) {
     return (
         <div ref={ref} className={className}>
             <div className="typewriter">
-                <tt class="typing">{children}</tt>
+                <tt className="typing">{children}</tt>
             </div>
         </div>
     );

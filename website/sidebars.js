@@ -99,7 +99,7 @@ module.exports = {
                 },     
                 {
                     type: 'category',
-                    label: 'Design Patterns',
+                    label: 'Use Design Patterns',
                     collapsible: true,
                     collapsed: true,
                     items: [

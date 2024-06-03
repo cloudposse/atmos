@@ -23,6 +23,10 @@ a.navbar__item.navbar__link.latest-release-link {
     font-size: 0.8em;
     padding: 0;
     margin-right: 1em;
+    border-radius: 6px;
+    padding-left: 1em;
+    padding-right: 1em;
+    background: #cccccc1c;
 }
 
 .navbar__title {
