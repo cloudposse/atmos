@@ -4,6 +4,8 @@ sidebar_position: 30
 sidebar_label: Affected Stacks
 ---
 
+import Terminal from '@site/src/components/Terminal'
+
 **Streamline Your Change Management Process**
 
 The [Atmos Affected Stacks GitHub Action](https://github.com/cloudposse/github-action-atmos-affected-stacks) empowers you to easily identify the affected [atmos stacks](/core-concepts/stacks/) for a pull request so you can gain better insights into the impact of your pull requests. It works by installing Atmos and running [`atmos describe affected`](/cli/commands/describe/affected), and outputs a comprehensive list of affected stacks, both as raw output and as a matrix to be used in subsequent GitHub action jobs.
@@ -23,42 +25,7 @@ Atmos checks component folders for changes first, marking all related components
 
 ## Usage Example
 
-### Config
-
-The action expects the Atmos configuration file `atmos.yaml` to be present in the repository. 
-Usually, the configuration placed in `./rootfs/usr/local/etc/atmos/atmos.yaml`.
-The config should have the following structure:
-
-```yaml
-# ./rootfs/usr/local/etc/atmos/atmos.yaml
-integrations:
-  github:
-    gitops:
-      terraform-version: 1.5.2
-      infracost-enabled: false
-      artifact-storage:
-        region: us-east-2
-        bucket: cptest-core-ue2-auto-gitops
-        table: cptest-core-ue2-auto-gitops-plan-storage
-        role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
-      role:
-        plan: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
-        apply: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
-      matrix:
-        sort-by: .stack_slug
-        group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
-```
-
-:::tip Important!
-
-**Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v2` version](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v2).
-
-:::
-
-### Workflow example
-
-```yaml
-# .github/workflows/atmos-terraform-plan.yaml
+```yaml title=".github/workflows/atmos-terraform-plan.yaml"
 name: Pull Request
 on:
   pull_request:
@@ -103,3 +70,7 @@ jobs:
           atmos-config-path: ./rootfs/usr/local/etc/atmos/
           atmos-version: 1.63.0
 ```
+
+## Requirements
+
+This action has the requirements as [Github Actions](/integrations/github-actions/). Use the same S3 Bucket, DynamoDB table, IAM Roles and config described there.

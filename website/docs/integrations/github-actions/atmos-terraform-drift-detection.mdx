@@ -4,6 +4,8 @@ sidebar_position: 60
 sidebar_label: Terraform Drift Detection
 ---
 
+import Terminal from '@site/src/components/Terminal'
+
 The Cloud Posse GitHub Action for "Atmos Terraform Drift Detection" and "Atmos Terraform Drift Remediation" define a scalable pattern for detecting and remediating Terraform drift from within GitHub using workflows and Issues. "Atmos Terraform Drift Detection" will determine drifted Terraform state by running [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan) and creating GitHub Issues for any drifted component and stack. Furthermore, "Atmos Terraform Drift Remediation" will run [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply) for any open Issue if called and close the given Issue. With these two actions, we can fully support drift detection for Terraform directly within the GitHub UI.
 
 This action is intended to be used together with [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan) and [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply).
@@ -20,7 +22,7 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 * **Free Tier GitHub** Use GitHub Issues to track drifted resources.
 * **100% Open Source with Permissive APACHE2 License** means you have no expensive subscriptions or long-term commitments.
 
-## Usage
+## Usage Example
 
 ```mermaid
 ---
@@ -82,39 +84,9 @@ We can quickly see a complete list of all drift components in the "Issues" tab i
 
 ![Example Issue List](/img/github-actions/drift-issue-list.png)
 
-#### Example Usage
+#### Usage Example
 
-The action expects the Atmos configuration file `atmos.yaml` to be present in the repository. 
-Usually, the configuration placed in `./rootfs/usr/local/etc/atmos/atmos.yaml`.
-The config should have the following structure:
-
-```yaml
-# ./rootfs/usr/local/etc/atmos/atmos.yaml
-integrations:
-  github:
-    gitops:
-      terraform-version: 1.5.2
-      infracost-enabled: false
-      artifact-storage:
-        region: us-east-2
-        bucket: cptest-core-ue2-auto-gitops
-        table: cptest-core-ue2-auto-gitops-plan-storage
-        role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
-      role:
-        plan: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
-        apply: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
-      matrix:
-        sort-by: .stack_slug
-        group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
-```
-
-:::tip Important!
-
-**Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v0` version](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0).
-
-:::
-
-```yaml
+```yaml title=".github/workflows/atmos-terraform-drfit-detection.yaml"
 name: 👽 Atmos Terraform Drift Detection
 
 on:
@@ -226,15 +198,10 @@ stateDiagram-v2
 
 Once we have an open Issue for a drifted component, we can trigger another workflow to remediate the drifted Terraform resources. When an Issue is labeled with `apply`, the "Atmos Terraform Drift Remediation" workflow will take the component and stack in the given Issue and run `atmos terraform apply <component> --stack <stack>` using the latest Terraform Planfile. If the apply is successful, the workflow will close the given Issue as resolved.
 
-#### Example Usage
+#### Usage Example
 
-:::tip Important!
 
-**Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use [`v1` version](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1).
-
-:::
-
-```yaml
+```yaml title=".github/workflows/atmos-terraform-drfit-remediation.yaml"
 name: 👽 Atmos Terraform Drift Remediation
 run-name: 👽 Atmos Terraform Drift Remediation
 
@@ -282,4 +249,4 @@ jobs:
 
 ## Requirements
 
-This action has the same requirements as [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan). Use the same S3 Bucket, DynamoDB table, and IAM Roles created with the requirements described there.
+This action has the requirements as [Github Actions](/integrations/github-actions/). Use the same S3 Bucket, DynamoDB table, IAM Roles and config described there.
