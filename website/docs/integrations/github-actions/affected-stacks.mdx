@@ -4,7 +4,7 @@ sidebar_position: 30
 sidebar_label: Affected Stacks
 ---
 
-import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 
 **Streamline Your Change Management Process**
 
@@ -25,7 +25,8 @@ Atmos checks component folders for changes first, marking all related components
 
 ## Usage Example
 
-```yaml title=".github/workflows/atmos-terraform-plan.yaml"
+<File title=".github/workflows/atmos-terraform-plan.yaml">
+```yaml
 name: Pull Request
 on:
   pull_request:
@@ -70,6 +71,7 @@ jobs:
           atmos-config-path: ./rootfs/usr/local/etc/atmos/
           atmos-version: 1.63.0
 ```
+</File>
 
 ## Requirements
 

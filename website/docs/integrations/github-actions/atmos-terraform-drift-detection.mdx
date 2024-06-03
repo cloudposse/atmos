@@ -4,7 +4,7 @@ sidebar_position: 60
 sidebar_label: Terraform Drift Detection
 ---
 
-import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 
 The Cloud Posse GitHub Action for "Atmos Terraform Drift Detection" and "Atmos Terraform Drift Remediation" define a scalable pattern for detecting and remediating Terraform drift from within GitHub using workflows and Issues. "Atmos Terraform Drift Detection" will determine drifted Terraform state by running [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan) and creating GitHub Issues for any drifted component and stack. Furthermore, "Atmos Terraform Drift Remediation" will run [Atmos Terraform Apply](/integrations/github-actions/atmos-terraform-apply) for any open Issue if called and close the given Issue. With these two actions, we can fully support drift detection for Terraform directly within the GitHub UI.
 
@@ -86,7 +86,8 @@ We can quickly see a complete list of all drift components in the "Issues" tab i
 
 #### Usage Example
 
-```yaml title=".github/workflows/atmos-terraform-drfit-detection.yaml"
+<File title=".github/workflows/atmos-terraform-drfit-detection.yaml">
+```yaml
 name: 👽 Atmos Terraform Drift Detection
 
 on:
@@ -145,6 +146,7 @@ jobs:
           max-opened-issues: '4'
           process-all: 'true'
 ```
+</File>
 
 #### 256 Matrix Limitation
 
@@ -201,7 +203,8 @@ Once we have an open Issue for a drifted component, we can trigger another workf
 #### Usage Example
 
 
-```yaml title=".github/workflows/atmos-terraform-drfit-remediation.yaml"
+<File title=".github/workflows/atmos-terraform-drfit-remediation.yaml">
+```yaml
 name: 👽 Atmos Terraform Drift Remediation
 run-name: 👽 Atmos Terraform Drift Remediation
 
@@ -246,6 +249,7 @@ jobs:
           atmos-config-path: ./rootfs/usr/local/etc/atmos/
           atmos-version: 1.63.0
 ```
+</File>
 
 ## Requirements
 

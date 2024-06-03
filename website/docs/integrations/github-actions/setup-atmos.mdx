@@ -4,7 +4,7 @@ sidebar_position: 10
 sidebar_label: Setup Atmos
 ---
 
-import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 
 The Cloud Posse GitHub Action to "Setup Atmos" simplifies your GitHub Action Workflows.
 
@@ -14,7 +14,8 @@ We provide a [GitHub Action](https://github.com/cloudposse/github-action-setup-a
 
 ## Usage Example
 
-```yaml title=".github/workflows/example.yaml"
+<File title=".github/workflows/example.yaml">
+```yaml
 on:
   workflow_dispatch:
   pull_request:
@@ -30,4 +31,5 @@ jobs:
         with:
           # Make sure to pin to the latest version of atmos
           atmos_version: 1.77.0
-  ```
+```
+</File>

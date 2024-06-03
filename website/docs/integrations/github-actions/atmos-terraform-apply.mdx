@@ -4,7 +4,7 @@ sidebar_position: 50
 sidebar_label: Terraform Apply
 ---
 
-import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 
 The Cloud Posse GitHub Action for "Atmos Terraform Apply" simplifies provisioning Terraform entirely within GitHub Action workflows. It makes it very easy to understand exactly what happened directly within the GitHub UI.
 
@@ -39,7 +39,8 @@ We recommend combining this action with the [`affected-stacks`](/integrations/gi
 
 :::
 
-```yaml title=".github/workflows/atmos-terraform-apply.yaml"
+<File title=".github/workflows/atmos-terraform-apply.yaml">
+```yaml
 name: "atmos-terraform-apply"
 
 on:
@@ -68,6 +69,7 @@ jobs:
           atmos-config-path: ./rootfs/usr/local/etc/atmos/
           atmos-version: 1.63.0
 ```
+</File>
 
 ## Requirements
 

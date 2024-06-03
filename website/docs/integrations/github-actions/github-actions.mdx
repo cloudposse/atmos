@@ -6,7 +6,7 @@ description: GitHub Actions.
 id: gitHub-actions
 ---
 
-import Terminal from '@site/src/components/Terminal';
+import File from '@site/src/components/File';
 import DocCardList from "@theme/DocCardList";
 
 # GitHub Actions
@@ -41,7 +41,8 @@ This action can use any S3 Bucket to keep track of your planfiles. Just ensure t
 
 For example, [vendor in](/core-concepts/components/vendoring) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/core-concepts/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
 
-```yaml title="stacks/catalog/s3-bucket/gitops.yaml"
+<File title="stacks/catalog/s3-bucket/gitops.yaml">
+```yaml
 import:
   - catalog/s3-bucket/defaults
 
@@ -57,6 +58,7 @@ components:
         name: gitops-plan-storage
         allow_encrypted_uploads_only: false
 ```
+</File>
 
 Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
 
@@ -64,7 +66,8 @@ Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
 
 Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://docs.cloudposse.com/components/library/aws/dynamodb/). Set the **Hash Key** and create a **Global Secondary Index** as follows:
 
-```yaml title="stacks/catalog/dynamodb/gitops.yaml"
+<File title="stacks/catalog/dynamodb/gitops.yaml">
+```yaml
 import:
   - catalog/dynamodb/defaults
 
@@ -101,6 +104,7 @@ components:
         ttl_enabled: true
         ttl_attribute: ttl
 ```
+</File>
 
 Pass the ARN of this table as the input to the `terraform-plan-table` of the [`cloudposse/github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) GitHub Action.
 
@@ -115,7 +119,8 @@ Next, create a role for GitHub workflows to use to plan and apply Terraform. We 
 The actions that works with atmos `>= 1.63.0` expects the Atmos configuration file `atmos.yaml` to be present in the repository.
 The config should have the following structure:
 
-```yaml title="rootfs/usr/local/etc/atmos/atmos.yaml"
+<File title="rootfs/usr/local/etc/atmos/atmos.yaml">
+```yaml
 integrations:
   github:
     gitops:
@@ -133,6 +138,7 @@ integrations:
         sort-by: .stack_slug
         group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
 ```
+</File>
 
 For actions that use atmos `< 1.63.0` the settings passed as github action inputs.
 Please follow documentation for each action to see the required inputs.
