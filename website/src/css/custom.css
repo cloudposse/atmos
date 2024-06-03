@@ -14,10 +14,6 @@ html[data-theme='dark'] nav.navbar {
     background: rgba(3, 7, 17, .75);
 }
 
-.navbar-sidebar--show .navbar-sidebar {
-    height: 100vh;
-}
-
 a.navbar__item.navbar__link.latest-release-link {
     color: #cccccc6e;
     font-size: 0.8em;
@@ -322,10 +318,16 @@ li.menu__list-item.hidden {
     color: var(--ifm-button-color);
     font-weight: bolder;
     order: 2;
+    margin-left: 2em;
 }
 
-.navbar-sidebar__item menu .navbar-cta-button {
-    margin-left: 2em;
+
+.navbar-sidebar--show {
+  backdrop-filter: none !important;
+}
+
+.navbar-sidebar__item .navbar-cta-button {
+    margin-left: inherit;
 }
 
 .navbar-cta-button:hover {

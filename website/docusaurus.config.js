@@ -29,12 +29,14 @@ const config = {
     projectName: 'atmos',
 
     // Even if you don't use internalization, you can use this field to set useful
-    // metadata like html lang. For example, if your site is Chinese, you may want
-    // to replace "en" with "zh-Hans".
+    // metadata like html lang.
     i18n: {
         defaultLocale: 'en',
         locales: ['en'],
     },
+
+    scripts: [
+    ],
 
     plugins: [
         [
@@ -105,6 +107,7 @@ const config = {
             docs: {
                 sidebar: {
                     hideable: true,
+                    autoCollapseCategories: true,
                 },
             },
             navbar: {
