@@ -5,7 +5,7 @@ sidebar_label: Terraform Workspaces
 description: Terraform Workspaces.
 id: terraform-workspaces
 ---
-
+import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 
 In Terraform, a [workspace](https://developer.hashicorp.com/terraform/language/state/workspaces) is a feature that allows
@@ -39,7 +39,7 @@ Atmos automatically calculates Terraform workspace names and uses workspaces to 
 name as the Terraform workspace when provisioning components in the stack. For example, consider the following manifest
 for the component `vpc` in the stack `ue2-dev`:
 
-<Terminal title="stacks/ue2-dev.yaml">
+<File title="stacks/ue2-dev.yaml">
 ```yaml
 vars:
   # Context variables that define the Atmos stack `ue2-dev`
@@ -57,7 +57,7 @@ components:
         name: my-vpc
         ipv4_primary_cidr_block: 10.9.0.0/18
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -84,7 +84,7 @@ with the component name.
 For example, the following manifest shows how to define two Atmos components, `vpc/1` and `vpc/2`,
 which both point to the same Terraform component `vpc`, in the stack `ue2-dev`:
 
-<Terminal title="stacks/ue2-dev.yaml">
+<File title="stacks/ue2-dev.yaml">
 ```yaml
 vars:
   # Context variables that define the Atmos stack `ue2-dev`
@@ -119,7 +119,7 @@ components:
         name: vpc-2
         ipv4_primary_cidr_block: 10.10.0.0/18
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -146,7 +146,7 @@ and `ue2-dev-vpc-2` instead of just `ue2-dev`) to store the Terraform state file
 You can override Terraform workspaces for Atmos components by using `metadata.terraform_workspace` and
 `metadata.terraform_workspace_pattern` attributes. For example:
 
-<Terminal title="stacks/ue2-dev.yaml">
+<File title="stacks/ue2-dev.yaml">
 ```yaml
 vars:
   environment: ue2
@@ -166,7 +166,7 @@ components:
         # Override Terraform workspace
         terraform_workspace_pattern: "{environment}-{stage}-{component}-workspace-override"
 ```
-</Terminal>
+</File>
 
 <br/>
 

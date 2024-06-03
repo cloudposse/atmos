@@ -51,8 +51,13 @@ const (
 	BackendTypeSectionName = "backend_type"
 	MetadataSectionName    = "metadata"
 	ComponentSectionName   = "component"
+	ComponentsSectionName  = "components"
 	CommandSectionName     = "command"
+	TerraformSectionName   = "terraform"
+	HelmfileSectionName    = "helmfile"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
+
+	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 )

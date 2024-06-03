@@ -12,6 +12,7 @@ type CliConfiguration struct {
 	Integrations                  Integrations   `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 	Schemas                       Schemas        `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates      `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Settings                      CliSettings    `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 	Initialized                   bool           `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	StacksBaseAbsolutePath        string         `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string       `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
@@ -21,6 +22,10 @@ type CliConfiguration struct {
 	StackConfigFilesRelativePaths []string       `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string       `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string         `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
+}
+
+type CliSettings struct {
+	ListMergeStrategy string `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 }
 
 type Templates struct {
@@ -108,34 +113,35 @@ type Context struct {
 }
 
 type ArgsAndFlagsInfo struct {
-	AdditionalArgsAndFlags  []string
-	SubCommand              string
-	SubCommand2             string
-	ComponentFromArg        string
-	GlobalOptions           []string
-	TerraformCommand        string
-	TerraformDir            string
-	HelmfileCommand         string
-	HelmfileDir             string
-	ConfigDir               string
-	StacksDir               string
-	WorkflowsDir            string
-	BasePath                string
-	DeployRunInit           string
-	InitRunReconfigure      string
-	AutoGenerateBackendFile string
-	UseTerraformPlan        bool
-	PlanFile                string
-	DryRun                  bool
-	SkipInit                bool
-	NeedHelp                bool
-	JsonSchemaDir           string
-	OpaDir                  string
-	CueDir                  string
-	AtmosManifestJsonSchema string
-	RedirectStdErr          string
-	LogsLevel               string
-	LogsFile                string
+	AdditionalArgsAndFlags    []string
+	SubCommand                string
+	SubCommand2               string
+	ComponentFromArg          string
+	GlobalOptions             []string
+	TerraformCommand          string
+	TerraformDir              string
+	HelmfileCommand           string
+	HelmfileDir               string
+	ConfigDir                 string
+	StacksDir                 string
+	WorkflowsDir              string
+	BasePath                  string
+	DeployRunInit             string
+	InitRunReconfigure        string
+	AutoGenerateBackendFile   string
+	UseTerraformPlan          bool
+	PlanFile                  string
+	DryRun                    bool
+	SkipInit                  bool
+	NeedHelp                  bool
+	JsonSchemaDir             string
+	OpaDir                    string
+	CueDir                    string
+	AtmosManifestJsonSchema   string
+	RedirectStdErr            string
+	LogsLevel                 string
+	LogsFile                  string
+	SettingsListMergeStrategy string
 }
 
 type ConfigAndStacksInfo struct {
@@ -196,6 +202,7 @@ type ConfigAndStacksInfo struct {
 	RedirectStdErr                string
 	LogsLevel                     string
 	LogsFile                      string
+	SettingsListMergeStrategy     string
 }
 
 // Workflows

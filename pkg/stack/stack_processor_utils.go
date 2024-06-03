@@ -364,6 +364,7 @@ func getFileContent(filePath string) (string, error) {
 
 // ProcessBaseComponentConfig processes base component(s) config
 func ProcessBaseComponentConfig(
+	cliConfig schema.CliConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[any]any,
 	component string,
@@ -414,6 +415,7 @@ func ProcessBaseComponentConfig(
 			}
 
 			err := ProcessBaseComponentConfig(
+				cliConfig,
 				baseComponentConfig,
 				allComponentsMap,
 				baseComponent,
@@ -447,7 +449,7 @@ func ProcessBaseComponentConfig(
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
 						if checkBaseComponentExists {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack '%[2]s' inherits from '%[3]s' "+
+							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
 								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
 								component,
 								stack,
@@ -459,6 +461,7 @@ func ProcessBaseComponentConfig(
 
 					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
 					err := ProcessBaseComponentConfig(
+						cliConfig,
 						baseComponentConfig,
 						allComponentsMap,
 						component,
@@ -546,28 +549,28 @@ func ProcessBaseComponentConfig(
 		}
 
 		// Base component `vars`
-		merged, err := m.Merge([]map[any]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
+		merged, err := m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentVars = merged
 
 		// Base component `settings`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentSettings = merged
 
 		// Base component `env`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentEnv = merged
 
 		// Base component `providers`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
 		if err != nil {
 			return err
 		}
@@ -580,7 +583,7 @@ func ProcessBaseComponentConfig(
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
 		// Base component `backend`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
 		if err != nil {
 			return err
 		}
@@ -590,7 +593,7 @@ func ProcessBaseComponentConfig(
 		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 
 		// Base component `remote_state_backend`
-		merged, err = m.Merge([]map[any]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
+		merged, err = m.Merge(cliConfig, []map[any]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
 		if err != nil {
 			return err
 		}

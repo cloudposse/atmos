@@ -23,6 +23,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	err = ValidateStacks(cliConfig)
+	if err != nil {
+		return err
+	}
+
 	// Process flags
 	flags := cmd.Flags()
 
@@ -100,6 +105,10 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	if err != nil {
 		return err
+	}
+
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("\nAffected components and stacks: \n"))
