@@ -6,6 +6,7 @@ id: affected
 description: This command produces a list of the affected Atmos components and stacks given two Git commits.
 ---
 import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
@@ -80,8 +81,6 @@ Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Actio
 `describe affected` and produce a GitHub matrix.
 :::
 
-#
-
 <br/>
 
 ## Usage
@@ -112,6 +111,7 @@ atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password
 atmos describe affected --repo-path <path_to_already_cloned_repo>
 atmos describe affected --include-spacelift-admin-stacks=true
 atmos describe affected --clone-target-ref=true
+atmos describe affected --include-dependents=true
 ```
 
 
@@ -212,6 +212,7 @@ Affected components and stacks:
 | `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                        | no       |
 | `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                   | no       |
 | `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory | no       |
+| `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                    | no       |
 
 ## Output
 
@@ -230,7 +231,9 @@ Each object has the following schema:
   "atlantis_project": ".....",
   "affected": ".....",
   "file": ".....",
-  "folder": "....."
+  "folder": ".....",
+  "dependents": [],
+  "included_in_dependents": "true | false"
 }
 ```
 
@@ -258,6 +261,21 @@ where:
 
 - `folder` - if the Atmos component depends on an external folder, and any file in the folder was changed (see `affected.folder` below),
   the `folder` attributes shows the modified folder
+
+- `dependents` - list of components that depend on the current affected component. It will be included only if the
+  command-line flag `--include-dependents=true` is passed (to take dependencies into account) and there are other components
+  that depend on the affected component in the stack.
+  Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` property is
+  hierarchical - each component in the list will also contain a `dependents` property if that component has dependent
+  components as well
+
+- `included_in_dependents` - a boolean flag indicating if the affected component in the stack is also present in any of the `dependents`
+  properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
+  is passed. If `included_in_dependents` is set to `true`, it indicates that the affected component in the stack is also
+  present in any of the `dependents` lists in the dependency hierarchy of the other affected components.
+  This flag can be used to decide whether to plan/apply the affected component - you might skip planning/applying the component
+  since it's also a dependency of another affected component and will be triggered in the dependency order of the other
+  affected component
 
 - `affected` - shows what was changed for the component. The possible values are:
 
@@ -454,8 +472,8 @@ where:
 
 :::note
 
-Abstract Atmos components (`metadata.type` is set to `abstract`) are not included in the output since they serve as blueprints for other
-Atmos components and are not meant to be provisioned.
+Abstract Atmos components (where `metadata.type` is set to `abstract`) are not included in the output since they serve
+as blueprints for other Atmos components and are not meant to be provisioned.
 
 :::
 
@@ -538,6 +556,118 @@ Atmos components and are not meant to be provisioned.
 </Terminal>
 
 <br/>
+
+## Affected Components with Dependencies
+
+The output of the `atmos describe affected` command can include dependencies for the affected components.
+
+If the command-line flag `--include-dependents=true` is passed to the `atmos describe affected` command, and there are
+other components that depend on the affected components in the stack, the command will include a `dependents`
+property (list) for each affected component. The `dependents` property is hierarchical - each component in the list will
+also contain a `dependents` property if that component has dependent components as well.
+
+For example, suppose that we have the following configuration for the Atmos components `component-1`, `component-2` and
+`component-3` in the stack `plat-ue2-dev`:
+
+<File title="stacks/orgs/acme/plat/dev/us-east-2.yaml">
+  ```yaml
+    components:
+      terraform:
+        component-1:
+          metadata:
+            component: "terraform-component-1"
+          vars: {}
+
+        component-2:
+          metadata:
+            component: "terraform-component-2"
+          vars: {}
+          settings:
+            depends_on:
+              1:
+                component: "component-1"
+
+        component-3:
+          metadata:
+            component: "terraform-component-3"
+          vars: {}
+          settings:
+            depends_on:
+              1:
+                component: "component-2"
+  ```
+</File>
+
+<br/>
+
+:::tip
+For more details on how to configure component dependencies, refer to [`atmos describe dependents`](/cli/commands/describe/dependents)
+:::
+
+<br/>
+
+In the above configuration, `component-3` depends on `component-2`, whereas `component-2` depends on `component-1`.
+
+If all the components are affected (modified) in the current working branch,
+the `atmos describe affected --include-dependents=true` command will produce the following result:
+
+<br/>
+
+<Terminal title="atmos describe affected --include-dependents=true">
+ ```json
+  [
+    {
+      "component": "component-1",
+      "stack": "plat-ue2-dev",
+      "stack_slug": "plat-ue2-dev-component-1",
+      "included_in_dependents": false,
+      "dependents": [
+        {
+          "component": "component-2",
+          "stack": "plat-ue2-dev",
+          "stack_slug": "plat-ue2-dev-component-2",
+          "dependents": [
+            {
+              "component": "component-3",
+              "stack": "plat-ue2-dev",
+              "stack_slug": "plat-ue2-dev-component-3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "component": "component-2",
+      "stack": "plat-ue2-dev",
+      "stack_slug": "plat-ue2-dev-component-2",
+      "included_in_dependents": true,
+      "dependents": [
+        {
+          "component": "component-3",
+          "stack": "plat-ue2-dev",
+          "stack_slug": "plat-ue2-dev-component-3"
+        }
+      ]
+    },
+    {
+      "component": "component-3",
+      "stack": "plat-ue2-dev",
+      "stack_slug": "plat-ue2-dev-component-3",
+      "included_in_dependents": true
+    }
+  ]
+ ```
+</Terminal>
+
+<br/>
+
+The `component-1` component does not depend on any other component, and therefore it has the `included_in_dependents`
+attribute set to `false`. The `component-2` and `component-3` components depend on other components and are included in
+the `dependents` property of the other components, and hence the `included_in_dependents` attribute is set to `true`.
+
+When processing the above output, you might decide to not plan/apply the `component-2` and `component-3` components
+since they are in the `dependents` property of the `component-1` component. Instead, you might just
+trigger `component-1` and then `component-2` and `component-3` in the order of dependencies.
 
 ## Working with Private Repositories
 

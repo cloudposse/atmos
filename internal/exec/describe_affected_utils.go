@@ -1378,3 +1378,86 @@ func addAffectedSpaceliftAdminStack(
 
 	return affectedList, nil
 }
+
+// addDependentsToAffected adds dependent components and stacks to each affected component
+func addDependentsToAffected(cliConfig schema.CliConfiguration, affected *[]schema.Affected) error {
+	for i := 0; i < len(*affected); i++ {
+		a := &(*affected)[i]
+
+		deps, err := ExecuteDescribeDependents(cliConfig, a.Component, a.Stack)
+		if err != nil {
+			return err
+		}
+
+		if len(deps) > 0 {
+			a.Dependents = deps
+			err = addDependentsToDependents(cliConfig, &deps)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	processIncludedInDependencies(affected)
+	return nil
+}
+
+// addDependentsToDependents recursively adds dependent components and stacks to each dependent component
+func addDependentsToDependents(cliConfig schema.CliConfiguration, dependents *[]schema.Dependent) error {
+	for i := 0; i < len(*dependents); i++ {
+		d := &(*dependents)[i]
+
+		deps, err := ExecuteDescribeDependents(cliConfig, d.Component, d.Stack)
+		if err != nil {
+			return err
+		}
+
+		if len(deps) > 0 {
+			d.Dependents = deps
+			err = addDependentsToDependents(cliConfig, &deps)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func processIncludedInDependencies(affected *[]schema.Affected) bool {
+	for i := 0; i < len(*affected); i++ {
+		a := &(*affected)[i]
+		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
+	}
+	return false
+}
+
+func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stackSlug string, affectedIndex int) bool {
+	for i := 0; i < len(*affected); i++ {
+		if i == affectedIndex {
+			continue
+		}
+
+		a := &(*affected)[i]
+
+		if len(a.Dependents) > 0 {
+			return processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
+		}
+	}
+	return false
+}
+
+func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, stackSlug string) bool {
+	for i := 0; i < len(*dependents); i++ {
+		d := &(*dependents)[i]
+
+		if d.StackSlug == stackSlug {
+			return true
+		}
+
+		if len(d.Dependents) > 0 {
+			return processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
+		}
+	}
+	return false
+}

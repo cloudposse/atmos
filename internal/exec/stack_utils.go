@@ -170,3 +170,13 @@ func BuildComponentPath(
 func GetStackNamePattern(cliConfig schema.CliConfiguration) string {
 	return cliConfig.Stacks.NamePattern
 }
+
+// IsComponentAbstract returns 'true' if the component is abstract
+func IsComponentAbstract(metadataSection map[any]any) bool {
+	if metadataType, ok := metadataSection["type"].(string); ok {
+		if metadataType == "abstract" {
+			return true
+		}
+	}
+	return false
+}

@@ -178,18 +178,21 @@ func createComponentStackMap(
 
 	for stackManifest, stackSection := range stacksMap {
 		if componentsSection, ok := stackSection.(map[any]any)[cfg.ComponentsSectionName].(map[string]any); ok {
-
-			// Terraform components
 			if terraformSection, ok := componentsSection[componentType].(map[string]any); ok {
 				for componentName, compSection := range terraformSection {
 					componentSection, ok := compSection.(map[string]any)
 
-					if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
-						varsSection = map[any]any{}
-					}
-
 					if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); !ok {
 						metadataSection = map[any]any{}
+					}
+
+					// Don't check abstract components (they are never provisioned)
+					if IsComponentAbstract(metadataSection) {
+						continue
+					}
+
+					if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
+						varsSection = map[any]any{}
 					}
 
 					if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
