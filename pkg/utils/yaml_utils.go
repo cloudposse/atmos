@@ -4,6 +4,8 @@ import (
 	"os"
 
 	"gopkg.in/yaml.v2"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // PrintAsYAML prints the provided value as YAML document to the console
@@ -13,6 +15,16 @@ func PrintAsYAML(data any) error {
 		return err
 	}
 	PrintMessage(y)
+	return nil
+}
+
+// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
+func PrintAsYAMLToFileDescriptor(cliConfig schema.CliConfiguration, data any) error {
+	y, err := ConvertToYAML(data)
+	if err != nil {
+		return err
+	}
+	LogInfo(cliConfig, y)
 	return nil
 }
 

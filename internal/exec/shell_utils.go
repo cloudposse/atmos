@@ -45,8 +45,9 @@ func ExecuteShellCommand(
 	} else if redirectStdError == "" {
 		cmd.Stderr = os.Stderr
 	} else {
-		f, err := os.OpenFile(redirectStdError, os.O_RDWR|os.O_CREATE, 0644)
+		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
+			u.LogWarning(cliConfig, err.Error())
 			return err
 		}
 

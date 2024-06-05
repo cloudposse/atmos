@@ -175,6 +175,9 @@
         },
         "overrides": {
           "$ref": "#/definitions/overrides"
+        },
+        "providers": {
+          "$ref": "#/definitions/providers"
         }
       },
       "required": [],
@@ -225,6 +228,9 @@
         },
         "remote_state_backend": {
           "$ref": "#/definitions/remote_state_backend"
+        },
+        "providers": {
+          "$ref": "#/definitions/providers"
         }
       },
       "required": [],
@@ -356,6 +362,9 @@
         },
         "atlantis": {
           "$ref": "#/definitions/atlantis"
+        },
+        "templates": {
+          "$ref": "#/definitions/templates"
         }
       },
       "required": [],
@@ -428,11 +437,14 @@
     "backend_type": {
       "type": "string",
       "enum": [
+        "local",
         "s3",
         "remote",
         "vault",
         "static",
-        "azurerm"
+        "azurerm",
+        "gcs",
+        "cloud"
       ],
       "description": "Backend type",
       "title": "backend_type"
@@ -444,11 +456,14 @@
     "remote_state_backend_type": {
       "type": "string",
       "enum": [
+        "local",
         "s3",
         "remote",
         "vault",
         "static",
-        "azurerm"
+        "azurerm",
+        "gcs",
+        "cloud"
       ],
       "description": "Remote state backend type",
       "title": "remote_state_backend_type"
@@ -516,6 +531,14 @@
         "azurerm": {
           "type": "object",
           "additionalProperties": true
+        },
+        "gcs": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "cloud": {
+          "type": "object",
+          "additionalProperties": true
         }
       },
       "required": [],
@@ -537,6 +560,9 @@
         },
         "settings": {
           "$ref": "#/definitions/settings"
+        },
+        "providers": {
+          "$ref": "#/definitions/providers"
         }
       },
       "required": [],
@@ -716,6 +742,18 @@
         "steps"
       ],
       "title": "workflow_manifest"
+    },
+    "providers": {
+      "type": "object",
+      "description": "Providers section",
+      "additionalProperties": true,
+      "title": "providers"
+    },
+    "templates": {
+      "type": "object",
+      "description": "Templates section",
+      "additionalProperties": true,
+      "title": "templates"
     }
   }
 }

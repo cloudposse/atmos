@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 	"gopkg.in/yaml.v2"
@@ -104,7 +105,7 @@ func ExecuteComponentVendorInternal(
 
 	// Parse 'uri' template
 	if vendorComponentSpec.Source.Version != "" {
-		t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Parse(vendorComponentSpec.Source.Uri)
+		t, err = template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
 		if err != nil {
 			return err
 		}
@@ -189,6 +190,17 @@ func ExecuteComponentVendorInternal(
 				return err
 			}
 		} else {
+			// Use `go-getter` to download the sources into the temp directory
+			// When cloning from the root of a repo w/o using modules (sub-paths), `go-getter` does the following:
+			// - If the destination directory does not exist, it creates it and runs `git init`
+			// - If the destination directory exists, it should be an already initialized Git repository (otherwise an error will be thrown)
+			// For more details, refer to
+			// - https://github.com/hashicorp/go-getter/issues/114
+			// - https://github.com/hashicorp/go-getter?tab=readme-ov-file#subdirectories
+			// We add the `uri` to the already created `tempDir` so it does not exist to allow `go-getter` to create
+			// and correctly initialize it
+			tempDir = path.Join(tempDir, filepath.Base(uri))
+
 			client := &getter.Client{
 				Ctx: context.Background(),
 				// Define the destination where the files will be stored. This will create the directory if it doesn't exist
@@ -301,7 +313,7 @@ func ExecuteComponentVendorInternal(
 
 			// Parse 'uri' template
 			if mixin.Version != "" {
-				t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Funcs(sprig.FuncMap()).Parse(mixin.Uri)
+				t, err = template.New(fmt.Sprintf("mixin-uri-%s", mixin.Version)).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
 				if err != nil {
 					return err
 				}

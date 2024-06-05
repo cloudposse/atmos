@@ -1,6 +1,6 @@
 ---
 title: Spacelift Integration
-sidebar_position: 3
+sidebar_position: 6
 sidebar_label: Spacelift
 ---
 
@@ -59,6 +59,35 @@ components:
 ```
 
 <br/>
+
+
+## OpenTofu Support
+
+Spacelift is compatible with [OpenTofu](https://opentofu.org) and configurable on a global and per stack or component basis.
+
+To make OpenTofu the default, add the following to your top-level stack manifest:
+
+```yaml
+settings:
+  spacelift:
+    # Use OpenTofu    
+    terraform_workflow_tool: OPEN_TOFU
+```
+
+Similarly, to override this behavior, or to only configure it on specific components, add the following to the component 
+configuration:
+
+```yaml
+components:
+  terraform:
+    my-component:
+      settings:
+        spacelift:
+          # Use OpenTofu
+          terraform_workflow_tool: OPEN_TOFU
+```
+
+For more details on [Atmos support for OpenTofu](/integrations/opentofu) see our integration page.
 
 ## Spacelift Stack Dependencies
 

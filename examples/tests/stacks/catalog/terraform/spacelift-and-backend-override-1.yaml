@@ -7,7 +7,7 @@ settings:
 terraform:
   vars: {}
 
-  backend_type: s3 # s3, remote, vault, etc.
+  backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud
   backend:
     s3:
       encrypt: true

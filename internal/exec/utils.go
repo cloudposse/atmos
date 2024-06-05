@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -24,7 +26,9 @@ var (
 		cfg.DryRunFlag,
 		cfg.SkipInitFlag,
 		cfg.KubeConfigConfigFlag,
+		cfg.TerraformCommandFlag,
 		cfg.TerraformDirFlag,
+		cfg.HelmfileCommandFlag,
 		cfg.HelmfileDirFlag,
 		cfg.CliConfigDirFlag,
 		cfg.StackDirFlag,
@@ -48,8 +52,8 @@ var (
 	}
 )
 
-// FindComponentConfig finds component config sections
-func FindComponentConfig(
+// ProcessComponentConfig processes component config sections
+func ProcessComponentConfig(
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
@@ -64,6 +68,7 @@ func FindComponentConfig(
 	var componentVarsSection map[any]any
 	var componentSettingsSection map[any]any
 	var componentOverridesSection map[any]any
+	var componentProvidersSection map[any]any
 	var componentImportsSection []string
 	var componentEnvSection map[any]any
 	var componentBackendSection map[any]any
@@ -85,33 +90,36 @@ func FindComponentConfig(
 		return fmt.Errorf("could not find the stack '%s'", stack)
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
-		return fmt.Errorf("'components' section is missing in the stack file '%s'", stack)
+		return fmt.Errorf("'components' section is missing in the stack manifest '%s'", stack)
 	}
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
-		return fmt.Errorf("'components/%s' section is missing in the stack file '%s'", componentType, stack)
+		return fmt.Errorf("'components.%s' section is missing in the stack manifest '%s'", componentType, stack)
 	}
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
-		return fmt.Errorf("no config found for the component '%s' in the stack file '%s'", component, stack)
+		return fmt.Errorf("no config found for the component '%s' in the stack manifest '%s'", component, stack)
 	}
 	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
-		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack file '%s'", component, stack)
+		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack manifest '%s'", component, stack)
 	}
-	if componentBackendSection, ok = componentSection["backend"].(map[any]any); !ok {
+	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
+		componentProvidersSection = map[any]any{}
+	}
+	if componentBackendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
 		componentBackendSection = nil
 	}
-	if componentBackendType, ok = componentSection["backend_type"].(string); !ok {
+	if componentBackendType, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
 		componentBackendType = ""
 	}
 	if componentImportsSection, ok = stackSection["imports"].([]string); !ok {
 		componentImportsSection = nil
 	}
-	if command, ok = componentSection["command"].(string); !ok {
+	if command, ok = componentSection[cfg.CommandSectionName].(string); !ok {
 		command = ""
 	}
-	if componentEnvSection, ok = componentSection["env"].(map[any]any); !ok {
+	if componentEnvSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
 		componentEnvSection = map[any]any{}
 	}
-	if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
 		componentSettingsSection = map[any]any{}
 	}
 	if componentOverridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
@@ -139,6 +147,7 @@ func FindComponentConfig(
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
 	configAndStacksInfo.ComponentOverridesSection = componentOverridesSection
+	configAndStacksInfo.ComponentProvidersSection = componentProvidersSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -185,7 +194,9 @@ func processCommandLineArgs(
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
 	configAndStacksInfo.BasePath = argsAndFlagsInfo.BasePath
+	configAndStacksInfo.TerraformCommand = argsAndFlagsInfo.TerraformCommand
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
+	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
@@ -205,6 +216,7 @@ func processCommandLineArgs(
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
+	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
@@ -233,6 +245,7 @@ func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
 ) {
 	// Process stack config file(s)
 	_, stacksMap, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
+		cliConfig,
 		cliConfig.StacksBaseAbsolutePath,
 		cliConfig.TerraformDirAbsolutePath,
 		cliConfig.HelmfileDirAbsolutePath,
@@ -279,12 +292,12 @@ func ProcessStacks(
 	if cliConfig.Logs.Level == u.LogLevelTrace {
 		var msg string
 		if cliConfig.StackType == "Directory" {
-			msg = "\nFound the config file for the provided stack:"
+			msg = "\nFound stack manifest:"
 		} else {
-			msg = "\nFound stack config files:"
+			msg = "\nFound stack manifests:"
 		}
 		u.LogTrace(cliConfig, msg)
-		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAMLToFileDescriptor(cliConfig, cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -292,7 +305,7 @@ func ProcessStacks(
 
 	// Check and process stacks
 	if cliConfig.StackType == "Directory" {
-		err = FindComponentConfig(
+		err = ProcessComponentConfig(
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
@@ -303,7 +316,6 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 
-		configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 		configAndStacksInfo.StackFile = configAndStacksInfo.Stack
 
 		// Process context
@@ -313,7 +325,7 @@ func ProcessStacks(
 
 		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
-			cliConfig.Stacks.NamePattern,
+			GetStackNamePattern(cliConfig),
 			configAndStacksInfo.Stack,
 		)
 		if err != nil {
@@ -325,8 +337,8 @@ func ProcessStacks(
 		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
-			// Check if we've found the component config
-			err = FindComponentConfig(
+			// Check if we've found the component in the stack
+			err = ProcessComponentConfig(
 				&configAndStacksInfo,
 				stackName,
 				stacksMap,
@@ -337,21 +349,30 @@ func ProcessStacks(
 				continue
 			}
 
-			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
+			if cliConfig.Stacks.NameTemplate != "" {
+				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				if err2 != nil {
+					continue
+				}
+				configAndStacksInfo.ContextPrefix = tmpl
+			} else if cliConfig.Stacks.NamePattern != "" {
+				// Process context
+				configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
-			// Process context
-			configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+				configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+					configAndStacksInfo.Context,
+					GetStackNamePattern(cliConfig),
+					stackName,
+				)
+				if err != nil {
+					continue
+				}
+			} else {
+				return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config")
+			}
+
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-
-			configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
-				configAndStacksInfo.Context,
-				cliConfig.Stacks.NamePattern,
-				stackName,
-			)
-			if err != nil {
-				continue
-			}
 
 			// Check if we've found the stack
 			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
@@ -362,7 +383,7 @@ func ProcessStacks(
 
 				u.LogDebug(
 					cliConfig,
-					fmt.Sprintf("Found config for the component '%s' for the stack '%s' in the stack config file '%s'",
+					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
 						stackName,
@@ -379,30 +400,186 @@ func ProcessStacks(
 			}
 
 			return configAndStacksInfo,
-				fmt.Errorf("\nSearched all stack YAML files, but could not find config for the component '%s' in the stack '%s'.\n"+
-					"Check that all variables in the stack name pattern '%s' are correctly defined in the stack config files.\n"+
+				fmt.Errorf("\nCould not find the component '%s' in the stack '%s'.\n"+
+					"Check that all the context variables are correctly defined in the stack manifests.\n"+
 					"Are the component and stack names correct? Did you forget an import?%v\n",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
-					cliConfig.Stacks.NamePattern,
 					cliConfigYaml)
 		} else if foundStackCount > 1 {
-			err = fmt.Errorf("\nFound duplicate config for the component '%s' for the stack '%s' in the files: %v.\n"+
-				"Check that all context variables in the stack name pattern '%s' are correctly defined in the files and not duplicated.\n"+
+			err = fmt.Errorf("\nFound duplicate config for the component '%s' in the stack '%s' in the manifests: %v.\n"+
+				"Check that all the context variables are correctly defined in the manifests and not duplicated.\n"+
 				"Check that all imports are valid.",
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
-				cliConfig.Stacks.NamePattern)
+			)
 			u.LogErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
 	}
 
-	if len(configAndStacksInfo.Command) == 0 {
-		configAndStacksInfo.Command = configAndStacksInfo.ComponentType
+	// Add imports
+	configAndStacksInfo.ComponentSection["imports"] = configAndStacksInfo.ComponentImportsSection
+
+	// Add Atmos component and stack
+	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
+
+	// Add Atmos CLI config
+	atmosCliConfig := map[string]any{}
+	atmosCliConfig["base_path"] = cliConfig.BasePath
+	atmosCliConfig["components"] = cliConfig.Components
+	atmosCliConfig["stacks"] = cliConfig.Stacks
+	atmosCliConfig["workflows"] = cliConfig.Workflows
+	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
+
+	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
+	if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+		configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = configAndStacksInfo.ComponentFromArg
 	}
+
+	// Add component info, including Terraform config
+	componentInfo := map[string]any{}
+	componentInfo["component_type"] = configAndStacksInfo.ComponentType
+
+	if configAndStacksInfo.ComponentType == "terraform" {
+		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
+		componentInfo["component_path"] = componentPath
+		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+		componentInfo["terraform_config"] = terraformConfiguration
+	} else if configAndStacksInfo.ComponentType == "helmfile" {
+		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
+	}
+
+	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
+
+	// `sources` (stack config files where the variables and other settings are defined)
+	sources, err := ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	configAndStacksInfo.ComponentSection["sources"] = sources
+
+	// Component dependencies
+	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.ComponentSection["deps"] = componentDeps
+	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
+
+	// Terraform workspace
+	workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	configAndStacksInfo.TerraformWorkspace = workspace
+	configAndStacksInfo.ComponentSection["workspace"] = workspace
+
+	// Process `Go` templates in Atmos manifest sections
+	componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	var settingsSectionStruct schema.Settings
+
+	err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	if err != nil {
+		// If any error returned from the templates processing, log it and exit
+		u.LogErrorAndExit(err)
+	}
+
+	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+	if err != nil {
+		if !cliConfig.Templates.Settings.Enabled {
+			if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+				errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+				err = errors.Join(err, errors.New(errorMessage))
+			}
+		}
+		u.LogErrorAndExit(err)
+	}
+
+	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+
+	// Process Atmos manifest sections
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentProvidersSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentVarsSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentSettingsSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentEnvSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentOverridesSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentMetadataSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[any]any); ok {
+		configAndStacksInfo.ComponentBackendSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
+		configAndStacksInfo.ComponentBackendType = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
+		configAndStacksInfo.Component = i
+	}
+
+	// Spacelift stack
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	// Atlantis project
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
+	// Process `command`
+	//if len(configAndStacksInfo.Command) == 0 {
+	//	configAndStacksInfo.Command = configAndStacksInfo.ComponentType
+	//}
+
+	// Process the ENV variables from the `env` section
+	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
+
+	// Process component metadata
+	_, baseComponentName, _ := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
+	configAndStacksInfo.BaseComponentPath = baseComponentName
 
 	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""
@@ -439,105 +616,6 @@ func ProcessStacks(
 		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
 	}
 
-	// workspace
-	workspace, err := BuildTerraformWorkspace(
-		configAndStacksInfo.Stack,
-		cliConfig.Stacks.NamePattern,
-		configAndStacksInfo.ComponentMetadataSection,
-		configAndStacksInfo.Context,
-	)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	configAndStacksInfo.TerraformWorkspace = workspace
-	configAndStacksInfo.ComponentSection["workspace"] = workspace
-
-	// Add imports
-	configAndStacksInfo.ComponentSection["imports"] = configAndStacksInfo.ComponentImportsSection
-
-	// Add Atmos component and stack
-	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
-	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
-	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
-
-	// Add Atmos CLI config
-	atmosCliConfig := map[string]any{}
-	atmosCliConfig["base_path"] = cliConfig.BasePath
-	atmosCliConfig["components"] = cliConfig.Components
-	atmosCliConfig["stacks"] = cliConfig.Stacks
-	atmosCliConfig["workflows"] = cliConfig.Workflows
-	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
-
-	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
-	if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
-		configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
-	}
-
-	// Spacelift stack
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(
-		cliConfig,
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.Stack,
-		configAndStacksInfo.ComponentSettingsSection,
-		configAndStacksInfo.ComponentVarsSection,
-	)
-
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	if spaceliftStackName != "" {
-		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
-	}
-
-	// Atlantis project
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(
-		cliConfig,
-		configAndStacksInfo.ComponentFromArg,
-		configAndStacksInfo.ComponentSettingsSection,
-		configAndStacksInfo.ComponentVarsSection,
-	)
-
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	if atlantisProjectName != "" {
-		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
-	}
-
-	// Add component info, including Terraform config
-	componentInfo := map[string]any{}
-	componentInfo["component_type"] = configAndStacksInfo.ComponentType
-
-	if configAndStacksInfo.ComponentType == "terraform" {
-		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
-		componentInfo["component_path"] = componentPath
-		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
-		componentInfo["terraform_config"] = terraformConfiguration
-	} else if configAndStacksInfo.ComponentType == "helmfile" {
-		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
-	}
-
-	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
-
-	// `sources` (stack config files where the variables and other settings are defined)
-	sources, err := ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	configAndStacksInfo.ComponentSection["sources"] = sources
-
-	// Component dependencies
-	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	configAndStacksInfo.ComponentSection["deps"] = componentDeps
-	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
-
 	return configAndStacksInfo, nil
 }
 
@@ -559,6 +637,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			globalOptionsFlagIndex = i
 		}
 
+		if arg == cfg.TerraformCommandFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.TerraformCommand = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.TerraformCommandFlag) {
+			var terraformCommandFlagParts = strings.Split(arg, "=")
+			if len(terraformCommandFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.TerraformCommand = terraformCommandFlagParts[1]
+		}
+
 		if arg == cfg.TerraformDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -570,6 +661,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.TerraformDir = terraformDirFlagParts[1]
+		}
+
+		if arg == cfg.HelmfileCommandFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.HelmfileCommand = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.HelmfileCommandFlag) {
+			var helmfileCommandFlagParts = strings.Split(arg, "=")
+			if len(helmfileCommandFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.HelmfileCommand = helmfileCommandFlagParts[1]
 		}
 
 		if arg == cfg.HelmfileDirFlag {
@@ -782,6 +886,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			info.LogsFile = logsFileFlagParts[1]
 		}
 
+		if arg == cfg.SettingsListMergeStrategyFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.SettingsListMergeStrategy = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.SettingsListMergeStrategyFlag) {
+			var settingsListMergeStrategyParts = strings.Split(arg, "=")
+			if len(settingsListMergeStrategyParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
+		}
+
 		if arg == cfg.FromPlanFlag {
 			info.UseTerraformPlan = true
 		}
@@ -886,13 +1003,53 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 }
 
 // generateComponentBackendConfig generates backend config for components
-func generateComponentBackendConfig(backendType string, backendConfig map[any]any) map[string]any {
+func generateComponentBackendConfig(backendType string, backendConfig map[any]any, terraformWorkspace string) (map[string]any, error) {
+
+	// Generate backend config file for Terraform Cloud
+	// https://developer.hashicorp.com/terraform/cli/cloud/settings
+	if backendType == "cloud" {
+		var backendConfigFinal = backendConfig
+
+		if terraformWorkspace != "" {
+			// Process template tokens in the backend config
+			backendConfigStr, err := u.ConvertToYAML(backendConfig)
+			if err != nil {
+				return nil, err
+			}
+
+			ctx := schema.Context{
+				TerraformWorkspace: terraformWorkspace,
+			}
+
+			backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
+
+			backendConfigFinal, err = c.YAMLToMapOfInterfaces(backendConfigStrReplaced)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return map[string]any{
+			"terraform": map[string]any{
+				"cloud": backendConfigFinal,
+			},
+		}, nil
+	}
+
+	// Generate backend config file for all other Terraform backends
 	return map[string]any{
 		"terraform": map[string]any{
 			"backend": map[string]any{
 				backendType: backendConfig,
 			},
 		},
+	}, nil
+}
+
+// generateComponentProviderOverrides generates provider overrides for components
+func generateComponentProviderOverrides(providerOverrides map[any]any) map[string]any {
+	return map[string]any{
+		"provider": providerOverrides,
 	}
 }
 

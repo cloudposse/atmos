@@ -40,4 +40,7 @@ components:
         nat_instance_enabled: false
         max_subnet_count: 3
         map_public_ip_on_launch: true
-        dns_hostnames_enabled: true
+        subnet_type_tag_key: "type"
+      providers:
+        aws:
+          assume_role: "vpc_role"

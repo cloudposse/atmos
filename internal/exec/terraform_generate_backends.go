@@ -123,7 +123,7 @@ func ExecuteTerraformGenerateBackends(cliConfig schema.CliConfiguration, fileTem
 				// If `component` attribute is present, it's the terraform component.
 				// Otherwise, the YAML component name is the terraform component.
 				terraformComponent := componentName
-				if componentAttribute, ok := componentSection["component"].(string); ok {
+				if componentAttribute, ok := componentSection[cfg.ComponentSectionName].(string); ok {
 					terraformComponent = componentAttribute
 				}
 
@@ -141,7 +141,7 @@ func ExecuteTerraformGenerateBackends(cliConfig schema.CliConfiguration, fileTem
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, cliConfig.Stacks.NamePattern, stackFileName)
+				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
 				if err != nil {
 					return err
 				}
@@ -201,7 +201,11 @@ func ExecuteTerraformGenerateBackends(cliConfig schema.CliConfiguration, fileTem
 					u.LogDebug(cliConfig, fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
 
 					if format == "json" {
-						componentBackendConfig := generateComponentBackendConfig(backendType, backendSection)
+						componentBackendConfig, err := generateComponentBackendConfig(backendType, backendSection, "")
+						if err != nil {
+							return err
+						}
+
 						err = u.WriteToFileAsJSON(backendFileAbsolutePath, componentBackendConfig, 0644)
 						if err != nil {
 							return err

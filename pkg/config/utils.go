@@ -180,6 +180,18 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.Stacks.NamePattern = stacksNamePattern
 	}
 
+	stacksNameTemplate := os.Getenv("ATMOS_STACKS_NAME_TEMPLATE")
+	if len(stacksNameTemplate) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_TEMPLATE=%s", stacksNameTemplate))
+		cliConfig.Stacks.NameTemplate = stacksNameTemplate
+	}
+
+	componentsTerraformCommand := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND")
+	if len(componentsTerraformCommand) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_COMMAND=%s", componentsTerraformCommand))
+		cliConfig.Components.Terraform.Command = componentsTerraformCommand
+	}
+
 	componentsTerraformBasePath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
 	if len(componentsTerraformBasePath) > 0 {
 		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=%s", componentsTerraformBasePath))
@@ -224,6 +236,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 			return err
 		}
 		cliConfig.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
+	}
+
+	componentsHelmfileCommand := os.Getenv("ATMOS_COMPONENTS_HELMFILE_COMMAND")
+	if len(componentsHelmfileCommand) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_COMMAND=%s", componentsHelmfileCommand))
+		cliConfig.Components.Helmfile.Command = componentsHelmfileCommand
 	}
 
 	componentsHelmfileBasePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
@@ -302,6 +320,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.Logs.Level = logsLevel
 	}
 
+	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
+	if len(listMergeStrategy) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_SETTINGS_LIST_MERGE_STRATEGY=%s", listMergeStrategy))
+		cliConfig.Settings.ListMergeStrategy = listMergeStrategy
+	}
+
 	return nil
 }
 
@@ -322,9 +346,17 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 		cliConfig.BasePath = configAndStacksInfo.BasePath
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
 	}
+	if len(configAndStacksInfo.TerraformCommand) > 0 {
+		cliConfig.Components.Terraform.Command = configAndStacksInfo.TerraformCommand
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as terraform executable", configAndStacksInfo.TerraformCommand))
+	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		cliConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
+	}
+	if len(configAndStacksInfo.HelmfileCommand) > 0 {
+		cliConfig.Components.Helmfile.Command = configAndStacksInfo.HelmfileCommand
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s' as helmfile executable", configAndStacksInfo.HelmfileCommand))
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		cliConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
@@ -390,6 +422,10 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 		cliConfig.Logs.File = configAndStacksInfo.LogsFile
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
 	}
+	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
+		cliConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
+		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy))
+	}
 
 	return nil
 }
@@ -439,7 +475,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 		if part == "{namespace}" {
 			if len(context.Namespace) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'namespace`, but the stack '%s' does not have a namespace defined in the stack file '%s'",
+					fmt.Errorf("the stack name pattern '%s' specifies 'namespace', but the stack '%s' does not have a namespace defined in the stack file '%s'",
 						stackNamePattern,
 						stack,
 						stackFile,
@@ -453,7 +489,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'tenant`, but the stack '%s' does not have a tenant defined in the stack file '%s'",
+					fmt.Errorf("the stack name pattern '%s' specifies 'tenant', but the stack '%s' does not have a tenant defined in the stack file '%s'",
 						stackNamePattern,
 						stack,
 						stackFile,
@@ -467,7 +503,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 		} else if part == "{environment}" {
 			if len(context.Environment) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'environment`, but the stack '%s' does not have an environment defined in the stack file '%s'",
+					fmt.Errorf("the stack name pattern '%s' specifies 'environment', but the stack '%s' does not have an environment defined in the stack file '%s'",
 						stackNamePattern,
 						stack,
 						stackFile,
@@ -481,7 +517,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 		} else if part == "{stage}" {
 			if len(context.Stage) == 0 {
 				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'stage`, but the stack '%s' does not have a stage defined in the stack file '%s'",
+					fmt.Errorf("the stack name pattern '%s' specifies 'stage', but the stack '%s' does not have a stage defined in the stack file '%s'",
 						stackNamePattern,
 						stack,
 						stackFile,
@@ -510,6 +546,7 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 		"{tenant}", context.Tenant,
 		"{stage}", context.Stage,
 		"{workspace}", context.Workspace,
+		"{terraform_workspace}", context.TerraformWorkspace,
 		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOdStrings(context.Attributes), "-"),
 	)
 	return r.Replace(pattern)

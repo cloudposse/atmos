@@ -382,6 +382,17 @@ func ExecuteAtmosVendorInternal(
 					return err
 				}
 			} else {
+				// Use `go-getter` to download the sources into the temp directory
+				// When cloning from the root of a repo w/o using modules (sub-paths), `go-getter` does the following:
+				// - If the destination directory does not exist, it creates it and runs `git init`
+				// - If the destination directory exists, it should be an already initialized Git repository (otherwise an error will be thrown)
+				// For more details, refer to
+				// - https://github.com/hashicorp/go-getter/issues/114
+				// - https://github.com/hashicorp/go-getter?tab=readme-ov-file#subdirectories
+				// We add the `uri` to the already created `tempDir` so it does not exist to allow `go-getter` to create
+				// and correctly initialize it
+				tempDir = path.Join(tempDir, filepath.Base(uri))
+
 				client := &getter.Client{
 					Ctx: context.Background(),
 					// Define the destination where the files will be stored. This will create the directory if it doesn't exist
@@ -396,7 +407,7 @@ func ExecuteAtmosVendorInternal(
 				}
 			}
 
-			// Copy from the temp folder to the destination folder and skip the excluded files
+			// Copy from the temp directory to the destination folder and skip the excluded files
 			copyOptions := cp.Options{
 				// Skip specifies which files should be skipped
 				Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {

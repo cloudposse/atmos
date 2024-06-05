@@ -66,12 +66,12 @@ locals {
 
 module "utils" {
   source  = "cloudposse/utils/aws"
-  version = "1.1.0"
+  version = "1.4.0"
 }
 
 module "vpc" {
   source  = "cloudposse/vpc/aws"
-  version = "2.1.0"
+  version = "2.1.1"
 
   ipv4_primary_cidr_block          = var.ipv4_primary_cidr_block
   internet_gateway_enabled         = var.public_subnets_enabled

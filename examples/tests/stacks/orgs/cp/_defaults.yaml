@@ -2,9 +2,28 @@ vars:
   namespace: cp
 
 terraform:
-  vars: {}
+  vars:
+    tags:
+      # https://atmos.tools/core-concepts/stacks/templating
+      # atmos_component: "{{\"{{`{{ .atmos_component }}`}}\"}}"
+      atmos_component: "{{`{{ .atmos_component }}`}}"
+      atmos_stack: "{{ .atmos_stack }}"
+      atmos_manifest: "{{ .atmos_stack_file }}"
+      terraform_workspace: "{{ .workspace }}"
+      terraform_component: "{{ .component }}"
+      # Examples of using the Sprig and Gomplate functions
+      # https://masterminds.github.io/sprig/os.html
+      provisioned_by_user: '{{ env "USER" }}'
+      # https://docs.gomplate.ca/functions/strings
+      atmos_component_description: "{{ strings.Title .atmos_component }} component provisioned in the stack {{ .atmos_stack | strings.Quote }}"
+      spacelift_stack: "{{ .spacelift_stack }}"
+      atlantis_project: "{{ .atlantis_project }}"
+      region: "{{ .vars.region }}"
+      # provisioned_by_ip: '{{ (datasource "ip").ip }}'
 
-  backend_type: s3 # s3, remote, vault, static, azurerm, etc.
+  backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud
+
+  # https://developer.hashicorp.com/terraform/language/settings/backends/configuration
   backend:
     s3:
       encrypt: true
@@ -22,10 +41,45 @@ terraform:
       key: dev.atmos
     remote: {}
     vault: {}
+    # https://developer.hashicorp.com/terraform/cli/cloud/settings
+    cloud:
+      organization: "my-org"
+      hostname: "app.terraform.io"
+      workspaces:
+        name: "{terraform_workspace}"
 
   remote_state_backend:
     s3:
       role_arn: "arn:aws:iam::123456789012:role/cp-gbl-root-terraform"
+
+  providers:
+    context:
+      enabled: true
+      delimiter: "-"
+      properties:
+        namespace:
+          required: true
+          min_length: 2
+          max_length: 4
+        tenant:
+          required: true
+          min_length: 2
+          max_length: 10
+        environment:
+          required: true
+          min_length: 2
+          max_length: 6
+        stage:
+          required: true
+          min_length: 2
+          max_length: 20
+      values:
+        namespace: "{{ .vars.namespace }}"
+        tenant: "{{ .vars.tenant }}"
+        environment: "{{ .vars.environment }}"
+        stage: "{{ .vars.stage }}"
+        atmos_component: "{{ .atmos_component }}"
+        atmos_stack: "{{ .atmos_stack }}"
 
 helmfile:
   vars: {}
@@ -35,6 +89,21 @@ components:
   helmfile: {}
 
 settings:
+  # https://atmos.tools/core-concepts/stacks/templating
+  templates:
+    settings:
+      # https://masterminds.github.io/sprig
+      sprig: {}
+      # https://docs.gomplate.ca
+      gomplate:
+        timeout: 20  # 20 seconds timeout to execute the datasources
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          ip:
+            url: "https://api.ipify.org?format=json"
+            headers:
+              accept:
+                - "application/json"
   spacelift:
     workspace_enabled: false
     autodeploy: false

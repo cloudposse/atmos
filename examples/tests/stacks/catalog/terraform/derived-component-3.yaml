@@ -11,3 +11,9 @@ components:
       vars:
         enabled: true
         service_1_name: "bad-name"
+      settings:
+        depends_on:
+          1:
+            # If the `context` is not provided,
+            # the `component` is from the same Atmos stack as this component
+            component: "derived-component-2"
