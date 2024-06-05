@@ -27,6 +27,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	err = ValidateStacks(cliConfig)
+	if err != nil {
+		return err
+	}
+
 	flags := cmd.Flags()
 
 	filterByStack, err := flags.GetString("stack")
@@ -135,8 +140,8 @@ func ExecuteDescribeStacks(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
-						if comp, ok := componentSection["component"].(string); !ok || comp == "" {
-							componentSection["component"] = componentName
+						if comp, ok := componentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Find all derived components of the provided components and include them in the output
@@ -200,12 +205,8 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
-						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
-						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
-
-						if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
-							configAndStacksInfo.ComponentSection["component"] = componentName
+						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Stack name
@@ -234,6 +235,10 @@ func ExecuteDescribeStacks(
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
+
+						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
@@ -309,8 +314,8 @@ func ExecuteDescribeStacks(
 							return nil, fmt.Errorf("invalid 'components.helmfile.%s' section in the file '%s'", componentName, stackFileName)
 						}
 
-						if comp, ok := componentSection["component"].(string); !ok || comp == "" {
-							componentSection["component"] = componentName
+						if comp, ok := componentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Find all derived components of the provided components and include them in the output
@@ -374,12 +379,8 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
-						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
-						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
-
-						if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
-							configAndStacksInfo.ComponentSection["component"] = componentName
+						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
 						// Stack name
@@ -408,6 +409,10 @@ func ExecuteDescribeStacks(
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
+
+						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {

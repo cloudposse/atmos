@@ -147,7 +147,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		u.LogDebug(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 
 		if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
-			err = u.PrintAsYAML(info.ComponentVarsSection)
+			err = u.PrintAsYAMLToFileDescriptor(cliConfig, info.ComponentVarsSection)
 			if err != nil {
 				return err
 			}
@@ -255,6 +255,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
 	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
 
+	// Print ENV vars if they are found in the component's stack config
+	if len(info.ComponentEnvList) > 0 {
+		u.LogDebug(cliConfig, "\nUsing ENV vars:")
+		for _, v := range info.ComponentEnvList {
+			u.LogDebug(cliConfig, v)
+		}
+	}
+
 	if runTerraformInit {
 		initCommandWithArguments := []string{"init"}
 		if info.SubCommand == "workspace" || cliConfig.Components.Terraform.InitRunReconfigure {
@@ -318,14 +326,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
-
-	// Print ENV vars if they are found in the component's stack config
-	if len(info.ComponentEnvList) > 0 {
-		u.LogDebug(cliConfig, "\nUsing ENV vars:")
-		for _, v := range info.ComponentEnvList {
-			u.LogDebug(cliConfig, v)
-		}
-	}
 
 	allArgsAndFlags := strings.Fields(info.SubCommand)
 

@@ -26,7 +26,9 @@ var (
 		cfg.DryRunFlag,
 		cfg.SkipInitFlag,
 		cfg.KubeConfigConfigFlag,
+		cfg.TerraformCommandFlag,
 		cfg.TerraformDirFlag,
+		cfg.HelmfileCommandFlag,
 		cfg.HelmfileDirFlag,
 		cfg.CliConfigDirFlag,
 		cfg.StackDirFlag,
@@ -111,7 +113,7 @@ func ProcessComponentConfig(
 	if componentImportsSection, ok = stackSection["imports"].([]string); !ok {
 		componentImportsSection = nil
 	}
-	if command, ok = componentSection["command"].(string); !ok {
+	if command, ok = componentSection[cfg.CommandSectionName].(string); !ok {
 		command = ""
 	}
 	if componentEnvSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
@@ -192,7 +194,9 @@ func processCommandLineArgs(
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
 	configAndStacksInfo.BasePath = argsAndFlagsInfo.BasePath
+	configAndStacksInfo.TerraformCommand = argsAndFlagsInfo.TerraformCommand
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
+	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
@@ -212,6 +216,7 @@ func processCommandLineArgs(
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
+	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
@@ -292,7 +297,7 @@ func ProcessStacks(
 			msg = "\nFound stack manifests:"
 		}
 		u.LogTrace(cliConfig, msg)
-		err = u.PrintAsYAML(cliConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAMLToFileDescriptor(cliConfig, cliConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -311,7 +316,6 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 
-		configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 		configAndStacksInfo.StackFile = configAndStacksInfo.Stack
 
 		// Process context
@@ -344,8 +348,6 @@ func ProcessStacks(
 			if err != nil {
 				continue
 			}
-
-			configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 			if cliConfig.Stacks.NameTemplate != "" {
 				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
@@ -418,54 +420,6 @@ func ProcessStacks(
 		}
 	}
 
-	if len(configAndStacksInfo.Command) == 0 {
-		configAndStacksInfo.Command = configAndStacksInfo.ComponentType
-	}
-
-	// Process component path and name
-	configAndStacksInfo.ComponentFolderPrefix = ""
-	componentPathParts := strings.Split(configAndStacksInfo.ComponentFromArg, "/")
-	componentPathPartsLength := len(componentPathParts)
-	if componentPathPartsLength > 1 {
-		componentFromArgPartsWithoutLast := componentPathParts[:componentPathPartsLength-1]
-		configAndStacksInfo.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
-		configAndStacksInfo.Component = componentPathParts[componentPathPartsLength-1]
-	} else {
-		configAndStacksInfo.Component = configAndStacksInfo.ComponentFromArg
-	}
-	configAndStacksInfo.ComponentFolderPrefixReplaced = strings.Replace(configAndStacksInfo.ComponentFolderPrefix, "/", "-", -1)
-
-	// Process base component path and name
-	if len(configAndStacksInfo.BaseComponentPath) > 0 {
-		baseComponentPathParts := strings.Split(configAndStacksInfo.BaseComponentPath, "/")
-		baseComponentPathPartsLength := len(baseComponentPathParts)
-		if baseComponentPathPartsLength > 1 {
-			baseComponentPartsWithoutLast := baseComponentPathParts[:baseComponentPathPartsLength-1]
-			configAndStacksInfo.ComponentFolderPrefix = strings.Join(baseComponentPartsWithoutLast, "/")
-			configAndStacksInfo.BaseComponent = baseComponentPathParts[baseComponentPathPartsLength-1]
-		} else {
-			configAndStacksInfo.ComponentFolderPrefix = ""
-			configAndStacksInfo.BaseComponent = configAndStacksInfo.BaseComponentPath
-		}
-		configAndStacksInfo.ComponentFolderPrefixReplaced = strings.Replace(configAndStacksInfo.ComponentFolderPrefix, "/", "-", -1)
-	}
-
-	// Get the final component
-	if len(configAndStacksInfo.BaseComponent) > 0 {
-		configAndStacksInfo.FinalComponent = configAndStacksInfo.BaseComponent
-	} else {
-		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
-	}
-
-	// Terraform workspace
-	workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	configAndStacksInfo.TerraformWorkspace = workspace
-	configAndStacksInfo.ComponentSection["workspace"] = workspace
-
 	// Add imports
 	configAndStacksInfo.ComponentSection["imports"] = configAndStacksInfo.ComponentImportsSection
 
@@ -483,26 +437,8 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
-	if comp, ok := configAndStacksInfo.ComponentSection["component"].(string); !ok || comp == "" {
-		configAndStacksInfo.ComponentSection["component"] = configAndStacksInfo.ComponentFromArg
-	}
-
-	// Spacelift stack
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if spaceliftStackName != "" {
-		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
-	}
-
-	// Atlantis project
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if atlantisProjectName != "" {
-		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+		configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = configAndStacksInfo.ComponentFromArg
 	}
 
 	// Add component info, including Terraform config
@@ -535,6 +471,15 @@ func ProcessStacks(
 	}
 	configAndStacksInfo.ComponentSection["deps"] = componentDeps
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
+
+	// Terraform workspace
+	workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+
+	configAndStacksInfo.TerraformWorkspace = workspace
+	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
 	// Process `Go` templates in Atmos manifest sections
 	componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
@@ -602,6 +547,75 @@ func ProcessStacks(
 		configAndStacksInfo.ComponentBackendType = i
 	}
 
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
+		configAndStacksInfo.Component = i
+	}
+
+	// Spacelift stack
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	// Atlantis project
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
+	// Process `command`
+	//if len(configAndStacksInfo.Command) == 0 {
+	//	configAndStacksInfo.Command = configAndStacksInfo.ComponentType
+	//}
+
+	// Process the ENV variables from the `env` section
+	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
+
+	// Process component metadata
+	_, baseComponentName, _ := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
+	configAndStacksInfo.BaseComponentPath = baseComponentName
+
+	// Process component path and name
+	configAndStacksInfo.ComponentFolderPrefix = ""
+	componentPathParts := strings.Split(configAndStacksInfo.ComponentFromArg, "/")
+	componentPathPartsLength := len(componentPathParts)
+	if componentPathPartsLength > 1 {
+		componentFromArgPartsWithoutLast := componentPathParts[:componentPathPartsLength-1]
+		configAndStacksInfo.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
+		configAndStacksInfo.Component = componentPathParts[componentPathPartsLength-1]
+	} else {
+		configAndStacksInfo.Component = configAndStacksInfo.ComponentFromArg
+	}
+	configAndStacksInfo.ComponentFolderPrefixReplaced = strings.Replace(configAndStacksInfo.ComponentFolderPrefix, "/", "-", -1)
+
+	// Process base component path and name
+	if len(configAndStacksInfo.BaseComponentPath) > 0 {
+		baseComponentPathParts := strings.Split(configAndStacksInfo.BaseComponentPath, "/")
+		baseComponentPathPartsLength := len(baseComponentPathParts)
+		if baseComponentPathPartsLength > 1 {
+			baseComponentPartsWithoutLast := baseComponentPathParts[:baseComponentPathPartsLength-1]
+			configAndStacksInfo.ComponentFolderPrefix = strings.Join(baseComponentPartsWithoutLast, "/")
+			configAndStacksInfo.BaseComponent = baseComponentPathParts[baseComponentPathPartsLength-1]
+		} else {
+			configAndStacksInfo.ComponentFolderPrefix = ""
+			configAndStacksInfo.BaseComponent = configAndStacksInfo.BaseComponentPath
+		}
+		configAndStacksInfo.ComponentFolderPrefixReplaced = strings.Replace(configAndStacksInfo.ComponentFolderPrefix, "/", "-", -1)
+	}
+
+	// Get the final component
+	if len(configAndStacksInfo.BaseComponent) > 0 {
+		configAndStacksInfo.FinalComponent = configAndStacksInfo.BaseComponent
+	} else {
+		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
+	}
+
 	return configAndStacksInfo, nil
 }
 
@@ -623,6 +637,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			globalOptionsFlagIndex = i
 		}
 
+		if arg == cfg.TerraformCommandFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.TerraformCommand = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.TerraformCommandFlag) {
+			var terraformCommandFlagParts = strings.Split(arg, "=")
+			if len(terraformCommandFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.TerraformCommand = terraformCommandFlagParts[1]
+		}
+
 		if arg == cfg.TerraformDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
@@ -634,6 +661,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.TerraformDir = terraformDirFlagParts[1]
+		}
+
+		if arg == cfg.HelmfileCommandFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.HelmfileCommand = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.HelmfileCommandFlag) {
+			var helmfileCommandFlagParts = strings.Split(arg, "=")
+			if len(helmfileCommandFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.HelmfileCommand = helmfileCommandFlagParts[1]
 		}
 
 		if arg == cfg.HelmfileDirFlag {
@@ -844,6 +884,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.LogsFile = logsFileFlagParts[1]
+		}
+
+		if arg == cfg.SettingsListMergeStrategyFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.SettingsListMergeStrategy = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.SettingsListMergeStrategyFlag) {
+			var settingsListMergeStrategyParts = strings.Split(arg, "=")
+			if len(settingsListMergeStrategyParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
 		}
 
 		if arg == cfg.FromPlanFlag {

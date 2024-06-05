@@ -1,11 +1,11 @@
 ---
 title: Terraform Component Remote State
-sidebar_position: 8
+sidebar_position: 14
 sidebar_label: Remote State
 id: remote-state
 ---
 
-The Terraform Component Remote State is used when we need to get the outputs of an [Terraform component](/core-concepts/components),
+The Terraform Component Remote State is used when we need to get the outputs of a [Terraform component](/core-concepts/components),
 provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and use the outputs as inputs to another Atmos component.
 
 :::info
@@ -34,10 +34,10 @@ state for the component in the stack.
 
 - **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) and stored typically in `components/terraform/$name`
   that consists of the resources defined in the `.tf` files in a working directory
-  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/tests/components/terraform/infra/vpc))
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc))
 
-- **Atmos Component** provides configuration (variables and other settings) for a component and is defined in one or more YAML stack config
-  files (which are called [Atmos stacks](/core-concepts/stacks))
+- **Atmos Component** provides configuration (variables and other settings) for a component and is defined in one or more Atmos stack manifests
+  (a.k.a. stack conffig files)
 
 :::
 
@@ -268,7 +268,7 @@ atmos terraform apply vpc/1 -s ue2-dev
 Both the `atmos` [CLI](/cli) and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
 which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
 
-This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
+This means that `atmos.yaml` file must be at a location in the file system where all the processes can find it.
 
 While placing `atmos.yaml` at the root of the repository will work for Atmos, it will not work for
 the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider because the provider gets executed from the
@@ -330,7 +330,7 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
   the Atmos component name for which to get the remote state outputs
 
 - The module accepts the `context` input as a way to provide the information about the stack (using the context
-  variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
+  variables `namespace`, `tenant`, `environment`, `stage` defined in the stack manifests)
 
 - If the Atmos component (for which we want to get the remote state outputs) is provisioned in a different Atmos stack (in a different AWS OU, or
   different AWS account, or different AWS region), we can override the context variables `tenant`, `stage` and `environment` to point the module to

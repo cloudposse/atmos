@@ -1,9 +1,19 @@
 package merge
 
 import (
+	"fmt"
+
+	"dario.cat/mergo"
 	"github.com/fatih/color"
-	"github.com/imdario/mergo"
 	"gopkg.in/yaml.v2"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	ListMergeStrategyReplace = "replace"
+	ListMergeStrategyAppend  = "append"
+	ListMergeStrategyMerge   = "merge"
 )
 
 // MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
@@ -45,12 +55,10 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		// It was not working before in `github.com/imdario/mergo` so we need to disable it in our code
 		// opts = append(opts, mergo.WithOverwriteWithEmptyValue)
 
-		if appendSlice {
-			opts = append(opts, mergo.WithAppendSlice)
-		}
-
 		if sliceDeepCopy {
 			opts = append(opts, mergo.WithSliceDeepCopy)
+		} else if appendSlice {
+			opts = append(opts, mergo.WithAppendSlice)
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
@@ -64,6 +72,31 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 }
 
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
-func Merge(inputs []map[any]any) (map[any]any, error) {
-	return MergeWithOptions(inputs, false, false)
+func Merge(
+	cliConfig schema.CliConfiguration,
+	inputs []map[any]any,
+) (map[any]any, error) {
+	if cliConfig.Settings.ListMergeStrategy == "" {
+		cliConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
+	}
+
+	if cliConfig.Settings.ListMergeStrategy != ListMergeStrategyReplace &&
+		cliConfig.Settings.ListMergeStrategy != ListMergeStrategyAppend &&
+		cliConfig.Settings.ListMergeStrategy != ListMergeStrategyMerge {
+		return nil, fmt.Errorf("invalid Atmos manifests list merge strategy '%s'.\n"+
+			"Supported list merge strategies are: %s.",
+			cliConfig.Settings.ListMergeStrategy,
+			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
+	}
+
+	sliceDeepCopy := false
+	appendSlice := false
+
+	if cliConfig.Settings.ListMergeStrategy == ListMergeStrategyMerge {
+		sliceDeepCopy = true
+	} else if cliConfig.Settings.ListMergeStrategy == ListMergeStrategyAppend {
+		appendSlice = true
+	}
+
+	return MergeWithOptions(inputs, appendSlice, sliceDeepCopy)
 }

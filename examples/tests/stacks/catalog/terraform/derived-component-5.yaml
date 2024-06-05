@@ -1,0 +1,19 @@
+import:
+  - catalog/terraform/base-component-3
+
+components:
+  terraform:
+    derived-component-5:
+      metadata:
+        component: "test/test-component"
+        inherits:
+          - base-component-3
+      vars:
+        enabled: true
+        service_1_name: "name5"
+      settings:
+        depends_on:
+          1:
+            # If the `context` is not provided,
+            # the `component` is from the same Atmos stack as this component
+            component: "derived-component-3"

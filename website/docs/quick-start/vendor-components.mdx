@@ -4,6 +4,7 @@ sidebar_position: 5
 sidebar_label: Vendor Components
 ---
 import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 
 In the previous steps, we've configured the repository and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
 components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
@@ -46,7 +47,8 @@ perform the following steps:
 
 - Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
 
-```yaml title="vendor.yaml"
+<File title="vendor.yaml">
+```yaml 
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -96,6 +98,7 @@ spec:
       tags:
         - storage
 ```
+</File>
 
 <br/>
 
@@ -106,7 +109,8 @@ If the component's folder has sub-folders, and you need to vendor them, they hav
 
 :::
 
-```yaml title="vendor.yaml"
+<File title="vendor.yaml">
+```yaml 
 spec:
   sources:
     - component: "vpc-flow-logs-bucket"
@@ -119,6 +123,7 @@ spec:
         # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
         - "**/modules/**"
 ```
+</File>
 
 <br/>
 
@@ -183,7 +188,8 @@ recommends. There are a few additions:
   for the `vpc-flow-logs-bucket` component. The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
   configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket
 
-```hcl title="components/terraform/vpc/remote-state.tf"
+<File title="components/terraform/vpc/remote-state.tf">
+```hcl
 module "vpc_flow_logs_bucket" {
   count = local.vpc_flow_logs_enabled ? 1 : 0
 
@@ -205,6 +211,7 @@ module "vpc_flow_logs_bucket" {
   context = module.this.context
 }
 ```
+</File>
 
 ## Remote State Notes
 

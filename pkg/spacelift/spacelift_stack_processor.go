@@ -194,16 +194,16 @@ func TransformStackConfigToSpaceliftStacks(
 						contextPrefix = strings.Replace(stackName, "/", "-", -1)
 					}
 
-					spaceliftConfig["component"] = component
+					spaceliftConfig[cfg.ComponentSectionName] = component
 					spaceliftConfig["stack"] = contextPrefix
 					spaceliftConfig["imports"] = imports
-					spaceliftConfig["vars"] = componentVars
-					spaceliftConfig["settings"] = componentSettings
-					spaceliftConfig["env"] = componentEnv
+					spaceliftConfig[cfg.VarsSectionName] = componentVars
+					spaceliftConfig[cfg.SettingsSectionName] = componentSettings
+					spaceliftConfig[cfg.EnvSectionName] = componentEnv
 					spaceliftConfig["stacks"] = componentStacks
 					spaceliftConfig["inheritance"] = componentInheritance
 					spaceliftConfig["base_component"] = baseComponentName
-					spaceliftConfig["metadata"] = componentMetadata
+					spaceliftConfig[cfg.MetadataSectionName] = componentMetadata
 
 					// backend
 					backendTypeName := ""

@@ -52,7 +52,6 @@ func GetGlobMatches(pattern string) ([]string, error) {
 // assumes that both `pattern` and `name` are using the system's path
 // separator. If you can't be sure of that, use filepath.ToSlash() on both
 // `pattern` and `name`, and then use the Match() function instead.
-//
 func PathMatch(pattern, name string) (bool, error) {
 	return doublestar.PathMatch(pattern, name)
 }

@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
+// describeDependentsCmd produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
 var describeDependentsCmd = &cobra.Command{
 	Use:                "dependents",
 	Aliases:            []string{"dependants"},

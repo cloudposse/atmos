@@ -114,7 +114,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 				// If `component` attribute is present, it's the terraform component.
 				// Otherwise, the YAML component name is the terraform component.
 				terraformComponent := componentName
-				if componentAttribute, ok := componentSection["component"].(string); ok {
+				if componentAttribute, ok := componentSection[cfg.ComponentSectionName].(string); ok {
 					terraformComponent = componentAttribute
 				}
 

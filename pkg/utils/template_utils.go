@@ -3,6 +3,8 @@ package utils
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"text/template"
 	"text/template/parse"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
+	"github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -59,92 +62,153 @@ func ProcessTmplWithDatasources(
 		return tmplValue, nil
 	}
 
+	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
+	var cliConfigTemplateSettingsMap map[any]any
+	var stackManifestTemplateSettingsMap map[any]any
+	var templateSettings schema.TemplatesSettings
+
+	err := mapstructure.Decode(cliConfig.Templates.Settings, &cliConfigTemplateSettingsMap)
+	if err != nil {
+		return "", err
+	}
+
+	err = mapstructure.Decode(settingsSection.Templates.Settings, &stackManifestTemplateSettingsMap)
+	if err != nil {
+		return "", err
+	}
+
+	templateSettingsMerged, err := merge.Merge(cliConfig, []map[any]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
+	if err != nil {
+		return "", err
+	}
+
+	err = mapstructure.Decode(templateSettingsMerged, &templateSettings)
+	if err != nil {
+		return "", err
+	}
+
 	// Add Gomplate and Sprig functions and datasources
 	funcs := make(map[string]any)
 
-	// Gomplate functions and datasources
-	if cliConfig.Templates.Settings.Gomplate.Enabled {
-		// Merge the datasources from `atmos.yaml` and from the `settings.templates.settings` section in stack manifests
-		var cliConfigDatasources map[any]any
-		var stackManifestDatasources map[any]any
+	// Number of processing evaluations/passes
+	evaluations, _ := lo.Coalesce(cliConfig.Templates.Settings.Evaluations, 1)
+	result := tmplValue
 
-		err := mapstructure.Decode(cliConfig.Templates.Settings.Gomplate.Datasources, &cliConfigDatasources)
-		if err != nil {
-			return "", err
+	for i := 0; i < evaluations; i++ {
+		// Gomplate functions and datasources
+		if cliConfig.Templates.Settings.Gomplate.Enabled {
+			// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
+			timeoutSeconds, _ := lo.Coalesce(templateSettings.Gomplate.Timeout, 5)
+
+			ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
+			defer cancelFunc()
+
+			d := data.Data{}
+			d.Ctx = ctx
+
+			for k, v := range templateSettings.Gomplate.Datasources {
+				_, err := d.DefineDatasource(k, v.Url)
+				if err != nil {
+					return "", err
+				}
+
+				// Add datasource headers
+				if len(v.Headers) > 0 {
+					d.Sources[k].Header = v.Headers
+				}
+			}
+
+			funcs = lo.Assign(funcs, gomplate.CreateFuncs(ctx, &d))
 		}
 
-		err = mapstructure.Decode(settingsSection.Templates.Settings.Gomplate.Datasources, &stackManifestDatasources)
-		if err != nil {
-			return "", err
+		// Sprig functions
+		if cliConfig.Templates.Settings.Sprig.Enabled {
+			funcs = lo.Assign(funcs, sprig.FuncMap())
 		}
 
-		merged, err := merge.Merge([]map[any]any{cliConfigDatasources, stackManifestDatasources})
-		if err != nil {
-			return "", err
-		}
-
-		var datasources map[string]schema.TemplatesSettingsGomplateDatasource
-		err = mapstructure.Decode(merged, &datasources)
-		if err != nil {
-			return "", err
-		}
-
-		// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
-		timeoutSeconds, _ := lo.Coalesce(cliConfig.Templates.Settings.Gomplate.Timeout, settingsSection.Templates.Settings.Gomplate.Timeout, 5)
-
-		ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
-		defer cancelFunc()
-
-		d := data.Data{}
-		d.Ctx = ctx
-
-		for k, v := range datasources {
-			_, err := d.DefineDatasource(k, v.Url)
+		// Process and add environment variables
+		for k, v := range templateSettings.Env {
+			err = os.Setenv(k, v)
 			if err != nil {
 				return "", err
 			}
-
-			// Add datasource headers
-			if len(v.Headers) > 0 {
-				d.Sources[k].Header = v.Headers
-			}
 		}
 
-		funcs = lo.Assign(funcs, gomplate.CreateFuncs(ctx, &d))
+		// Process the template
+		t := template.New(tmplName).Funcs(funcs)
+
+		// Template delimiters
+		leftDelimiter := "{{"
+		rightDelimiter := "}}"
+
+		if len(cliConfig.Templates.Settings.Delimiters) > 0 {
+			delimiterError := fmt.Errorf("invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
+				"'delimiters' must be an array with two string items: left and right delimiter\n"+
+				"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters)
+
+			if len(cliConfig.Templates.Settings.Delimiters) != 2 {
+				return "", delimiterError
+			}
+
+			if cliConfig.Templates.Settings.Delimiters[0] == "" {
+				return "", delimiterError
+			}
+
+			if cliConfig.Templates.Settings.Delimiters[1] == "" {
+				return "", delimiterError
+			}
+
+			leftDelimiter = cliConfig.Templates.Settings.Delimiters[0]
+			rightDelimiter = cliConfig.Templates.Settings.Delimiters[1]
+		}
+
+		t.Delims(leftDelimiter, rightDelimiter)
+
+		// Control the behavior during execution if a map is indexed with a key that is not present in the map
+		// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
+		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
+		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
+
+		option := "missingkey=error"
+
+		if ignoreMissingTemplateValues {
+			option = "missingkey=default"
+		}
+
+		t.Option(option)
+
+		// Parse the template
+		t, err = t.Parse(result)
+		if err != nil {
+			return "", err
+		}
+
+		// Execute the template
+		var res bytes.Buffer
+		err = t.Execute(&res, tmplData)
+		if err != nil {
+			return "", err
+		}
+
+		result = res.String()
+		resultMap, err := convert.YAMLToMapOfInterfaces(result)
+		if err != nil {
+			return "", err
+		}
+
+		if resultMapSettings, ok := resultMap["settings"].(map[any]any); ok {
+			if resultMapSettingsTemplates, ok := resultMapSettings["templates"].(map[any]any); ok {
+				if resultMapSettingsTemplatesSettings, ok := resultMapSettingsTemplates["settings"].(map[any]any); ok {
+					err = mapstructure.Decode(resultMapSettingsTemplatesSettings, &templateSettings)
+					if err != nil {
+						return "", err
+					}
+				}
+			}
+		}
 	}
 
-	// Sprig functions
-	if cliConfig.Templates.Settings.Sprig.Enabled {
-		funcs = lo.Assign(funcs, sprig.FuncMap())
-	}
-
-	// Process the template
-	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
-	if err != nil {
-		return "", err
-	}
-
-	// Control the behavior during execution if a map is indexed with a key that is not present in the map
-	// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
-	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
-	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
-
-	option := "missingkey=error"
-
-	if ignoreMissingTemplateValues {
-		option = "missingkey=default"
-	}
-
-	t.Option(option)
-
-	// Execute the template
-	var res bytes.Buffer
-	err = t.Execute(&res, tmplData)
-	if err != nil {
-		return "", err
-	}
-
-	return res.String(), nil
+	return result, nil
 }
 
 // IsGolangTemplate checks if the provided string is a Go template
