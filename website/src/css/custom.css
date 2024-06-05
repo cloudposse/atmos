@@ -151,7 +151,7 @@ li > ul.menu__list {
 }
 
 html[data-theme='dark'] article ul strong, html[data-theme='dark'] article ol strong {
-    color: #654dfe;
+    color: #9589e3;
 }
 
 article ul strong, article ol strong {
@@ -763,6 +763,12 @@ strong.underline::after {
     padding: 0.5em;
     border: 1px solid #cccccc36;
     box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
+}
+
+.terminal span.token.plain {
+    /* Add little dots to the terminal that represent spaces */
+    background-image: radial-gradient(circle, #ffffff38 1px, transparent 1px);
+    background-size: 9px 20px;
 }
 
 .terminal h1 {

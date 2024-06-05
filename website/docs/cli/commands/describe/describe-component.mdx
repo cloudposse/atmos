@@ -138,10 +138,10 @@ The output contains the following sections:
 The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
 
 - `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and 
-   in [OPA validation policies](/core-concepts/validating/components) to check whether an import is allowed in the stack or not
+   in [OPA validation policies](/core-concepts/validate/components) to check whether an import is allowed in the stack or not
 
 - `deps_all` shows all component stack dependencies (imports and root-level stacks) where any configuration for the component is present.
-  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/validating/components) to check whether a user or a team 
+  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/validate/components) to check whether a user or a team 
   is allowed to import a particular config file for the component in the stack
 
 - `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined

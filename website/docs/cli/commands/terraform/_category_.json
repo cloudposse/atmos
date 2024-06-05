@@ -3,7 +3,7 @@
   "position": 6,
   "className": "command",
   "collapsible": true,
-  "collapsed": false,
+  "collapsed": true,
   "link": {
     "type": "doc",
     "id": "usage"

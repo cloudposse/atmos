@@ -8,7 +8,7 @@ description: Use this command to pull sources and mixins from remote repositorie
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
-This command implements [Atmos Vendoring](/core-concepts/vendoring/). Use this command to download sources from local and remote 
+This command implements [Atmos Vendoring](/core-concepts/vendor/). Use this command to download sources from local and remote 
 repositories for Terraform and Helmfile components and stacks.
 :::
 
@@ -76,7 +76,7 @@ configurations.
   specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
 
 :::tip
-Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
+Refer to [`Atmos Vendoring`](/core-concepts/vendor) for more details
 :::
 
 ## Vendoring using `component.yaml` manifest
@@ -92,7 +92,7 @@ Refer to [`Atmos Vendoring`](/core-concepts/vendoring) for more details
   file names/paths (double-star/globstar `**` is supported as well).
 
 :::tip
-Refer to [`Atmos Component Vendoring`](/core-concepts/vendoring/component-manifest) for more details
+Refer to [`Atmos Component Vendoring`](/core-concepts/vendor/component-manifest) for more details
 :::
 
 ## Vendoring from OCI Registries

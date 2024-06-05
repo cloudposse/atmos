@@ -24,20 +24,33 @@ You can clone it and configure to your own needs. The repository should be a goo
 
 <br/>
 
-The steps to configure and provision the infrastructure are as follows:
+In this advanced tutorial, we’ll delve into concepts like [inheritance](/core-concepts/stacks/inheritance) 
+and [state management](/core-concepts/components/terraform/state-backend). 
+Additionally, we’ll cover how to read the remote state from other components using native Terraform. 
+This example focuses on AWS, and while Atmos isn’t AWS-specific, this tutorial will be. 
 
-- [Install Atmos](/install)
-- [Configure Repository](/quick-start/advanced/configure-repository)
-- [Configure CLI](/quick-start/advanced/configure-cli)
-- [Vendor Components](/quick-start/advanced/vendor-components)
-- [Create Atmos Stacks](/quick-start/advanced/create-atmos-stacks)
-- [Configure Validation](/quick-start/advanced/configure-validation)
-- [Create Workflows](/quick-start/advanced/create-workflows)
-- [Add Custom Commands](/quick-start/advanced/add-custom-commands)
-- [Configure Terraform Backend](/quick-start/advanced/configure-terraform-backend)
-- [Provision](/quick-start/advanced/provision)
-- [Final Notes](/quick-start/advanced/final-notes)
-- [Next Steps](/quick-start/advanced/next-steps)
+## Requirements
+
+We’ll assume you have administrative access to an AWS organization, as this tutorial will also provision
+AWS accounts and the IAM architecture. If you don’t have these prerequisites, our [Simple Quick Start](/quick-start/simple) tutorial
+might be a more practical starting point.
+
+## Overview
+
+The 10 steps to configure and provision the infrastructure are as follows:
+
+1. [Install Atmos](/install)
+2. [Configure Project Repository](/quick-start/advanced/configure-repository)
+3. [Configure Atmos CLI](/quick-start/advanced/configure-cli)
+4. [Vendor Component Dependencies](/quick-start/advanced/vendor-components)
+5. [Create Atmos Stacks](/quick-start/advanced/create-atmos-stacks)
+6. [Configure Validation](/quick-start/advanced/configure-validation)
+7. [Automate Common Workflows](/quick-start/advanced/create-workflows)
+8. [Add Custom Commands](/quick-start/advanced/add-custom-commands)
+9. [Configure Terraform Backend](/quick-start/advanced/configure-terraform-backend)
+10. [Deploy Everything](/quick-start/advanced/provision)
+
+We'll then conclude with some [final notes](/quick-start/advanced/final-notes) and [next steps](/quick-start/advanced/next-steps)
 
 
 import DocCardList from "@theme/DocCardList";

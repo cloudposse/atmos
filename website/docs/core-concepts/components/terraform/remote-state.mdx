@@ -1,12 +1,12 @@
 ---
-title: Terraform Component Remote State
-sidebar_position: 14
-sidebar_label: Remote State
+title: Using Remote State
+sidebar_position: 7
+sidebar_label: Using Remote State
 id: remote-state
 ---
 
-The Terraform Component Remote State is used when we need to get the outputs of a [Terraform component](/core-concepts/components),
-provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and use the outputs as inputs to another Atmos component.
+Atmos itself does not help manage passing output values between components. However, with Terraform there's a very easy
+way to access the outputs of one Terraform component in another component. This is done using the `remote-state` module.
 
 :::info
 
@@ -27,6 +27,10 @@ modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/
 configurations to get the final config for an Atmos component in an Atmos stack. The final component config is then used by
 the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote
 state for the component in the stack.
+
+:::important
+Atmos does not support the `local` backend type. This is because the local backend is not recommended for production.
+:::
 
 <br/>
 

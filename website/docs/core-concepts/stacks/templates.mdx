@@ -25,8 +25,8 @@ In `Go` templates, you can use the following functions and datasources:
 Atmos supports many different ways of configuring and using `Go` templates:
 
 - In [Atmos Custom Commands](/core-concepts/custom-commands)
-- In [Atmos Vendoring](/core-concepts/vendoring)
-- In [Atmos Component Vendoring](/core-concepts/vendoring/component-manifest)
+- In [Atmos Vendoring](/core-concepts/vendor)
+- In [Atmos Component Vendoring](/core-concepts/vendor/vendor-manifest)
 - In [Imports](/core-concepts/stacks/imports)
 - In [Stack Manifests](/core-concepts/stacks)
 
@@ -39,7 +39,7 @@ These templates are processed in different phases and use different context:
   exposing all the component sections that are returned by the `atmos describe component <component> -s <stack>` CLI 
   command
 
-- `Go` templates in [Atmos Vendoring](/core-concepts/vendoring) and [Atmos Component Vendoring](/core-concepts/vendoring/component-manifest)
+- `Go` templates in [Atmos Vendoring](/core-concepts/vendor) and [Atmos Component Vendoring](/core-concepts/vendor/vendor-manifest)
   are processed when the CLI command [`atmos vendor pull`](/cli/commands/vendor/pull) is executed. The templates in 
   the vendoring manifests support the `{{.Version}}` variable, and the execution context is provided in the `version` attribute
 

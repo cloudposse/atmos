@@ -1,0 +1,93 @@
+---
+title: Customize Component Behavior
+sidebar_position: 1
+sidebar_label: Customize Component Behavior
+id: components
+description: >-
+    Use the `atmos.yaml` configuration file to specify default behaviors for components,
+    such as what command to use when running Terraform commands, the base path for Terraform, and more..
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+
+Specify the default behaviors for components.
+
+:::important
+Do not confuse this configuration with [configuring components in stacks](/core-concepts/stacks/define-components). 
+This configuration below is defined in the `atmos.yaml` and meant for specifying default behaviors for components, 
+such as what command to use when running Terraform commands, the base path for Terraform, and more.
+:::
+
+## Terraform Component Behavior
+
+For additional details on configuring Terraform components, refer to the [Terraform](/core-concepts/components/terraform/configuration) 
+and [OpenTofu](/core-concepts/components/terraform/opentofu) documentation.
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
+    # If not defined, `terraform` is used
+    # Examples:
+    # command: terraform
+    # command: /usr/local/bin/terraform
+    # command: /usr/local/bin/terraform-1.8
+    # command: tofu
+    # command: /usr/local/bin/tofu-1.7.1
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_COMMAND' ENV var, or '--terraform-command' command-line argument
+    command: terraform
+
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "components/terraform"
+
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
+    apply_auto_approve: false
+
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
+    deploy_run_init: true
+
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
+    init_run_reconfigure: true
+
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
+    auto_generate_backend_file: true
+
+```
+</File>
+
+
+## Helmfile Component Behavior
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helmfile:
+    # Optional `command` specifies the executable to be called by `atmos` when running Helmfile commands
+    # If not defined, `helmfile` is used
+    # Examples:
+    # command: helmfile
+    # command: /usr/local/bin/helmfile
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_COMMAND' ENV var, or '--helmfile-command' command-line argument
+    command: helmfile
+
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "components/helmfile"
+
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_USE_EKS' ENV var
+    # If not specified, defaults to 'true'
+    use_eks: true
+
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV var
+    kubeconfig_path: "/dev/shm"
+
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV var
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+```
+</File>

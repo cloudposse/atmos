@@ -87,7 +87,7 @@ components:
           terraform_workflow_tool: OPEN_TOFU
 ```
 
-For more details on [Atmos support for OpenTofu](/integrations/opentofu) see our integration page.
+For more details on [Atmos support for OpenTofu](/core-concepts/components/terraform/opentofu) see our integration page.
 
 ## Spacelift Stack Dependencies
 

@@ -56,7 +56,7 @@ If using `terraform` with multiple clouds, use the [multi-cloud filesytem layout
 ```
 
 :::tip
-Organizing the components on the filesystem is configurable in the [Atmos CLI configuration](/cli/configuration#configuration-file-atmosyaml).
+Organizing the components on the filesystem is configurable in the [Atmos CLI configuration](/cli/configuration/#configuration-file-atmosyaml).
 :::
 
 

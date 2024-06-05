@@ -32,7 +32,7 @@ Its strength in managing [DRY configurations at scale](https://atmos.tools/core-
 [design patterns](https://atmos.tools/design-patterns/), comprehensive [documentation](https://atmos.tools/), and a
 [passionate community](https://slack.cloudposse.com/), making it a versatile [tool for both startups and enterprises](https://cloudposse.com/).
 Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes
-[policy controls](https://atmos.tools/core-concepts/validating/components), [vendoring](https://atmos.tools/core-concepts/vendoring/),
+[policy controls](https://atmos.tools/core-concepts/validate/components), [vendoring](https://atmos.tools/core-concepts/vendor/),
 and [GitOps capabilities](https://atmos.tools/integrations/github-actions) out of the box. Everything is open source and free.
 
 ## Screenshots
@@ -85,7 +85,7 @@ indispensable asset for managing complex infrastructures with confidence.
 - [**Native Terraform Support:**](https://atmos.tools/cli/commands/terraform/usage) Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
 - [**Stacks:**](https://atmos.tools/core-concepts/stacks) Powerful abstraction layer defined in YAML for orchestrating and deploying components.
 - [**Components:**](https://atmos.tools/core-concepts/components) A generic abstraction for deployable units, such as Terraform "root" modules.
-- [**Vendoring:**](https://atmos.tools/core-concepts/vendoring) Pulls dependencies from remote sources, supporting immutable infrastructure practices.
+- [**Vendoring:**](https://atmos.tools/core-concepts/vendor) Pulls dependencies from remote sources, supporting immutable infrastructure practices.
 - [**Custom Commands:**](https://atmos.tools/core-concepts/custom-commands) Extends Atmos's functionality, allowing integration of any command with stack configurations.
 - [**Workflow Orchestration:**](https://atmos.tools/core-concepts/workflows) Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
 
@@ -109,7 +109,7 @@ strength in the cloud infrastructure and DevOps domains:
 - **Compliant Infrastructure for Regulated Industries:** Atmos empowers DevOps and SecOps teams to create vetted configurations that comply
   with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations can then be efficiently shared and reused across the
   organization via [service catalogs](https://atmos.tools/core-concepts/stacks/catalogs), [component libraries](https://atmos.tools/core-concepts/components/library),
-  [vendoring](https://atmos.tools/core-concepts/vendoring), and [OPA policies](https://atmos.tools/core-concepts/validating/components),
+  [vendoring](https://atmos.tools/core-concepts/vendor), and [OPA policies](https://atmos.tools/core-concepts/validate/components),
   simplifying the process of achieving and maintaining rigorous compliance.
 - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using
   predefined templates and policies.

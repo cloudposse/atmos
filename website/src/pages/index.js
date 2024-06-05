@@ -21,7 +21,7 @@ function Home() {
             <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
             <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
           </div>
-          <h3>Use a Modern <strong className="underline">Component Oriented Framework</strong> for Terraform backed by YAML</h3>
+          <h3>Use a Modern <strong className="underline">Composable Framework</strong> for Terraform backed by YAML</h3>
         </header>
         <main>
           <h2 className="section">Simplify complex architectures with <strong className="atmos__text">DRY configuration</strong></h2>
