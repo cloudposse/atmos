@@ -58,6 +58,6 @@ jobs:
     #     ./location_of_script_within_repo/buildscript.sh
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@v3
       with:
         category: "/language:${{matrix.language}}"
