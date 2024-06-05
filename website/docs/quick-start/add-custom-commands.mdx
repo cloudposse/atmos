@@ -4,6 +4,7 @@ sidebar_position: 9
 sidebar_label: Add Custom Commands
 ---
 import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 
 Atmos can be easily extended to support any number of custom CLI commands.
 
@@ -15,6 +16,7 @@ Custom commands are defined in the `commands` section in `atmos.yaml` CLI config
 
 In this Quick Start guide, we'll define two custom commands to list the Atmos stacks in the infrastructure and the components in the stacks.
 
+<File title="atmos.yaml">
 ```yaml
 # Custom CLI commands
 commands:
@@ -72,6 +74,7 @@ commands:
               {{ end }}
             {{ end }}
 ```
+</File>
 
 Run the following Atmos command to list all stacks in the infrastructure:
 

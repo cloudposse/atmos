@@ -89,7 +89,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	u.LogDebug(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 
 	if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAML(info.ComponentVarsSection)
+		err = u.PrintAsYAMLToFileDescriptor(cliConfig, info.ComponentVarsSection)
 		if err != nil {
 			return err
 		}

@@ -63,8 +63,12 @@ workflows:
   base_path: "stacks/workflows"
 
 logs:
-  file: "/dev/stdout"
+  # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
+  # File or standard file descriptor to write logs to
+  # Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`
+  file: "/dev/stderr"
   # Supported log levels: Trace, Debug, Info, Warning, Off
+  # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
 
 # Custom CLI commands
@@ -116,24 +120,6 @@ commands:
         steps:
           - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
           - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
-  - name: play
-    description: This command plays games
-    steps:
-      - echo Playing...
-    # subcommands
-    commands:
-      - name: hello
-        description: This command says Hello world
-        steps:
-          - echo Hello world
-      - name: ping
-        description: This command plays ping-pong
-        # If 'verbose' is set to 'true', atmos will output some info messages to the console before executing the command's steps
-        # If 'verbose' is not defined, it implicitly defaults to 'false'
-        verbose: true
-        steps:
-          - echo Playing ping-pong...
-          - echo pong
   - name: show
     description: Execute 'show' commands
     # subcommands
@@ -352,9 +338,13 @@ schemas:
 templates:
   settings:
     enabled: true
+    evaluations: 1
     # https://masterminds.github.io/sprig
     sprig:
       enabled: true
     # https://docs.gomplate.ca
     gomplate:
       enabled: true
+      timeout: 5
+      # https://docs.gomplate.ca/datasources
+      datasources: {}

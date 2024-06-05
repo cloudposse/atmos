@@ -4,15 +4,24 @@ vars:
 terraform:
   vars:
     tags:
-      atmos_component: "{{ .atmos_component }}"
+      # https://atmos.tools/core-concepts/stacks/templating
+      # atmos_component: "{{\"{{`{{ .atmos_component }}`}}\"}}"
+      atmos_component: "{{`{{ .atmos_component }}`}}"
       atmos_stack: "{{ .atmos_stack }}"
       atmos_manifest: "{{ .atmos_stack_file }}"
+      terraform_workspace: "{{ .workspace }}"
+      terraform_component: "{{ .component }}"
+      # Examples of using the Sprig and Gomplate functions
+      # https://masterminds.github.io/sprig/os.html
+      provisioned_by_user: '{{ env "USER" }}'
+      # https://docs.gomplate.ca/functions/strings
+      atmos_component_description: "{{ strings.Title .atmos_component }} component provisioned in the stack {{ .atmos_stack | strings.Quote }}"
       spacelift_stack: "{{ .spacelift_stack }}"
       atlantis_project: "{{ .atlantis_project }}"
       region: "{{ .vars.region }}"
-      terraform_workspace: "{{ .workspace }}"
+      # provisioned_by_ip: '{{ (datasource "ip").ip }}'
 
-  backend_type: s3 # s3, remote, vault, static, azurerm, gcs, cloud
+  backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud
 
   # https://developer.hashicorp.com/terraform/language/settings/backends/configuration
   backend:
@@ -73,13 +82,28 @@ terraform:
         atmos_stack: "{{ .atmos_stack }}"
 
 helmfile:
-  vars: { }
+  vars: {}
 
 components:
-  terraform: { }
-  helmfile: { }
+  terraform: {}
+  helmfile: {}
 
 settings:
+  # https://atmos.tools/core-concepts/stacks/templating
+  templates:
+    settings:
+      # https://masterminds.github.io/sprig
+      sprig: {}
+      # https://docs.gomplate.ca
+      gomplate:
+        timeout: 20  # 20 seconds timeout to execute the datasources
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          ip:
+            url: "https://api.ipify.org?format=json"
+            headers:
+              accept:
+                - "application/json"
   spacelift:
     workspace_enabled: false
     autodeploy: false

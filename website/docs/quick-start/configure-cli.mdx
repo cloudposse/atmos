@@ -3,6 +3,7 @@ title: Configure CLI
 sidebar_position: 4
 sidebar_label: Configure CLI
 ---
+import File from '@site/src/components/File'
 
 In the previous step, we've decided on the following:
 
@@ -22,6 +23,7 @@ file.
 
 <br/>
 
+<File title="atmos.yaml">
 ```yaml
 # CLI config is loaded from the following locations (from lowest to highest priority):
 # system dir ('/usr/local/etc/atmos' on Linux, '%LOCALAPPDATA%/atmos' on Windows)
@@ -75,8 +77,12 @@ workflows:
   base_path: "stacks/workflows"
 
 logs:
-  file: "/dev/stdout"
+  # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
+  # File or standard file descriptor to write logs to
+  # Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`
+  file: "/dev/stderr"
   # Supported log levels: Trace, Debug, Info, Warning, Off
+  # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
 
 # Custom CLI commands
@@ -108,6 +114,7 @@ schemas:
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
+</File>
 
 <br/>
 

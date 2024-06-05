@@ -362,6 +362,9 @@
         },
         "atlantis": {
           "$ref": "#/definitions/atlantis"
+        },
+        "templates": {
+          "$ref": "#/definitions/templates"
         }
       },
       "required": [],
@@ -434,6 +437,7 @@
     "backend_type": {
       "type": "string",
       "enum": [
+        "local",
         "s3",
         "remote",
         "vault",
@@ -452,6 +456,7 @@
     "remote_state_backend_type": {
       "type": "string",
       "enum": [
+        "local",
         "s3",
         "remote",
         "vault",
@@ -743,6 +748,12 @@
       "description": "Providers section",
       "additionalProperties": true,
       "title": "providers"
+    },
+    "templates": {
+      "type": "object",
+      "description": "Templates section",
+      "additionalProperties": true,
+      "title": "templates"
     }
   }
 }

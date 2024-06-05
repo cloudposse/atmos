@@ -1,9 +1,10 @@
 ---
 title: Atlantis Integration
-sidebar_position: 11
+sidebar_position: 10
 sidebar_label: Atlantis
 ---
-import Terminal from '@site/src/components/Screengrab'
+
+import Terminal from '@site/src/components/Terminal'
 
 Atmos natively supports [Atlantis](https://runatlantis.io) for Terraform Pull Request Automation.
 
@@ -76,7 +77,7 @@ integrations:
         name: "{tenant}-{environment}-{stage}-{component}"
         workspace: "{workspace}"
         dir: "{component-path}"
-        terraform_version: v1.2
+        terraform_version: v1.8
         delete_source_branch_on_merge: true
         autoplan:
           enabled: true
@@ -128,7 +129,7 @@ projects:
     workspace: test-component-override-3-workspace
     workflow: workflow-1
     dir: examples/tests/components/terraform/test/test-component
-    terraform_version: v1.2
+    terraform_version: v1.8
     delete_source_branch_on_merge: true
     autoplan:
       enabled: true
@@ -141,7 +142,7 @@ projects:
     workspace: tenant1-ue2-staging
     workflow: workflow-1
     dir: examples/tests/components/terraform/infra/vpc
-    terraform_version: v1.2
+    terraform_version: v1.8
     delete_source_branch_on_merge: true
     autoplan:
       enabled: true
@@ -215,7 +216,7 @@ Configuring the Atlantis Integration in the `settings.atlantis` sections in the 
           delete_source_branch_on_merge: false
           dir: '{component-path}'
           name: '{tenant}-{environment}-{stage}-{component}'
-          terraform_version: v1.3
+          terraform_version: v1.8
           workflow: workflow-1
           workspace: '{workspace}'
         project_template_name: project-1
@@ -353,7 +354,7 @@ The Atlantis config template and project template can be defined in the `setting
           name: "{tenant}-{environment}-{stage}-{component}"
           workspace: "{workspace}"
           dir: "{component-path}"
-          terraform_version: v1.2
+          terraform_version: v1.8
           delete_source_branch_on_merge: true
           autoplan:
             enabled: true
@@ -411,7 +412,7 @@ The Atlantis config template and project template can be defined in the `setting
         workspace: "{workspace}"
         workflow: "workflow-1"
         dir: "{component-path}"
-        terraform_version: v1.3
+        terraform_version: v1.8
         delete_source_branch_on_merge: false
         autoplan:
           enabled: true
@@ -686,7 +687,7 @@ on:
     branches: [ main ]
 
 env:
-  ATMOS_VERSION: 1.68.0
+  ATMOS_VERSION: 1.78.0
   ATMOS_CLI_CONFIG_PATH: ./
 
 jobs:

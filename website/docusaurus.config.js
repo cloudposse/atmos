@@ -57,7 +57,13 @@ const config = {
         }],
         [
             'custom-loaders', {}
-        ]
+        ],
+        [
+            '@docusaurus/plugin-google-tag-manager',
+            {
+                containerId: 'GTM-KQ62MGX9',
+            },
+        ],
     ],
 
     presets: [

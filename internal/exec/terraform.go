@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"os"
+	osexec "os/exec"
 	"path"
 	"strings"
 
@@ -146,7 +147,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		u.LogDebug(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 
 		if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
-			err = u.PrintAsYAML(info.ComponentVarsSection)
+			err = u.PrintAsYAMLToFileDescriptor(cliConfig, info.ComponentVarsSection)
 			if err != nil {
 				return err
 			}
@@ -254,6 +255,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
 	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
 
+	// Print ENV vars if they are found in the component's stack config
+	if len(info.ComponentEnvList) > 0 {
+		u.LogDebug(cliConfig, "\nUsing ENV vars:")
+		for _, v := range info.ComponentEnvList {
+			u.LogDebug(cliConfig, v)
+		}
+	}
+
 	if runTerraformInit {
 		initCommandWithArguments := []string{"init"}
 		if info.SubCommand == "workspace" || cliConfig.Components.Terraform.InitRunReconfigure {
@@ -318,19 +327,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
 
-	// Set terraform workspace via ENV var
-	if !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_WORKSPACE=%s", info.TerraformWorkspace))
-	}
-
-	// Print ENV vars if they are found in the component's stack config
-	if len(info.ComponentEnvList) > 0 {
-		u.LogDebug(cliConfig, "\nUsing ENV vars:")
-		for _, v := range info.ComponentEnvList {
-			u.LogDebug(cliConfig, v)
-		}
-	}
-
 	allArgsAndFlags := strings.Fields(info.SubCommand)
 
 	switch info.SubCommand {
@@ -373,6 +369,46 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
+
+	// Run `terraform workspace` before executing other terraform commands
+	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
+		workspaceSelectRedirectStdErr := "/dev/stdout"
+
+		// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
+		if info.RedirectStdErr != "" {
+			workspaceSelectRedirectStdErr = info.RedirectStdErr
+		}
+
+		err = ExecuteShellCommand(
+			cliConfig,
+			info.Command,
+			[]string{"workspace", "select", info.TerraformWorkspace},
+			componentPath,
+			info.ComponentEnvList,
+			info.DryRun,
+			workspaceSelectRedirectStdErr,
+		)
+		if err != nil {
+			var osErr *osexec.ExitError
+			ok := errors.As(err, &osErr)
+			if !ok || osErr.ExitCode() != 1 {
+				// err is not a non-zero exit code or err is not exit code 1, which we are expecting
+				return err
+			}
+			err = ExecuteShellCommand(
+				cliConfig,
+				info.Command,
+				[]string{"workspace", "new", info.TerraformWorkspace},
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	// Check if the terraform command requires a user interaction,
 	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)

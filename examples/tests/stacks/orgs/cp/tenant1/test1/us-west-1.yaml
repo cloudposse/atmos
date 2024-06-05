@@ -1,4 +1,6 @@
 import:
+  - path: mixins/region/us-west-1
+  - path: orgs/cp/tenant1/test1/_defaults
 
   # This import with the provided hierarchical context will dynamically generate
   # a new Atmos component `eks-blue/cluster` in the `tenant1-uw1-test-1` stack

@@ -8,9 +8,6 @@ import:
       region: "{{ .region }}"
       environment: "{{ .environment }}"
 
-  # `Go` templates in the import path
-  - path: "orgs/cp/{{ .tenant }}/{{ .stage }}/_defaults"
-
 components:
   terraform:
     # Parameterize Atmos component name

@@ -102,6 +102,11 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 
 	// If the flag `--affected-only=true` is passed, find the affected components and stacks
 	if affectedOnly {
+		cloneTargetRef, err := flags.GetBool("clone-target-ref")
+		if err != nil {
+			return err
+		}
+
 		return ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			cliConfig,
 			outputPath,
@@ -113,6 +118,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 			sshKeyPath,
 			sshKeyPassword,
 			verbose,
+			cloneTargetRef,
 		)
 	}
 
@@ -138,6 +144,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	sshKeyPath string,
 	sshKeyPassword string,
 	verbose bool,
+	cloneTargetRef bool,
 ) error {
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
@@ -146,10 +153,12 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	var affected []schema.Affected
 	var err error
 
-	if repoPath == "" {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, false)
-	} else {
+	if repoPath != "" {
 		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, false)
+	} else if cloneTargetRef {
+		affected, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, false)
+	} else {
+		affected, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, false)
 	}
 
 	if err != nil {
@@ -299,7 +308,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				// If 'component' attribute is present, it's the terraform component
 				// Otherwise, the Atmos component name is the terraform component (by default)
 				terraformComponent := componentName
-				if componentAttribute, ok := componentSection["component"].(string); ok {
+				if componentAttribute, ok := componentSection[cfg.ComponentSectionName].(string); ok {
 					terraformComponent = componentAttribute
 				}
 
@@ -319,6 +328,11 @@ func ExecuteAtlantisGenerateRepoConfig(
 					return err
 				}
 
+				// Base component is required to calculate terraform workspace for derived components
+				if terraformComponent != componentName {
+					context.BaseComponent = terraformComponent
+				}
+
 				configAndStacksInfo := schema.ConfigAndStacksInfo{
 					ComponentFromArg:         componentName,
 					Stack:                    stackConfigFileName,
@@ -334,11 +348,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 				}
 
 				// Calculate terraform workspace
-				// Base component is required to calculate terraform workspace for derived components
-				if terraformComponent != componentName {
-					context.BaseComponent = terraformComponent
-				}
-
 				workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 				if err != nil {
 					return err

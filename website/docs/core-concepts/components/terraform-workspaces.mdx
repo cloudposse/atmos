@@ -5,7 +5,7 @@ sidebar_label: Terraform Workspaces
 description: Terraform Workspaces.
 id: terraform-workspaces
 ---
-
+import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 
 In Terraform, a [workspace](https://developer.hashicorp.com/terraform/language/state/workspaces) is a feature that allows
@@ -31,16 +31,15 @@ For example, you might use separate workspaces for blue-green deployments or can
 
 To work with workspaces in Terraform, you can use commands like `terraform workspace new`, `terraform workspace select`,
 and `terraform workspace delete` to create, switch between, and delete workspaces respectively.
-Additionally, the ENV variable [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
-can be used to create and select Terraform workspaces.
+Atmos automatically manages Terraform workspaces for you when you provision components in a stack.
 
 ## Terraform Workspaces in Atmos
 
-Atmos uses and automatically calculates Terraform workspaces to manage top-level stacks. By default, Atmos uses the stack
+Atmos automatically calculates Terraform workspace names and uses workspaces to manage top-level stacks. By default, Atmos uses the stack
 name as the Terraform workspace when provisioning components in the stack. For example, consider the following manifest
 for the component `vpc` in the stack `ue2-dev`:
 
-<Terminal title="stacks/ue2-dev.yaml">
+<File title="stacks/ue2-dev.yaml">
 ```yaml
 vars:
   # Context variables that define the Atmos stack `ue2-dev`
@@ -58,7 +57,7 @@ components:
         name: my-vpc
         ipv4_primary_cidr_block: 10.9.0.0/18
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -72,8 +71,10 @@ When you provision the `vpc` component in the stack `ue2-dev` by executing the f
 
 <br/>
 
-Atmos sets the [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
-ENV variable to the name of the stack `ue2-dev`, and Terraform then selects this workspace or creates it if it does not exist.
+Atmos computes the workspace name to be `ue2-dev`. Any Atmos Terraform command other than `init`, using this stack,
+will cause Atmos to select this workspace, creating it if needed. (This leaves the workspace selected as a side effect
+for subsequent Terraform commands run outside of Atmos. Atmos version 1.55 took away this side effect, but it was
+restored in version 1.69.)
 
 The exception to the default rule (using the stack name as Terraform workspace) is when we provision more than one
 instance of the same Terraform component (with the same or different settings) into the same stack by defining multiple
@@ -83,7 +84,7 @@ with the component name.
 For example, the following manifest shows how to define two Atmos components, `vpc/1` and `vpc/2`,
 which both point to the same Terraform component `vpc`, in the stack `ue2-dev`:
 
-<Terminal title="stacks/ue2-dev.yaml">
+<File title="stacks/ue2-dev.yaml">
 ```yaml
 vars:
   # Context variables that define the Atmos stack `ue2-dev`
@@ -118,7 +119,7 @@ components:
         name: vpc-2
         ipv4_primary_cidr_block: 10.10.0.0/18
 ```
-</Terminal>
+</File>
 
 <br/>
 
@@ -133,9 +134,9 @@ When you provision the components by executing the commands:
 
 <br/>
 
-Atmos sets the [`TF_WORKSPACE`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_workspace)
-environment variable to `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively, and Terraform selects (or creates) different workspaces
-for the components. This is done because the same Terraform component `vpc` is used as the workspace prefix
+Atmos computes the workspace names as `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively,
+and selects the appropriate workspace for each component (again, creating it if needed).
+This is done because the same Terraform component `vpc` is used as the workspace prefix
 (in case of [AWS S3 backend](https://developer.hashicorp.com/terraform/language/settings/backends/s3),
 folder in the S3 state bucket), and it's necessary to have different subfolders (`ue2-dev-vpc-1`
 and `ue2-dev-vpc-2` instead of just `ue2-dev`) to store the Terraform state files.
@@ -145,7 +146,7 @@ and `ue2-dev-vpc-2` instead of just `ue2-dev`) to store the Terraform state file
 You can override Terraform workspaces for Atmos components by using `metadata.terraform_workspace` and
 `metadata.terraform_workspace_pattern` attributes. For example:
 
-<Terminal title="stacks/ue2-dev.yaml">
+<File title="stacks/ue2-dev.yaml">
 ```yaml
 vars:
   environment: ue2
@@ -165,7 +166,7 @@ components:
         # Override Terraform workspace
         terraform_workspace_pattern: "{environment}-{stage}-{component}-workspace-override"
 ```
-</Terminal>
+</File>
 
 <br/>
 
