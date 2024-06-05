@@ -14,16 +14,38 @@ Component Inheritance is the ability to combine multiple configurations through 
 [Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming)) to logically organize complex configurations in
 a way that makes conceptual sense. The side effect of this are extremely DRY and reusable configurations.
 
-:::info
+[Component-Oriented Configuration](https://en.wikipedia.org/wiki/Component-based_software_engineering) is a reuse-based approach to defining,
+implementing and composing loosely-coupled independent components into systems.
 
-In Object-Oriented Programming (OOP), Inheritance is the mechanism of basing an object or class upon another object (prototype-based inheritance) or
-class (class-based inheritance), retaining similar implementation.
+## Overview
 
-Similarly, in Atmos, **Component Inheritance** is the mechanism of deriving a component from one or more base components, inheriting all the
-properties of the base component(s) and overriding only some fields specific to the derived component. The derived component acquires all the
-properties of the "parent" component(s), allowing creating very DRY configurations that are built upon existing components.
+Atmos supports the following concepts and principles of **Component-Oriented Programming (COP)**:
 
-:::
+- [Single Inheritance](/core-concepts/stacks/inheritance#single-inheritance) - when an Atmos component inherits the configuration properties from
+  another Atmos component
+
+- [Multiple Inheritance](/core-concepts/stacks/inheritance#multiple-inheritance) - when an Atmos component inherits the configuration from more than one Atmos
+  component
+
+
+These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
+and [`metadata`](/core-concepts/stacks/define-components#metadata) component's configuration section.
+
+<details>
+<summary>Advanced Concepts</summary>
+- Dynamic Polymorphism - ability to use and override base component(s) properties
+
+- Encapsulation - enclose a set of related configuration properties into reusable loosely-coupled modules. Encapsulation is implemented
+  by [Atmos Components](/core-concepts/components) which are opinionated building blocks of Infrastructure-as-Code (IAC) that solve one specific
+  problem or use-case
+
+- Abstraction, which is accomplished by these Atmos features:
+  - Principle of Abstraction: in a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity
+    and increase efficiency
+  - Abstract Components: if a component is marked as `abstract`, it can be used only as a base for other components and can't be provisioned
+    using `atmos`.
+</details>
+
 
 <br/>
 
@@ -39,7 +61,9 @@ and `metadata` component's configuration section.
 
 :::
 
-## Single Inheritance
+## Understanding Inheritance
+
+### Single Inheritance
 
 Single Inheritance is used when an Atmos component inherits from another base Atmos component.
 
@@ -78,7 +102,7 @@ classDiagram
 
 <br/>
 
-### Single Inheritance Example
+#### Single Inheritance Example
 
 Let's say we want to provision two VPCs with different settings into the same AWS account.
 
@@ -187,7 +211,7 @@ As we can see, using the principles of **Component-Oriented Programming (COP)**,
 different settings, and provision them into the same (or different) environment (account/region) using the same Terraform code (which is
 environment-agnostic). And the configurations are extremely DRY and reusable.
 
-## Multiple Inheritance
+### Multiple Inheritance
 
 Multiple Inheritance is used when an Atmos component inherits from more than one Atmos component.
 
@@ -271,7 +295,7 @@ statement or by explicitly defining them in the Stack configuration. The `metada
 
 <br/>
 
-### Multiple Inheritance Example
+#### Multiple Inheritance Example
 
 Here is a concrete example:
 
@@ -344,7 +368,7 @@ Inheritance: test/test-component-override-3 -> mixin/test-2 -> mixin/test-1 ->
 The `Inheritance` output shows the multiple inheritance steps that Atmos performed and deep-merged into the final configuration, including
 the variables which are sent to the Terraform component `test/test-component` that is being provisioned.
 
-## Multilevel Inheritance
+### Multilevel Inheritance
 
 Multilevel Inheritance is used when an Atmos component inherits from a base Atmos component, which in turn inherits from another base Atmos component.
 
@@ -389,7 +413,7 @@ classDiagram
 
 <br/>
 
-## Hierarchical Inheritance
+### Hierarchical Inheritance
 
 Hierarchical Inheritance is a combination of Multiple Inheritance and Multilevel Inheritance.
 
@@ -517,7 +541,7 @@ For `ComponentG`:
 
 - And finally, `ComponentG` is processed, and it overrides `ComponentC`, `ComponentA` and `ComponentI`
 
-### Hierarchical Inheritance Example
+#### Hierarchical Inheritance Example
 
 Let's consider the following configuration for Atmos components `base-component-1`, `base-component-2`, `derived-component-1`
 and `derived-component-2`:
