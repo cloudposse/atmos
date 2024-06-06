@@ -4,72 +4,74 @@ sidebar_position: 2
 sidebar_label: Configure Atmos CLI
 ---
 import EmbedFile from '@site/src/components/EmbedFile';
+import KeyPoints from '@site/src/components/KeyPoints';
 
-In the previous step, we've decided on the following:
+The `atmos.yaml` configuration file is used to control the behavior of the `atmos` CLI and how Atmos will work with your project. 
+Therefore, this file should exist in the project repository, along side your Terraform components and Atmos stacks.
 
-- Use a monorepo to configure and provision a Terraform "root module" component
-- Configured the project's filesystem layout for the infrastructure monorepo
+<KeyPoints>
+- How to set up base paths for components, stacks, and workflows in `atmos.yaml`.
+- How Atmos identifies stack configurations using context variables and naming patterns.
+</KeyPoints>
 
-Now, we should configure `atmos.yaml` to tell Atmos where to find the Terraform components and Atmos stacks (because everything is configurable!)
+Let's start by configuring `atmos.yaml` to tell Atmos where to find the Terraform components and Atmos stacks (because everything is configurable!)
 
-The `atmos.yaml` configuration file is used to control the behavior of the `atmos` CLI. The file supports many features that are configured in different
-sections of the `atmos.yaml` file. For the description of all the sections, refer to [CLI Configuration](/cli/configuration).
-
-For the purpose of this Quick Start, below is the minimum recommended configuration for Atmos to work with Terraform and to
-configure [Atmos components](/core-concepts/components) and [Atmos stacks](/core-concepts/stacks). Copy the YAML config below into your `atmos.yaml`
-file.
+Below is the minimum recommended configuration for Atmos to work with Terraform and to configure [Atmos components](/core-concepts/components) 
+and [Atmos stacks](/core-concepts/stacks). Copy this YAML config below into your `atmos.yaml` file.
 
 <br/>
 
 <EmbedFile filePath="examples/demo-stacks/atmos.yaml" />
 
-<br/>
+__NOTE:__ For the description of all the sections, refer to [CLI Configuration](/cli/configuration).
 
-The `atmos.yaml` configuration file defines the following sections.
+And here's what all that means...
 
-__NOTE:__ below is the description of the sections relevant to this Quick Start guide. For the description of all the sections, refer
-to [CLI Configuration](/cli/configuration).
+## Basic Settings
 
-### Configure Paths
 <dl>
-  <dt>base_path</dt>
-  <dd>The base path for components, stacks, and workflows configurations. We set it to an empty string because we've decided to use the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo</dd>
+  <dt>`stacks.name_pattern`</dt>
+  <dd>
+    Atmos uses “slugs” to refer to stacks, defined by the name_pattern setting.<br/>
+    Instead of relying on file names and locations, which can change, Atmos uses context variables (`namespace`, `tenant`, `environment`, `stage`) 
+    to identify the stack. For example, with the command `atmos terraform apply myapp -s dev`, 
+    Atmos interprets the slug `dev` using the pattern `{stage}` to locate the correct stack configuration
+    in the stacks directory.
+  </dd>
 
-  <dt>components.terraform.base_path</dt>
-  <dd>The base path to the Terraform components (Terraform root modules). As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `components.terraform.base_path` to calculate the final path to the Terraform components</dd>
-
-  <dt>stacks.base_path</dt>
-  <dd>The base path to the Atmos stacks. As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the stack configurations into the `stacks` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `stacks.base_path` to calculate the final path to the stacks</dd>
-
-  <dt>stacks.included_paths</dt>
-  <dd>List of file paths to the top-level stacks in the `stacks` directory to include in search when Atmos searches for the stack where the component is defined when executing `atmos` commands</dd>
-
-  <dt>stacks.excluded_paths</dt>
-  <dd>List of file paths to the top-level stacks in the `stacks` directory to exclude from search when Atmos searches for the stack where the component is defined when executing `atmos` commands</dd>
-
-  <dt>workflows.base_path</dt>
-  <dd>The base path to Atmos [Workflows](/core-concepts/workflows) files</dd>
+  <dt>`logs.level`</dt>
+  <dd>
+    Set to `Info` to see the most helpful logs. You can also set it to `Trace` to see all the logs, which is helpful for debugging.
+  </dd>
+  
+  <dt>`logs.file`</dt>
+  <dd>
+    Set to `/dev/stderr` to send all of Atmos output to the standard error stream. This is useful when running Atmos in a CI/CD pipeline.
+  </dd>
 </dl>
 
-### Other Options
-<dl>
-  <dt>stacks.name_pattern</dt>
-  <dd>
-    Atmos stack name pattern. When executing `atmos` commands, Atmos does not use the configuration file names and their
-    filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context
-    variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names can be anything, and they can be in
-    any folder in any sub-folder in the `stacks` directory. For example, when executing the `atmos terraform apply vpc -s tenant1-ue2-dev`
-    command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"` and processing
-    the tokens, Atmos knows that the first part of the stack name is `tenant`, the second part is `environment`, and the third part is `stage`. Then
-    Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are
-    defined (inline or via imports)
-  </dd>
+## Path Configuration
 
-  <dt>logs.verbose</dt>
-  <dd>
-    Set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and
-    process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack
-  </dd>
+Well-known paths are how Atmos knows how to find all your stack configurations, comoponents and workflows.
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>The base path for components, stacks, and workflows configurations. We set it to an empty string because we've decided to use the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo</dd>
+
+  <dt>`components.terraform.base_path`</dt>
+  <dd>The base path to the Terraform components (Terraform root modules). As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `components.terraform.base_path` to calculate the final path to the Terraform components</dd>
+
+  <dt>`stacks.base_path`</dt>
+  <dd>The base path to the Atmos stacks. As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the stack configurations into the `stacks` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `stacks.base_path` to calculate the final path to the stacks</dd>
+
+  <dt>`stacks.included_paths`</dt>
+  <dd>List of file paths to the top-level stacks in the `stacks` directory to include in search when Atmos searches for the stack where the component is defined when executing `atmos` commands</dd>
+
+  <dt>`stacks.excluded_paths`</dt>
+  <dd>List of file paths to the top-level stacks in the `stacks` directory to exclude from search when Atmos searches for the stack where the component is defined when executing `atmos` commands</dd>
+
+  <dt>`workflows.base_path`</dt>
+  <dd>The base path to Atmos [Workflows](/core-concepts/workflows) files</dd>
 </dl>
 
 
@@ -103,3 +105,43 @@ to [CLI Configuration](/cli/configuration).
 </details>
 
 
+## Config File Location
+
+While placing `atmos.yaml` at the root of the repository will work for the `atmos` CLI, it will not work
+for [Component Remote State](/core-concepts/components/terraform/remote-state) because it uses
+the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider. Terraform executes the provider from the
+component's folder (e.g. `components/terraform/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
+
+Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
+which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
+
+This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
+
+<details>
+<summary>How is the `atmos.yaml` file located?</summary>
+
+`atmos.yaml` is loaded from the following locations (from lowest to highest priority):
+
+- System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- Home dir (`~/.atmos/atmos.yaml`)
+- Current directory
+- ENV var `ATMOS_CLI_CONFIG_PATH`
+
+:::note
+
+Initial Atmos configuration can be controlled by these ENV vars:
+
+<dl>
+  <dt>`ATMOS_CLI_CONFIG_PATH`</dt>
+  <dd>Directory that contains the `atmos.yaml` (just the folder without the file name). It's not possible to change the filename at this time.</dd>
+
+  <dt>`ATMOS_BASE_PATH`</dt>
+  <dd>Base path to the `components/` and `stacks/` folders.</dd>
+</dl>
+:::
+</details>
+
+
+## Additional Reading
+
+For the description of all the sections of the `atmos.yaml`, refer to [CLI Configuration](/cli/configuration).

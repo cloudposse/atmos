@@ -374,7 +374,8 @@ dl dt {
 }
 
 dl dd {
-    font-style: italic
+    font-style: italic;
+    color: #929292;
 }
 
 dd p {
