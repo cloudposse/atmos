@@ -6,9 +6,140 @@ description: GitHub Actions.
 id: gitHub-actions
 ---
 
-# GitHub Actions
-
-
+import File from '@site/src/components/File';
 import DocCardList from "@theme/DocCardList";
 
+# GitHub Actions
+
+:::tip Important!
+
+**Please note!** GitHub Actions versions usage depends of the Atmos versions. Please follow this table
+
+| Github action                                                                                                                      | Atmos `< 1.63.0`                                                                              | Atmos `>= 1.63.0`                                                                             |
+|------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| [`github-action-atmos-affected-stacks`](https://github.com/cloudposse/github-action-atmos-affected-stacks)                         | [`v2`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v2)             | [`v1`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v1)             |
+| [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan)                           | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v1)              | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v2)              |
+| [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply)                         | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v1)             | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v2)             |
+| [`github-action-atmos-terraform-drift-remediation`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation) | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1) | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v2) |
+| [`github-action-atmos-terraform-drift-detection`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection)     | [`v0`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0)   | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v1)   |
+
+:::
+
 <DocCardList/>
+
+## Requirements
+
+This GitHub Action depends on a few resources:
+* **S3 bucket** for storing planfiles
+* **DynamoDB table** for retrieving metadata about planfiles
+* **2x IAM roles** for "planning" and accessing the "state" bucket
+* `atmos.yaml` config with GitOps settings
+
+### S3 Bucket
+
+This action can use any S3 Bucket to keep track of your planfiles. Just ensure the bucket is properly locked down since planfiles may contain secrets.
+
+For example, [vendor in](/core-concepts/components/vendoring) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/core-concepts/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
+
+<File title="stacks/catalog/s3-bucket/gitops.yaml">
+```yaml
+import:
+  - catalog/s3-bucket/defaults
+
+components:
+  terraform:
+    # S3 Bucket for storing Terraform Plans
+    gitops/s3-bucket:
+      metadata:
+        component: s3-bucket
+        inherits:
+          - s3-bucket/defaults
+      vars:
+        name: gitops-plan-storage
+        allow_encrypted_uploads_only: false
+```
+</File>
+
+Assign this S3 Bucket ARN to the `terraform-plan-bucket` input.
+
+### DynamoDB Table
+
+Similarly, a simple DynamoDB table can be provisioned using our [`dynamodb` component](https://docs.cloudposse.com/components/library/aws/dynamodb/). Set the **Hash Key** and create a **Global Secondary Index** as follows:
+
+<File title="stacks/catalog/dynamodb/gitops.yaml">
+```yaml
+import:
+  - catalog/dynamodb/defaults
+
+components:
+  terraform:
+    # DynamoDB table used to store metadata for Terraform Plans
+    gitops/dynamodb:
+      metadata:
+        component: dynamodb
+        inherits:
+          - dynamodb/defaults
+      vars:
+        name: gitops-plan-storage
+        # This key (case-sensitive) is required for the cloudposse/github-action-terraform-plan-storage action
+        hash_key: id
+        range_key: ""
+        # Only these 2 attributes are required for creating the GSI,
+        # but there will be several other attributes on the table itself
+        dynamodb_attributes:
+          - name: 'createdAt'
+            type: 'S'
+          - name: 'pr'
+            type: 'N'
+        # This GSI is used to Query the latest plan file for a given PR.
+        global_secondary_index_map:
+          - name: pr-createdAt-index
+            hash_key: pr
+            range_key: createdAt
+            projection_type: ALL
+            non_key_attributes: []
+            read_capacity: null
+            write_capacity: null
+        # Auto delete old entries
+        ttl_enabled: true
+        ttl_attribute: ttl
+```
+</File>
+
+Pass the ARN of this table as the input to the `terraform-plan-table` of the [`cloudposse/github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan) GitHub Action.
+
+### IAM Access Roles
+
+First create an access role for storing and retrieving planfiles from the S3 Bucket and DynamoDB table. We deploy this role using the [`gitops` component](https://docs.cloudposse.com/components/library/aws/gitops/). Assign this role ARN to the `terraform-state-role` input.
+
+Next, create a role for GitHub workflows to use to plan and apply Terraform. We typically create an "AWS Team" with our [`aws-teams` component](https://docs.cloudposse.com/components/library/aws/aws-teams/), and then allow this team to assume `terraform` in the delegated accounts with our [`aws-team-roles` component](https://docs.cloudposse.com/components/library/aws/aws-team-roles/). Assign this role ARN to the `terraform-plan-role` input
+
+### Atmos Configuration
+
+The actions that works with atmos `>= 1.63.0` expects the Atmos configuration file `atmos.yaml` to be present in the repository.
+The config should have the following structure:
+
+<File title="rootfs/usr/local/etc/atmos/atmos.yaml">
+```yaml
+integrations:
+  github:
+    gitops:
+      terraform-version: 1.5.2
+      infracost-enabled: false
+      artifact-storage:
+        region: us-east-2
+        bucket: cptest-core-ue2-auto-gitops
+        table: cptest-core-ue2-auto-gitops-plan-storage
+        role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
+      role:
+        plan: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+        apply: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+      matrix:
+        sort-by: .stack_slug
+        group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
+```
+</File>
+
+For actions that use atmos `< 1.63.0` the settings passed as github action inputs.
+Please follow documentation for each action to see the required inputs.
+

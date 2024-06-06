@@ -4,6 +4,8 @@ sidebar_position: 50
 sidebar_label: Terraform Apply
 ---
 
+import File from '@site/src/components/File'
+
 The Cloud Posse GitHub Action for "Atmos Terraform Apply" simplifies provisioning Terraform entirely within GitHub Action workflows. It makes it very easy to understand exactly what happened directly within the GitHub UI.
 
 Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply) will retrieve an existing Terraform [planfile](https://developer.hashicorp.com/terraform/tutorials/automation/automate-terraform) from a given S3 bucket using metadata stored inside a DynamoDB table, run `atmos terraform apply` with that planfile, and format the Terraform Apply result as part of a [GitHub Workflow Job Summary](https://github.blog/2022-05-09-supercharging-github-actions-with-job-summaries/).
@@ -27,7 +29,7 @@ In the following screenshot, we see a successful "apply" Job Summary report. The
 
 ![Example Image](/img/github-actions/apply.png)
 
-## Usage
+## Usage Example
 
 In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "apply" job, the "component" and "stack" are hardcoded (`foobar` and `plat-ue2-sandbox`). In practice, these are usually derived from another action. 
 
@@ -37,53 +39,38 @@ We recommend combining this action with the [`affected-stacks`](/integrations/gi
 
 :::
 
-
+<File title=".github/workflows/atmos-terraform-apply.yaml">
 ```yaml
-  # .github/workflows/atmos-terraform-apply.yaml
-  name: "atmos-terraform-apply"
+name: "atmos-terraform-apply"
 
-  on:
-    workflow_dispatch:
-    pull_request:
-      types:
-        - closed
-      branches:
-        - main
+on:
+  workflow_dispatch:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
 
-  # These permissions are required for GitHub to assume roles in AWS
-  permissions:
-    id-token: write
-    contents: read
+# These permissions are required for GitHub to assume roles in AWS
+permissions:
+  id-token: write
+  contents: read
 
-  jobs:
-    apply:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Terraform Apply
-          uses: cloudposse/github-action-atmos-terraform-apply@v2
-          with:
-            component: "foobar"
-            stack: "plat-ue2-sandbox"
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Terraform Apply
+        uses: cloudposse/github-action-atmos-terraform-apply@v2
+        with:
+          component: "foobar"
+          stack: "plat-ue2-sandbox"
+          sha: ${{ github.sha }}          
+          atmos-config-path: ./rootfs/usr/local/etc/atmos/
+          atmos-version: 1.63.0
 ```
-
-with the following configuration as an example:
-
-```yaml
-  # .github/config/atmos-gitops.yaml
-  atmos-config-path: ./rootfs/usr/local/etc/atmos/
-  atmos-version: 1.65.0
-  aws-region: us-east-2
-  enable-infracost: false
-  group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
-  sort-by: .stack_slug
-  terraform-apply-role: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
-  terraform-plan-role: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
-  terraform-state-bucket: cptest-core-ue2-auto-gitops
-  terraform-state-role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
-  terraform-state-table: cptest-core-ue2-auto-gitops
-  terraform-version: 1.65.0
-```
+</File>
 
 ## Requirements
 
-This action has the same requirements as [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan). Use the same S3 Bucket, DynamoDB table, and IAM Roles created with the requirements described there.
+This action has the requirements as [Github Actions](/integrations/github-actions/). Use the same S3 Bucket, DynamoDB table, IAM Roles and config described there.

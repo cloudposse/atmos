@@ -4,6 +4,8 @@ sidebar_position: 20
 sidebar_label: Component Updater
 ---
 
+import File from '@site/src/components/File'
+
 **Efficient Automation for Component Updates**
 
 Use Cloud Posse's GitHub Action for updating [Atmos components](/core-concepts/components/) (e.g. [like the ones provided by Cloud Posse](https://github.com/cloudposse/terraform-aws-components/)) to streamline your infrastructure management.
@@ -26,6 +28,7 @@ Discover more details and a comprehensive list of `inputs` and `outputs` in the 
 
 ### Workflow example
 
+<File title=".github/workflows/atmos-component-updater.yaml">
 ```yaml
 name: "Atmos Component Updater"
 
@@ -72,6 +75,7 @@ jobs:
           allowed_prefixes: "component-update/"
           dry_run: no
 ```
+</File>
 
 ### Requirements
 
@@ -171,6 +175,7 @@ Now the Atmos Component Updater workflow will create a new Deployment in the `at
 
 If your [`atmos.yaml` file](https://atmos.tools/cli/configuration) is not located in the root of the infrastructure repository, you can specify the path to it using [`ATMOS_CLI_CONFIG_PATH` env variable](https://atmos.tools/cli/configuration/#environment-variables).
 
+<File title=".github/workflows/atmos-component-updater.yaml">
 ```yaml
   # ...
   - name: Update Atmos Components
@@ -182,9 +187,11 @@ If your [`atmos.yaml` file](https://atmos.tools/cli/configuration) is not locate
       github-access-token: ${{ secrets.GITHUB_TOKEN }}
       max-number-of-prs: 5
 ```
+</File>
 
 ### Customize Pull Request labels, title and body
 
+<File title=".github/workflows/atmos-component-updater.yaml">
 ```yaml
   # ...
   - name: Update Atmos Components
@@ -204,6 +211,7 @@ If your [`atmos.yaml` file](https://atmos.tools/cli/configuration) is not locate
         automated
         atmos
 ```
+</File>
 
 **IMPORTANT:** The backtick symbols must be escaped in the GitHub Action parameters. This is because GitHub evaluates whatever is in the backticks and it will render as an empty string.
 
