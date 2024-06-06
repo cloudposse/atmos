@@ -22,7 +22,7 @@ import (
 var (
 	NotFound = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
 		"\nYou can download a sample config and adapt it to your requirements from " +
-		"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
+		"https://raw.githubusercontent.com/cloudposse/atmos/main/examples/quick-start/atmos.yaml")
 
 	defaultCliConfig = schema.CliConfiguration{
 		BasePath: ".",

@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"path"
+	"reflect"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -177,18 +178,21 @@ func createComponentStackMap(
 
 	for stackManifest, stackSection := range stacksMap {
 		if componentsSection, ok := stackSection.(map[any]any)[cfg.ComponentsSectionName].(map[string]any); ok {
-
-			// Terraform components
 			if terraformSection, ok := componentsSection[componentType].(map[string]any); ok {
 				for componentName, compSection := range terraformSection {
 					componentSection, ok := compSection.(map[string]any)
 
-					if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
-						varsSection = map[any]any{}
-					}
-
 					if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); !ok {
 						metadataSection = map[any]any{}
+					}
+
+					// Don't check abstract components (they are never provisioned)
+					if IsComponentAbstract(metadataSection) {
+						continue
+					}
+
+					if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
+						varsSection = map[any]any{}
 					}
 
 					if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
@@ -272,13 +276,63 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 	for componentName, componentSection := range componentStackMap {
 		for stackName, stackManifests := range componentSection {
 			if len(stackManifests) > 1 {
-				m := fmt.Sprintf("the Atmos component '%s' in the stack '%s' is defined in more than one top-level stack manifest file: %s.\n"+
-					"Atmos can't decide which stack manifest to use to get configuration for the component in the stack.\n"+
-					"This is a stack misconfiguration.",
-					componentName,
-					stackName,
-					strings.Join(stackManifests, ", "))
-				res = append(res, m)
+				// We have the same Atmos component in the same stack configured (or imported) in more than one stack manifest files
+				// Check if the component configs are the same (deep-equal) in those stack manifests.
+				// If the configs are different, add it to the errors
+				var componentConfigs []map[string]any
+				for _, stackManifestName := range stackManifests {
+					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName)
+					if err != nil {
+						return nil, err
+					}
+
+					// Hide the sections that should not be compared
+					componentConfig["atmos_cli_config"] = nil
+					componentConfig["atmos_stack"] = nil
+					componentConfig["atmos_stack_file"] = nil
+					componentConfig["sources"] = nil
+					componentConfig["imports"] = nil
+					componentConfig["deps_all"] = nil
+					componentConfig["deps"] = nil
+
+					componentConfigs = append(componentConfigs, componentConfig)
+				}
+
+				componentConfigsEqual := true
+
+				for i := 0; i < len(componentConfigs)-1; i++ {
+					if !reflect.DeepEqual(componentConfigs[i], componentConfigs[i+1]) {
+						componentConfigsEqual = false
+						break
+					}
+				}
+
+				if !componentConfigsEqual {
+					var m1 string
+					for _, stackManifestName := range stackManifests {
+						m1 = m1 + "\n" + fmt.Sprintf("- atmos describe component %s -s %s", componentName, stackManifestName)
+					}
+
+					m := fmt.Sprintf("The Atmos component '%[1]s' in the stack '%[2]s' is defined in more than one top-level stack manifest file: %[3]s.\n\n"+
+						"The component configurations in the stack manifests are different.\n\n"+
+						"To check and compare the component configurations in the stack manifests, run the following commands: %[4]s\n\n"+
+						"You can use the '--file' flag to write the results of the above commands to files (refer to https://atmos.tools/cli/commands/describe/component).\n"+
+						"You can then use the Linux 'diff' command to compare the files line by line and show the differences (refer to https://man7.org/linux/man-pages/man1/diff.1.html)\n\n"+
+						"When searching for the component '%[1]s' in the stack '%[2]s', Atmos can't decide which stack "+
+						"manifest file to use to get configuration for the component.\n"+
+						"This is a stack misconfiguration.\n\n"+
+						"Consider the following solutions to fix the issue:\n"+
+						"- Ensure that the same instance of the Atmos '%[1]s' component in the stack '%[2]s' is only defined once (in one YAML stack manifest file)\n"+
+						"- When defining multiple instances of the same component in the stack, ensure each has a unique name\n"+
+						"- Use multiple-inheritance to combine multiple configurations together (refer to https://atmos.tools/core-concepts/components/inheritance)\n\n",
+						componentName,
+						stackName,
+						strings.Join(stackManifests, ", "),
+						m1,
+					)
+
+					res = append(res, m)
+				}
 			}
 		}
 	}

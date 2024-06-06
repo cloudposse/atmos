@@ -25,7 +25,7 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 
 	// Git reference and commit SHA
 	// Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details
-	ref := "refs/heads/master"
+	ref := "refs/heads/main"
 	sha := ""
 
 	affected, err := e.ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, "", "", true, true)
