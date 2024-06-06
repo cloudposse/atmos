@@ -5,10 +5,15 @@ on:
     paths-ignore:
       - "README.md"
 
-  release:
-    types: [created]
+  push:
+    branches:
+      - main
+      - release/v*
     paths-ignore:
-      - "README.md"
+      - '.github/**'
+      - 'docs/**'
+      - 'examples/**'
+      - 'test/**'
 
   workflow_dispatch:
 
@@ -19,14 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.21"
-        id: go
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go
 
       - name: Get dependencies
         run: |
@@ -47,14 +52,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.21"
-        id: go
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go
 
       - name: Get dependencies
         run: |
@@ -64,3 +69,12 @@ jobs:
         timeout-minutes: 10
         run: |
           make testacc
+
+  release:
+    needs: test
+    if: github.event_name == 'push'
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
+    with:
+      publish: false
+      format: binary
+    secrets: inherit

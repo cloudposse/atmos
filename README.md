@@ -1,7 +1,7 @@
 <!-- markdownlint-disable -->
 <a href="https://cpco.io/homepage"><img src=".github/banner.png?raw=true" alt="Project Banner"/></a><br/>
     <p align="right">
-<a href="https://github.com/cloudposse/atmos/releases/latest"><img src="https://img.shields.io/github/release/cloudposse/atmos.svg?style=for-the-badge" alt="Latest Release"/></a><a href="https://github.com/cloudposse/atmos/commits/master/"><img src="https://img.shields.io/github/last-commit/cloudposse/atmos/master?style=for-the-badge" alt="Last Updated"/></a><a href="https://github.com/cloudposse/atmos/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/cloudposse/atmos/test.yml?style=for-the-badge" alt="Tests"/></a><a href="https://slack.cloudposse.com"><img src="https://slack.cloudposse.com/for-the-badge.svg" alt="Slack Community"/></a></p>
+<a href="https://github.com/cloudposse/atmos/releases/latest"><img src="https://img.shields.io/github/release/cloudposse/atmos.svg?style=for-the-badge" alt="Latest Release"/></a><a href="https://github.com/cloudposse/atmos/commits/main/"><img src="https://img.shields.io/github/last-commit/cloudposse/atmos/main?style=for-the-badge" alt="Last Updated"/></a><a href="https://github.com/cloudposse/atmos/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/cloudposse/atmos/test.yml?style=for-the-badge" alt="Tests"/></a><a href="https://slack.cloudposse.com"><img src="https://slack.cloudposse.com/for-the-badge.svg" alt="Slack Community"/></a></p>
 <!-- markdownlint-restore -->
 
 <!--
