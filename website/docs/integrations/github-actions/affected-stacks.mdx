@@ -4,6 +4,8 @@ sidebar_position: 30
 sidebar_label: Affected Stacks
 ---
 
+import File from '@site/src/components/File'
+
 **Streamline Your Change Management Process**
 
 The [Atmos Affected Stacks GitHub Action](https://github.com/cloudposse/github-action-atmos-affected-stacks) empowers you to easily identify the affected [atmos stacks](/core-concepts/stacks/) for a pull request so you can gain better insights into the impact of your pull requests. It works by installing Atmos and running [`atmos describe affected`](/cli/commands/describe/affected), and outputs a comprehensive list of affected stacks, both as raw output and as a matrix to be used in subsequent GitHub action jobs.
@@ -23,9 +25,9 @@ Atmos checks component folders for changes first, marking all related components
 
 ## Usage Example
 
+<File title=".github/workflows/atmos-terraform-plan.yaml">
 ```yaml
 name: Pull Request
-
 on:
   pull_request:
     branches: [ 'main' ]
@@ -35,11 +37,42 @@ jobs:
   context:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
       - id: affected
-        uses: cloudposse/github-action-atmos-affected-stacks@v0.0.1
+        uses: cloudposse/github-action-atmos-affected-stacks@v3
+        with:
+          atmos-config-path: ./rootfs/usr/local/etc/atmos/
+          atmos-version: 1.63.0
+          nested-matrices-count: 1
 
     outputs:
       affected: ${{ steps.affected.outputs.affected }}
       matrix: ${{ steps.affected.outputs.matrix }}
+
+  # This job is an example how to use the affected stacks with the matrix strategy
+  atmos-plan:
+    needs: ["atmos-affected"]
+    if: ${{ needs.atmos-affected.outputs.has-affected-stacks == 'true' }}
+    name: ${{ matrix.stack_slug }}
+    runs-on: ['self-hosted']
+    strategy:
+      max-parallel: 10
+      fail-fast: false # Don't fail fast to avoid locking TF State
+      matrix: ${{ fromJson(needs.atmos-affected.outputs.matrix) }}
+    ## Avoid running the same stack in parallel mode (from different workflows)
+    concurrency:
+      group: ${{ matrix.stack_slug }}
+      cancel-in-progress: false
+    steps:
+      - name: Plan Atmos Component
+        uses: cloudposse/github-action-atmos-terraform-plan@v2
+        with:
+          component: ${{ matrix.component }}
+          stack: ${{ matrix.stack }}
+          atmos-config-path: ./rootfs/usr/local/etc/atmos/
+          atmos-version: 1.63.0
 ```
+</File>
+
+## Requirements
+
+This action has the requirements as [Github Actions](/integrations/github-actions/). Use the same config described there.
