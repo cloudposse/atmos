@@ -5,6 +5,9 @@ sidebar_label: Vendor Components
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Step from '@site/src/components/Step'
+import StepNumber from '@site/src/components/StepNumber';
+
 
 In the previous steps, we've configured the repository and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
 components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
@@ -45,7 +48,11 @@ For more information about Atmos Vendoring and the `atmos vendor pull` CLI comma
 To vendor the components from the open-source component repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components),
 perform the following steps:
 
-- Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
+<Step>
+
+## <StepNumber/> Create a `vendor.yaml` config file
+
+Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
 
 <File title="vendor.yaml">
 ```yaml 
@@ -102,6 +109,9 @@ spec:
 
 <br/>
 
+
+<details>
+<summary>Advanced Configuration</summary>
 :::warning
 
 The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
@@ -124,10 +134,13 @@ spec:
         - "**/modules/**"
 ```
 </File>
+</details>
+</Step>
 
-<br/>
 
-- Execute the command `atmos vendor pull` from the root of the repo
+<Step>
+## <StepNumber/> Vendor the dependencies
+Execute the command `atmos vendor pull` from the root of the repo.
 
 <Terminal title="atmos vendor pull">
 ```shell
@@ -172,6 +185,9 @@ After the command is executed, the filesystem layout should look like this:
                ├── variables.tf
                └── versions.tf
 ```
+
+</Step>
+
 
 <br/>
 

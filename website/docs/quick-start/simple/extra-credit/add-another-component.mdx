@@ -1,0 +1,58 @@
+---
+title: 'Deploy Another App'
+sidebar_position: 1
+sidebar_label: 'Deploy Another App'
+---
+import File from '@site/src/components/File'
+
+We can provision more than one instance of the same Terraform component (with the same or different settings) 
+into the same environment by defining many Atmos components that provide configuration for the Terraform component.
+For example, the following config shows how to define two Atmos components, `myapp/1` and `myapp/2`, 
+which both point to the same Terraform component `myapp`:
+
+<File>
+```yaml
+import:
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
+  # Import the defaults for all myapp components
+  - catalog/myapp/defaults
+
+components:
+  terraform:
+  # Atmos component `myapp/1`
+  myapp/1:
+    metadata:
+    # Point to the Terraform component in `components/terraform/myapp`
+    component: myapp
+    # Inherit the defaults for all myapp components
+    inherits:
+      - myapp/defaults
+    # Define/override variables specific to this `myapp/1` component
+    vars:
+    name: myapp-1
+    ipv4_primary_cidr_block: 10.9.0.0/18
+
+  # Atmos component `myapp/2`
+  myapp/2:
+    metadata:
+    # Point to the Terraform component in `components/terraform/myapp`
+    component: myapp
+    # Inherit the defaults for all myapp components
+    inherits:
+      - myapp/defaults
+    # Define/override variables specific to this `myapp/2` component
+    vars:
+    name: myapp-2
+    ipv4_primary_cidr_block: 10.10.0.0/18
+```
+</File>
+
+<br/>
+
+Then we can execute the following `atmos` commands to provision the two myapps into the `dev` account in the `us-east-2` region:
+
+```shell
+atmos terraform apply myapp/1 -s plat-ue2-dev
+atmos terraform apply myapp/2 --stack plat-ue2-dev
+```

@@ -4,7 +4,8 @@
 // https://github.com/facebook/docusaurus/issues/2097
 // https://webpack.js.org/concepts/#loaders
 
-const path = require('html-loader');
+const html = require('html-loader');
+const path = require('path');
 
 module.exports = function (context, options) {
     return {
@@ -29,6 +30,10 @@ module.exports = function (context, options) {
                   },
                 },
               },
+              {
+                test: /\.(yml|yaml|tf)$/,
+                use: 'raw-loader'
+              }
             ],
           },
         };

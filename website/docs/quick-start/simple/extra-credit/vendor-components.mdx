@@ -1,7 +1,7 @@
 ---
-title: Vendor Components
-sidebar_position: 5
-sidebar_label: Vendor Components
+title: Vendor Dependencies
+sidebar_position: 2
+sidebar_label: Vendor Dependencies
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
@@ -178,17 +178,24 @@ After the command is executed, the filesystem layout should look like this:
 Each component follows the [Standard Module Structure](https://developer.hashicorp.com/terraform/language/modules/develop/structure) that Terraform
 recommends. There are a few additions:
 
-- `context.tf` - this file contains all the common variables that Terraform modules and components consume (to make the component's `variables.tf`
-  file DRY). This is a standard file that is copied into each component. The file also defines the context
-  variables (`namespace`, `tenant`, `environment`, `stage`) which are used by Atmos to search for Atmos stacks when executing
-  the [CLI commands](/cheatsheets/commands)
+<dl>
+  <dt>context.tf</dt>
+  <dd>
+    This file contains all the common variables that Terraform modules and components consume (to make the component's `variables.tf`
+    file DRY). This is a standard file that is copied into each component. The file also defines the context
+    variables (`namespace`, `tenant`, `environment`, `stage`) which are used by Atmos to search for Atmos stacks when executing
+    the [CLI commands](/cheatsheets/commands)
+  </dd>
 
-- `remote-state.tf` in the `vpc` component - this file configures the
-  [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
-  for the `vpc-flow-logs-bucket` component. The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
-  configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket
+  <dt>remote-state.tf in the vpc component</dt>
+  <dd>
+    This file configures the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
+    for the `vpc-flow-logs-bucket` component. The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
+    configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket
+  </dd>
+</dl>
 
-<File title="components/terraform/vpc/remote-state.tf">
+<File title="main.tf">
 ```hcl
 module "vpc_flow_logs_bucket" {
   count = local.vpc_flow_logs_enabled ? 1 : 0
@@ -213,53 +220,3 @@ module "vpc_flow_logs_bucket" {
 ```
 </File>
 
-## Remote State Notes
-
-The [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module uses the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) 
-Terraform provider to read Atmos configuration and obtain the remote state for Atmos components.
-
-Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
-which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
-
-This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
-
-While placing `atmos.yaml` at the root of the repository will work for Atmos, it will not work for
-the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider because the provider gets executed from the
-component's directory (e.g. `components/terraform/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
-
-:::info
-
-`atmos.yaml` is loaded from the following locations (from lowest to highest priority):
-
-- System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
-- Home dir (`~/.atmos/atmos.yaml`)
-- Current directory
-- ENV variables `ATMOS_CLI_CONFIG_PATH` and `ATMOS_BASE_PATH`
-
-:::
-
-<br/>
-
-For this to work for both the `atmos` CLI and the Terraform `utils` provider, we recommend doing one of the following:
-
-- Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root
-  of the repo
-
-- Put `atmos.yaml` into the home directory (`~/.atmos/atmos.yaml`) and set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of
-  the repo
-
-- Put `atmos.yaml` at a location in the file system and then set the ENV var `ATMOS_CLI_CONFIG_PATH` to point to that location. The ENV var must
-  point to a folder without the `atmos.yaml` file name. For example, if `atmos.yaml` is at `/atmos/config/atmos.yaml`,
-  set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
-
-- When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
-  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/rootfs/usr/local/etc/atmos/atmos.yaml)
-  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/Dockerfile)
-  by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
-  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
-  uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
-  var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
-
-<br/>
-
-For a complete description of how Atmos components use remote state, refer to [Component Remote State](/core-concepts/components/terraform/remote-state).

@@ -7,15 +7,7 @@ id: inheritance
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 
-Component Inheritance is one of the principles of [Component-Oriented Programming (COP)](/core-concepts/stacks/component-oriented-configuration)
-supported by Atmos.
-
-Component Inheritance is the ability to combine multiple configurations through ordered deep-merging of configurations. The concept is borrowed from
-[Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming)) to logically organize complex configurations in
-a way that makes conceptual sense. The side effect of this are extremely DRY and reusable configurations.
-
-[Component-Oriented Configuration](https://en.wikipedia.org/wiki/Component-based_software_engineering) is a reuse-based approach to defining,
-implementing and composing loosely-coupled independent components into systems.
+Component Inheritance is the ability to combine multiple configurations through ordered deep-merging of configurations. 
 
 ## Overview
 
@@ -27,25 +19,38 @@ Atmos supports the following concepts and principles of **Component-Oriented Pro
 - [Multiple Inheritance](/core-concepts/stacks/inheritance#multiple-inheritance) - when an Atmos component inherits the configuration from more than one Atmos
   component
 
-
 These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
 and [`metadata`](/core-concepts/stacks/define-components#metadata) component's configuration section.
 
 <details>
 <summary>Advanced Concepts</summary>
-- Dynamic Polymorphism - ability to use and override base component(s) properties
 
-- Encapsulation - enclose a set of related configuration properties into reusable loosely-coupled modules. Encapsulation is implemented
-  by [Atmos Components](/core-concepts/components) which are opinionated building blocks of Infrastructure-as-Code (IAC) that solve one specific
-  problem or use-case
+Component Inheritance is one of the principles of [Component-Oriented Programming (COP)](https://en.wikipedia.org/wiki/Component-based_software_engineering)
+supported by Atmos.
 
-- Abstraction, which is accomplished by these Atmos features:
-  - Principle of Abstraction: in a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity
-    and increase efficiency
-  - Abstract Components: if a component is marked as `abstract`, it can be used only as a base for other components and can't be provisioned
-    using `atmos`.
+The concept is borrowed from [Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming)) 
+to logically organize complex configurations in a way that makes conceptual sense. The side effect of this are extremely DRY and reusable 
+configurations.
+
+[Component-Oriented Configuration](https://en.wikipedia.org/wiki/Component-based_software_engineering) is a reuse-based approach to defining,
+implementing and composing loosely-coupled independent components into systems.
+
+<dl>
+  <dt>Dynamic Polymorphism</dt>
+  <dd>Ability to use and override base component(s) properties</dd>
+
+  <dt>Encapsulation</dt>
+  <dd>Enclose a set of related configuration properties into reusable loosely-coupled modules. Encapsulation is implemented by <a href="/core-concepts/components">Atmos Components</a> which are opinionated building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case</dd>
+
+  <dt>Abstraction</dt>
+  <dd>
+    <ul>
+      <li>Principle of Abstraction: In a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity and increase efficiency</li>
+      <li>Abstract Components: If a component is marked as <code>abstract</code>, it can be used only as a base for other components and can't be provisioned using <code>atmos</code></li>
+    </ul>
+  </dd>
+</dl>
 </details>
-
 
 <br/>
 

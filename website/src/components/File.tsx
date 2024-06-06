@@ -28,16 +28,16 @@ const iconMap = {
     // Add more mappings as needed
   };
 
-  // Function to guess the type based on the title
+// Function to guess the type based on the title
 const guessTypeFromTitle = (title) => {
     if (/\.tf\.json$/i.test(title)) {
       return 'code';
     }
-    if (/.*stack.*\.ya?ml$/i.test(title)) {
-        return 'stack';
-    }
     if (/atmos\.ya?ml$/i.test(title)) {
         return 'config';
+    }    
+    if (/.*stack.*\.ya?ml$/i.test(title)) {
+        return 'stack';
     }
     if (/\.ya?ml$/i.test(title)) {
         return 'yaml';

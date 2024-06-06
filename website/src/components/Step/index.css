@@ -1,0 +1,10 @@
+.step {
+  margin-bottom: 20px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.step h2 {
+  margin-top: 0;
+}

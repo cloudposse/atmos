@@ -410,6 +410,9 @@ dd.disambiguation a {
 	}
 }
 
+.markdown > a.button:last-child {
+    margin-bottom: 1em !important;
+}
 
 /* Homepage */
 
