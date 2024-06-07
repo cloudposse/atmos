@@ -1,5 +1,5 @@
 import React from 'react';
-
+import './index.css';
 
 // Import the original mapper
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; // Import the FontAwesomeIcon component.

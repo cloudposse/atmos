@@ -6,10 +6,13 @@ sidebar_label: Define Stack Configurations
 import File from '@site/src/components/File'
 import KeyPoints from '@site/src/components/KeyPoints';
 
-[Atmos Stacks](/core-concepts/stacks) are the configuration for your components. If you think of your "components" as applications, 
-then Stacks are simply the settings that you want to pass to them. If you make your components highly reusable, it usually 
-means they will need to accept a lot of configuration. This is what makes Atmos so powerful; you can import and inherit configurations
-in a logical way to keep your configurations DRY.
+[Atmos Stacks](/core-concepts/stacks) are the configuration for your components. It's how you can combine multiple reusable, stateful
+components into your "Stack".
+
+If you think of your "components" as applications, then Stacks are simply which components you depend on and the settings that you want
+to pass to them. If you make your components highly reusable, it usually means they will need to accept a lot of configuration. 
+
+**This is what makes Atmos so powerful:** you can import and inherit configurations in a logical way to keep your configurations DRY and consistent.
 
 <KeyPoints>
 - How to specify the configuration for your Terraform "root modules" using Atmos Stacks
@@ -18,10 +21,8 @@ in a logical way to keep your configurations DRY.
 </KeyPoints>
 
 Stack configurations are merely all the settings for your components. They can be organized in any way you like, 
-but we recommend a hierarchical layout. 
-
-We present some [different ways to organize your stacks in the Catalog](/core-concepts/stacks/catalogs), but for this example
-we will use a simple layout.
+but we recommend a hierarchical layout. We share some [different ways to organize your stacks in the Catalog](/core-concepts/stacks/catalogs),
+but for this example we will use a simple layout.
 
 ## Create Catalog for Reusable Configurations
 

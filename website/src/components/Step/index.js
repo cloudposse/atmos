@@ -1,5 +1,6 @@
 // src/components/Step.js
 import React, { useEffect, useState, createContext, useContext } from 'react';
+import './index.css';
 
 let stepCounter = 0;
 

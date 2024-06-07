@@ -5,16 +5,38 @@ sidebar_label: Configure Atmos CLI
 ---
 import EmbedFile from '@site/src/components/EmbedFile';
 import KeyPoints from '@site/src/components/KeyPoints';
+import Screengrab from '@site/src/components/Screengrab'
+import LatestRelease from '@site/src/components/LatestRelease';
+import Step from '@site/src/components/Step'
+import StepNumber from '@site/src/components/StepNumber';
 
 The `atmos.yaml` configuration file is used to control the behavior of the `atmos` CLI and how Atmos will work with your project. 
 Therefore, this file should exist in the project repository, along side your Terraform components and Atmos stacks.
 
 <KeyPoints>
-- How to set up base paths for components, stacks, and workflows in `atmos.yaml`.
-- How Atmos identifies stack configurations using context variables and naming patterns.
+- How install atmos and make sure you're on a current version
+- How to configure `atmos.yaml` for your project's filesystem layout
+- How Atmos identifies stack configurations using context variables and naming patterns
 </KeyPoints>
 
-Let's start by configuring `atmos.yaml` to tell Atmos where to find the Terraform components and Atmos stacks (because everything is configurable!)
+
+<Step>
+## <StepNumber/> Install Atmos
+Let's make sure you've [properly installed Atmos](/install), by running the following command.
+
+```bash
+atmos --version
+```
+
+You should see something like this... (note, the current release of Atmos is <LatestRelease />)
+
+<Screengrab title="atmos help" slug="atmos-version" />
+</Step>
+
+<Step>
+## <StepNumber/> Configure `atmos.yaml` for your project
+To configure Atmos to work with your project, we'll create a file called `atmos.yaml` to tell Atmos where to find the
+Terraform components and Atmos stacks. Almost everything in Atmos is configurable via this file.
 
 Below is the minimum recommended configuration for Atmos to work with Terraform and to configure [Atmos components](/core-concepts/components) 
 and [Atmos stacks](/core-concepts/stacks). Copy this YAML config below into your `atmos.yaml` file.
@@ -24,10 +46,14 @@ and [Atmos stacks](/core-concepts/stacks). Copy this YAML config below into your
 <EmbedFile filePath="examples/demo-stacks/atmos.yaml" />
 
 __NOTE:__ For the description of all the sections, refer to [CLI Configuration](/cli/configuration).
+</Step>
+
+<Step>
+## <StepNumber/> Understand what it's doing
 
 And here's what all that means...
 
-## Basic Settings
+### Basic Settings
 
 <dl>
   <dt>`stacks.name_pattern`</dt>
@@ -50,7 +76,7 @@ And here's what all that means...
   </dd>
 </dl>
 
-## Path Configuration
+### Path Configuration
 
 Well-known paths are how Atmos knows how to find all your stack configurations, comoponents and workflows.
 
@@ -98,14 +124,14 @@ Well-known paths are how Atmos knows how to find all your stack configurations, 
   <dd>
   [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for:
   - [Atmos Manifests Validation](/cli/schemas)
-  - [Atmos Components Validation](/core-concepts/validate/components)
+  - [Atmos Stack Validation](/core-concepts/validate)
   </dd>
 </dl>
 
 </details>
 
 
-## Config File Location
+### Config File Location
 
 While placing `atmos.yaml` at the root of the repository will work for the `atmos` CLI, it will not work
 for [Component Remote State](/core-concepts/components/terraform/remote-state) because it uses
@@ -140,7 +166,7 @@ Initial Atmos configuration can be controlled by these ENV vars:
 </dl>
 :::
 </details>
-
+</Step>
 
 ## Additional Reading
 

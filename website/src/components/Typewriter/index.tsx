@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import './index.css';
 
 export default function Typewriter({ className, children }) {
     const ref = useRef();

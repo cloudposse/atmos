@@ -1,38 +1,78 @@
 ---
-title: The Atmos Mindset
+title: Thinking Like Atmos
 sidebar_position: 2
 sidebar_label: Atmos Mindset
 id: mindset
 ---
+import Link from '@docusaurus/Link'
+import KeyPoints from '@site/src/components/KeyPoints';
+import Step from '@site/src/components/Step'
+import StepNumber from '@site/src/components/StepNumber';
 
-These chapters would guide users through the process of thinking and building with Atmos.
+Atmos can change how you think about the Terraform code you write to build your infrastructure. 
 
-## Understanding Atmos Concepts
+When you design cloud architectures with Atmos, you will first break it apart into pieces called components. 
 
-Introduction to Atmos concepts.
+Then, you will implement Terraform "root modules" for each of those components. 
 
-## Breaking Down the Infrastructure
+To ensure your components are highly reusable, parameterize them with variables. 
+Design them to serve a single purpose, making them the smallest possible unit of infrastructure in a typical 
+software development lifecycle (SDLC). Group pieces that usually change together and separate those that change independently.
 
-Dividing your cloud infrastructure into manageable components.
+Finally, you connect your components together using stacks, so that everything comes together. 
 
-## Deploying Environments
+In this tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components.
 
-Setting up a non-interactive version of your infrastructure.
+You're about discover a new way to think about terraform... 
 
-## Handling Terraform State
 
-Determining the minimal state necessary for your infrastructure.
+<h1> Your Architecture is Made up of Components</h1>
 
-## Passing Values Between Components
+Start by thinking about your architecture in terms its logical components.
 
-Implementing state management and ensuring data flows correctly.
+For example, let’s take a typical architecture of a modern website. Its components include a network, a cluster, some applications running on it,
+a database to store data, a cache, and maybe some object storage. Each of these logical pieces is a component and typically changes independently.
+They are loosely related and this relationship forms a stack. A stack logically combines components without tightly coupling them,
+ensuring each component’s state is separate. This approach minimizes the blast radius of changes, keeps the state separate, and 
+allows teams to own components. Plus, it encourages reuse since there is a finite number ways to express infrastructure.
 
-## Adding Custom Commands and Automating Workflows
+Then, to implement this architecture with Atmos, you will usually follow these same five steps everytime.
 
-Making the infrastructure dynamic and automated.
+<Step>
+## <StepNumber/> Write Your Components (e.g. Terraform Root Modules)
+</Step>
+
+<Step>
+## <StepNumber/> Pass Values Between Components
+</Step>
+
+<Step>
+## <StepNumber/> Define their Baseline Configuration
+</Step>
+
+<Step>
+## <StepNumber/> Import Configurations into a Stack
+</Step>
+
+<Step>
+## <StepNumber/> Deploy Stacks with Atmos
+</Step>
 
 ## Where to Go From Here
 
-This brief introduction covered the essentials of building Atmos components and cloud architectures. 
-Now you can start an Atmos project now, maybe try out the [Simple](/quick-start/simple)/[Advanced(/quick-start/advanced) Quick Start, 
+This brief introduction covered the essentials designing cloud architectures that can be used with Atmos.
+
+Now you can start with your first an Atmos project! Try out our [Simple](/quick-start/simple)/[Advanced](/quick-start/advanced) Quick Start, 
 or delve deeper into the [syntax and concepts](/core-concepts) used in this tutorial.
+
+<Link
+    to="/quick-start/simple"
+    className="button button--lg button--primary">
+    Try our Simple Tutorial
+</Link>
+
+<Link
+    to="/quick-start/advanced"
+    className="button button--lg button--outline button--primary ml20">
+    Try our Advanced Tutorial
+</Link>

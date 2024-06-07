@@ -48,7 +48,7 @@ const config = {
                     
                     {
                         from: '/reference/terraform-limitations',
-                        to: '/core-concepts/components/terraform/journey'
+                        to: '/introduction/why-atmos'
                     }
                 ],
             },

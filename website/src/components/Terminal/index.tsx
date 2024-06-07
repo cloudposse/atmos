@@ -1,4 +1,5 @@
 import React from 'react';
+import './index.css';
 
 export default function Terminal({ title, className, children }) {
     return (

@@ -7,20 +7,37 @@ id: simple
 ---
 import PillBox from '@site/src/components/PillBox';
 import DocCardList from "@theme/DocCardList";
+import KeyPoints from '@site/src/components/KeyPoints';
 
 <PillBox>Easy</PillBox>
-
-Take 30 minutes to learn the most important Atmos concepts. 
 
 In this simple example, we’re going to show you how you can Terraform the weather. We won’t focus on 
 more advanced concepts like configuring state backends or integrating with specific cloud providers, 
 allowing us to concentrate on the core concepts of Atmos.
 
-**Spoiler alert:** you can’t actually change the weather with Terraform, but you can certainly ask for it. 
-We’ll use this example to avoid relying on complicated cloud credentials, which can vary based on your 
+
+Start your first project in 5 easy steps. After this, you'll be able to configure and provision infrastructure with Terraform using Atmos.
+
+<KeyPoints>
+1. How to set up a project repository to organize your Terraform code and configurations
+2. How to configure the Atmos CLI to work with the project
+3. Write a simple Terraform root module
+4. How to create stacks and configure the root module as a component of a stack
+5. Finally, how to deploy everything using Atmos
+</KeyPoints>
+
+
+**Spoiler alert** You can’t actually change the weather with Terraform, but you can certainly ask for it. 
+We’ll [use this example](https://github.com/cloudposse/atmos/tree/master/examples/demo-stacks) to avoid relying on complicated cloud credentials, which can vary based on your 
 organizational context and cloud provider. Instead, we want to focus on Terraform and how to utilize it effectively 
 as a component within Atmos. Once you understand this, you’ll see how you can tailor your Terraform "root modules" 
 to work seamlessly with Atmos.
+
+:::note
+This tutorial is for those who prefer hands-on learning and want to quickly create something tangible. 
+If you prefer to learn theory and concepts first, start with the [Core Concepts](/core-concepts).
+:::
+
 
 :::tip
 
@@ -34,15 +51,6 @@ You can clone it and tweak it to your own needs. The repository should be a good
 Then when you're ready, for a deeper understanding of Terraform state management and working with 
 AWS authentication, please refer to our [advanced quick start guide](/quick-start/advanced).
 
-## Let's get started...
-
-Start your first project in 5 easy steps. After this, you'll be able to configure and provision infrastructure with Terraform using Atmos.
-
-1. [Install Atmos](/install)
-2. [Setup Project Repository](/quick-start/simple/configure-repository)
-3. [Configure the Atmos CLI](/quick-start/simple/configure-cli)
-4. [Create Atmos Stacks](/quick-start/simple/create-atmos-stacks)
-5. [Deploy Everything](/quick-start/simple/provision)
 
 ## Extra Credit
 

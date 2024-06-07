@@ -31,8 +31,8 @@ Atmos simplifies complex cloud architectures and DevOps workflows into [intuitiv
 Its strength in managing [DRY configurations at scale](https://atmos.tools/core-concepts/) is supported by robust
 [design patterns](https://atmos.tools/design-patterns/), comprehensive [documentation](https://atmos.tools/), and a
 [passionate community](https://slack.cloudposse.com/), making it a versatile [tool for both startups and enterprises](https://cloudposse.com/).
-Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes
-[policy controls](https://atmos.tools/core-concepts/validate/components), [vendoring](https://atmos.tools/core-concepts/vendor/),
+Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes custom
+[policy controls](https://atmos.tools/core-concepts/validate), [vendoring](https://atmos.tools/core-concepts/vendor/),
 and [GitOps capabilities](https://atmos.tools/integrations/github-actions) out of the box. Everything is open source and free.
 
 ## Screenshots
@@ -109,7 +109,7 @@ strength in the cloud infrastructure and DevOps domains:
 - **Compliant Infrastructure for Regulated Industries:** Atmos empowers DevOps and SecOps teams to create vetted configurations that comply
   with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations can then be efficiently shared and reused across the
   organization via [service catalogs](https://atmos.tools/core-concepts/stacks/catalogs), [component libraries](https://atmos.tools/core-concepts/components/library),
-  [vendoring](https://atmos.tools/core-concepts/vendor), and [OPA policies](https://atmos.tools/core-concepts/validate/components),
+  [vendoring](https://atmos.tools/core-concepts/vendor), and [OPA policies](https://atmos.tools/core-concepts/validate/opa),
   simplifying the process of achieving and maintaining rigorous compliance.
 - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using
   predefined templates and policies.

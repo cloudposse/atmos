@@ -1,4 +1,5 @@
 import React from 'react';
+import './cheatsheet.css';
 
 export default function CardGroup({ title, className, children }) {
     return (

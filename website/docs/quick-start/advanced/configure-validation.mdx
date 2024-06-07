@@ -4,7 +4,7 @@ sidebar_position: 7
 sidebar_label: Validation Configurations
 ---
 
-Atmos supports [Atmos Manifests Validation](/cli/schemas) and [Atmos Components Validation](/core-concepts/validate/components)
+Atmos supports [Stack Schema Validation](/cli/schemas) and [Custom Policy Validation](/core-concepts/validate)
 using [JSON Schema](https://json-schema.org/) and [OPA Policies](https://www.openpolicyagent.org/).
 
 :::tip
@@ -16,8 +16,6 @@ You can clone the repository and modify to your own needs. The repository will h
 Atmos manifests and components.
 
 :::
-
-<br/>
 
 Configuring validation for Atmos manifests and components consists of the three steps:
 
@@ -65,8 +63,6 @@ For more information, refer to:
 
 :::
 
-<br/>
-
 ## Configure Atmos Manifests Validation
 
 [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) can be used to validate Atmos stack manifests and provide
@@ -100,8 +96,6 @@ Complete the following steps to configure Atmos manifest validation:
   atmos validate stacks --schemas-atmos-manifest stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   ```
 
-<br/>
-
 :::tip
 
 For more information, refer to:
@@ -110,8 +104,6 @@ For more information, refer to:
 - [atmos validate stacks](/cli/commands/validate/stacks)
 
 :::
-
-<br/>
 
 ## Configure Atmos Components Validation
 
@@ -122,17 +114,13 @@ Atmos component validation allows:
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   [OPA Policies](https://www.openpolicyagent.org/)
 
-To configure Atmos components validation, complete the steps described in [Atmos Components Validation](/core-concepts/validate/components).
-
-<br/>
+To configure Atmos components validation, complete the steps described in [Custom Policy Validation](/core-concepts/validate).
 
 :::tip
 
 For more information, refer to:
 
-- [Atmos Components Validation](/core-concepts/validate/components)
-- [atmos validate component](/cli/commands/validate/component)
+- [Custom Policy Validation](/core-concepts/validate)
+- Command: [`atmos validate component`](/cli/commands/validate/component)
 
 :::
-
-<br/>

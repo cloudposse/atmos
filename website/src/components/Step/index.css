@@ -1,8 +1,6 @@
 .step {
-  margin-bottom: 20px;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
+  margin-top: 4em;
+  margin-bottom: 1em;
 }
 
 .step h2 {

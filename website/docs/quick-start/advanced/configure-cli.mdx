@@ -123,53 +123,46 @@ The `atmos.yaml` configuration file defines the following sections.
 __NOTE:__ below is the description of the sections relevant to this Quick Start guide. For the description of all the sections, refer
 to [CLI Configuration](/cli/configuration).
 
-- `base_path` - the base path for components, stacks and workflows configurations. We set it to an empty string because we've decided to use the ENV
-  var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo
+<dl>
+  <dt>`base_path`</dt>
+  <dd>The base path for components, stacks and workflows configurations. We set it to an empty string because we've decided to use the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo.</dd>
 
-- `components.terraform.base_path` - the base path to the Terraform components (Terraform root modules). As described in
-  [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory,
-  and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
-  with `components.terraform.base_path` to calculate the final path to the Terraform components
+  <dt>`components.terraform.base_path`</dt>
+  <dd>The base path to the Terraform components (Terraform root modules). As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var) with `components.terraform.base_path` to calculate the final path to the Terraform components.</dd>
 
-- `components.terraform.apply_auto_approve` - if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the
-  plan without asking for confirmation when executing `terraform apply` command
+  <dt>`components.terraform.apply_auto_approve`</dt>
+  <dd>If set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without asking for confirmation when executing `terraform apply` command.</dd>
 
-- `components.terraform.deploy_run_init` - if set to `true`, Atmos runs `terraform init` before
-  executing [`atmos terraform deploy`](/cli/commands/terraform/deploy) command
+  <dt>`components.terraform.deploy_run_init`</dt>
+  <dd>If set to `true`, Atmos runs `terraform init` before executing [`atmos terraform deploy`](/cli/commands/terraform/deploy) command.</dd>
 
-- `components.terraform.init_run_reconfigure` - if set to `true`, Atmos automatically adds the `-reconfigure` option to update the backend
-  configuration when executing `terraform init` command
+  <dt>`components.terraform.init_run_reconfigure`</dt>
+  <dd>If set to `true`, Atmos automatically adds the `-reconfigure` option to update the backend configuration when executing `terraform init` command.</dd>
 
-- `components.terraform.auto_generate_backend_file` - if set to `true`, Atmos automatically generates the Terraform backend file from the component
-  configuration when executing `terraform plan` and `terraform apply` commands
+  <dt>`components.terraform.auto_generate_backend_file`</dt>
+  <dd>If set to `true`, Atmos automatically generates the Terraform backend file from the component configuration when executing `terraform plan` and `terraform apply` commands.</dd>
 
-- `stacks.base_path` - the base path to the Atmos stacks. As described in
-  [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the stack configurations into the `stacks` directory,
-  and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var)
-  with `stacks.base_path` to calculate the final path to the stacks
+  <dt>`stacks.base_path`</dt>
+  <dd>The base path to the Atmos stacks. As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the stack configurations into the `stacks` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENN var) with `stacks.base_path` to calculate the final path to the stacks.</dd>
 
-- `stacks.included_paths` - list of file paths to the top-level stacks in the `stacks` directory to include in search when Atmos searches for the
-  stack where the component is defined when executing `atmos` commands
+  <dt>`stacks.included_paths`</dt>
+  <dd>List of file paths to the top-level stacks in the `stacks` directory to include in search when Atmos searches for the stack where the component is defined when executing `atmos` commands.</dd>
 
-- `stacks.excluded_paths` - list of file paths to the top-level stacks in the `stacks` directory to exclude from search when Atmos searches for the
-  stack where the component is defined when executing `atmos` commands
+  <dt>`stacks.excluded_paths`</dt>
+  <dd>List of file paths to the top-level stacks in the `stacks` directory to exclude from search when Atmos searches for the stack where the component is defined when executing `atmos` commands.</dd>
 
-- `stacks.name_pattern` - Atmos stack name pattern. When executing `atmos` commands, Atmos does not use the configuration file names and their
-  filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context
-  variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names can be anything, and they can be in
-  any folder in any sub-folder in the `stacks` directory. For example, when executing the `atmos terraform apply vpc -s tenant1-ue2-dev`
-  command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"` and processing
-  the tokens, Atmos knows that the first part of the stack name is `tenant`, the second part is `environment`, and the third part is `stage`. Then
-  Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are
-  defined (inline or via imports)
+  <dt>`stacks.name_pattern`</dt>
+  <dd>Atmos stack name pattern. When executing `atmos` commands, Atmos does not use the configuration file names and their filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names can be anything, and they can be in any folder in any sub-folder in the `stacks` directory. For example, when executing the `atmos terraform apply vpc -s tenant1-ue2-dev` command, the stack `tenant1-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"` and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second part is `environment`, and the third part is `stage`. Then Atmos searches for the stack configuration file (in the `stacks` directory) where `tenant: tenant1`, `environment: ue2` and `stage: dev` are defined (inline or via imports).</dd>
 
-- `workflows.base_path` - the base path to Atmos [Workflows](/core-concepts/workflows) files
+  <dt>`workflows.base_path`</dt>
+  <dd>The base path to Atmos [Workflows](/core-concepts/workflows) files.</dd>
 
-- `logs.verbose` - set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and
-  process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack
+  <dt>`logs.verbose`</dt>
+  <dd>Set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack.</dd>
 
-- `commands` - configuration for [Atmos Custom Commands](/core-concepts/custom-commands)
+  <dt>`commands`</dt>
+  <dd>Configuration for [Atmos Custom Commands](/core-concepts/custom-commands).</dd>
 
-- `schemas` - [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for:
-  - [Atmos Manifests Validation](/cli/schemas)
-  - [Atmos Components Validation](/core-concepts/validate/components)
+  <dt>`schemas`</dt>
+  <dd>See [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for: [Atmos Schema Validation](/cli/schemas), [Atmos Custom Validation](/core-concepts/validate).</dd>
+</dl>

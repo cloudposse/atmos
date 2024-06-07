@@ -4,6 +4,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Link from '@docusaurus/Link';
 import useBaseUrl from '@docusaurus/useBaseUrl'
 import Screengrab from '@site/src/components/Screengrab'
+import '../css/landing-page.css';
 
 function Home() {
   const context = useDocusaurusContext();

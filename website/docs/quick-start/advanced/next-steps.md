@@ -20,5 +20,5 @@ Here are some of the major differentiators of Atmos and topics worth exploring i
 * [Workflow Automation](/core-concepts/workflows)
 * [Custom Commands](/core-concepts/custom-commands)
 * [Component Inheritance & Multiple Inheritance](/core-concepts/stacks/inheritance)
-* [JSON Schema & OPA Policy Enforcement](/core-concepts/validate/components)
+* [JSON Schema & OPA Policy Enforcement](/core-concepts/validate)
 * [Atmos Manifest JSON Schema](/cli/schemas)
