@@ -11,9 +11,9 @@ import (
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
-	Aliases:            []string{"tf", "tofu"},
-	Short:              "Execute Terraform/OpenTofu commands",
-	Long:               `This command executes Terraform/OpenTofu commands`,
+	Aliases:            []string{"tf"},
+	Short:              "Execute Terraform commands",
+	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
