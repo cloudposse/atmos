@@ -8,9 +8,14 @@ import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 
-## Stacks
+The `stacks` section of the `atmos.yaml` defines how Atmos locates and manages your stack configurations. Think of it as the bootstrapping configuration.
+Here you can define the stack name pattern or template used to build the "slugs" and specify where to find stack files.
 
-Define the stack name pattern or template and specify where to find stacks.
+:::important
+Do not confuse this configuration with [stack configuration](/core-concepts/stacks). 
+This configuration below is defined in the `atmos.yaml` and instructs atmos where to find
+your stack configurations.
+:::
 
 <File title="atmos.yaml">
 ```yaml

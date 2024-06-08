@@ -1,10 +1,11 @@
 ---
 title: "Stage 4: Move Towards Modularization"
-description: Learn about the typical Terraform journey when not using Atmos.
-sidebar_label: "Stage 3: Modularization"
+description: In-house modules are created to avoid code duplication.
+sidebar_label: "Stage 3: Reinvent the Wheel"
 sidebar_position: 4
 id: stage-3
 ---
+import Link from '@docusaurus/Link'
 
 As developers dive deeper into Terraform's capabilities, they begin to recognize the inefficiencies of their initial approaches. 
 The move towards modularization represents a significant leap in managing infrastructure as code more effectively.
@@ -17,6 +18,16 @@ The move towards modularization represents a significant leap in managing infras
 1. These modules are "reusable" but usually just within the project itself and not written to be reused across the organization.
 2. Many assumptions are made on specific requirements of the problem at hand, and generalizing them is not of paramount concern.
 3. Lots of similar modules appear in the organization, some more maintained than others.
-4. Still, no automated tests (E.g. `terratest`).
+4. No automated tests (E.g. `terratest`).
 5. Everyone is probably an Administrator.
 :::
+
+As developers researched how to accomplish various tasks with Terraform while writing their modules, they came across one
+of [Cloud Posse's hundreds of terraform modules](https://github.com/cloudposse). Then it dawned on them that they could 
+[avoid reinventing the wheel by using these modules](/introduction/why-atmos/stage-4). 
+
+<Link
+    to="/introduction/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    Try Atmos!
+</Link>

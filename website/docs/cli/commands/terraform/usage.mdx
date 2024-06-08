@@ -25,10 +25,13 @@ atmos terraform <command> <component> --stack <stack> [options]
 
 <br />
 
-:::info
 Atmos supports all `terraform` commands and options described in [Terraform CLI reference](https://www.terraform.io/cli/commands).
 
 In addition, the `component` argument and `stack` flag are required to generate variables and backend config for the component in the stack.
+
+:::note Disambiguation
+The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the 
+HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
 :::
 
 <br />

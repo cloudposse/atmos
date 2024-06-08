@@ -1,10 +1,11 @@
 ---
-title: "Stage 8: Team Adoption"
-description: Learn about the typical Terraform journey when not using Atmos.
-sidebar_label: "Stage 8: Team Adoption"
+title: "Stage 8: Team Challenges"
+description: Team expands and begins to struggle with Terraform
+sidebar_label: "Stage 8: Team Challenges"
 sidebar_position: 9
 id: stage-8
 ---
+import Link from '@docusaurus/Link'
 
 As Terraform use grows within the team, it becomes clear that what facilitated the initial success, is insufficient for the next level of growth and teamwork. This stage is a turning point, emphasizing the need for evolved workflows, enhanced collaboration tools, and a
 more structured approach to managing scalable infrastructure projects.
@@ -18,3 +19,15 @@ more structured approach to managing scalable infrastructure projects.
 2. Developers are stepping on each other's toes. What worked when there were only a few developers no longer scales.
 3. Poor controls and lack of consistency of Terraform code. Tons of duplication.
 :::
+
+But it turns out, it wasn't that easy for everyone to run these scripts. Lot's tooling needs to be installed. 
+Some developers are on Windows, some on Mac, and others on Linux. The scripts weren't that not portable, 
+so the team is struggling to keep up with the changes. And the documentation, isn't that great either.
+
+To solve these problems, developers realize it's time to bite the bullet and [implement a CI/CD process for their Terraform code](/introduction/why-atmos/stage-9). 
+
+<Link
+    to="/introduction/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    Try Atmos!
+</Link>

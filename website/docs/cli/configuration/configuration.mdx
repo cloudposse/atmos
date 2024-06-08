@@ -21,6 +21,11 @@ Use the `atmos.yaml` configuration file to control the behavior of the [`atmos` 
 Everything in the [`atmos` CLI](/cli) is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
 be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
+Think of this file as where you [bootstrap the settings or configuration of your project](/core-concepts/projects). If you'll be using
+[terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior) 
+you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)), 
+the base path location of the components, and so forth.
+
 ## Configuration File (`atmos.yaml`)
 
 The CLI config is loaded from the following locations (from lowest to highest priority):
@@ -158,20 +163,24 @@ The `settings` section configures Atmos global settings.
     ```
 </File>
 
-- `settings.list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
-  The following strategies are supported:
+<dl>
+  <dt>`settings.list_merge_strategy`</dt>
+  <dd>
+    Specifies how lists are merged in Atmos stack manifests. 
+  
+    The following strategies are supported:
+    <dl>
+      <dt>`replace`</dt>
+      <dd>Most recent list imported wins (the default behavior).</dd>
 
-  -   `replace` - Most recent list imported wins (the default behavior).
+      <dt>`append`</dt>
+      <dd>The sequence of lists is appended in the same order as imports.</dd>
 
-  -   `append` - The sequence of lists is appended in the same order as imports.
-
-  -   `merge` - The items in the destination list are deep-merged with the items in the source list.
-               The items in the source list take precedence.
-               The items are processed starting from the first up to the length of the source list (the remaining items are not processed).
-               If the source and destination lists have the same length, all items in the destination lists are
-               deep-merged with all items in the source list.
-
-
+      <dt>`merge`</dt>
+      <dd>The items in the destination list are deep-merged with the items in the source list. The items in the source list take precedence. The items are processed starting from the first up to the length of the source list (the remaining items are not processed). If the source and destination lists have the same length, all items in the destination lists are deep-merged with all items in the source list.</dd>
+    </dl>
+  </dd>
+</dl>
 
 
 

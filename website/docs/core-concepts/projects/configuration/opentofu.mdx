@@ -1,7 +1,8 @@
 ---
-title: Using OpenTofu
+title: Configure OpenTofu
 sidebar_position: 2
-sidebar_label: Using OpenTofu
+sidebar_label: Configure OpenTofu
+id: opentofu
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl';
@@ -9,10 +10,10 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 <img width="250" align="right" src={useBaseUrl('/img/opentofu-icon.svg')} alt="OpenTofu"/>
 
 Atmos natively supports [OpenTofu](https://opentofu.org),
-similar to the way it supports [Terraform](/core-concepts/components/terraform/configuration). It's compatible with every version of `opentofu` and designed to
-work with multiple different versions of it concurrently, and can even work alongside with [HashiCorp Terraform](/core-concepts/components/terraform/configuration).
+similar to the way it supports [Terraform](/core-concepts/projects/configuration/terraform). It's compatible with every version of `opentofu` and designed to
+work with multiple different versions of it concurrently, and can even work alongside with [HashiCorp Terraform](/core-concepts/projects/configuration/terraform).
 
-Please see the complete configuration options for [Terraform](/core-concepts/components/terraform/configuration), as they are the same for OpenTofu. We'll focus
+Please see the complete configuration options for [Terraform](/core-concepts/projects/configuration/terraform), as they are the same for OpenTofu. We'll focus
 only on what's different in this document, in order to utilize OpenTofu. Keep in mind that Atmos does not handle the downloading or installation
 of OpenTofu; it assumes that any required binaries for the commands are already installed on your system.
 
@@ -35,9 +36,12 @@ components:
     base_path: "components/tofu"
 ```
 
-:::important
+:::important Disambiguation
 Atmos consistently utilizes the `terraform` keyword across all configurations, rather than `tofu` or `opentofu`.
+The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the 
+HCL-based domain-specific language and its interpreter.
 :::
+
 
 Additionally, if you prefer to run `atmos tofu` instead of `atmos terraform`, you can configure an alias.
 Just add the following configuration somewhere in the `atmos.yaml` CLI config file:

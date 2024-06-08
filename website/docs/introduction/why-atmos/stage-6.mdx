@@ -1,13 +1,15 @@
 ---
-title: "Stage 6: Refactoring for DRY Configuration"
-description: Learn about the typical Terraform journey when not using Atmos.
-sidebar_label: "Stage 6: Refactoring"
+title: "Stage 6: Optimize for DRY Configuration"
+description: Confiuration management moves to `.tfvar` files.
+sidebar_label: "Stage 6: DRY Configuration"
 sidebar_position: 7
 id: stage-6
 ---
+import Link from '@docusaurus/Link'
 
-As developers navigate the complexities of managing multiple environments, root modules, and accounts or organizations, the focus shifts from merely defining
-infrastructure as code to the overarching challenge of maintaining these expansive configurations efficiently.
+As developers navigate the complexities of managing multiple environments, root modules, and accounts or organizations, 
+the focus shifts from merely defining infrastructure as code to the overarching challenge of maintaining these expansive
+configurations efficiently.
 
 1. With numerous environments, root modules, and accounts or organizations, the challenge shifts from defining infrastructure as code to maintaining the extensive configuration of parameters that get passed to Terraform.
 2. In an effort to manage repetitive configurations, developers resort to using symlinks or other methods to link common files across projects, seeking to reduce redundancy.
@@ -20,3 +22,12 @@ infrastructure as code to the overarching challenge of maintaining these expansi
    falls outside Terraform's capabilities and needs to be solved in another way.
 3. The adoption of code generation tools to address Terraform's *perceived* limitations (e.g., [inability to](https://github.com/hashicorp/terraform/issues/19932#issuecomment-1817043906) iterate over providers](https://github.com/hashicorp/terraform/issues/19932#issuecomment-1817043906)) that often can mask underlying architectural issues as well as make automated testing complicated.
 :::
+
+Now with all these new configuration files and additional parameters to run Terraform, developers invest 
+more time in [scripting and automation](/introduction/why-atmos/stage-7) to manage these configurations.
+
+<Link
+    to="/introduction/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    Try Atmos!
+</Link>

@@ -1,7 +1,7 @@
 ---
-title: Define Component Configurations in Stacks
+title: Configuring Components in Stacks
 sidebar_position: 2
-sidebar_label: Define Components
+sidebar_label: Configure Components
 id: define-components
 ---
 
@@ -61,80 +61,88 @@ components:
 
 ### Component Attributes
 
-#### vars
+<dl>
 
-The `vars` section is a free-form map. Use [component validation](/core-concepts/validate) to enforce policies.
+  <dt>`vars` (optional)</dt>
+  <dd>The `vars` section is a free-form map. Use [component validation](/core-concepts/validate) to enforce policies.</dd>
 
-#### vars.namespace
+  <dt>`vars.namespace` (optional)</dt>
+  <dd>
+  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
-This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
+  The namespace of all stacks. Typically, there will be one namespace for the organization.
 
-The namespace of all stacks. Typically, there will be one namespace for the organization.
+  Example:
 
-Example:
+  ```yaml
+  vars:
+    namespace: acme
+  ```
+  </dd>
 
-```yaml
-vars:
-  namespace: acme
-```
+  <dt>`vars.tenant` (optional)</dt>
+  <dd>
+  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
-#### vars.tenant
+  In a multi-tenant configuration, the tenant represents a single `tenant`. By convention, we typically
+  recommend that every tenant have its own Organizational Unit (OU).
 
-This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
+  Example:
 
-In a multi-tenant configuration, the tenant represents a single `tenant`. By convention, we typically
-recommend that every tenant have its own Organizational Unit (OU).
+  ```yaml
+  vars:
+    tenant: platform
+  ```
+  </dd>
 
-Example:
+  <dt>`vars.stage` (optional)</dt>
+  <dd>
+  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
-```yaml
-vars:
-  tenant: platform
-```
+  The `stage` is where workloads run. See our [glossary](/terms) for disambiguation.
 
-#### vars.stage
+  Example:
 
-This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
+  ```yaml
+  vars:
+    # Production stage
+    stage: prod
+  ```
+  </dd>
 
-The `stage` is where workloads run. See our [glossary](/terms) for disambiguation.
+  <dt>`vars.environment` (optional)</dt>
+  <dd>
+  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
 
-Example:
+  The `environment` is used for location where things run. See our [glossary](/terms) for disambiguation.
 
-```yaml
-vars:
-  # Production stage
-  stage: prod
-```
+  Example:
 
-#### vars.environment
+  ```yaml
 
-This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
+  vars:
+    # us-east-1
+    environment: ue1
+  ```
+  </dd>
 
-The `environment` is used for location where things run. See our [glossary](/terms) for disambiguation.
+  <dt>`metadata` (optional)</dt>
+  <dd>The `metadata` section extends functionality of the component.</dd>
 
-Example:
+  <dt>`settings`</dt>
+  <dd>The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations).</dd>
 
-```yaml
-
-vars:
-  # us-east-1
-  environment: ue1
-```
-
-#### metadata
-
-The `metadata` section extends functionality of the component.
-
-#### settings
-
-The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations).
+</dl>
 
 ### Types of Components
 
 The type of component is expressed in the `metadata.type` parameter of a given component configuration.
 
 There are two types of components:
+<dl>
+  <dt>`real`</dt>
+  <dd>is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance that can be provisioned</dd>
 
-- `real` - is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance that can be provisioned
-- `abstract` - a component configuration, which cannot be instantiated directly. The concept is borrowed
-  from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming
+  <dt>`abstract`</dt>
+  <dd>a component configuration, which cannot be instantiated directly. The concept is borrowed from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming</dd>
+</dl>

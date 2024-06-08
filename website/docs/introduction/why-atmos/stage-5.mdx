@@ -1,10 +1,11 @@
 ---
-title: "Stage 5: Multiple Root Modules"
-description: Learn about the typical Terraform journey when not using Atmos.
-sidebar_label: "Stage 5: Multiple Root Modules"
+title: "Stage 5: Refactor Root Modules"
+description: Root modules are refactored into smaller, more manageable units.
+sidebar_label: "Stage 5: Refactor Root Modules"
 sidebar_position: 6
 id: stage-5
 ---
+import Link from '@docusaurus/Link'
 
 Developers recognize the pitfalls of having all environments in one root module. After having refactored their code heavily into modules, Developers realize it was a bad idea to define dev, staging and prod, all in the same root module. Developers realize terraform gets very slow and brittle when a root module is too large.
 
@@ -21,3 +22,14 @@ Developers recognize the pitfalls of having all environments in one root module.
 2. Performance becomes a concern with overly large root modules.
 3. Very poor reusability across the organization due to the "snowflake" nature of the root modules.
 :::
+
+After refactoring to smaller "root modules", now there are some dependencies between them, including shared configurations 
+that were once easily passed between resources, but are now variable inputs. 
+
+Developers hate repeating themselves, so attention shifts to [DRY Configuration](/introduction/why-atmos/stage-6).
+
+<Link
+    to="/introduction/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    Try Atmos!
+</Link>

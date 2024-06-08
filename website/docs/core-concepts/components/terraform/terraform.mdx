@@ -4,7 +4,6 @@ sidebar_position: 3
 sidebar_label: Terraform Root Modules
 description: Learn why Atmos can change how you think about the Terraform modules that you use to build your infrastructure. 
 id: terraform
-slug: /terraform
 ---
 import DocCardList from "@theme/DocCardList";
 import KeyPoints from '@site/src/components/KeyPoints';
@@ -26,7 +25,6 @@ To make them highly reusable, they should serve a "single purpose" so that they 
 unit of infrastructure managed in the software development lifecycle (SDLC).
 Finally, you will connect your components together using stacks, so that everything comes together. 
 
-
 In this tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components.
 
 You're about discover a new way to think about terraform... 
@@ -36,6 +34,12 @@ You're about discover a new way to think about terraform...
 Terraform is a command-line utility or interpreter (like Perl or Ruby), that processes infrastructure configurations 
 written in ["HashiCorp's Configuration Language" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning. 
 Its chief role is to delineate and structure infrastructure definitions. 
+
+:::note Disambiguation
+The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the 
+HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
+:::
+
 
 <details>
 <summary>Fun Fact!</summary>
@@ -136,6 +140,37 @@ HashiCorp primarily offers foundational guidance on Terraform and pushes compani
     Terraform natively supports passing information between "root modules" without any additional tooling,
     a capability we rely on in Atmos.</dd>
 </dl>
+
+
+## Example: Provision Terraform Component
+
+To provision a Terraform component using the `atmos` CLI, run the following commands in the container shell:
+
+```console
+atmos terraform plan eks --stack=ue2-dev
+atmos terraform apply eks --stack=ue2-dev
+```
+
+where:
+
+- `eks` is the Terraform component to provision (from the `components/terraform` folder)
+- `--stack=ue2-dev` is the stack to provision the component into
+
+Short versions of all command-line arguments can be used:
+
+```console
+atmos terraform plan eks -s ue2-dev
+atmos terraform apply eks -s ue2-dev
+```
+
+The `atmos terraform deploy` command executes `terraform apply -auto-approve` to provision components in stacks without
+user interaction:
+
+```console
+atmos terraform deploy eks -s ue2-dev
+```
+
+
 
 ## Terraform Usage with Atmos
 

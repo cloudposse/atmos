@@ -1,0 +1,20 @@
+---
+title: Stacks Best Practices
+sidebar_position: 1
+sidebar_label: Stacks
+description: Learn the opinionated "Best Practices" for using Stacks with Atmos 
+id: stacks
+---
+
+## Best Practices
+
+:::tip
+Remember to adhere to the laws physics. All other laws are meant broken.
+:::
+
+- **Treat Stack Templates like an Escape Hatch** Apply it carefully and only when necessary. Using templates instead of inheritance can make stack configurations complex and hard to manage. Be careful using stack templates together with the component factory pattern.
+- **Avoid Too Many Levels of Imports** It's very difficult for others to follow relationships when there are too many nested levels and overrides.
+- **Balance DRY Principles with Configuration Clarity** Avoid overly DRY configuration as it leads to complexity rashes. Sometimes repeating configuration is beneficial for maintenance and clarity.
+- **Reserve Code Generation for Stack Configuration** While we generally advise against using code generation for application logic (components), it's beneficial for creating configurations where appropriate, such as developer environments and SaaS tenants. These configurations ought to be committed.
+- **Use Mixin Pattern for Snippets of Stack Configuration** Employ the mixin pattern for clarity when there there is brief configuration snippets that are reusable. Steer clear of minimal stack configurations simply for the sake of DRYness as it frequently leads to too many levels of imports.
+

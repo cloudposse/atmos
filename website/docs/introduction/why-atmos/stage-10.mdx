@@ -1,50 +1,57 @@
 ---
 title: "Stage 10: Terraform Bankruptcy 💥"
-description: Learn about the typical Terraform journey when not using Atmos.
+description: Teams start looking for alternatives out of frustration.
 sidebar_label: "Stage 10: Terraform Bankruptcy 💥"
 sidebar_position: 11
 id: stage-10
 ---
 import Link from '@docusaurus/Link'
+import KeyPoints from '@site/src/components/KeyPoints'
 
-At this point, you might be ready to thow in the towel on Terraform. You start looking for alternatives like [CDK](https://aws.amazon.com/cdk/),
+At this point, developers might be ready to thow in the towel on Terraform. 
+They question the hype and wonder if it's all worth it.
+
+They might even start looking for alternatives like [CDK](https://aws.amazon.com/cdk/),
 [CDK TF](https://developer.hashicorp.com/terraform/cdktf), [Pulumi](https://www.pulumi.com/), 
-or even maybe [Crossplane](https://www.crossplane.io/).
+or platforms like [Crossplane](https://www.crossplane.io/).
 
 As the complexity and scale of Terraform projects reach a tipping point, developers face a stark realization.
-Questions arise about the inherent difficulties of managing sprawling infrastructure code bases using Terraform,
-leading to a moment of reckoning. Some might question if Terraform is even the right tool.
+This wasn't easy. Questions arise about the inherent difficulties of managing sprawling infrastructure code bases
+using Terraform, leading to a moment of reckoning. Some might question if Terraform is still the right tool for them.
 
 :::danger
 
-- Scripts all over the place that call terraform
-- Inconsistent conventions on what is a module, root module and when to combine them
-- Root modules that need to be provisioned in a specific order to bring them up and down, often necessitating the use of `-target`
-- No way to define dependencies between root modules
-- Passing state between root modules is inconsistent
-- Automating the terraform in CI/CD is oversimplified, lacking project-level locks and `planfile` retrieval
-- Inconsistent conventions or a total lack of conventions
+- Scripts all over the place that call Terraform
+- No clear separation of concerns
+- Inconsistent conventions, or a total lack of conventionss
+- Disorganized project structures
+- Interdependencies that complicate deployment processes
+- Unsafe CI/CD practices and hardcoded credentials
 - Incomplete or out-of-date documentation
 - **No one understands how it all works anymore ⚠️**
 
 :::
 
-**But the problem isn't Terraform. The problem is how you are using Terraform.**
+## But the problem isn't Terraform. 
 
-Changing the tool, will not change the outcome. Even if you decide to switch to a different tool, you will face the same challenges, 
-just with a different set of limitations.
+**The problem is how they are using Terraform.**
 
-What you really need is a strategy for approaching cloud architecture that translates to how you manage the Configuration
- and design all the components it comprises.
+Changing the tool, will not change the outcome. Even if they decide to switch to a different tool, 
+they will face the same challenges, just with a different set of limitations.
 
-Most developers never write their own framework; they use one that’s been established and proven by countless enterprises and
-supported by a community. Why should we expect DevOps teams to be equipped and prepared to design an extensible framework when
-they’ve never done it before? 
+Terraform is not a framework. It's a tool. One that can be used to build a framework. Just as Docker is not Kubernetes.
 
-A well-designed framework does not limit you; it enables you. It doesn’t hold you back; it empowers you.
+What they really need is a coherent strategy with some rigor for approaching cloud architecture that translates to
+how they manage the configuration and design all the components that comprise their infrastructure.
+
+It's not a surprise that teams fail with Terraform. Most developers never write their own framework from scratch; instead, they use one
+that’s been well-established and proven by countless enterprises and supported by a community. So why should we expect DevOps teams 
+to be equipped and prepared to design an extensible framework when they’ve never done it before? 
+
+After a little bit of Googling, searching Reddit and asking around, they then [stumble upon Atmos](/introduction/why-atmos/nirvana).
 
 <Link
     to="/introduction/why-atmos/nirvana"
     className="button button--lg button--primary">
-    MAKE IT STOP!
+    Try Atmos!
 </Link>
