@@ -499,6 +499,69 @@
             "region": {
               "type": "string"
             },
+            "assume_role": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role_arn": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "duration": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "external_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "policy": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "policy_arns": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "session_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "source_identity": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "tags": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true
+                },
+                "transitive_tag_keys": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
             "role_arn": {
               "type": [
                 "string",

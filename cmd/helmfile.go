@@ -13,7 +13,7 @@ var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
 	Aliases:            []string{"hf"},
 	Short:              "Execute 'helmfile' commands",
-	Long:               `This command runs helmfile commands`,
+	Long:               `This command runs Helmfile commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration

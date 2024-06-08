@@ -441,21 +441,6 @@ func ProcessStacks(
 		configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = configAndStacksInfo.ComponentFromArg
 	}
 
-	// Add component info, including Terraform config
-	componentInfo := map[string]any{}
-	componentInfo["component_type"] = configAndStacksInfo.ComponentType
-
-	if configAndStacksInfo.ComponentType == "terraform" {
-		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
-		componentInfo["component_path"] = componentPath
-		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
-		componentInfo["terraform_config"] = terraformConfiguration
-	} else if configAndStacksInfo.ComponentType == "helmfile" {
-		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
-	}
-
-	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
-
 	// `sources` (stack config files where the variables and other settings are defined)
 	sources, err := ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
 	if err != nil {
@@ -569,11 +554,6 @@ func ProcessStacks(
 		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
 
-	// Process `command`
-	//if len(configAndStacksInfo.Command) == 0 {
-	//	configAndStacksInfo.Command = configAndStacksInfo.ComponentType
-	//}
-
 	// Process the ENV variables from the `env` section
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
@@ -615,6 +595,21 @@ func ProcessStacks(
 	} else {
 		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
 	}
+
+	// Add component info, including Terraform config
+	componentInfo := map[string]any{}
+	componentInfo["component_type"] = configAndStacksInfo.ComponentType
+
+	if configAndStacksInfo.ComponentType == "terraform" {
+		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
+		componentInfo["component_path"] = componentPath
+		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+		componentInfo["terraform_config"] = terraformConfiguration
+	} else if configAndStacksInfo.ComponentType == "helmfile" {
+		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
+	}
+
+	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
 	return configAndStacksInfo, nil
 }

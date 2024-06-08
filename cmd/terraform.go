@@ -12,8 +12,8 @@ import (
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
 	Aliases:            []string{"tf"},
-	Short:              "Execute 'terraform' commands",
-	Long:               `This command executes 'terraform'' commands`,
+	Short:              "Execute Terraform commands",
+	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
