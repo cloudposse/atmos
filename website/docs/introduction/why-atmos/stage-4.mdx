@@ -1,0 +1,25 @@
+---
+title: "Stage 4: Adoption of Open Source Modules"
+description: Learn about the typical Terraform journey when not using Atmos.
+sidebar_label: "Stage 4: Open Source Modules"
+sidebar_position: 5
+id: stage-4
+---
+
+Developers begin their Terraform journey often by crafting their own modules, initially overlooking the extensive ecosystem of pre-existing 
+modules, such [Cloud Posse's terraform modules](https://github.com/cloudposse) ecosystem.
+
+1. Developers, initially crafting bespoke modules, discover hundreds of freely available open-source Terraform modules.
+2. With the recognition of high-quality, well-maintained open-source modules, developers start to replace their custom solutions (like VPCs and clusters) with those from the community, streamlining their infrastructure code.
+3. The switch to open-source modules often leads to pull requests that dramatically reduce the complexity and lines of code,
+   sometimes cutting out hundreds or even thousands of lines, to the team's astonishment and delight.
+
+:::warning New Problems
+1. How will they keep their modules current and ensure they meet certain policies for the organization?
+2. Which of the XYZ modules should they pick? For example, there are dozens of VPC modules. What if 2 different teams pick different ones?
+3. The quality of open-source modules varies drastically. 
+   - What if the modules are abandoned? 
+   - What if they aren't updated to support the latest versions? 
+   - What if they don't accept pull requests?
+   - What if two modules conflict with each other?
+:::

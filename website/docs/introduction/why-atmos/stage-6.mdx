@@ -1,0 +1,22 @@
+---
+title: "Stage 6: Refactoring for DRY Configuration"
+description: Learn about the typical Terraform journey when not using Atmos.
+sidebar_label: "Stage 6: Refactoring"
+sidebar_position: 7
+id: stage-6
+---
+
+As developers navigate the complexities of managing multiple environments, root modules, and accounts or organizations, the focus shifts from merely defining
+infrastructure as code to the overarching challenge of maintaining these expansive configurations efficiently.
+
+1. With numerous environments, root modules, and accounts or organizations, the challenge shifts from defining infrastructure as code to maintaining the extensive configuration of parameters that get passed to Terraform.
+2. In an effort to manage repetitive configurations, developers resort to using symlinks or other methods to link common files across projects, seeking to reduce redundancy.
+3. Code Generation is adopted to overcome *perceived* limitations of Terraform (when, in fact it's often a flaw in the architecture of the project).
+
+:::warning New Problems
+1. For every new application developed, the automatic response is to create bespoke root modules for specific needs, despite
+   reusing child modules, raising the question of why a new root module is necessary for each application in the first place.
+2. As the number of root modules grows, the Terraform state gets divided by component. Managing these inter-component dependencies
+   falls outside Terraform's capabilities and needs to be solved in another way.
+3. The adoption of code generation tools to address Terraform's *perceived* limitations (e.g., [inability to](https://github.com/hashicorp/terraform/issues/19932#issuecomment-1817043906) iterate over providers](https://github.com/hashicorp/terraform/issues/19932#issuecomment-1817043906)) that often can mask underlying architectural issues as well as make automated testing complicated.
+:::

@@ -6,10 +6,12 @@ description: Components are opinionated building blocks of infrastructure as cod
 ---
 
 Components are opinionated, self-contained building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case. 
+Examples of componets are things like VPCs, Clusters, Databases, Buckets, Load Balancers, etc. But it's not limited to this. They can be anything.
 Those Components are then configured inside of one or more [Stacks](/core-concepts/stacks).
 
-The most common use-case for Atmos is using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module) as components in stacks.
-But Atmos was designed to be tool-agnostic, and [custom commands](/core-concepts/custom-commands) can be made to work with Atmos.
+The most common use-case for Atmos is using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module)
+as components that are configured in stacks. 
+But since Atmos was designed to be tool-agnostic, and [custom commands](/core-concepts/custom-commands) can be made to work with Atmos.
 
 :::tip
 Components are things like [Terraform "root" modules](https://developer.hashicorp.com/terraform/language/modules#the-root-module), Helm Charts, Dockerfiles, or any fundamental building block of infrastructure.

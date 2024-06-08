@@ -1,0 +1,25 @@
+---
+title: "Stage 9: DIY CI/CD with Terraform"
+description: Learn about the typical Terraform journey when not using Atmos.
+sidebar_label: "Stage 9: CI/CD Terraform"
+sidebar_position: 10
+id: stage-9
+---
+
+With the greater adoption of Terraform and DevOps principles, Developers are now using Terraform daily. They decide to use the same patterns for deploying applications with Terraform. Only Terraform is exceptionally different from deploying containerized apps. There are no rollbacks. It's more akin to performing database migrations without transactions (YOLO!). It's a scary business. Controls are needed.
+
+1. Developers stick their scripts in a CI/CD pipeline. 
+2. Pipeline posts comments for each commit on every PR containing the raw output of the `terraform plan`, to validate what *should* happen during `terraform apply`.
+3. On merge to main, `terraform apply` is run *without* a planfile. 🤞
+
+:::warning New Problems
+- Still using Jenkins. 🧌🔥
+- CI/CD system promoted to *God Mode*. 🤞 Static administrative cloud credentials are exposed as environment variables, ripe for exfiltration
+- No visibility into the impact of the changes across multiple environments at the same time
+- Inadequate security mechanisms creating a critical risk of catastrophic business loss
+- Lack of plan file storage means incorrect implementation of plan/apply workflows
+- Missing project-level locks, so PRs can easily clobber each other, rolling back state.
+- Entire organization is spammed by GitHub comments every time someone pushes a commit, and a plan is run on the PR
+- No recourse for when a `terraform apply` fails
+- Automated drift detection is needed to ensure environments converge with what's in version control
+:::

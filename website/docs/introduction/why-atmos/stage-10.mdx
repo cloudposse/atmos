@@ -1,0 +1,50 @@
+---
+title: "Stage 10: Terraform Bankruptcy 💥"
+description: Learn about the typical Terraform journey when not using Atmos.
+sidebar_label: "Stage 10: Terraform Bankruptcy 💥"
+sidebar_position: 11
+id: stage-10
+---
+import Link from '@docusaurus/Link'
+
+At this point, you might be ready to thow in the towel on Terraform. You start looking for alternatives like [CDK](https://aws.amazon.com/cdk/),
+[CDK TF](https://developer.hashicorp.com/terraform/cdktf), [Pulumi](https://www.pulumi.com/), 
+or even maybe [Crossplane](https://www.crossplane.io/).
+
+As the complexity and scale of Terraform projects reach a tipping point, developers face a stark realization.
+Questions arise about the inherent difficulties of managing sprawling infrastructure code bases using Terraform,
+leading to a moment of reckoning. Some might question if Terraform is even the right tool.
+
+:::danger
+
+- Scripts all over the place that call terraform
+- Inconsistent conventions on what is a module, root module and when to combine them
+- Root modules that need to be provisioned in a specific order to bring them up and down, often necessitating the use of `-target`
+- No way to define dependencies between root modules
+- Passing state between root modules is inconsistent
+- Automating the terraform in CI/CD is oversimplified, lacking project-level locks and `planfile` retrieval
+- Inconsistent conventions or a total lack of conventions
+- Incomplete or out-of-date documentation
+- **No one understands how it all works anymore ⚠️**
+
+:::
+
+**But the problem isn't Terraform. The problem is how you are using Terraform.**
+
+Changing the tool, will not change the outcome. Even if you decide to switch to a different tool, you will face the same challenges, 
+just with a different set of limitations.
+
+What you really need is a strategy for approaching cloud architecture that translates to how you manage the Configuration
+ and design all the components it comprises.
+
+Most developers never write their own framework; they use one that’s been established and proven by countless enterprises and
+supported by a community. Why should we expect DevOps teams to be equipped and prepared to design an extensible framework when
+they’ve never done it before? 
+
+A well-designed framework does not limit you; it enables you. It doesn’t hold you back; it empowers you.
+
+<Link
+    to="/introduction/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    MAKE IT STOP!
+</Link>

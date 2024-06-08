@@ -1,0 +1,25 @@
+---
+title: "Stage 2: The Monolithic Root Module (aka Terralith)"
+description: Learn about the typical Terraform journey when not using Atmos.
+sidebar_label: "Stage 2: Terraliths"
+sidebar_position: 3
+id: stage-2
+---
+
+As developers grow more comfortable with Terraform, they often transition to a more ambitious approach of automating everything.
+
+This results in creating a monolithic "root module", also known as a Terralith. This stage is characterized by an expansive,
+all-encompassing Terraform configuration that attempts to manage every aspect of the infrastructure within a single module.
+
+1. Developers begin by composing a single root module that continuously expands.
+2. Define all environments as code (dev, staging, production) within the single Terraform root module.
+3. Extensive use of feature flags for everything (e.g. `prod_cluster_size`, `staging_cluster_size`, etc.)
+
+:::warning New Problems
+1. Massive blast radius for every change. It's literally scary to apply the changes, because anything can go wrong.
+2. Brittle and prolonged plan/apply cycles, often disrupted by transient errors, expiring credentials and API rate limits, require frequent, manual retries.
+3. Large root modules become more complicated, often necessitating the use of targeted applies (e.g. `terraform apply -target`) as a workaround for cycles.
+4. Far from DRY. Significant code duplication. Tons parameters are used for toggling settings for each environment within the same root module.
+5. No practical way to separate responsibilities by team within the root module.
+6. Testing every parameter combination is impossible.
+:::

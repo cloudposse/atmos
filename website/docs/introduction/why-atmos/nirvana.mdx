@@ -1,0 +1,67 @@
+---
+title: Nirvana
+description: Learn about the typical Terraform journey when not using Atmos.
+sidebar_label: Nirvana
+sidebar_position: 12
+id: nirvana
+---
+import Link from '@docusaurus/Link'
+
+## The Atmos Difference
+
+Atmos lets you model the configuration of your cloud architecture in a way that makes logical sense. 
+You can then develop components using any toolchain you want, with Terraform among them, to implement
+the components of your infrastructure. This is why it’s not a Terraform problem but a data modeling and
+configuration modeling problem. For some reason, the same rigor that has been applied to software applications
+for decades is not being applied to DevOps tooling. All we’ve done is add a little bit of rigor. 
+That’s what Atmos brings to the table with our framework, patterns, best practices, and tooling.
+
+What you really need is a strategy for approaching cloud architecture that translates to how you manage your configuration
+and design all the components it comprises. Most developers never write their own framework; they use one that’s been
+established and proven by countless enterprises, companies, and community members. Why should we expect DevOps teams
+to be equipped and prepared to design an extensible framework when they’ve never done it before? 
+
+A well-designed framework does not limit you; it enables you. It doesn’t hold you back; it empowers you.
+
+## What's the Solution? *Hello Atmos!* 👽
+
+😎 Good news! Atmos supports all of this out of the box and exactly what you **cannot** achieve with "standalone" (a.k.a. community edition) 
+Terraform and [none of the alternatives](/reference/alternatives) can do it all. Plus, there's no need to abandon Terraform—it's actually
+a great tool, and Atmos enhances its strengths.
+
+Here's what you can expect after adopting Atmos:
+
+- **Consistent Invocation:** Atmos ensures Terraform invokes the same way every time; no more need to pass complicated arguments to `terraform`. This removes guesswork and confusion across teams with what parameters to pass and what order of operations things need to be invoked.
+- **Seamless Initialization:** Backend? Modules? Prep steps? Atmos makes sure everything is ready before you run `terraform apply`.
+- **Separation of Configuration from Code** Unlike most alternatives, Atmos cleanly separates the configuration into Stacks, separate from Components (terraform root modules). This ensure root modules remain highly reusable across teams and promotes testing.
+- **Enables Efficient Configuration:** Borrowing from the Kustomize playbook, Atmos makes configurations streamlined. It employs imports, hierarchy, inheritance, and deep merging, thus establishing company-wide standards effortlessly.
+- **Environment Consistency:** With a nod to helmfile, Atmos ensures environments remain consistent, providing a toolkit that ensures reliability, no matter where you deploy.
+- **Ensures Structured Modularity:** With Atmos, write Terraform configurations modularly using stacks and catalogs.
+  This not only ensures the code is reusable but also that it's efficient.
+- **Promotes Reusable Building Blocks:** Set up a robust library of proven and easily reusable components (terraform root modules). Once done, there's minimal need for extra HCL work. This reduces the number of custom root modules needed in an organization and facilitates integration testing.
+- **Makes Composition Easier:** Think [Docker Compose](https://docs.docker.com/compose/intro/features-uses/), but for Terraform. Atmos seamlessly integrates root modules into a stack manifest.
+- **Stack Organization:** Keeping Terraform configurations organized is a breeze with Atmos's stack-based approach for combining components to build your "Stack". It's the solution for those multi-config puzzles.
+- **Simplifies State Backends:** Atmos can generate a backend configuration dynamically based on the context within its stack.
+- **OPA Policy Controls:** Atmos integrates [OPA](https://www.openpolicyagent.org/), offering high-level policy enforcement based on configuration values rather than the intricate HCL code details. This enhancement doesn't negate using tools like `tfsec`, `tflint`, or `checkov`, since none function at this elevated capacity.
+- **Dependency Coordination:** Atmos takes the lead, ensuring Terraform components that depend on each other play nicely.
+- **Standardized Workflows:** Workflows capture the intricate details of how to invoke commands, so it's easy to codify routine operations, the same way developers use `Makefiles` (or, more recently, [`Gotask`](https://github.com/go-task/task))
+- **Turnkey CI/CD:** Integrate with [GitHub Actions](https://atmos.tools/integrations/github-actions), [Spacelift](https://atmos.tools/integrations/spacelift), or [Atlantis](https://atmos.tools/integrations/atlantis) seamlessly. With Atmos, you can avoid the steep costs associated with commercial solutions that charge based on the number of resources under management, self-hosted runners, or users.
+
+Oh yes, and it's entirely free and truly Open Source (licensed APACHE2) like [everything else Cloud Posse builds](https://github.com/cloudposse)! 🔥
+
+## Where to Go From Here
+
+Now that we're all on the same page, start your first an Atmos project in 30 minutes! 
+Try out our [Simple](/quick-start/simple) Quick Start or delve deeper into the [syntax and concepts](/core-concepts) used by Atmos.
+
+<Link
+    to="/quick-start/simple"
+    className="button button--lg button--primary">
+    Try our Simple Tutorial
+</Link>
+
+<Link
+    to="/core-concepts"
+    className="button button--lg button--outline button--primary ml20">
+    Learn Atmos Concepts
+</Link>

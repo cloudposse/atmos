@@ -1,0 +1,23 @@
+---
+title: "Stage 5: Multiple Root Modules"
+description: Learn about the typical Terraform journey when not using Atmos.
+sidebar_label: "Stage 5: Multiple Root Modules"
+sidebar_position: 6
+id: stage-5
+---
+
+Developers recognize the pitfalls of having all environments in one root module. After having refactored their code heavily into modules, Developers realize it was a bad idea to define dev, staging and prod, all in the same root module. Developers realize terraform gets very slow and brittle when a root module is too large.
+
+1. Initiate the split of the monolithic root module into smaller, more manageable units while incorporating additional feature flags
+   and expanding configuration management through `.tfvars` files.
+2. Move towards a structure where multiple root modules are used, each one precisely aligned with specific environments
+   to enhance maintainability and performance.
+3. Recognize the efficiency gains and increased adaptability that came from segregating large root modules, leading to quicker
+   Terraform operations and easier adjustments per environment.
+
+
+:::warning New Problems
+1. Increased feature flags and configuration management using `.tfvars`.
+2. Performance becomes a concern with overly large root modules.
+3. Very poor reusability across the organization due to the "snowflake" nature of the root modules.
+:::

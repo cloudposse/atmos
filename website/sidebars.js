@@ -35,7 +35,8 @@ module.exports = {
             className: 'sidebar-title',
             collapsible: false,
             collapsed: false,
-            items: [ 'community/community', 'community/slack', 'community/office-hours' ]
+            link: {type: 'doc', id: 'community/community'},
+            items: [ 'community/slack', 'community/office-hours' ]
         },
         {
           type: 'category',
