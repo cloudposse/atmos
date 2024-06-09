@@ -7,7 +7,7 @@ id: inheritance
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 
-Component Inheritance is the ability to combine multiple configurations through ordered deep-merging of configurations. 
+Inheritance provides a template-free way to customize Stack configurations. When combined with imports, it provides the ability to combine multiple configurations through ordered deep-merging of configurations. Inheritance is how you manage configuration variations, without resorting to [templating](/core-concepts/stacks/templates).
 
 ## Overview
 
@@ -21,6 +21,14 @@ Atmos supports the following concepts and principles of **Component-Oriented Pro
 
 These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
 and [`metadata`](/core-concepts/stacks/define-components#metadata) component's configuration section.
+
+:::info
+The mechanics of mixins and inheritance apply only to the [Stack](/core-concepts/stacks) configurations. Atmos knows nothing about the underlying
+components (e.g. terraform), and does not magically implement inheritance for HCL. However, by designing highly reusable components that do one thing
+well, we're able to achieve many of the same benefits.
+:::
+
+
 
 <details>
 <summary>Advanced Concepts</summary>

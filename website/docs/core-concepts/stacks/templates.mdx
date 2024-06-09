@@ -2,15 +2,18 @@
 title: Stack Manifest Templating
 sidebar_position: 7
 sidebar_label: Template Configurations
-id: templating
+id: templates
 ---
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import PillBox from '@site/src/components/PillBox';
+import Intro from '@site/src/components/Intro';
 
 <PillBox>Advanced</PillBox>
 
-Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
+<Intro>
+Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests. Use functions to customize Stack configurations _prior_ to interpretting them as YAML.
+</Intro>
 
 In `Go` templates, you can use the following functions and datasources:
 

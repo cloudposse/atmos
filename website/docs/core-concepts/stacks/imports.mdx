@@ -6,18 +6,22 @@ id: imports
 ---
 import File from '@site/src/components/File'
 
-Imports are how we reduce duplication of configurations by creating reusable baselines. The imports should be thought of almost like blueprints. Once
-a reusable catalog of Stacks exists, robust architectures can be easily created simply by importing those blueprints.
+As your stacks grow taller with more and more component configurations, it often makes sense to start splitting them apart into different files. That's why you might want to take advantage of imports. This helps you keep your stack files smaller so they are easier to understand, while reuseing their configuration in multiple places.
+
+Each import overlays on top of others, and gets deep merged. Then we support [inheritance](/core-concepts/stacks/inheritance) and overrides to manage configuration variations, all without relying on templating. When none of these other methods work for your use-case, we provide an "Escape Hatch" with [templating](/core-concepts/stacks/templates).
+
+## Use cases
+- **DRY Configuration:** Imports are how we reduce duplication of configurations. 
+- **Configuration Blueprints:** Define reusable baselines or "defaults". Think of them almost as blueprints, that you can reuse anytime you want some particular combination of components in a stack. 
+- **Service Catalogs:** Provide a "Service Catalog" for your team with reusable configurations that anyone can use to easily compose architectures with golden-path configurations.
+
+:::warning Pitfalls!
+Imports can make your configurations harder to understand if overused. Review our [best practices](/best-practices/stacks) for practical guidance.
+:::
 
 Imports may be used in Stack configurations together with [inheritance](/core-concepts/stacks/inheritance)
 and [mixins](/core-concepts/stacks/mixins) to produce an exceptionally DRY configuration in a way that is logically organized and easier to maintain
 for your team.
-
-:::info
-The mechanics of mixins and inheritance apply only to the [Stack](/core-concepts/stacks) configurations. Atmos knows nothing about the underlying
-components (e.g. terraform), and does not magically implement inheritance for HCL. However, by designing highly reusable components that do one thing
-well, we're able to achieve many of the same benefits.
-:::
 
 ## Configuration
 

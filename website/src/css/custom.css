@@ -162,6 +162,25 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
     color: #ff8a8a
 }
 
+/* disable left border on adminitions in dark mode */
+.theme-admonition {
+    border-left: none;
+    padding: 2em;
+    border-radius: 1.3em;
+    margin-top: 2.5em;
+    margin-bottom: 2.5em;
+}
+
+html[data-theme='dark'] .theme-admonition  > .admonitionHeading_node_modules-\@docusaurus-theme-classic-lib-theme-Admonition-Layout-styles-module:not(:last-child) {
+    margin-bottom: 1em;
+    font-size: 1.2em;
+}
+
+html[data-theme='dark'] .admonitionContent_node_modules-\@docusaurus-theme-classic-lib-theme-Admonition-Layout-styles-module > ul:last-child {
+    margin-bottom: 0;
+    padding-left: 1.6em;
+}
+
 article ul >li, article ol > li {
     margin-bottom: 1em;
 }
@@ -382,6 +401,7 @@ dd p {
 }
 
 dd {
+
     margin-bottom: 1em;
 }
 
@@ -416,4 +436,18 @@ dd.disambiguation a {
 
 .markdown > a.button:last-child {
     margin-bottom: 1em !important;
+}
+
+
+.docusaurus-mermaid-container {
+    margin-top: 3em;
+}
+
+.docusaurus-mermaid-container:not(:last-child):not(:has(+ i)) {
+    margin-bottom: 3em;
+}
+
+.docusaurus-mermaid-container + i {
+    display: block;
+    margin-bottom: 1em;
 }

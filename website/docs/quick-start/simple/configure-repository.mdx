@@ -1,11 +1,11 @@
 ---
-title: Setup Project Repository
+title: Start Your Project
 sidebar_position: 1
-sidebar_label: Setup Project Repository
+sidebar_label: Start Your Project
 ---
 import KeyPoints from '@site/src/components/KeyPoints';
 
-The repository structure for an Atmos project is designed to organize your infrastructure effectively on the file system. 
+The folder structure for an Atmos project is designed to organize your infrastructure effectively on the file system. 
 It separates configuration from code, ensuring your Terraform root modules are distinct and reusable. 
 While you can customize the structure using the `atmos.yaml` configuration, we will start with a simple layout to get you started.
 
@@ -74,6 +74,15 @@ Atmos requires a few common directories and files, which need to be configured i
   <dd>Atmos vendor config file</dd>
 
 </dl>
+
+:::tip
+
+The source code for this Quick Start guide can be found in the [Atmos repo](https://github.com/cloudposse/atmos/tree/master/examples/demo-stacks) demo repository.
+(It's the same demo you see on the Atmos landing page)
+
+You can clone it and tweak it to your own needs. The repository should be a good start to get yourself familiar with Atmos.
+
+:::
 
 Atmos separates code from configuration (separation of concerns). The code is in the `components` directories and the configurations for different environments are in the `stacks` directory. This allows the code (Terraform and Helmfile components) to be environment-agnostic, meaning the components don't know and don't care how and where they will be provisioned. They can be provisioned into many accounts and regions - the configurations for different environments are defined in the `stacks` directory.
 

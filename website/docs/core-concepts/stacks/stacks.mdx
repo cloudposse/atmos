@@ -2,42 +2,91 @@
 title: Atmos Stacks
 sidebar_position: 3
 sidebar_label: Configure Stacks
-description: Stacks are a way to express the complete infrastructure needed for an environment
+description: Use Stacks to configure Components for an environment
 id: stacks
 ---
 
 import File from '@site/src/components/File'
 
-Stacks define the complete configuration of an environment. Think of a Stack like an architectural "Blueprint" composed
-of one or more [Components](/core-concepts/components) configurations and defined using a [standardized YAML configuration](#schema).
+When you design cloud architectures with Atmos, you break them apart into pieces called components. Then, you implement Terraform "root modules" for each of those components. Stacks are how you connect your components with configuration, so that everything comes together. 
 
-This abstraction layer helps to automate the orchestration and deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. They enable scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks)
-by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., Terraform components).
+Stacks define the complete configuration of an environment. Think of Stacks like an architectural "Blueprints" composed of one or more [Components](/core-concepts/components) configurations and defined using a [standardized YAML configuration](#schema).
 
-By facilitating the infrastructure configurations this way, developers achieve DRY (Don't Repeat Yourself) architectures with minimal configuration. Stacks make infrastructure more streamlined and consistent, significantly enhancing productivity. Best of all, Stacks can deploy 
-vanilla Terraform "root" modules *without* any code generation, custom vendor extensions, or changes to the HCL code.
+Then by running the `atmos` command, automate the orchestrate the deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. By doing this, it enables scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks) by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., [Terraform components](/core-concepts/components/terraform)).
+
+By facilitating the infrastructure configurations this way, developers achieve DRY (Don't Repeat Yourself) architectures with minimal
+configuration. Stacks make infrastructure more streamlined and consistent, significantly enhancing productivity. Best of all, Stacks
+can deploy vanilla Terraform "root" modules *without* any code generation, custom vendor extensions, or changes to the HCL code.
 
 Atmos utilizes a custom YAML configuration format for stacks. YAML is ideal because it's portable across multiple toolchains and languages; every developer understands it. The Atmos [CLI](/cli), the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-utils) provider, and Spacelift via the [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module all support stacks. Utilizing the Terraform provider enables native access to the entire infrastructure configuration directly from Terraform.
 
 ## Use-cases
 
-- **Rapid Environment Provisioning:** Leverage stacks to swiftly set up and replicate development, testing, and production environments, ensuring consistency and reducing manual setup errors. This accelerates the development cycle and enables businesses to respond quickly to market demands or development needs.
-- **Multi-Tenant Infrastructure Management:** Utilize stacks to manage and isolate resources for different clients or projects within a single cloud infrastructure. This approach supports SaaS companies in providing secure, isolated environments for each tenant, optimizing resource utilization and simplifying the management of complex, multi-tenant architectures.
-- **Compliance and Governance:** Implement stacks to enforce compliance and governance policies across all environments systematically. By defining standard configurations that meet regulatory requirements, businesses can ensure that every deployment is compliant, reducing the risk of violations and enhancing security posture.
+- **Rapid Environment Provisioning:** Leverage stacks to swiftly set up and replicate development, testing, 
+  and production environments, ensuring consistency and reducing manual setup errors. This accelerates the development
+  cycle and enables businesses to respond quickly to market demands or development needs.
+- **Multi-Tenant Infrastructure Management:** Utilize stacks to manage and isolate resources for different clients or projects
+  within a single cloud infrastructure. This approach supports SaaS companies in providing secure, isolated environments for each
+  tenant, optimizing resource utilization and simplifying the management of complex, multi-tenant architectures.
+- **Compliance and Governance:** Implement stacks to enforce compliance and governance policies across all environments systematically.
+  By defining standard configurations that meet regulatory requirements, businesses can ensure that every deployment is compliant,
+  reducing the risk of violations and enhancing security posture.
 
 ## Conventions
 
 The differentiation between the following two types of stacks is crucial for understanding how to organize stacks and the basis for the
 various [design patterns](/design-patterns/).
 
-### Parent Stacks
+### Stack Names (aka "slugs")
 
-*Parent Stacks* are the top-level stacks that are responsible for importing Child stacks. Components inside of Parent stacks are deployable, unlike in Child stacks.
+Every stack is uniquely identified by a name. The name is used to reference the stack in the Atmos CLI, or with stack dependencies.
 
-### Child Stacks
+These are computed from either the `name_pattern` (old way) or the more configurable
+`name_template` (new way). These are configured in the `atmos.yaml` configuration file. 
 
-*Child Stacks* are any stacks whose components cannot be deployed independently without being imported by a Parent Stack.
-[Catalogs](/core-concepts/stacks/catalogs) are typically where we keep our Child stacks.
+For example, using the slug, we can reference a stack like this when applying the `vpc` stack in the `us2-dev` environment:
+
+```bash
+atmos terraform apply vpc -s us2-dev
+```
+
+### Components vs Component instances
+
+Components are different from Stacks.
+
+When a component is added to a stack, we call that a "Component Instance"
+
+
+
+### Parent Stacks vs Child Stacks
+
+<dl>
+  <dt>Parent Stacks</dt>
+  <dd>These are the top-level stacks that are responsible for importing Child stacks. Components inside of Parent stacks are deployable, unlike in Child stacks.</dd>
+
+  <dt>Child Stacks</dt>
+  <dd>These are any stacks whose components cannot be deployed independently without being imported by a Parent Stack. <a href="/core-concepts/stacks/catalogs">Catalogs</a> are typically where we keep our Child stacks.</dd>
+</dl>
+
+### Logical Stacks vs. Physical Stack Manifests
+
+<dl>
+  <dt>Logical Stacks</dt>
+  <dd>
+      Represent the entire environment defined by context variables and global settings in atmos.yaml. 
+      Logical stacks are the in-memory representation of the deep-merged configuration.
+    </dd>
+
+  <dt>Physical Stacks</dt>
+  <dd>Are the raw YAML files where the specific configurations of components are defined.</dd>
+</dl>
+
+Atmos processes each physical stack file, first evaluating any templates and then processing it as YAML. After loading the YAML,
+it proceeds to deep-merge the configuration with the current in-memory logical representation of the Stack, then apply any overrides.
+This is done iteratively for each physical stack file in the order they are defined in the `import` section of the Stack file.
+
+Note, the logical repersentation is never influenced by file paths or directories. It's only influenced by the configuration itself.
+
 
 ## Schema
 

@@ -1,12 +1,10 @@
 ---
-title: Atmos Alternatives
+title: Atmos Alternatives & Inspirations
 sidebar_label: Alternatives
 sidebar_position: 3
 ---
 
-To better understand where Atmos fits in, it may be helpful to understand some of the alternative tooling it seeks to replace. 
-There are lots of great tools out there and we're going through a bit of a "DevOps Rennisance" when it comes to creativity
-on how to automate systems.
+To better understand where Atmos fits in, it may be helpful to understand some of the alternative tooling that has inspired it's design or serve as possible alternatives to its approach.
 
 ## Conceptual Inspiration
 

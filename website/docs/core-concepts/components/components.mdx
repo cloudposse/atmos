@@ -5,22 +5,22 @@ sidebar_label: Build Components
 description: Components are opinionated building blocks of infrastructure as code that solve one specific problem or use-case.
 ---
 
-Components are opinionated, self-contained building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case. 
-Examples of componets are things like VPCs, Clusters, Databases, Buckets, Load Balancers, etc. But it's not limited to this. They can be anything.
-Those Components are then configured inside of one or more [Stacks](/core-concepts/stacks).
+When you design cloud architectures with Atmos, you start by breaking them apart into pieces called components. Then, you [implement Terraform "root modules"](/core-concepts/components/terraform) for each of those components, and [compose them with Stack configurations](/core-concepts/stacks).
 
-The most common use-case for Atmos is using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module)
-as components that are configured in stacks. 
-But since Atmos was designed to be tool-agnostic, and [custom commands](/core-concepts/custom-commands) can be made to work with Atmos.
+
+The most common use-case for Atmos is using implementing components using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module). But since Atmos was designed to be tool-agnostic, [custom commands](/core-concepts/custom-commands) can be used to implement components for any type of tooling.
+
+Components can be as small as you'd like (but we don't recommend too small), or as large as a [Terralith](/terms/terralith) (but we don't recommend that either). See our [best practices for components](/best-practices/components) to get a sense of what we recommend.
 
 :::tip
-Components are things like [Terraform "root" modules](https://developer.hashicorp.com/terraform/language/modules#the-root-module), Helm Charts, Dockerfiles, or any fundamental building block of infrastructure.
+
+Typical components of an architecture are things like VPCs, clusters, databases, buckets, load balancers, and applications. Implement components using [Terraform "root" modules](https://developer.hashicorp.com/terraform/language/modules#the-root-module).
+
 :::
 
 ## Use-cases
 
-Components offer a multitude of applications across various business scenarios. Cloud Posse publishes its AWS components for free, so you can see
-some [technical use-cases for Terraform components](https://docs.cloudposse.com/components/category/aws/).
+Components offer a multitude of applications across various business scenarios. Cloud Posse publishes its AWS components for free, so you can see some [technical use-cases for Terraform components](https://docs.cloudposse.com/components/category/aws/).
 
 - **Accelerate Development Cycles:** By reusing components, development teams can significantly shorten the time from concept to deployment, facilitating faster product iterations and quicker responses to market changes.
 
@@ -43,8 +43,3 @@ Atmos natively supports two kinds of components, but using [custom commands](/co
 ## Terraform Components
 
 One important distinction about components that is worth noting about Terraform components is they should be opinionated Terraform "root" modules that typically call other child modules. Components are the building blocks of your infrastructure. This is where you define all the business logic for provisioning some common piece of infrastructure like ECR repos (with the [ecr](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/ecr) component) or EKS clusters (with the [eks/cluster](https://github.com/cloudposse/terraform-aws-components/tree/master/modules/eks/cluster) component). Our convention is to stick Terraform components in the `components/terraform/` directory.
-
-If your components rely on submodules, our convention is to use a `modules/` subfolder of the component to store them.
-
-We do not recommend consuming one terraform component inside of another as that would defeat the purpose; each component is intended to be
-a loosely coupled unit of IaC with its own lifecycle. Furthermore, since components define a state backend and providers, it's not advisable to call one root module from another root module.

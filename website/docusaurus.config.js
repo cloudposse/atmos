@@ -196,6 +196,14 @@ const config = {
                 // "light" | "dark" | "system"
                 respectPrefersColorScheme: false,
               },
+
+              mermaid: {
+                theme: {
+                    light: 'neutral', 
+                    dark: 'dark', 
+                    
+                },
+              },
         }),
 
     customFields: {

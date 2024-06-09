@@ -25,9 +25,7 @@ To make them highly reusable, they should serve a "single purpose" so that they 
 unit of infrastructure managed in the software development lifecycle (SDLC).
 Finally, you will connect your components together using stacks, so that everything comes together. 
 
-In this tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components.
-
-You're about discover a new way to think about terraform... 
+In the [Quick Start](/quick-start/simple) tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components.
 
 ## What is Terraform?
 
@@ -170,6 +168,9 @@ user interaction:
 atmos terraform deploy eks -s ue2-dev
 ```
 
+## Using Submodules (Child Modules)
+
+If your components rely on local submodules, our convention is to use a `modules/` subfolder of the component to store them.
 
 
 ## Terraform Usage with Atmos
