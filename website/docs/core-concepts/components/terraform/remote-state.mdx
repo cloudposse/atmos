@@ -1,12 +1,15 @@
 ---
 title: Using Remote State
-sidebar_position: 7
+sidebar_position: 4
 sidebar_label: Using Remote State
 id: remote-state
 ---
+import Intro from '@site/src/components/Intro';
 
+<Intro>
 Atmos itself does not help manage passing output values between components. However, with Terraform there's a very easy
 way to access the outputs of one Terraform component in another component. This is done using the `remote-state` module.
+</Intro>
 
 In Atmos, Terraform Remote State is implemented by using these modules:
 

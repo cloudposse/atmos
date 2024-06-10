@@ -5,11 +5,13 @@ sidebar_label: Build Configuration Catalogs
 id: catalogs
 description: Catalogs are how to organize all Stack configurations for easy imports. 
 ---
+import Intro from '@site/src/components/Intro';
 
-# Catalogs
+<Intro>
+As you start splitting your stacks apart into smaller configurations, it often makes to organize those into a catalog of reusable configurations. That way you can take advantage of imports, to reuse configuration in multiple places. Catalogs are how to logically organize all the child [Stack](/core-concepts/stacks) configurations on the filesystem for use by [imports](/core-concepts/stacks/imports).
+</Intro>
 
-Catalogs are how to logically organize all the child [Stack](/core-concepts/stacks) configurations on the filesystem for use by 
-[imports](/core-concepts/stacks/imports). There's no "right or wrong" way to do it, and Atmos does not enforce any one convention. 
+There's no "right or wrong" way to do it, and Atmos does not enforce any one convention. 
 What we've come to realize is there's no "one way" to organize Stack configurations. The best way to organize them will come down to
 how an organization wants to model its infrastructure.
 

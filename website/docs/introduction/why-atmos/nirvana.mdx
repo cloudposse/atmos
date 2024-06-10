@@ -6,18 +6,17 @@ sidebar_position: 12
 id: nirvana
 ---
 import Link from '@docusaurus/Link'
+import Intro from '@site/src/components/Intro';
 
+<Intro>
 ## The Atmos Difference
 
 Atmos lets you model the configuration of your cloud architecture in a way that makes logical sense. 
 You can then develop components using any toolchain you want, including Terraform, to implement
-the components of your infrastructure. This is why it’s not a Terraform problem but a data modeling and
-configuration modeling problem. For some reason, the same rigor that has been applied to software engineering
-for decades is not being applied to DevOps tooling. That’s what Atmos brings to the table with our framework, 
-design patterns, best practices, and tooling.
+the components of your infrastructure. 
+</Intro>
 
-What you really need is a strategy for approaching cloud architecture that translates to how you manage your configuration
-and design all the components it comprises. 
+Most teams don’t have a Terraform problem; they struggle with modeling their architecture in a reusable manner. Terraform provides everything needed to provision infrtructure, but an effective strategy to model cloud architecures is what is missing. Atmos fills this gap with a robust framework, offering design patterns, best practices, and advanced tooling to optimize your cloud architecture.
 
 **A well-designed framework does not limit you; it enables you. It doesn’t hold you back; it empowers you.**
 
@@ -32,12 +31,9 @@ You'll have a clear separation of concerns, consistent conventions, and organize
 Configuration is organized into Stacks defined by YAML, separate from Components (terraform root modules).
 This ensures root modules remain highly reusable across teams and promotes testing.  
 
-It was designed to be a turnkey solution for CI/CD, so you can integrate with
-[GitHub Actions](https://atmos.tools/integrations/github-actions), [Spacelift](https://atmos.tools/integrations/spacelift),
-or even [Atlantis](https://atmos.tools/integrations/atlantis).
+It was designed to be used with CI/CD, so you can integrate with [GitHub Actions](https://atmos.tools/integrations/github-actions), [Spacelift](https://atmos.tools/integrations/spacelift), or even [Atlantis](https://atmos.tools/integrations/atlantis).
 
-And it was [inspired by giants](/reference/alternatives). We took the best of what we learned from all these other tools stuck into Atmos.
-So if you like the concepts of imports, inheritance, layering, and composition, you'll love Atmos.
+And it was [inspired by giants](/reference/alternatives). We took the best of what we learned from all these other tools stuck into Atmos. So if you like the concepts of imports, inheritance, layering, and composition, you'll love Atmos.
 
 Oh yes, and it's entirely free and truly Open Source (licensed APACHE2) like [everything else Cloud Posse builds](https://github.com/cloudposse)! 🔥
 

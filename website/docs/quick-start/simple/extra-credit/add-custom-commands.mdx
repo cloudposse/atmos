@@ -5,14 +5,18 @@ sidebar_label: Add Custom Commands
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro';
 
-Atmos can be easily extended to support any number of custom CLI commands.
+<Intro>
+Atmos can be easily extended to support any number of custom CLI commands. For example, imagine you wanted to add a command 
+like `atmos reload-database`, you can do that with custom commands.
+</Intro>
+
+Custom commands are defined in the `commands` section in `atmos.yaml` CLI configuration file.
 
 :::tip
 Refer to [Atmos Custom Commands](/core-concepts/custom-commands) for more information about Atmos Custom Commands
 :::
-
-Custom commands are defined in the `commands` section in `atmos.yaml` CLI configuration file.
 
 In this Quick Start guide, we'll define two custom commands to list the Atmos stacks in the infrastructure and the components in the stacks.
 

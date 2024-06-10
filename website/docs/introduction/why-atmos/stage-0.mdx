@@ -6,9 +6,12 @@ sidebar_position: 1
 id: stage-0
 ---
 import Link from '@docusaurus/Link'
+import Intro from '@site/src/components/Intro';
 
+<Intro>
 ClickOps is the "art" of provisioning or setting up your infrastructure using the _click_ of the mouse, 
 aimed at the web console of your chosen cloud provider. 
+</Intro>
 
 Think of ClickOps as the sketching phase of designing your cloud infrastructure — it’s a way to quickly
 and visually design how your setup should look without investing the time to codify it as formal blueprints. 
@@ -30,6 +33,8 @@ The biggest problem with ClickOps is reproducibility. No self-respecting enginee
 two configurations or spot checking two environments side by side in the web console. These issues begin to disappear when you adopt infrastructure 
 as code (IaC). IaC provides the blueprints needed for consistent, automated, and scalable infrastructure management, 
 eliminating the pitfalls of manual, repetitive ClickOps processes.
+
+## Realization 
 
 So developers [begin their journey with Terraform](/introduction/why-atmos/stage-1), a tool that allows them to define their infrastructure as code,
 

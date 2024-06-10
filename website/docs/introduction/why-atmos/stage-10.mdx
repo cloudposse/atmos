@@ -7,13 +7,17 @@ id: stage-10
 ---
 import Link from '@docusaurus/Link'
 import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro';
 
+<Intro>
 At this point, developers might be ready to thow in the towel on Terraform. 
 They question the hype and wonder if it's all worth it.
 
 They might even start looking for alternatives like [CDK](https://aws.amazon.com/cdk/),
 [CDK TF](https://developer.hashicorp.com/terraform/cdktf), [Pulumi](https://www.pulumi.com/), 
 or platforms like [Crossplane](https://www.crossplane.io/).
+</Intro>
+
 
 As the complexity and scale of Terraform projects reach a tipping point, developers face a stark realization.
 This wasn't easy. Questions arise about the inherent difficulties of managing sprawling infrastructure code bases
@@ -47,6 +51,8 @@ how they manage the configuration and design all the components that comprise th
 It's not a surprise that teams fail with Terraform. Most developers never get the opportunity to write their own framework from scratch;
 instead, they use one that’s been well-established and proven by countless enterprises and supported by a community. 
 So why should we expect DevOps teams to be equipped and prepared to design an extensible framework when they’ve never done it before? 
+
+## Realization
 
 After a little bit of Googling, searching Reddit and asking around, they then [stumble upon Atmos](/introduction/why-atmos/nirvana).
 

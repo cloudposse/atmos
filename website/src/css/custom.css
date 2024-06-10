@@ -93,7 +93,10 @@ body {
     background-repeat: no-repeat;
     background-size: 15em;
     background-attachment: fixed;
-    font-family: "Lato", sans-serif;
+    font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    font-size: 17px;
+    line-height: 30px;
+    
 }
 
 .language-console pre > code, .language-text pre > code  {

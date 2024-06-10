@@ -6,9 +6,12 @@ sidebar_label: Create Workflows
 import Terminal from '@site/src/components/Terminal'
 import Step from '@site/src/components/Step'
 import StepNumber from '@site/src/components/StepNumber'
+import Intro from '@site/src/components/Intro';
 
+<Intro>
 [Atmos Workflows](/core-concepts/workflows) combine multiple commands into executable units of work, ideal for automating common
 tasks and orchestrating “cold starts,” where you bring an environment up from scratch.
+</Intro>
 
 Workflows can call other workflows and be combined with [Custom Commands](/core-concepts/custom-commands). Usually, we use
 workflows to provision some combinatino of [Terraform](/core-concepts/components/terraform) components.

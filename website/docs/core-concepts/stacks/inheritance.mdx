@@ -29,44 +29,8 @@ components (e.g. terraform), and does not magically implement inheritance for HC
 well, we're able to achieve many of the same benefits.
 :::
 
-
-
-<details>
-<summary>Advanced Concepts</summary>
-
-Component Inheritance is one of the principles of [Component-Oriented Programming (COP)](https://en.wikipedia.org/wiki/Component-based_software_engineering)
-supported by Atmos.
-
-The concept is borrowed from [Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming)) 
-to logically organize complex configurations in a way that makes conceptual sense. The side effect of this are extremely DRY and reusable 
-configurations.
-
-[Component-Oriented Configuration](https://en.wikipedia.org/wiki/Component-based_software_engineering) is a reuse-based approach to defining,
-implementing and composing loosely-coupled independent components into systems.
-
-<dl>
-  <dt>Dynamic Polymorphism</dt>
-  <dd>Ability to use and override base component(s) properties</dd>
-
-  <dt>Encapsulation</dt>
-  <dd>Enclose a set of related configuration properties into reusable loosely-coupled modules. Encapsulation is implemented by <a href="/core-concepts/components">Atmos Components</a> which are opinionated building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case</dd>
-
-  <dt>Abstraction</dt>
-  <dd>
-    <ul>
-      <li>Principle of Abstraction: In a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity and increase efficiency</li>
-      <li>Abstract Components: If a component is marked as <code>abstract</code>, it can be used only as a base for other components and can't be provisioned using <code>atmos</code></li>
-    </ul>
-  </dd>
-</dl>
-</details>
-
-<br/>
-
 Component Inheritance is implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
 and `metadata` component's configuration section.
-
-<br/>
 
 :::info Definitions
 
@@ -86,10 +50,10 @@ Single Inheritance is used when an Atmos component inherits from another base At
 In the diagram below, `ComponentA` is the base component. `ComponentB` and `ComponentC` are derived components, they inherit all the
 configurations (`vars`, `settings`, `env` and other sections) from `ComponentA`, and can override the default values from `ComponentA`.
 
-<br/>
 
 ```mermaid
 classDiagram
+      direction TB
       ComponentA --> ComponentB
       ComponentA --> ComponentC
       ComponentA : vars
@@ -155,6 +119,37 @@ In the configuration above, the following **Component-Oriented Programming** con
 - **Dynamic Polymorphism**: All the variables in the `vars` section become the default values for the derived components. This provides the ability to
   override and use the base component properties in the derived components to provision the same Terraform configuration many times but with different
   settings
+
+<details>
+<summary>Deep Dive</summary>
+
+Component Inheritance is one of the principles of [Component-Oriented Programming (COP)](https://en.wikipedia.org/wiki/Component-based_software_engineering)
+supported by Atmos.
+
+The concept is borrowed from [Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming)) 
+to logically organize complex configurations in a way that makes conceptual sense. The side effect of this are extremely DRY and reusable 
+configurations.
+
+[Component-Oriented Configuration](https://en.wikipedia.org/wiki/Component-based_software_engineering) is a reuse-based approach to defining,
+implementing and composing loosely-coupled independent components into systems.
+
+<dl>
+  <dt>Dynamic Polymorphism</dt>
+  <dd>Ability to use and override base component(s) properties</dd>
+
+  <dt>Encapsulation</dt>
+  <dd>Enclose a set of related configuration properties into reusable loosely-coupled modules. Encapsulation is implemented by <a href="/core-concepts/components">Atmos Components</a> which are opinionated building blocks of Infrastructure-as-Code (IAC) that solve one specific problem or use-case</dd>
+
+  <dt>Abstraction</dt>
+  <dd>
+    <ul>
+      <li>Principle of Abstraction: In a given stack, "hide" all but the relevant information about a component configuration in order to reduce complexity and increase efficiency</li>
+      <li>Abstract Components: If a component is marked as <code>abstract</code>, it can be used only as a base for other components and can't be provisioned using <code>atmos</code></li>
+    </ul>
+  </dd>
+</dl>
+</details>
+
 
 <br/>
 
@@ -232,6 +227,7 @@ environment-agnostic). And the configurations are extremely DRY and reusable.
 <PillBox>Advanced</PillBox>
 
 Multiple Inheritance is used when an Atmos component inherits from more than one Atmos component.
+
 
 In the diagram below, `ComponentA` and `ComponentB` are the base components. `ComponentC` is a derived components, it inherits all the
 configurations (`vars`, `settings`, `env` and other sections) from `ComponentA` and `ComponentB`, and can override the default values

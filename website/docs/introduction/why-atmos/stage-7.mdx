@@ -6,8 +6,11 @@ sidebar_position: 8
 id: stage-7
 ---
 import Link from '@docusaurus/Link'
+import Intro from '@site/src/components/Intro';
 
+<Intro>
 As Terraform projects grow in complexity and scale, developers seek ways to automate and streamline their workflows beyond what native Terraform commands offer. This leads to exploring scripting as a means to orchestrate Terraform operations.
+</Intro>
 
 1. The first path usually involves adopting a simple `bash` script or `Makefile` to orchestrate Terraform. This works well, up to a point (we know this because it is how we started using Terraform at Cloud Posse).
 2. These scripts evolved to solve specific problems that made Terraform cumbersome as a tool.
@@ -22,16 +25,16 @@ As Terraform projects grow in complexity and scale, developers seek ways to auto
 3. Terraform is run mostly from local workstations/laptops, with no thought for how it will run in CI/CD.
 :::
 
+## Realization 
+
 With these scripts, they are ready to [introduce the rest of the team or company to Terraform](/introduction/why-atmos/stage-8).
 
-## The Atmos Difference
+<details>
+<summary>The Atmos Difference</summary>
 
 ### No More Homegrown Scripts
 
-When you use Atmos, you eliminate the need for rampant scripting that is constantly breaking, never tested, poorly parameterized and seldom validated. 
-Instead of relying on scripts that vary between companies and teams, Atmos provides a [purpose-built tool designed for Terraform]( /core-concepts/components/terraform). 
-It introduces a framework that ensures all your Terraform code and configurations are consistently organized and validated, 
-reducing sprawl and inconsistency across the enterprise.
+When you use Atmos, you eliminate the need for rampant scripting that is constantly breaking, never tested, poorly parameterized and seldom validated. Instead of relying on scripts that vary between companies and teams, Atmos provides a [purpose-built tool designed for Terraform]( /core-concepts/components/terraform). It introduces a framework that ensures all your Terraform code and configurations are consistently organized and validated, reducing sprawl and inconsistency across the enterprise.
 
 ### Standardized Framework & Best Practices
 
@@ -57,3 +60,4 @@ However, these limitations stem from the architecture, design, and use of Terraf
     className="button button--lg button--primary">
     Try Atmos!
 </Link>
+</details>

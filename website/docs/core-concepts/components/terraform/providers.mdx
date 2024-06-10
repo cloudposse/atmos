@@ -1,15 +1,18 @@
 ---
 title: Terraform Providers
-sidebar_position: 8
+sidebar_position: 6
 sidebar_label: Terraform Providers
 description: Configure and override Terraform Providers.
 id: providers
 ---
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro';
 
+<Intro>
 Terraform utilizes plugins known as [providers](https://developer.hashicorp.com/terraform/language/providers) for
 communication with cloud providers, SaaS providers, and various APIs.
+</Intro>
 
 In order for Terraform to install these providers, the corresponding Terraform configurations need to
 explicitly state what providers are required. Furthermore, certain providers require additional configuration, such as

@@ -1,16 +1,14 @@
 ---
-title: Terraform State Backends
-sidebar_position: 5
-sidebar_label: State Backends
+title: State Backend Configuration
+sidebar_position: 3
+sidebar_label: Backend Configuration
 id: state-backend
 ---
+import Intro from '@site/src/components/Intro';
 
-Atmos supports configuring [Terraform Backends](/core-concepts/components/terraform/backends) to define where
-Terraform stores its [state](https://developer.hashicorp.com/terraform/language/state),
-and [Remote State](/core-concepts/components/terraform/remote-state) to get the outputs
-of a [Terraform component](/core-concepts/components), provisioned in the same or a
-different [Atmos stack](/core-concepts/stacks), and use
-the outputs as inputs to another Atmos component. 
+<Intro>
+Atmos supports configuring [Terraform Backends](/core-concepts/components/terraform/backends) to define where Terraform stores its [state](https://developer.hashicorp.com/terraform/language/state), and [Remote State](/core-concepts/components/terraform/remote-state) to get the outputs of a [Terraform component](/core-concepts/components), provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and use the outputs as inputs to another Atmos component. 
+</Intro>
 
 Bear in mind that Atmos is simply managing the configuration of the Backend; 
 provisioning the backend resources themselves, is the responsibility of a Terraform component.

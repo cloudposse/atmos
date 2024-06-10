@@ -4,9 +4,11 @@ sidebar_position: 2
 sidebar_label: Build Components
 description: Components are opinionated building blocks of infrastructure as code that solve one specific problem or use-case.
 ---
+import Intro from '@site/src/components/Intro';
 
+<Intro>
 When you design cloud architectures with Atmos, you start by breaking them apart into pieces called components. Then, you [implement Terraform "root modules"](/core-concepts/components/terraform) for each of those components, and [compose them with Stack configurations](/core-concepts/stacks).
-
+</Intro>
 
 The most common use-case for Atmos is using implementing components using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module). But since Atmos was designed to be tool-agnostic, [custom commands](/core-concepts/custom-commands) can be used to implement components for any type of tooling.
 
