@@ -9,23 +9,31 @@ import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import EmbedFile from '@site/src/components/EmbedFile'
 
-Atmos component validation allows:
+The [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA, pronounced “oh-pa”) is the open-source industry standard for policy validation. It provides a general-purpose policy engine to unify policy enforcement across your stacks. 
+
+The OPA language (Rego) is a high-level declarative language for specifying policy as code. Atmos has native support for the OPA decision-making engine to enforce policies across all the components in your stacks (e.g. for microservice configurations).
+
+This is powerful stuff: because you can define many policies, it's possible to validate the same components differently for different environments or teams.
+
+## Use Cases
+
+Use Open Policy Agent (OPA) policies to validate Atmos stacks and component configurations.
 
 * Validate component config (`vars`, `settings`, `backend`, `env`, `overrides` and other sections) using JSON Schema
 
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   OPA/Rego policies
 
+## Usage
+
+Atmos `validate component` command supports `--schema-path`, `--schema-type` and `--module-paths` command line arguments.
+If the arguments are not provided, Atmos will try to find and use the `settings.validation` section defined in the component's YAML config.
+
 :::tip
 
 Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
 
 :::
-
-## Usage
-
-Atmos `validate component` command supports `--schema-path`, `--schema-type` and `--module-paths` command line arguments.
-If the arguments are not provided, Atmos will try to find and use the `settings.validation` section defined in the component's YAML config.
 
 <Terminal>
 ```shell
@@ -80,7 +88,7 @@ Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-c
 
 <EmbedFile filePath="examples/quick-start/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
 
-:::note
+### Use One Policy File or Many
 
 Atmos supports OPA policies for components validation in a single Rego file and in multiple Rego files.
 
@@ -97,7 +105,9 @@ engine.
 This allows you to separate the common OPA modules, constants and helper functions into a catalog of reusable Rego modules,
 and to structure your OPA policies to make them DRY.
 
-:::
+## Examples
+
+### Validate VPC Component in Stacks
 
 Run the following commands to validate the component in the stacks:
 
@@ -118,6 +128,9 @@ exit status 1
 ```
 </Terminal>
 
+
+### Validate Before Provisioning
+
 Try to run the following commands to provision the component in the stacks:
 
 <Terminal>
@@ -137,7 +150,7 @@ Since the OPA validation policies don't pass, Atmos does not allow provisioning 
 ![atmos-validate-vpc-in-plat-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
 </Terminal>
 
-## Advanced Policy Examples
+### Advanced Policy Examples
 
 <EmbedFile filePath="examples//quick-start/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
 

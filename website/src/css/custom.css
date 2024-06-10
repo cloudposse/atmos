@@ -438,6 +438,18 @@ dd.disambiguation a {
     margin-bottom: 1em !important;
 }
 
+.markdown h3 {
+    color: #666;
+}
+
+.mermaid {
+            background-color: transparent !important;
+        }
+
+html[data-theme='dark'] .markdown h3 {
+    color: #b1b1b1;
+}
+
 
 .docusaurus-mermaid-container {
     margin-top: 3em;

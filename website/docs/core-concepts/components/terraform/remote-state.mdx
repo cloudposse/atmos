@@ -8,8 +8,6 @@ id: remote-state
 Atmos itself does not help manage passing output values between components. However, with Terraform there's a very easy
 way to access the outputs of one Terraform component in another component. This is done using the `remote-state` module.
 
-:::info
-
 In Atmos, Terraform Remote State is implemented by using these modules:
 
 - [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) - The Cloud Posse Terraform Provider for various utilities,
@@ -18,34 +16,11 @@ In Atmos, Terraform Remote State is implemented by using these modules:
 - [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) - Terraform module that loads and processes
   stack configurations from YAML sources and returns remote state outputs for Terraform components
 
-:::
+The [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) is implemented in [Go](https://go.dev/) and uses Atmos `Go` modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/core-concepts/stacks). The provider processes stack configurations to get the final config for an Atmos component in an Atmos stack. The final component config is then used by the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote state for the component in the stack.
 
-<br/>
-
-[terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) is implemented in [Go](https://go.dev/) and uses Atmos `Go`
-modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/core-concepts/stacks). The provider processes stack
-configurations to get the final config for an Atmos component in an Atmos stack. The final component config is then used by
-the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote
-state for the component in the stack.
-
-:::important
+:::warning
 Atmos does not support the `local` backend type. This is because the local backend is not recommended for production.
 :::
-
-<br/>
-
-:::info Disambiguation
-
-- **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) and stored typically in `components/terraform/$name`
-  that consists of the resources defined in the `.tf` files in a working directory
-  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc))
-
-- **Atmos Component** provides configuration (variables and other settings) for a component and is defined in one or more Atmos stack manifests
-  (a.k.a. stack conffig files)
-
-:::
-
-<br/>
 
 ## Example
 

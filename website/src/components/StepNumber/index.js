@@ -3,7 +3,7 @@ import { StepContext } from '@site/src/components/Step';
 
 const StepNumber = () => {
   const stepNumber = useContext(StepContext);
-  return `Step ${stepNumber}: `;
+  return (<i>{`Step ${stepNumber}:`}</i>);
 };
 
 export default StepNumber;

@@ -17,14 +17,16 @@ Refer to [atmos validate component](/cli/commands/validate/component) CLI comman
 
 :::
 
+## Types of Validation
+
 Atmos supports two types of native validation.
 
-## JSON Schema
+### JSON Schema
 
 Atmos supports [JSON Schema](https://json-schema.org/) validation, which can validate the schema of configurations such as stacks, workflows, and vendoring manifests.
 JSON Schema is an industry standard and provides a vocabulary to annotate and validate JSON documents for correctness.
 
-## Open Policy Agent (OPA)
+### Open Policy Agent (OPA)
 
 The [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA, pronounced “oh-pa”) is another open-source industry standard that provides
 a general-purpose policy engine to unify policy enforcement across your stacks. The OPA language (Rego) is a high-level declarative language for
@@ -92,5 +94,3 @@ The command checks and validates the following:
 :::tip
 For more details, refer to [`atmos validate stacks`](/cli/commands/validate/stacks) CLI command
 :::
-
-### Check Your Components
