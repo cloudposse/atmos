@@ -2,8 +2,41 @@
 title: Folder Structure
 sidebar_position: 1
 sidebar_label: Folder Structure
+description: Recommended way to organaize your Atmos stacks and components
 id: layout    
 ---
+import KeyPoints from '@site/src/components/KeyPoints';
 
-1. Create a project folder
-2. Create folder hierrchy
+<KeyPoints>
+- How to organize your project on the file system
+- How to separate configuration from components
+- Different ways to organize your project
+</KeyPoints>
+
+At the root of your project, you’ll typically find an `atmos.yaml` configuration file. This file defines how Atmos should discover your stack files for configuration and your Terraform root modules as components.
+
+Next, you’ll have a `components/` folder containing all your components, usually organized by your toolchain. For example, all your Terraform components would be in the `terraform/` subfolder within `components/`.
+
+Finally, you’ll have your stacks configurations, which are organized into multiple subfolders depending on their purpose:
+
+## Recommended Filesystem Layout
+<dl>
+    <dt>`components/`</dt>
+    <dd>folder containing all your components, usually organized by your toolchain</dd>
+
+    <dt>`components/terraform`</dt>
+    <dd>folder for all Terraform "root modules"</dd>
+
+    <dt>`stacks/orgs/`</dt>
+    <dd>folder for deployable stacks</dd>
+
+    <dt>`stacks/catalog/`</dt>
+    <dd>folder for the service catalog</dd>
+
+    <dt>`stacks/workflows/`</dt>
+    <dd>folder for workflows that operate on top of stacks.</dd>
+</dl>
+
+We provide detailed guidance on organizing your folder structure, whether it’s for a simple project or enterprise-scale architecture. 
+
+Remember, you can’t optimize for everything at once, so choose the model that best fits the stage you plan to reach when you complete the project.

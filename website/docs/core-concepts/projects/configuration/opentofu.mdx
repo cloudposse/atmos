@@ -4,14 +4,21 @@ sidebar_position: 2
 sidebar_label: Configure OpenTofu
 id: opentofu
 ---
-
 import useBaseUrl from '@docusaurus/useBaseUrl';
+import KeyPoints from '@site/src/components/KeyPoints';
 
 <img width="250" align="right" src={useBaseUrl('/img/opentofu-icon.svg')} alt="OpenTofu"/>
 
 Atmos natively supports [OpenTofu](https://opentofu.org),
 similar to the way it supports [Terraform](/core-concepts/projects/configuration/terraform). It's compatible with every version of `opentofu` and designed to
 work with multiple different versions of it concurrently, and can even work alongside with [HashiCorp Terraform](/core-concepts/projects/configuration/terraform).
+
+
+<KeyPoints>
+- How to configure Atmos to use OpenTofu for Terraform components
+- How to alias `terraform` to `tofu` in Atmos
+- How to configure OpenTofu for only specific components
+</KeyPoints>
 
 Please see the complete configuration options for [Terraform](/core-concepts/projects/configuration/terraform), as they are the same for OpenTofu. We'll focus
 only on what's different in this document, in order to utilize OpenTofu. Keep in mind that Atmos does not handle the downloading or installation

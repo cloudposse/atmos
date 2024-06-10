@@ -160,81 +160,92 @@ With this configuration, it would be possible to run the following commands:
 ```
 </Terminal>
 
-<br/>
-
-- The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
+The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
   and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo).
 
-- The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and
-  archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
-  [OCI registries](https://opencontainers.org).
+<dl>
 
-  **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
-  For example:
+  <dt>`source`</dt>
+  <dd>
+    The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and
+    archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from [OCI registries](https://opencontainers.org).
 
-  ```yaml
-  source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+    **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
+    For example:
+
+    ```yaml
+    source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+    ```
+  </dd>
+
+  <dt>`targets`</dt>
+  <dd>
+  The `targets` in each source supports absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
+    are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
+    will be considered relative to the `base_path`. Multiple targets can be specified.
+  </dd>
+
+  <dt>`included_paths` and `excluded_paths`</dt>
+  <dd>
+  `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths (double-star/globstar `**` is supported as well).
+  </dd>
+
+  <dt>`component`</dt>
+  <dd>
+  The `component` attribute in each source is optional. It's used in the `atmos vendor pull -- component <component>` command if the component is passed in. In this case, Atmos will vendor only the specified component instead of vendoring all the artifacts configured in the `vendor.yaml` manifest.
+  </dd>
+
+  <dt>`source` and `targets` templates</dt>
+  <dd>
+  The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template) and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the artifact versions specified in the `version` attribute.
+
+    Here's an advanced example showcasing how templates and Sprig functions can be used together with `targets`:
+
+    ```yaml
+    targets:
+      # Vendor a component into a major-minor versioned folder like 1.2
+      - "components/terraform/infra/vpc-flow-logs-bucket/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
+    ```
+  </dd>
+
+  <dt>`tags`</dt>
+  <dd>
+  The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
+  </dd>
+
+  <dt>`imports`</dt>
+  <dd>
+  The `imports` section defines the additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all sources in the imported manifests in the order they are defined.
+
+  :::note
+  The imported file extensions are optional. If an import is defined without an extension, the `.yaml` extension is assumed and used by default.
+  :::
+
+  <File title="vendor.yaml">
+  ```yaml title="vendor.yaml"
+  spec:
+    sources:
+      - component: "vpc-flow-logs-bucket"
+        source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+        version: "1.323.0"
+        targets:
+          - "components/terraform/vpc-flow-logs-bucket"
+        included_paths:
+          - "**/**"
+          # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+          - "**/modules/**"
   ```
+  </File>
 
-- The `targets` in each source supports absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
-  are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
-  will be considered relative to the `base_path`. Multiple targets can be specified.
+  :::warning
 
-- `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
-  (double-star/globstar `**` is supported as well).
+  The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+  If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
 
-- The `component` attribute in each source is optional. It's used in the `atmos vendor pull -- component <component>` command if the component is
-  passed in. In this case, Atmos will vendor only the specified component instead of vendoring all the artifacts configured in the `vendor.yaml`
-  manifest.
+  :::
+  </dd>
+</dl>
 
-- The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template)
-  and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the artifact
-  versions specified in the `version` attribute.
-
-  Here's an advanced example showcasing how templates and Sprig functions can be used together with `targets`:
-
-  ```yaml
-  targets:
-    # Vendor a component into a major-minor versioned folder like 1.2
-    - "components/terraform/infra/vpc-flow-logs-bucket/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
-  ```
-
-- The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the
-  specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
-
-- The `imports` section defines the additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported
-  at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all
-  sources in the imported manifests in the order they are defined.
-
-  **NOTE:** The imported file extensions are optional. If an import is defined without an extension, the `.yaml` extension is assumed and used
-  by default.
-
-<br/>
-
-:::warning
-
-The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
-If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
-
-:::
-
-<File title="vendor.yaml">
-```yaml title="vendor.yaml"
-spec:
-  sources:
-    - component: "vpc-flow-logs-bucket"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-      version: "1.323.0"
-      targets:
-        - "components/terraform/vpc-flow-logs-bucket"
-      included_paths:
-        - "**/**"
-        # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
-        - "**/modules/**"
-```
-</File>
-
-<br/>
 
 ## Hierarchical Imports in Vendoring Manifests
 
