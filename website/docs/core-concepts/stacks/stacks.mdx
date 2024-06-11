@@ -7,8 +7,13 @@ id: stacks
 ---
 
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 
-When you design cloud architectures with Atmos, you break them apart into pieces called components. Then, you implement Terraform "root modules" for each of those components. Stacks are how you connect your components with configuration, so that everything comes together. 
+<Intro>
+When you design cloud architectures with Atmos, you break them apart into pieces called components that you implement with Terraform "root modules". Stacks are how you connect your components with configuration, so that everything comes together.
+</Intro>
+
+The power of components comes from their ability to be reused: you can compose stacks with one or more components, even reusing any component multiple times within a stack. But as your stacks grow with more and more components, it often makes sense to start splitting them into different files and that's why you might want to make use of imports. This lets you keep your Stack files easier to scan and reuse their configuration in multiple places.
 
 Stacks define the complete configuration of an environment. Think of Stacks like an architectural "Blueprints" composed of one or more [Components](/core-concepts/components) configurations and defined using a [standardized YAML configuration](#schema).
 

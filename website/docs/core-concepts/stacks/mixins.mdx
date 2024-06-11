@@ -5,15 +5,16 @@ sidebar_label: Mixins
 id: mixins
 ---
 import File from '@site/src/components/File'
-import PillBox from '@site/src/components/PillBox';
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
 <PillBox>Advanced</PillBox>
 
-Mixins are reusable snippets of configurations (like regions, tags, etc) included in stack configurations to avoid repetition and enhance modularity. 
-They allow for defining common settings, variables, or configurations once and applying them efficiently across various stacks.
+<Intro>
+Mixins are reusable snippets of configurations (like regions, tags, etc) included in stack configurations to avoid repetition and enhance modularity. They allow for defining common settings, variables, or configurations once and applying them efficiently across various stacks.
+</Intro>
 
-Mixins are really just a [Design Pattern](/design-patterns/component-catalog-with-mixins) that uses [`imports`](/core-concepts/stacks/imports) to
-alter the Stack in some deliberate way. 
+Mixins are really just a [Design Pattern](/design-patterns/component-catalog-with-mixins) that uses [`imports`](/core-concepts/stacks/imports) to alter the Stack in some deliberate way. 
 
 :::important 
 Mixins are treated the same as all other imports in Atmos, with no special handling or technical distinction.

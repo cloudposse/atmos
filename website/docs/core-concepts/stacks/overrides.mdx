@@ -6,9 +6,11 @@ description: Use the 'Component Overrides' pattern to modify components' configu
 id: overrides
 ---
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 
-Atmos supports the [Component Overrides](/design-patterns/component-overrides) Design Pattern to modify components' configuration and behavior using
-the `overrides` section in Atmos stack manifests.
+<Intro>
+Atmos supports the ability to override the behavior of [imports](/core-concepts/stacks/imports) when the order of deep-merging interferes with what you want to express. Use the `overrides` section in Atmos stack manifests.
+</Intro>
 
 You can override the following sections in the component(s) configuration:
 
@@ -19,6 +21,8 @@ You can override the following sections in the component(s) configuration:
 - `command`
 
 The `overrides` section can be used in the global scope or in the Terraform and Helmfile scopes.
+
+The [Component Overrides](/design-patterns/component-overrides) Design Pattern goes into further details on how to use this effectively.
 
 ## Overrides Schema
 
@@ -58,10 +62,7 @@ helmfile:
     command: "<command to execute>"
 ```
 
-You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance.
-The scope of the `override` configuration is limited to all the Atmos components defined within the manifest and all its imports up until that point.
-In other words, the `overrides` configuration defined within a stack manifest does not affect any other components defined in different stack
-manifests for the same top-level stack.
+You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance. The scope of the `override` configuration is limited to all the Atmos components defined within the manifest and all its imports up until that point. In other words, the `overrides` configuration defined within a stack manifest does not affect any other components defined in different stack manifests for the same top-level stack.
 
 <br/>
 
@@ -114,15 +115,11 @@ import:
   - teams/testing
 ```
 
-Suppose that we want to change some variables in the `vars` and `env` sections and some config in the `settings` section for all the components
-that the `testing` Team manges, but we don't want to affect any components that the `devops` Team manages.
+Suppose that we want to change some variables in the `vars` and `env` sections and some config in the `settings` section for all the components that the `testing` Team manges, but we don't want to affect any components that the `devops` Team manages.
 
-If we added a global or Terraform level `vars`, `env` or `settings` sections to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml`
-or to the Team manifest `stacks/teams/testing.yaml`, then all the components in the `tenant1/dev/us-west-2` top-level stack would be modified,
-including those managed by the `devops` Team.
+If we added a global or Terraform level `vars`, `env` or `settings` sections to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml` or to the Team manifest `stacks/teams/testing.yaml`, then all the components in the `tenant1/dev/us-west-2` top-level stack would be modified, including those managed by the `devops` Team.
 
-To solve this, we could individually modify the `vars`, `env` and `settings` sections in all the components managed by the `testing` Team,
-but the entire configuration would not be DRY and reusable. That's where the __overrides__ pattern comes into play. To make the configuration DRY and
+To solve this, we could individually modify the `vars`, `env` and `settings` sections in all the components managed by the `testing` Team, but the entire configuration would not be DRY and reusable. That's where the __overrides__ pattern comes into play. To make the configuration DRY and
 configured only in one place, use the `overrides` section.
 
 For example, we want to override some values in the `env`, `vars` and `setings` sections for all the components managed by the `testing` Team:

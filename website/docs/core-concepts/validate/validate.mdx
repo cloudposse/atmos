@@ -7,15 +7,12 @@ id: validating
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 
+<Intro>
 Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute 
 to the development and deployment processes. Atmos enhances this validation process in two significant ways with [JSON Schema](https://json-schema.org/) and [OPA](https://www.openpolicyagent.org/) policies.
-
-:::tip
-
-Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
-
-:::
+</Intro>
 
 ## Types of Validation
 
@@ -37,6 +34,11 @@ This is powerful stuff: because you can define many policies, it's possible to v
 
 ## Validate Your Configurations
 
+:::tip
+
+Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
+
+:::
 
 ### Check Your Stacks
 

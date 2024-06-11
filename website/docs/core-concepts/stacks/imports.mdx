@@ -5,8 +5,11 @@ sidebar_label: Import Configurations
 id: imports
 ---
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 
+<Intro>
 As your stacks grow taller with more and more component configurations, it often makes sense to start splitting them apart into different files. That's why you might want to take advantage of imports. This helps you keep your stack files smaller so they are easier to understand, while reuseing their configuration in multiple places.
+</Intro>
 
 Each import overlays on top of others, and gets deep merged. Then we support [inheritance](/core-concepts/stacks/inheritance) and overrides to manage configuration variations, all without relying on templating. When none of these other methods work for your use-case, we provide an "Escape Hatch" with [templating](/core-concepts/stacks/templates).
 

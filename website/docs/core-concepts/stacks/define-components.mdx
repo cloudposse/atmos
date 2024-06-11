@@ -4,6 +4,11 @@ sidebar_position: 2
 sidebar_label: Configure Components
 id: define-components
 ---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Stacks are used to compose multiple components together and provide their configuration. The schema is the same for all stacks, but the configuration can be different. Use a combination of [imports](/core-concepts/stacks/imports), [inheritance](/core-concepts/stacks/inheritance), and [catalogs](/core-concepts/stacks/catalogs) for a template-free way to reuse configuration and [override](/core-concepts/overrides) values when needed.
+</Intro>
 
 ## Component Schema
 
@@ -11,8 +16,6 @@ A Component consists of the infrastructure as code business logic (e.g. a Terraf
 component. The configuration of a component is stored in a Stack configuration.
 
 To configure a Component in a [Stack](/core-concepts/stacks), you define the component in the `components` section of the Stack configuration.
-
-<br/>
 
 :::info Disambiguation
 
@@ -23,9 +26,6 @@ To configure a Component in a [Stack](/core-concepts/stacks), you define the com
 - **Component Configuration** provides configuration (variables and other settings) for a type of component (e.g. a Terraform component) 
   and is defined in one or more YAML stack config files (which are called [Atmos stacks](/core-concepts/stacks))
 :::
-
-<br/>
-
 
 The schema of an Atmos Component in an Atmos Stack is as follows:
 

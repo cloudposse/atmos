@@ -6,13 +6,13 @@ id: templates
 ---
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
-import PillBox from '@site/src/components/PillBox';
-import Intro from '@site/src/components/Intro';
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
 <PillBox>Advanced</PillBox>
 
 <Intro>
-Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests. Use functions to customize Stack configurations _prior_ to interpretting them as YAML.
+Use templates as an _escape hatch_, when standard [inheritance](/core-concepts/stacks/inheritance) as insufficient. Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations _prior_ to interpretting them as YAML.
 </Intro>
 
 In `Go` templates, you can use the following functions and datasources:
@@ -23,7 +23,8 @@ In `Go` templates, you can use the following functions and datasources:
  - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
  - [Atmos Template Functions](/core-concepts/template-functions)
 
-## Important Note
+
+## Template Evaluations
 
 Atmos supports many different ways of configuring and using `Go` templates:
 
@@ -144,60 +145,67 @@ templates:
 ```
 </File>
 
-- `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
-  If set to `false`, Atmos will not process `Go` templates in stack manifests
+<dl>
+  <dt>`templates.settings.enabled`</dt>
+  <dd>A boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. If set to `false`, Atmos will not process `Go` templates in stack manifests.</dd>
 
-- `templates.settings.env` - a map of environment variables to use when executing the templates
+  <dt>`templates.settings.env`</dt>
+  <dd>A map of environment variables to use when executing the templates.</dd>
 
-- `templates.settings.evaluations` - number of evaluations/passes to process `Go` templates. If not defined, `evaluations` 
-  is automatically set to `1`. For more details, refer to 
-  [Template Evaluations and Template Processing Pipelines](#template-evaluations-and-template-processing-pipelines)
+  <dt>`templates.settings.evaluations`</dt>
+  <dd>Number of evaluations/passes to process `Go` templates. If not defined, `evaluations` is automatically set to `1`. For more details, refer to [Template Evaluations and Template Processing Pipelines](#template-evaluations-and-template-processing-pipelines).</dd>
 
-- `templates.settings.delimiters` - a list of left and right delimiters to use to process the templates. 
-   If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used
+  <dt>`templates.settings.delimiters`</dt>
+  <dd>A list of left and right delimiters to use to process the templates. If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used.</dd>
 
-- `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
-  in Atmos stack manifests
+  <dt>`templates.settings.sprig.enabled`</dt>
+  <dd>A boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/) in Atmos stack manifests.</dd>
 
-- `templates.settings.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) 
-  and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests
+  <dt>`templates.settings.gomplate.enabled`</dt>
+  <dd>A boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests.</dd>
 
-- `templates.settings.gomplate.timeout` - timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources)
+  <dt>`templates.settings.gomplate.timeout`</dt>
+  <dd>Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).</dd>
 
-- `templates.settings.gomplate.datasources` - a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions:
+  <dt>`templates.settings.gomplate.datasources`</dt>
+  <dd>
+    A map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions.
+    
+    The keys of the map are the datasource names (aliases), which are used in `Go` templates in Atmos stack manifests.
+      For example:
+      <File title="stack.yaml">
+      ```yaml
+      terraform:
+        vars:
+          tags:
+            provisioned_by_ip: '{{ (datasource "ip").ip }}'
+            config1_tag: '{{ (datasource "config-1").tag }}'
+            config2_service_name: '{{ (datasource "config-2").service.name }}'
+      ```
+      </File>
 
-  - The keys of the map are the datasource names (aliases), which are used in `Go` templates in Atmos stack manifests.
-    For example:
-    <File title="stack.yaml">
-    ```yaml
-     terraform:
-       vars:
-         tags:
-           provisioned_by_ip: '{{ (datasource "ip").ip }}'
-           config1_tag: '{{ (datasource "config-1").tag }}'
-           config2_service_name: '{{ (datasource "config-2").service.name }}'
-    ```
-    </File>
+    The values of the map are the datasource definitions with the following schema:
+    <dl>
+      <dt>`url`</dt>
+      <dd> the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)</dd>
 
-  - The values of the map are the datasource definitions with the following schema:
+      <dt>`headers`</dt>
+      <dd>
+      a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers). The keys of the map are the header names. The values of the map are lists of values for the header.
 
-    - `url` - the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
+        The following configuration will result in the
+        [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
+        being sent with the HTTP request to the datasource:
 
-    - `headers` - a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
-      the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers).
-      The keys of the map are the header names. The values of the map are lists of values for the header.
-
-      The following configuration will result in the
-      [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
-      being sent with the HTTP request to the datasource:
-
-         ```yaml
-         headers:
-           accept:
-             - "application/json"
-        ```
-
-<br/>
+          ```yaml
+          headers:
+            accept:
+              - "application/json"
+          ```
+      </dd>
+    </dl>
+  </dd>
+</dl>
 
 :::warning
 
