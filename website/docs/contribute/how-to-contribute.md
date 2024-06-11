@@ -8,7 +8,7 @@ Thanks for the interest in contributing to the Atmos project!
 
 ## Contributing Etiquette
 
-Please see the [Contributor Code of Conduct](coc.md) for information on the rules of conduct.
+Please see the [Contributor Code of Conduct](/contribute/coc) for information on the rules of conduct.
 
 ## Creating an Issue
 

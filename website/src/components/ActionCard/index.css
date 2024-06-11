@@ -1,0 +1,23 @@
+.action-card {
+  background-color: #2c2c2c;
+  color: #cccccc;
+  padding: 2em;
+  border: 1px solid #cccccc36;
+  border-radius: 1.3em;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.action-card h2 {
+  margin-bottom: 10px;
+}
+
+.action-card p {
+  font-size: 20px;
+  margin-bottom: 20px;
+}
+
+.action-card .button--lg {
+    margin: inherit;
+    padding-top: 0.7em;
+    padding-bottom: 0.7em;
+}
