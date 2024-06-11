@@ -174,6 +174,11 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
     margin-bottom: 2.5em;
 }
 
+html[data-theme='dark'] .theme-admonition details {
+    background: #00000054;
+    border: 1px solid #ffffff52;
+}
+
 html[data-theme='dark'] .theme-admonition  > .admonitionHeading_node_modules-\@docusaurus-theme-classic-lib-theme-Admonition-Layout-styles-module:not(:last-child) {
     margin-bottom: 1em;
     font-size: 1.2em;
@@ -305,6 +310,7 @@ div > ul > li > a.table-of-contents__link.toc-highlight {
 
 [data-theme='dark'] .pagination-nav__link {
     background-color: rgb(16 36 69 / 23%);
+    border: none;
 }
 
 pre code {

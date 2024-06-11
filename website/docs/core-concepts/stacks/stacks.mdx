@@ -8,6 +8,7 @@ id: stacks
 
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
 
 <Intro>
 When you design cloud architectures with Atmos, you break them apart into pieces called components that you implement with Terraform "root modules". Stacks are how you connect your components with configuration, so that everything comes together.
@@ -24,6 +25,10 @@ configuration. Stacks make infrastructure more streamlined and consistent, signi
 can deploy vanilla Terraform "root" modules *without* any code generation, custom vendor extensions, or changes to the HCL code.
 
 Atmos utilizes a custom YAML configuration format for stacks. YAML is ideal because it's portable across multiple toolchains and languages; every developer understands it. The Atmos [CLI](/cli), the [terraform-utils-provider](https://github.com/cloudposse/terraform-provider-utils) provider, and Spacelift via the [terraform-spacelift-cloud-infrastructure-automation](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation) module all support stacks. Utilizing the Terraform provider enables native access to the entire infrastructure configuration directly from Terraform.
+
+<ActionCard ctaLink="/core-concepts/stacks/define-components">
+  Define your first component configuration using stacks.
+</ActionCard>
 
 ## Use-cases
 

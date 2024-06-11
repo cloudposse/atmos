@@ -4,18 +4,20 @@ sidebar_position: 1
 sidebar_label: Setup Project
 id: projects    
 ---
-import DocCardList from "@theme/DocCardList"
-import KeyPoints from '@site/src/components/KeyPoints';
+import DocCardList from '@theme/DocCardList'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
 
+<Intro>
+Atmos is a framework, so we suggest organizing your infrastructure using folders to separate configuration from components. This separation is key to making your components highly reusable.
+</Intro>
 
-Alrighty, let’s dive into the project structure of an Atmos project. 
-
-Since Atmos is a framework, we recommend some conventions for how to organize your infrastructure using folders to separate configuration from components. This separation is crucial because it makes your components highly reusable.
+By keeping configuration and components distinct, you can easily manage and update each part without affecting the other.  
 
 <KeyPoints>
 - Where to put your terraform components
 - Where to keep your configuration
-- How to configure Atmos to use Terraform
+- How to configure Atmos to work with Terraform
 </KeyPoints>
 
 We also go into some of these details in our [Simple Quick Start](/quick-start/simple).

@@ -10,11 +10,14 @@ description: >-
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 
+<Intro>
 In Atmos, every component is associated with a command. The command is what drives or provisions that component. 
 For example, [Terraform "root modules"](/core-concepts/components/terraform) can be used as components in Atmos. 
 To instruct Atmos how to interact with that component, we must specify the command to run and and where the code
 for the component is located. Then, depending on the type of component, certain behaviors can be configured.
+</Intro>
 
 The `components` section of the `atmos.yaml` is how we do it. It defines how Atmos locates and executes your components. 
 Think of it as the bootstrapping configuration.  This is where we can define the the `command` to run, 
