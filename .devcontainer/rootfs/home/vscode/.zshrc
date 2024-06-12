@@ -1,6 +1,10 @@
 eval "$(direnv hook zsh)"
 
+# VSCode shell integration
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
+
+# Enable Starship prompt
+eval "$(starship init zsh)" 
 
 # Setup some aliases
 alias tree='tree -CAF --gitignore -I ".git" -I "terraform.tfstate*"'

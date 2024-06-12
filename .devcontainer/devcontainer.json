@@ -14,7 +14,8 @@
       "vscode": {
         "extensions": [
           "ms-azuretools.vscode-docker",
-          "yahyabatulu.vscode-markdown-alert"
+          "bierner.github-markdown-preview",
+          "tomasdahlqvist.markdown-admonitions"
         ],
         "settings": {
             "git.openRepositoryInParentFolders": "always",

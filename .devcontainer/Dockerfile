@@ -16,6 +16,9 @@ RUN apt-get update && \
 RUN usermod -aG docker vscode && \
     chsh -s /bin/zsh vscode
 
+# Install the starship prompt
+RUN curl -sS https://starship.rs/install.sh | sh -s -- -y
+
 # Install OpenTofu
 RUN curl -1ssLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb
 
