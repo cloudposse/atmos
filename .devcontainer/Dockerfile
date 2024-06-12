@@ -2,11 +2,7 @@ FROM mcr.microsoft.com/vscode/devcontainers/base:debian
 
 # Install Docker CLI and Docker Compose plugin
 RUN apt-get update && \
-    apt-get install -y \
-    ca-certificates \
-    curl \
-    gnupg \
-    lsb-release && \
+    apt-get install -y ca-certificates curl gnupg lsb-release apt-utils && \
     mkdir -p /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     echo \
@@ -18,3 +14,8 @@ RUN apt-get update && \
 
 # Ensure the vscode user can access the Docker socket
 RUN usermod -aG docker vscode
+
+# Install the cloudposse Debian repository
+RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+
+RUN apt-get -y install atmos

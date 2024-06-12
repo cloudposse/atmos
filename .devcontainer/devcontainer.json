@@ -14,7 +14,13 @@
       "vscode": {
         "extensions": [
           "ms-azuretools.vscode-docker"
-        ]
+        ],
+        "settings": {
+            "workbench.startupEditor": "readme",
+            "workbench.editor.autoLockGroups": {
+              "readme": "/welcome.md"
+            }
+          }
       }
     }
   }
