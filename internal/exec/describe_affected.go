@@ -89,6 +89,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	includeSettings, err := flags.GetBool("include-settings")
+	if err != nil {
+		return err
+	}
+
 	cloneTargetRef, err := flags.GetBool("clone-target-ref")
 	if err != nil {
 		return err
@@ -101,11 +106,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	var affected []schema.Affected
 
 	if repoPath != "" {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks)
+		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks, includeSettings)
 	} else if cloneTargetRef {
-		affected, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks)
+		affected, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks, includeSettings)
 	} else {
-		affected, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks)
+		affected, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks, includeSettings)
 	}
 
 	if err != nil {

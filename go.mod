@@ -25,7 +25,7 @@ require (
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
-	github.com/lrstanley/bubblezone v0.0.0-20240602193536-d14e6b69d7f9
+	github.com/lrstanley/bubblezone v0.0.0-20240609171605-b723e5c0b1af
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/open-policy-agent/opa v0.65.0
@@ -90,9 +90,9 @@ require (
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/x/ansi v0.1.2 // indirect
-	github.com/charmbracelet/x/input v0.1.0 // indirect
+	github.com/charmbracelet/x/input v0.1.2 // indirect
 	github.com/charmbracelet/x/term v0.1.1 // indirect
-	github.com/charmbracelet/x/windows v0.1.0 // indirect
+	github.com/charmbracelet/x/windows v0.1.2 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/containerd/containerd v1.7.17 // indirect
@@ -229,15 +229,15 @@ require (
 	gocloud.dev v0.25.1-0.20220408200107-09b10f7359f7 // indirect
 	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
-	golang.org/x/mod v0.14.0 // indirect
+	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/term v0.20.0 // indirect
-	golang.org/x/text v0.15.0 // indirect
+	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	golang.org/x/tools v0.17.0 // indirect
+	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/api v0.171.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect

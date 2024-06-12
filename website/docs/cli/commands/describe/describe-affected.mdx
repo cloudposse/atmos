@@ -112,8 +112,8 @@ atmos describe affected --repo-path <path_to_already_cloned_repo>
 atmos describe affected --include-spacelift-admin-stacks=true
 atmos describe affected --clone-target-ref=true
 atmos describe affected --include-dependents=true
+atmos describe affected --include-settings=true
 ```
-
 
 # Example Output
 
@@ -213,6 +213,7 @@ Affected components and stacks:
 | `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                   | no       |
 | `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory | no       |
 | `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                    | no       |
+| `--include-settings`               | Include the `settings` section for each affected component.<br/>`atmos describe affected --include-settings=true`                                                                                                                                                                                                                                       | no       |
 
 ## Output
 
@@ -234,6 +235,7 @@ Each object has the following schema:
   "folder": ".....",
   "dependents": [],
   "included_in_dependents": "true | false"
+  "settings": {}
 }
 ```
 
@@ -268,6 +270,10 @@ where:
   Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` property is
   hierarchical - each component in the list will also contain a `dependents` property if that component has dependent
   components as well
+
+- `settings` - the `settings` section of the component in the stack. It will be included only if the
+  command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
+  configuration information to [integrations](/integrations)
 
 - `included_in_dependents` - a boolean flag indicating if the affected component in the stack is also present in any of the `dependents`
   properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
