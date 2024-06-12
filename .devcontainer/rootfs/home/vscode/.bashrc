@@ -1,4 +1,4 @@
-eval "$(direnv hook zsh)"
+eval "$(direnv hook bash)"
 
 # Disable directory entry messages
 export DIRENV_LOG_FORMAT=""

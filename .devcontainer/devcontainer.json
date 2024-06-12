@@ -13,9 +13,11 @@
     "customizations": {
       "vscode": {
         "extensions": [
-          "ms-azuretools.vscode-docker"
+          "ms-azuretools.vscode-docker",
+          "yahyabatulu.vscode-markdown-alert"
         ],
         "settings": {
+            "git.openRepositoryInParentFolders": "always",
             "workbench.startupEditor": "readme",
             "workbench.editor.autoLockGroups": {
               "readme": "/welcome.md"
@@ -23,7 +25,15 @@
             "workbench.editorAssociations": {   
                 "*.md": "vscode.markdown.preview.editor"
             },
-            "terminal.integrated.shell.linux": "/bin/zsh"
+            "terminal.integrated.shell.linux": "/bin/bash",
+            "terminal.integrated.allowWorkspaceConfiguration": true,
+            "terminal.integrated.commandsToSkipShell": []
+          },
+          "yaml.schemas": {
+            "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
+                "**/stacks/*.yaml",
+                "!**/stacks/workflows/*.yaml"
+              ]
           }
       }
     }
