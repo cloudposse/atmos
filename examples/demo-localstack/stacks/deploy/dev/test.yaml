@@ -1,9 +1,0 @@
-import:
-- mixins/localstack
-- catalog/test
-
-components:
-  terraform:
-    test:
-      vars:
-        stage: dev

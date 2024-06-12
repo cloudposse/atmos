@@ -8,4 +8,6 @@
 **/terraform.tfstate.backup
 **/terraform.tfstate.d/**
 **/cache.*.txt
+**/*.tf.json
 volume/**
+

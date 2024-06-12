@@ -1,5 +1,9 @@
 base_path: "./"
 
+schemas:
+  atmos:
+    manifest: "schemas/atmos-manifest.json"
+
 components:
   terraform:
     base_path: "components/terraform"
@@ -11,7 +15,7 @@ components:
 stacks:
   base_path: "stacks"
   included_paths:
-    - "deploy/**/*"
+    - "**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_pattern: "{stage}"
@@ -29,11 +33,33 @@ commands:
 - name: "localstack"
   commands:
   - name: "up"
-    description: This command returns the number of stargazers for a GitHub repository
+    description: Start lockstack
     steps:
       - docker compose up
 
   - name: "down"
-    description: This command returns the number of stargazers for a GitHub repository
+    description: Stop localstack
     steps:
       - docker compose down
+
+  - name: "restart"
+    description: Restart localstack
+    steps:
+      - docker compose down
+      - docker compose up
+
+  - name: "reset"
+    description: Reset localstack (delete all data)
+    steps:
+      - docker compose down
+      - rm -rf volume/
+      - docker compose up
+
+- name: "terraform"
+  commands:
+    - name: "reset"
+      description: Delete all local state files
+      steps:
+        - find . -type f -name "*.tfstate" -delete
+        - echo "Deleted all state files"
+    
