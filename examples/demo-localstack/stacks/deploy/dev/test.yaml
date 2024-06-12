@@ -1,5 +1,5 @@
-imports:
-- mixins/localstackasdasdasd
+import:
+- mixins/localstack
 - catalog/test
 
 components:
