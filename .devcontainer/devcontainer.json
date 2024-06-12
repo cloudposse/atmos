@@ -20,7 +20,10 @@
             "workbench.editor.autoLockGroups": {
               "readme": "/welcome.md"
             },
-            "terminal.integrated.shell.linux": "/bin/bash"
+            "workbench.editorAssociations": {   
+                "*.md": "vscode.markdown.preview.editor"
+            },
+            "terminal.integrated.shell.linux": "/bin/zsh"
           }
       }
     }

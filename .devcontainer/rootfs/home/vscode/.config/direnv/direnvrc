@@ -4,7 +4,7 @@ show_readme() {
     last_modified=$(stat -c %Y "./README.md")
     current_time=$(date +%s)
     if [ $((current_time - last_modified)) -gt 60 ]; then
-      cat "./README.md"
+      code "./README.md"
       touch "./README.md"
     fi
   fi
