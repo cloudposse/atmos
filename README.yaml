@@ -49,6 +49,14 @@ description: |-
   [policy controls](https://atmos.tools/core-concepts/validate), [vendoring](https://atmos.tools/core-concepts/vendor/),
   and [GitOps capabilities](https://atmos.tools/integrations/github-actions) out of the box. Everything is open source and free.
 
+  ## Try It Now
+
+  You can try our tool directly in your browser using GitHub Codespaces:
+
+  [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cloudposse/atmos/pull/612)
+
+  [![Open in Codespaces](https://img.shields.io/badge/GitHub-Codespaces-blue?logo=github&style=for-the-badge)](https://github.com/codespaces/new?hide_repo_select=true&ref=reorg&repo=cloudposse/atmos)
+
 introduction: |-
 
   [Atmos](https://atmos.tools) centralizes the DevOps chain and cloud automation/orchestration into a robust command-line tool,
