@@ -1,5 +1,5 @@
 output "weather" {
-  value = data.http.weather.body
+  value = data.http.weather.response_body
 }
 
 output "url" {

@@ -25,3 +25,8 @@ RUN apt-get -y install atmos terraform helmfile kubectl
 
 # Install the rootfs/ configurations
 COPY rootfs/ /
+
+# Direnv permissions
+RUN chown -R vscode:vscode /home/vscode/.config && \
+    chmod -R 755 /home/vscode/.config && \
+    chmod 644 /home/vscode/.config/direnv/direnvrc

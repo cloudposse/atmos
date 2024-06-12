@@ -18,5 +18,5 @@ data "http" "weather" {
 # Now write this to a file (as an example of a resource)
 resource "local_file" "cache" {
   filename = "cache.${var.stage}.txt"
-  content  = data.http.weather.body
+  content  = data.http.weather.response_body
 }
