@@ -436,6 +436,7 @@ type Affected struct {
 	Folder               string      `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
 	Dependents           []Dependent `yaml:"dependents,omitempty" json:"dependents,omitempty" mapstructure:"dependents"`
 	IncludedInDependents bool        `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
+	Settings             map[any]any `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 }
 
 type BaseComponentConfig struct {
