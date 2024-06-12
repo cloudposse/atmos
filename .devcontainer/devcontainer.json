@@ -19,8 +19,9 @@
             "workbench.startupEditor": "readme",
             "workbench.editor.autoLockGroups": {
               "readme": "/welcome.md"
-            }
+            },
+            "terminal.integrated.shell.linux": "/bin/bash"
           }
       }
     }
-  }
+  } 
