@@ -43,8 +43,6 @@ You can try our tool directly in your browser using GitHub Codespaces:
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cloudposse/atmos/pull/612)
 
-[![Open in Codespaces](https://img.shields.io/badge/GitHub-Codespaces-blue?logo=github&style=for-the-badge)](https://github.com/codespaces/new?hide_repo_select=true&ref=reorg&repo=cloudposse/atmos)
-
 ## Screenshots
 
 <img src="docs/demo.gif" alt="Demo" />*<br/>Example of running atmos to describe infrastructure.*
