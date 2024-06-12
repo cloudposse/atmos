@@ -1,0 +1,39 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Custom CLI commands
+
+# No arguments or flags are required
+commands:
+
+# Use Nested Custom Commands
+- name: "localstack"
+  commands:
+  - name: "up"
+    description: This command returns the number of stargazers for a GitHub repository
+    steps:
+      - docker compose up
+
+  - name: "down"
+    description: This command returns the number of stargazers for a GitHub repository
+    steps:
+      - docker compose down

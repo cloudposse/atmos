@@ -1,0 +1,34 @@
+terraform:
+  providers:
+    aws:
+      region: "us-east-1"
+      access_key: "fake"
+      secret_key: "fake"
+      profile: "default"
+      s3_use_path_style: false
+      skip_credentials_validation: true
+      skip_metadata_api_check: true
+      skip_requesting_account_id: true
+      endpoints:
+        # S3 is an exception, and requires a TLS endpoint
+        s3: "https://localhost.localstack.cloud:4566"
+
+        # Everything else can use HTTP on localhost
+        apigateway: &localstack_url "http://localstack:4566"
+        apigatewayv2: *localstack_url
+        cloudformation: *localstack_url
+        cloudwatch: *localstack_url
+        dynamodb: *localstack_url
+        ec2: *localstack_url
+        es: *localstack_url
+        elasticache: *localstack_url
+        iam: *localstack_url
+        lambda: *localstack_url
+        rds: *localstack_url
+        route53: *localstack_url
+        secretsmanager: *localstack_url
+        ses: *localstack_url
+        sns: *localstack_url
+        sqs: *localstack_url
+        ssm: *localstack_url
+        sts: *localstack_url

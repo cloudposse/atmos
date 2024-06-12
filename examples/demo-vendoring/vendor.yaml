@@ -12,7 +12,7 @@ spec:
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
       version: "reorg"
       targets:
-        - "components/terraform/github/stargazers/{{.Version}}"
+        - "components/terraform/{{ .Component }}/{{.Version}}"
       included_paths:
         - "**/*.tf"
         - "**/*.tfvars"
