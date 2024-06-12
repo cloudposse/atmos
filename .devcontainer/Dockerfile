@@ -15,10 +15,13 @@ RUN apt-get update && \
 # Ensure the vscode user can access the Docker socket
 RUN usermod -aG docker vscode
 
+# Install OpenTofu
+RUN curl -1ssLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb
+
 # Install the cloudposse Debian repository
 RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
 
-RUN apt-get -y install atmos
+RUN apt-get -y install atmos terraform helmfile kubectl
 
 # Install the rootfs/ configurations
 COPY rootfs/ /

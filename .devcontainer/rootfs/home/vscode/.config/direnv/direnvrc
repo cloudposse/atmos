@@ -9,5 +9,3 @@ watch_readme() {
     fi
   fi
 }
-
-watch_readme
