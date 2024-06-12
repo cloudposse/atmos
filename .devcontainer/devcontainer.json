@@ -18,6 +18,8 @@
         ],
         "settings": {
             "git.openRepositoryInParentFolders": "always",
+            "git.autofetch": true,
+            "git.showProgress": true,
             "workbench.startupEditor": "readme",
             "workbench.editor.autoLockGroups": {
               "readme": "/welcome.md"
@@ -25,11 +27,11 @@
             "workbench.editorAssociations": {   
                 "*.md": "vscode.markdown.preview.editor"
             },
-            "terminal.integrated.shell.linux": "/bin/bash",
+            "terminal.integrated.shell.linux": "/bin/zsh",
             "terminal.integrated.allowWorkspaceConfiguration": true,
             "terminal.integrated.commandsToSkipShell": []
           },
-          "yaml.schemas": {
+          "json.schemas": {
             "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
                 "**/stacks/*.yaml",
                 "!**/stacks/workflows/*.yaml"

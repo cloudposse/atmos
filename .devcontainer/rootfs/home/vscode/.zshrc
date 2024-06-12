@@ -1,4 +1,10 @@
-eval "$(direnv hook bash)"
+eval "$(direnv hook zsh)"
+
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
+
+# Setup some aliases
+alias tree='tree -CAF --gitignore -I ".git" -I "terraform.tfstate*"'
+alias bat='bat --style header,numbers --theme="GitHub"'
 
 # Disable directory entry messages
 export DIRENV_LOG_FORMAT=""

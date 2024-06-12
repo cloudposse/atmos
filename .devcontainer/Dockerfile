@@ -12,8 +12,9 @@ RUN apt-get update && \
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
 
-# Ensure the vscode user can access the Docker socket
-RUN usermod -aG docker vscode
+# Ensure the vscode user can access the Docker socket, and change the shell to zsh
+RUN usermod -aG docker vscode && \
+    chsh -s /bin/zsh vscode
 
 # Install OpenTofu
 RUN curl -1ssLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb
