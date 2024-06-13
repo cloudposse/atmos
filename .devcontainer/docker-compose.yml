@@ -1,0 +1,12 @@
+include:
+  - path: "../examples/demo-localstack/docker-compose.yml"
+
+services:
+  devcontainer:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../..:/workspaces:cached
+    network_mode: service:localstack
+    command: sleep infinity
