@@ -3,7 +3,7 @@
     "build": {
       "dockerfile": "Dockerfile"
     },
-    "dockerComposeFile": "demo-localstack/docker-compose.yml",
+    "dockerComposeFile": "/workspace/examples/demo-localstack/docker-compose.yml",
     "runArgs": ["-v", "/var/run/docker.sock:/var/run/docker.sock"],
     "postCreateCommand": "/workspace/.devcontainer/post-create.sh",
     "service": "localstack",
