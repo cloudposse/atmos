@@ -23,6 +23,7 @@
           "bierner.github-markdown-preview",
           "tomasdahlqvist.markdown-admonitions",
           "redhat.vscode-yaml",
+          "casualjim.gotemplate",
           "EditorConfig.EditorConfig"
         ],
         "settings": {
@@ -43,11 +44,14 @@
             "terminal.integrated.commandsToSkipShell": [],
             "yaml.schemaStore.enable": true,
             "json.schemas": [
-                {
-                    "fileMatch": ["**/stacks/*.yaml", "!**/stacks/workflows/*.yaml", "!**/stacks/schemas/*.yaml"],
-                    "url": "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
-                }
-            ]
+            ],
+            "yaml.schemas": {
+                "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
+                    "**/stacks/**/*.yaml",
+                    "!**/stacks/workflows/**/*.yaml",
+                    "!**/stacks/schemas/**/*.yaml"
+                ]
+             }
           }
       }
     }
