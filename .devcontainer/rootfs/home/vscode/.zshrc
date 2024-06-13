@@ -6,6 +6,9 @@ eval "$(direnv hook zsh)"
 # Enable Starship prompt
 eval "$(starship init zsh)" 
 
+# Install atmos completion
+eval $(atmos completion zsh)
+
 # Setup some aliases
 alias tree='tree -CAF --gitignore -I ".git" -I "terraform.tfstate*"'
 alias bat='bat --style header,numbers --theme="GitHub"'
