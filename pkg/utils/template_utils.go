@@ -15,6 +15,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
+	"github.com/cloudposse/atmos/internal/template_funcs"
 	"github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -22,7 +23,8 @@ import (
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	t, err := template.New(tmplName).Funcs(sprig.FuncMap()).Parse(tmplValue)
+	funcs := lo.Assign(template_funcs.FuncMap(nil), sprig.FuncMap())
+	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +89,7 @@ func ProcessTmplWithDatasources(
 		return "", err
 	}
 
-	// Add Gomplate and Sprig functions and datasources
+	// Add Atmos, Gomplate and Sprig functions and datasources
 	funcs := make(map[string]any)
 
 	// Number of processing evaluations/passes
@@ -125,6 +127,11 @@ func ProcessTmplWithDatasources(
 		if cliConfig.Templates.Settings.Sprig.Enabled {
 			funcs = lo.Assign(funcs, sprig.FuncMap())
 		}
+
+		// Atmos functions
+		ctx2, cancelFunc2 := context.WithTimeout(context.TODO(), time.Second*time.Duration(10))
+		defer cancelFunc2()
+		funcs = lo.Assign(funcs, template_funcs.FuncMap(ctx2))
 
 		// Process and add environment variables
 		for k, v := range templateSettings.Env {
