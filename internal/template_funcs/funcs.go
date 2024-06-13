@@ -14,11 +14,11 @@ func FuncMap(ctx context.Context) template.FuncMap {
 	return funcs
 }
 
-func CreateAtmosFuncs(ctx context.Context) map[string]interface{} {
+func CreateAtmosFuncs(ctx context.Context) map[string]any {
 	atmosFuncs := &AtmosFuncs{ctx}
 
 	return map[string]interface{}{
-		"atmos": func() interface{} { return atmosFuncs },
+		"atmos": func() any { return atmosFuncs },
 	}
 }
 
@@ -26,6 +26,6 @@ type AtmosFuncs struct {
 	ctx context.Context
 }
 
-func (AtmosFuncs) Component(component string, stack ...interface{}) (interface{}, error) {
-	return componentFunc(component, stack)
+func (AtmosFuncs) Component(component string, stackSelector ...map[string]string) (any, error) {
+	return componentFunc(component, stackSelector...)
 }

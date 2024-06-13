@@ -23,7 +23,8 @@ import (
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	funcs := lo.Assign(template_funcs.FuncMap(nil), sprig.FuncMap())
+	funcs := lo.Assign(template_funcs.FuncMap(context.TODO()), sprig.FuncMap())
+
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
