@@ -129,9 +129,7 @@ func ProcessTmplWithDatasources(
 		}
 
 		// Atmos functions
-		ctx2, cancelFunc2 := context.WithTimeout(context.TODO(), time.Second*time.Duration(10))
-		defer cancelFunc2()
-		funcs = lo.Assign(funcs, template_funcs.FuncMap(ctx2))
+		funcs = lo.Assign(funcs, template_funcs.FuncMap(context.TODO()))
 
 		// Process and add environment variables
 		for k, v := range templateSettings.Env {

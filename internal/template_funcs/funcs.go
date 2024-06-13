@@ -26,6 +26,6 @@ type AtmosFuncs struct {
 	ctx context.Context
 }
 
-func (AtmosFuncs) Component(component string, stack ...interface{}) (string, error) {
+func (AtmosFuncs) Component(component string, stack ...interface{}) (interface{}, error) {
 	return componentFunc(component, stack)
 }
