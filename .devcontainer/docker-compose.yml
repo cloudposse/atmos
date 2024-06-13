@@ -8,5 +8,6 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ../..:/workspaces:cached
-    network_mode: service:localstack
+    links:
+      - localstack
     command: sleep infinity
