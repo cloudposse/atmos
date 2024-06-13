@@ -1,5 +1,5 @@
 {
-    "name": "Atmos Demo",
+    "name": "Atmos Demo Lab",
     "build": {
         "dockerfile": "Dockerfile",
         "context": "."
