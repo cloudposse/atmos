@@ -1,20 +1,16 @@
-package template_funcs
+package utils
 
 import (
 	"context"
 	"text/template"
 
 	"github.com/samber/lo"
+
+	"github.com/cloudposse/atmos/internal/exec"
 )
 
 // FuncMap creates and returns a map of template functions
 func FuncMap(ctx context.Context) template.FuncMap {
-	funcs := template.FuncMap{}
-	funcs = lo.Assign(funcs, CreateAtmosFuncs(ctx))
-	return funcs
-}
-
-func CreateAtmosFuncs(ctx context.Context) map[string]any {
 	atmosFuncs := &AtmosFuncs{ctx}
 
 	return map[string]any{
@@ -28,4 +24,20 @@ type AtmosFuncs struct {
 
 func (AtmosFuncs) Component(component string, stack string) (any, error) {
 	return componentFunc(component, stack)
+}
+
+func componentFunc(component string, stack string) (any, error) {
+	sections, err := exec.ExecuteDescribeComponent(component, stack)
+	if err != nil {
+		return nil, err
+	}
+
+	outputs := map[string]any{
+		"outputs": map[string]any{
+			"id": stack,
+		},
+	}
+
+	sections = lo.Assign(sections, outputs)
+	return sections, nil
 }
