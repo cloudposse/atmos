@@ -26,6 +26,6 @@ type AtmosFuncs struct {
 	ctx context.Context
 }
 
-func (AtmosFuncs) Component(component string, stackSelectors ...map[string]any) (any, error) {
-	return componentFunc(component, stackSelectors...)
+func (AtmosFuncs) Component(component string, stack string) (any, error) {
+	return componentFunc(component, stack)
 }
