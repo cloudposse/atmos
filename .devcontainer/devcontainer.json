@@ -7,7 +7,12 @@
     "runArgs": ["-v", "/var/run/docker.sock:/var/run/docker.sock"],
     "postCreateCommand": "",
     "service": "localstack",
-    
+    "features": {
+        "ghcr.io/devcontainers/features/docker-outside-of-docker": {},
+        "ghcr.io/devcontainers/features/go:1": {
+            "version": "1.22"
+        },
+    },
     "workspaceFolder": "/workspace/examples",
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
     
