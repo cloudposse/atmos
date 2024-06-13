@@ -1,10 +1,13 @@
+env:
+  # We need to ensure no profile is set when using LocalStack, or the AWS SDK will try to use it
+  AWS_PROFILE: ""
+
 terraform:
   providers:
     aws:
       region: "us-east-1"
       access_key: "fake"
       secret_key: "fake"
-      profile: "default"
       s3_use_path_style: false
       skip_credentials_validation: true
       skip_metadata_api_check: true
