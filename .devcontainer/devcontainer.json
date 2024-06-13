@@ -3,8 +3,9 @@
     "build": {
       "dockerfile": "Dockerfile"
     },
+    "dockerComposeFile": "demo-localstack/docker-compose.yml",
     "runArgs": ["-v", "/var/run/docker.sock:/var/run/docker.sock"],
-    "postCreateCommand": "docker-compose up -d",
+    "postCreateCommand": "",
     "service": "localstack",
     
     "workspaceFolder": "/workspace/examples",
@@ -28,6 +29,8 @@
             "workbench.editorAssociations": {   
                 "*.md": "vscode.markdown.preview.editor"
             },
+            "terminal.integrated.tabs.title": "Atmos (${process})",
+            "terminal.integrated.tabs.description": "${task}${separator}${local}${separator}${cwdFolder}",
             "terminal.integrated.shell.linux": "/bin/zsh",
             "terminal.integrated.allowWorkspaceConfiguration": true,
             "terminal.integrated.commandsToSkipShell": []

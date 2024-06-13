@@ -20,7 +20,7 @@ export DIRENV_LOG_FORMAT=""
 direnv allow /workspace/examples
 
 # Install a .envrc file in each example directory (it's ignored in .gitignore)
-find /workspace/examples -type d -exec bash -c 'echo show_readme > {}/.envrc' \;
+find /workspace/examples -mindepth 1 -type d -exec sh -c 'echo show_readme > {}/.envrc' \;
 find /workspace/examples -type d -exec direnv allow {} \;
 
 if [ -f "README.md" ]; then
