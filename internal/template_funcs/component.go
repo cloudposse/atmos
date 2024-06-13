@@ -9,8 +9,8 @@ func componentFunc(component string, stackSelectors ...map[string]any) (any, err
 
 	stackSelector := stackSelectors[0]
 
-	res := map[string]interface{}{
-		"outputs": map[string]interface{}{
+	res := map[string]any{
+		"outputs": map[string]any{
 			"id": stackSelector["stage"],
 		},
 	}

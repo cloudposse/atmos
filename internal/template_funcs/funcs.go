@@ -17,7 +17,7 @@ func FuncMap(ctx context.Context) template.FuncMap {
 func CreateAtmosFuncs(ctx context.Context) map[string]any {
 	atmosFuncs := &AtmosFuncs{ctx}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"atmos": func() any { return atmosFuncs },
 	}
 }
