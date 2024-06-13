@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   localstack:
     container_name: localstack
@@ -8,7 +6,7 @@ services:
       - "0.0.0.0:4566:4566"            # LocalStack Gateway
       - "0.0.0.0:4510-4559:4510-4559"  # external services port range
     environment:
-      - SERVICES=s3, iam, lambda, dynamodb
+      - SERVICES=s3, iam, lambda, dynamodb, sts, account, ec2
       - DEBUG=0
       - DOCKER_HOST=unix:///var/run/docker.sock
       - AWS_ACCESS_KEY_ID="test"

@@ -1,23 +1,27 @@
 env:
   # We need to ensure no profile is set when using LocalStack, or the AWS SDK will try to use it
   AWS_PROFILE: ""
+  TF_CLI_ARGS_plan: "-compact-warnings"
+  TF_CLI_ARGS_apply: "-compact-warnings"
 
 terraform:
   providers:
     aws:
       region: "us-east-1"
-      access_key: "fake"
-      secret_key: "fake"
+      access_key: "test"
+      secret_key: "test"
       s3_use_path_style: false
       skip_credentials_validation: true
       skip_metadata_api_check: true
-      skip_requesting_account_id: true
       endpoints:
+        # An alias for the default LocalStack URL
+        sts: &localstack_url "https://localhost.localstack.cloud:4566"
+
         # S3 is an exception, and requires a TLS endpoint
         s3: "https://localhost.localstack.cloud:4566"
 
         # Everything else can use HTTP on localhost
-        apigateway: &localstack_url "http://localstack:4566"
+        apigateway: *localstack_url
         apigatewayv2: *localstack_url
         cloudformation: *localstack_url
         cloudwatch: *localstack_url
@@ -34,4 +38,4 @@ terraform:
         sns: *localstack_url
         sqs: *localstack_url
         ssm: *localstack_url
-        sts: *localstack_url
+
