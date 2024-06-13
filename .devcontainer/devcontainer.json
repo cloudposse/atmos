@@ -1,11 +1,11 @@
 {
-    "name": "Atmos Codespace",
+    "name": "Atmos Demo",
     "build": {
       "dockerfile": "Dockerfile"
     },
     "dockerComposeFile": "demo-localstack/docker-compose.yml",
     "runArgs": ["-v", "/var/run/docker.sock:/var/run/docker.sock"],
-    "postCreateCommand": "",
+    "postCreateCommand": "/workspace/.devcontainer/post-create.sh",
     "service": "localstack",
     "features": {
         "ghcr.io/devcontainers/features/docker-outside-of-docker": {},
@@ -21,7 +21,9 @@
         "extensions": [
           "ms-azuretools.vscode-docker",
           "bierner.github-markdown-preview",
-          "tomasdahlqvist.markdown-admonitions"
+          "tomasdahlqvist.markdown-admonitions",
+          "redhat.vscode-yaml",
+          "EditorConfig.EditorConfig"
         ],
         "settings": {
             "git.openRepositoryInParentFolders": "always",
@@ -38,13 +40,14 @@
             "terminal.integrated.tabs.description": "${task}${separator}${local}${separator}${cwdFolder}",
             "terminal.integrated.shell.linux": "/bin/zsh",
             "terminal.integrated.allowWorkspaceConfiguration": true,
-            "terminal.integrated.commandsToSkipShell": []
-          },
-          "json.schemas": {
-            "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
-                "**/stacks/*.yaml",
-                "!**/stacks/workflows/*.yaml"
-              ]
+            "terminal.integrated.commandsToSkipShell": [],
+            "yaml.schemaStore.enable": true,
+            "json.schemas": [
+                {
+                    "fileMatch": ["**/stacks/*.yaml", "!**/stacks/workflows/*.yaml", "!**/stacks/schemas/*.yaml"],
+                    "url": "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+                }
+            ]
           }
       }
     }
