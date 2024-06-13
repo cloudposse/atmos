@@ -276,7 +276,14 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := u.ProcessTmplWithDatasources(
+								cliConfig,
+								settingsSectionStruct,
+								"describe-stacks-all-sections",
+								componentSectionStr,
+								configAndStacksInfo.ComponentSection,
+								true,
+							)
 							if err != nil {
 								return nil, err
 							}
@@ -442,7 +449,14 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := u.ProcessTmplWithDatasources(
+								cliConfig,
+								settingsSectionStruct,
+								"describe-stacks-all-sections",
+								componentSectionStr,
+								configAndStacksInfo.ComponentSection,
+								true,
+							)
 							if err != nil {
 								return nil, err
 							}

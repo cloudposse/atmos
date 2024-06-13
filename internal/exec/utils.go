@@ -479,7 +479,14 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	componentSectionProcessed, err := u.ProcessTmplWithDatasources(
+		cliConfig,
+		settingsSectionStruct,
+		"all-atmos-sections",
+		componentSectionStr,
+		configAndStacksInfo.ComponentSection,
+		true,
+	)
 	if err != nil {
 		// If any error returned from the templates processing, log it and exit
 		u.LogErrorAndExit(err)
