@@ -29,6 +29,13 @@
           "EditorConfig.EditorConfig"
         ],
         "settings": {
+            // https://github.com/microsoft/vscode-docker/discussions/3945#discussioncomment-5917158
+            "docker.commands.composeUp": [
+                {
+                    "label": "override",
+                    "template": "${composeCommand} ${configurationFile} up ${detached} ${build} --remove-orphans",
+                }
+            ],
             "git.openRepositoryInParentFolders": "always",
             "git.autofetch": true,
             "git.showProgress": true,
