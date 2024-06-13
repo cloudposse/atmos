@@ -29,13 +29,19 @@ logs:
 # No arguments or flags are required
 commands:
 
-# Use Nested Custom Commands
+# Use Nested Custom Commands to provide easier interface for Docker Compose
 - name: "localstack"
   commands:
   - name: "up"
-    description: Start lockstack
+    description: Start lockstack in the background
     steps:
-      - docker compose up
+      - |
+        container_running=$(docker ps -q -f "name=localstack")
+        if [ -n "$container_running" ]; then
+          echo "LocalStack is already running; run \`atmos localstack down\` to stop it"
+        else
+          docker compose up -d --wait
+        fi
 
   - name: "down"
     description: Stop localstack
@@ -45,15 +51,25 @@ commands:
   - name: "restart"
     description: Restart localstack
     steps:
-      - docker compose down
-      - docker compose up
+      - docker compose restart
 
   - name: "reset"
     description: Reset localstack (delete all data)
     steps:
       - docker compose down
       - rm -rf volume/
-      - docker compose up
+      - docker compose up -d
+
+  - name: "status"
+    description: Show the status of LocalStack
+    steps:
+      - |
+        container_running=$(docker ps -q -f "name=localstack")
+        if [ -n "$container_running" ]; then
+          docker compose ps --format "{{`{{.Service}} is {{.State}}`}}"
+        else
+          echo "LocalStack is not running; run \`atmos localstack up\` to start it"
+        fi
 
 - name: "terraform"
   commands:

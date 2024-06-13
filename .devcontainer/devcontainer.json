@@ -1,11 +1,14 @@
 {
     "name": "Atmos Demo",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
     "hostRequirements": {
         "cpus": 8,
         "memory": "16gb",
         "storage": "32gb"
      },
-    "dockerComposeFile": "docker-compose.yml",
     "runArgs": ["-v", "/var/run/docker.sock:/var/run/docker.sock"],
     "postCreateCommand": "/workspace/.devcontainer/post-create.sh",
     "service": "localstack",
@@ -29,13 +32,6 @@
           "EditorConfig.EditorConfig"
         ],
         "settings": {
-            // https://github.com/microsoft/vscode-docker/discussions/3945#discussioncomment-5917158
-            "docker.commands.composeUp": [
-                {
-                    "label": "override",
-                    "template": "${composeCommand} ${configurationFile} up ${detached} ${build} --remove-orphans",
-                }
-            ],
             "git.openRepositoryInParentFolders": "always",
             "git.autofetch": true,
             "git.showProgress": true,
