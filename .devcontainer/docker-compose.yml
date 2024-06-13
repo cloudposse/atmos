@@ -1,5 +1,5 @@
-include:
-  - path: "../examples/demo-localstack/docker-compose.yml"
+#include:
+#  - path: "../examples/demo-localstack/docker-compose.yml"
 
 services:
   devcontainer:
@@ -8,6 +8,6 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ../:/workspace:cached
-    links:
-      - localstack
+#    links:
+#      - localstack
     command: sleep infinity
