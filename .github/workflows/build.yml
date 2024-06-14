@@ -6,6 +6,12 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -27,3 +33,35 @@ jobs:
           formula-path: Formula/a/atmos.rb
         env:
           COMMITTER_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+
+  docker:
+    name: "Build and push Docker image for Atmos CLI"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout source code at current commit"
+        uses: actions/checkout@v4
+
+      - name: "Docker Build"
+        id: build
+        uses: cloudposse/github-action-docker-build-push@main
+        with:
+          registry: ghcr.io
+          organization: "${{ github.event.repository.owner.login }}"
+          repository: "${{ github.event.repository.name }}"
+          login: "${{ github.actor }}"
+          password: "${{ secrets.GITHUB_TOKEN }}"
+          platforms: linux/amd64,linux/arm64
+          file: Dockerfile
+          build-args: |
+            ATMOS_VERSION=${{ github.event.release.tag_name }}
+
+      - name: "Verify Image"
+        run: |
+            docker pull ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag}}
+
+      - name: "Job Summary"
+        run: |
+          echo "## Docker Image Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          docker inspect ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag}}  >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
