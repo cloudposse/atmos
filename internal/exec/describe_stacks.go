@@ -11,7 +11,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -145,7 +144,7 @@ func ExecuteDescribeStacks(
 						}
 
 						// Find all derived components of the provided components and include them in the output
-						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
+						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
 						if err != nil {
 							return nil, err
 						}
@@ -330,7 +329,7 @@ func ExecuteDescribeStacks(
 						}
 
 						// Find all derived components of the provided components and include them in the output
-						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
+						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
 						if err != nil {
 							return nil, err
 						}

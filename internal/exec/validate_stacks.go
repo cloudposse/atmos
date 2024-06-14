@@ -11,7 +11,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -114,7 +113,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, _, err := s.ProcessYAMLConfigFile(
+		stackConfig, importsConfig, _, err := ProcessYAMLConfigFile(
 			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -133,7 +132,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		}
 
 		// Process and validate the stack manifest
-		_, err = s.ProcessStackConfig(
+		_, err = ProcessStackConfig(
 			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
 			cliConfig.TerraformDirAbsolutePath,

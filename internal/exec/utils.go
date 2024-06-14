@@ -13,7 +13,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -244,7 +243,7 @@ func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
 	error,
 ) {
 	// Process stack config file(s)
-	_, stacksMap, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
+	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		cliConfig,
 		cliConfig.StacksBaseAbsolutePath,
 		cliConfig.TerraformDirAbsolutePath,
