@@ -350,7 +350,7 @@ func ProcessStacks(
 			}
 
 			if cliConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
@@ -481,7 +481,7 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmplWithDatasources(
+	componentSectionProcessed, err := ProcessTmplWithDatasources(
 		cliConfig,
 		settingsSectionStruct,
 		"all-atmos-sections",

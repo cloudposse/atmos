@@ -244,7 +244,7 @@ func createComponentStackMap(
 
 					// Find Atmos stack name
 					if cliConfig.Stacks.NameTemplate != "" {
-						stackName, err = u.ProcessTmpl("validate-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						stackName, err = ProcessTmpl("validate-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 						if err != nil {
 							return nil, err
 						}

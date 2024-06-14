@@ -3,6 +3,7 @@ package stack
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v2"
@@ -203,7 +204,7 @@ func ProcessYAMLConfigFile(
 	// Process `Go` templates in the imported stack manifest using the provided `context`
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && len(context) > 0 {
-		stackManifestTemplatesProcessed, err = u.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, err = exec.ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
@@ -387,7 +388,7 @@ func ProcessYAMLConfigFile(
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
 				// The import was not found -> check if the import is a Go template; if not, return the error
-				isGolangTemplate, err2 := u.IsGolangTemplate(imp)
+				isGolangTemplate, err2 := exec.IsGolangTemplate(imp)
 				if err2 != nil {
 					return nil, nil, nil, err2
 				}
