@@ -1,0 +1,60 @@
+repositories:
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
+
+releases:
+  - name: nginx
+    namespace: default
+    chart: bitnami/nginx
+    force: true
+    hooks:
+      - events: ["presync"]
+        command: "kubectl"
+        args: ["apply", "-f", "manifests/"]
+      - events: ["postuninstall"]
+        command: "kubectl"
+        args: ["delete", "-f", "manifests/"]
+      - events: ["postsync"]
+        command: "bash"
+        showlogs: true
+        args: ["-c", 'echo -n "Success! We have taken over fbi.com ;)"']
+    transformers:
+      - apiVersion: builtin
+        kind: AnnotationsTransformer
+        metadata:
+          name: notImportantHere
+        annotations:
+          redeploy: '{{ now }}'
+        fieldSpecs:
+        - path: spec/template/metadata/annotations
+          create: true
+    values:
+      - image:
+          tag: "latest"
+        service:
+          type: ClusterIP
+          port: 80
+        replicaCount: 1 
+        ingress:
+          enabled: true
+          hostname: fbi.com
+          paths:
+            - /
+        readinessProbe:
+          initialDelaySeconds: 1
+          periodSeconds: 2
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+        persistence:
+          enabled: false
+        extraVolumes:
+          - name: custom-html
+            configMap:
+              name: custom-html
+        extraVolumeMounts:
+          - name: custom-html
+            mountPath: /app/index.html
+            subPath: index.html
+            readOnly: true
+      

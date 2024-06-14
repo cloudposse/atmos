@@ -1,0 +1,7 @@
+components:
+  terraform:
+    demo:
+      metadata:
+        type: abstract
+        component: bucket
+      vars: {}

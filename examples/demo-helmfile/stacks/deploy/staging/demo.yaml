@@ -1,0 +1,12 @@
+import:
+- mixins/localstack
+- catalog/demo
+
+vars:
+  stage: staging
+
+components:
+  terraform:
+    demo:
+      metadata:
+        type: real
