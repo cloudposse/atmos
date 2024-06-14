@@ -1,11 +1,10 @@
-FROM golang:1.18 AS confetty
+FROM golang:1.22 AS confetty
 
 # Set the working directory
 WORKDIR /app
 
-# Install the application
+# Install the confetty application
 RUN go install github.com/maaslalani/confetty@latest
-
 
 FROM mcr.microsoft.com/vscode/devcontainers/base:debian
 
@@ -14,7 +13,7 @@ COPY --from=confetty /go/bin/confetty /usr/local/bin/confetty
 
 # Install Docker CLI and Docker Compose plugin
 RUN apt-get update && \
-    apt-get install -y ca-certificates curl gnupg lsb-release apt-utils direnv && \
+    apt-get install -y ca-certificates curl gnupg lsb-release apt-utils direnv screen && \
     mkdir -p /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     echo \
@@ -37,7 +36,7 @@ RUN curl -1ssLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --ro
 # Install the cloudposse Debian repository
 RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
 
-RUN apt-get -y install atmos terraform kubectl helmfile helm && \
+RUN apt-get -y install atmos terraform kubectl helmfile helm k9s stern && \
     helm plugin install https://github.com/databus23/helm-diff
 
 # Install the rootfs/ configurations
