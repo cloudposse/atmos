@@ -3,10 +3,6 @@ package stack
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/pkg/errors"
-	"github.com/santhosh-tekuri/jsonschema/v5"
-	"gopkg.in/yaml.v2"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,6 +10,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
+	"github.com/santhosh-tekuri/jsonschema/v5"
+	"gopkg.in/yaml.v2"
+
+	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
