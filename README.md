@@ -27,21 +27,24 @@
 
 -->
 
-> ### Automated Terraform Management & Orchestration Software (ATMOS)
 
-Atmos simplifies complex cloud architectures and DevOps workflows into [intuitive CLI commands](https://atmos.tools/category/cli).
-Its strength in managing [DRY configurations at scale](https://atmos.tools/core-concepts/) is supported by robust
+Atmos is a framework that simplifies complex cloud architectures and DevOps workflows into [intuitive CLI commands](https://atmos.tools/category/cli).
+Its strength in managing [DRY configurations at scale](https://atmos.tools/core-concepts/) for Terraform and is supported by robust
 [design patterns](https://atmos.tools/design-patterns/), comprehensive [documentation](https://atmos.tools/), and a
 [passionate community](https://slack.cloudposse.com/), making it a versatile [tool for both startups and enterprises](https://cloudposse.com/).
 Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes custom
 [policy controls](https://atmos.tools/core-concepts/validate), [vendoring](https://atmos.tools/core-concepts/vendor/),
 and [GitOps capabilities](https://atmos.tools/integrations/github-actions) out of the box. Everything is open source and free.
 
-## Try It Now
 
-You can try our tool directly in your browser using GitHub Codespaces:
-
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cloudposse/atmos/pull/612)
+> [!TIP]
+> #### Try It Now
+>
+> You can try our tool directly in your browser using GitHub Codespaces
+> [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cloudposse/atmos/pull/612)
+>
+> Already start one? Find it [here](https://github.com/codespaces).
+>
 
 ## Screenshots
 
