@@ -1,6 +1,7 @@
 components:
   terraform:
     test:
+      command: tofu
       metadata:
         # Point to the Terraform component
         component: test
