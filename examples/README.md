@@ -1,13 +1,11 @@
 # Examples
 
 > [!TIP]
-  > #### Try It Now
-  >
-  > You can try our tool directly in your browser using GitHub Codespaces!
+  > ### You can try `atmos` directly in your browser using GitHub Codespaces!
   >
   > [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=cloudposse/atmos&skip_quickstart=true)
   >
-  > Already start one? Find it [here](https://github.com/codespaces).
+  > <i>Already start one? Find it [here](https://github.com/codespaces).</i>
   >
 
 ## Try it Locally
