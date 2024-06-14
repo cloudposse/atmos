@@ -18,5 +18,11 @@ find /workspace/examples -name '.envrc' -execdir direnv allow \;
 # Enable Starship prompt
 eval "$(starship init zsh)" 
 
+# Celebrate! 🎉
+if [ ! -f /tmp/.atmos-welcome ]; then
+    timeout --preserve-status 3 confetty
+    touch /tmp/.atmos-welcome
+fi
+
 # Show the version of atmos installed
 atmos version

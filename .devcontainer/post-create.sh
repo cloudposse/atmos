@@ -9,10 +9,7 @@ mv /workspace/examples/welcome.md /workspace/examples/README.md
 # Note that this also means errors won’t fail the bootstrapping of the container, which can mask issues.
 
 # Install a .envrc file in each example directory (it's ignored in .gitignore)
-nohup find /workspace/examples -mindepth 1 -type d -exec sh -c 'echo show_readme > {}/.envrc' \; >/tmp/direnv.log&
+screen -S direnv-setup "find /workspace/examples -mindepth 1 -type d -exec sh -c 'echo show_readme > {}/.envrc' \;"
 
 # Start localstack in the background, sincen it can take a little bit to start up
-nohup docker compose -f /workspace/examples/demo-localstack/docker-compose.yml up -d >/tmp/direnv.log &
-
-# Celebrate! 🎉
-timeout --preserve-status 3 confetty
+screen -S docker-compose -dm 'docker compose -f /workspace/examples/demo-localstack/docker-compose.yml up'
