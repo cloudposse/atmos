@@ -1,0 +1,9 @@
+components:
+  terraform:
+    test:
+      metadata:
+        # Point to the Terraform component
+        component: test
+      vars:
+        enabled: true
+        name: "test"

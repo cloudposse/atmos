@@ -3,3 +3,4 @@ import:
   - mixins/region/us-east-2
   # Override the `vpc` component configuration for `dev` by importing the `catalog/vpc/dev` manifest
   - catalog/vpc/dev
+  - catalog/test/defaults
