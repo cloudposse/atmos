@@ -28,7 +28,7 @@ terraform:
       # https://docs.gomplate.ca/functions/strings
       atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
       # Examples of using Atmos template functions
-      atmos_test: '{{ (atmos.Component "vpc" .atmos_stack).outputs.id }}'
+      atmos_test: '{{ (atmos.Component "vpc" .stack).outputs.id }}'
       # atmos_test: '{{ (atmos.Component "vpc" "plat-ue2-prod").outputs.id }}'
       # atmos_test: '{{ (atmos.Component "vpc" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage)).outputs.id }}'
       # atmos_test: '{{ (atmos.Component "vpc" (printf "plat-%s-dev" .vars.environment)).outputs.id }}'

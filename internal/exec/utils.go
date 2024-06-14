@@ -426,7 +426,9 @@ func ProcessStacks(
 	// Add Atmos component and stack
 	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
+	configAndStacksInfo.ComponentSection["atmos_manifest"] = configAndStacksInfo.StackFile
 
 	// Add Atmos CLI config
 	atmosCliConfig := map[string]any{}

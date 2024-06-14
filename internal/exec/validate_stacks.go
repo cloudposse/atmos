@@ -289,7 +289,9 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 					// Hide the sections that should not be compared
 					componentConfig["atmos_cli_config"] = nil
 					componentConfig["atmos_stack"] = nil
+					componentConfig["stack"] = nil
 					componentConfig["atmos_stack_file"] = nil
+					componentConfig["atmos_manifest"] = nil
 					componentConfig["sources"] = nil
 					componentConfig["imports"] = nil
 					componentConfig["deps_all"] = nil

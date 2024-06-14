@@ -238,7 +238,9 @@ func ExecuteDescribeStacks(
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+						configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
@@ -262,7 +264,9 @@ func ExecuteDescribeStacks(
 							// Atmos component, stack, and stack manifest file
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
+							componentSection["stack"] = stackName
 							componentSection["atmos_stack_file"] = stackFileName
+							componentSection["atmos_manifest"] = stackFileName
 
 							// Process `Go` templates
 							componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -419,7 +423,9 @@ func ExecuteDescribeStacks(
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+						configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
@@ -435,7 +441,9 @@ func ExecuteDescribeStacks(
 							// Atmos component, stack, and stack manifest file
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
+							componentSection["stack"] = stackName
 							componentSection["atmos_stack_file"] = stackFileName
+							componentSection["atmos_manifest"] = stackFileName
 
 							// Process `Go` templates
 							componentSectionStr, err := u.ConvertToYAML(componentSection)
