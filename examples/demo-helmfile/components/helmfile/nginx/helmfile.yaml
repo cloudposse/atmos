@@ -40,6 +40,11 @@ releases:
           hostname: fbi.com
           paths:
             - /
+          extraHosts:
+            - name: '{{ env "CODESPACE_HOSTNAME" | default "nginx.local" }}'
+              path: /
+            - name: 'localhost'
+              path: /
         readinessProbe:
           initialDelaySeconds: 1
           periodSeconds: 2
@@ -57,4 +62,3 @@ releases:
             mountPath: /app/index.html
             subPath: index.html
             readOnly: true
-      

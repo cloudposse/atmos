@@ -3,6 +3,11 @@ eval "$(direnv hook zsh)"
 # VSCode shell integration
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
 
+export KUBECONFIG=${KUBECONFIG:-/workspace/examples/demo-helmfile/kubeconfig.yaml}
+
+export CODESPACE_HOSTNAME="${CODESPACE_NAME}-80.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+export CODESPACE_URL="http://${CODESPACE_HOSTNAME}"
+
 # Install atmos completion
 eval $(atmos completion zsh)
 

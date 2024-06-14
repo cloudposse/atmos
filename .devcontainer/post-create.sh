@@ -22,3 +22,7 @@ screen -L -Logfile /tmp/localstack.log -S localstack -dm sh -c 'docker compose u
 # This should used as the file for KUBECONFIG
 cd /workspace/examples/demo-helmfile
 screen -L -Logfile /tmp/k3s.log -S k3s -dm sh -c 'docker compose up'
+
+# Since we cannot mount volumes inside of compose, we need to copy the kubeconfig.yaml file to the workspace
+export KUBECONFIG=${KUBECONFIG:-/workspace/examples/demo-helmfile/kubeconfig.yaml}
+screen -L -Logfile /tmp/kubeconfig.log -S kubeconfig -dm sh -c 'until test -f ${KUBECONFIG}; do docker cp demo-helmfile-server-1:/output/kubeconfig.yaml ${KUBECONFIG}; sleep 1; done; chmod 600 ${KUBECONFIG}'

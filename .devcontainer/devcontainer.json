@@ -1,5 +1,6 @@
 {
     "name": "Atmos Demo Lab",
+    "forwardPorts": [80, 443],
     "build": {
         "dockerfile": "Dockerfile",
         "context": "."
