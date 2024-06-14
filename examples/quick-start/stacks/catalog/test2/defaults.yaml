@@ -1,0 +1,11 @@
+components:
+  terraform:
+    test2:
+      metadata:
+        # Point to the Terraform component
+        component: test
+      vars:
+        enabled: true
+        name: "test2"
+        # Examples of using Atmos template functions to get the outputs of another Atmos component
+        test_label_id: '{{ (atmos.Component "test" .stack).vars.stage }}'

@@ -20,6 +20,11 @@ terraform:
       atlantis_project: "{{ .atlantis_project }}"
       region: "{{ .vars.region }}"
       # provisioned_by_ip: '{{ (datasource "ip").ip }}'
+      # Examples of using Atmos template functions
+      # atmos_test: '{{ (atmos.Component "vpc" .stack).outputs.id }}'
+      # atmos_test: '{{ (atmos.Component "vpc" "plat-ue2-prod").outputs.id }}'
+      # atmos_test: '{{ (atmos.Component "vpc" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage)).outputs.id }}'
+      # atmos_test: '{{ (atmos.Component "vpc" (printf "plat-%s-dev" .vars.environment)).outputs.id }}'
 
   backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud
 
