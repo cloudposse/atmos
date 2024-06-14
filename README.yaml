@@ -50,15 +50,10 @@ description: |-
 
 
   > [!TIP]
-  > #### Try It Now
+  > ### You can try out `atmos` directly in your browser using GitHub Codespaces
   >
-  > You can try our tool directly in your browser using GitHub Codespaces
-  >
-  > <br/>
-  >
-  > [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cloudposse/atmos/pull/612)
-  >
-  > __Already start one? Find it [here](https://github.com/codespaces).__
+  > [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=reorg&repo=cloudposse/atmos&skip_quickstart=true) 
+  > <i>Already start one? Find it [here](https://github.com/codespaces).</i>
   >
 
 introduction: |-

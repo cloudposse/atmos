@@ -5,7 +5,7 @@
   >
   > You can try our tool directly in your browser using GitHub Codespaces!
   >
-  > [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cloudposse/atmos/pull/612)
+  > [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=cloudposse/atmos&skip_quickstart=true)
   >
   > Already start one? Find it [here](https://github.com/codespaces).
   >
