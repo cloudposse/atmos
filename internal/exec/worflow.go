@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
-	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -36,7 +35,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	// If the `workflow` argument is not passed, start the workflow UI
 	if len(args) != 1 {
-		workflowFile, workflow, fromStep, err = w.ExecuteWorkflowUI(cliConfig)
+		workflowFile, workflow, fromStep, err = ExecuteWorkflowUI(cliConfig)
 		if err != nil {
 			return err
 		}
