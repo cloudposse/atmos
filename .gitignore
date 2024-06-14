@@ -10,6 +10,7 @@
 **/*.helmfile.vars.yaml
 **/.terraform.lock.hcl
 .vscode/
+**/nohup.out
 
 # Module directory
 .terraform
