@@ -11,6 +11,7 @@
 **/.terraform.lock.hcl
 .vscode/
 **/nohup.out
+**/kubeconfig.yaml
 
 # Module directory
 .terraform

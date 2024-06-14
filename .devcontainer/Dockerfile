@@ -33,11 +33,14 @@ RUN curl -sS https://starship.rs/install.sh | sh -s -- -y
 # Install OpenTofu
 RUN curl -1ssLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb
 
+# Install Kustomize binary (required by Helmfile)
+RUN curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
+
 # Install the cloudposse Debian repository
-RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash -s -- /usr/local/bin
 
 RUN apt-get -y install atmos terraform kubectl helmfile helm k9s stern && \
-    helm plugin install https://github.com/databus23/helm-diff
+    su - vscode -c "helm plugin install https://github.com/databus23/helm-diff"
 
 # Install the rootfs/ configurations
 COPY rootfs/ /

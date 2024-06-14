@@ -19,7 +19,9 @@ find /workspace/examples -name '.envrc' -execdir direnv allow \;
 eval "$(starship init zsh)" 
 
 # Celebrate! 🎉
-timeout --preserve-status 2 confetty
+if [ "${TERM}" != "screen.xterm-256color" ]; then
+  timeout --preserve-status 2 confetty
+fi
 
 # Show the version of atmos installed
 atmos version

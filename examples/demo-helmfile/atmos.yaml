@@ -5,12 +5,8 @@ schemas:
     manifest: "schemas/atmos-manifest.json"
 
 components:
-  terraform:
-    base_path: "components/terraform"
-    apply_auto_approve: false
-    deploy_run_init: true
-    init_run_reconfigure: true
-    auto_generate_backend_file: false
+  helmfile:
+    base_path: "components/helmfile"
   
 stacks:
   base_path: "stacks"
@@ -30,45 +26,43 @@ logs:
 commands:
 
 # Use Nested Custom Commands to provide easier interface for Docker Compose
-- name: "localstack"
+- name: "k3s"
   commands:
   - name: "up"
     description: Start lockstack in the background
     steps:
       - |
-        container_running=$(docker ps -q -f "name=localstack")
+        container_running=$(docker ps -q -f "name=k3s")
         if [ -n "$container_running" ]; then
-          echo "LocalStack is already running; run \`atmos localstack down\` to stop it"
+          echo "k3s is already running; run \`atmos k3s down\` to stop it"
         else
           docker compose up -d --wait
         fi
 
   - name: "down"
-    description: Stop localstack
+    description: Stop k3s
     steps:
       - docker compose down
 
   - name: "restart"
-    description: Restart localstack
+    description: Restart k3s
     steps:
       - docker compose restart
 
   - name: "reset"
-    description: Reset localstack (delete all data)
+    description: Reset k3s (delete all data)
     steps:
-      - docker compose down
-      - rm -rf volume/
-      - docker compose up -d
+      - docker compose down --volumes
 
   - name: "status"
-    description: Show the status of LocalStack
+    description: Show the status of k3s
     steps:
       - |
-        container_running=$(docker ps -q -f "name=localstack")
+        container_running=$(docker ps -q -f "name=k3s")
         if [ -n "$container_running" ]; then
           docker compose ps --format "{{`{{.Service}} is {{.State}}`}}"
         else
-          echo "LocalStack is not running; run \`atmos localstack up\` to start it"
+          echo "k3s is not running; run \`atmos k3s up\` to start it"
         fi
 
 - name: "terraform"
