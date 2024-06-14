@@ -1,13 +1,13 @@
+# Use a base image with platform specification
 FROM --platform=$BUILDPLATFORM debian:bookworm-slim
 
+# Define the arguments for Atmos version and platforms
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
-
-# Set the Atmos version (without the v prefix)
 ARG ATMOS_VERSION
-ARG OS=linux
-ARG ARCH=amd64
 
+SHELL ["/bin/bash", "-c"]
+# Update the package list and install curl and git
 RUN apt-get update && apt-get install -y curl git
 
 # Install the Cloud Posse Debian repository
@@ -25,14 +25,11 @@ RUN apt-get -y install terraform kubectl helmfile helm
 # Install the helm-diff plugin required by Helmfile
 RUN helm plugin install https://github.com/databus23/helm-diff
 
-# Install Atmos
+# Install Atmos from the GitHub Release
 RUN case ${TARGETPLATFORM} in \
-    "linux/amd64") \
-        OS=linux; ARCH=amd64 ;; \
-    "linux/arm64") \
-        OS=linux; ARCH=arm64 ;; \
-    *) \
-        echo "Unsupported platform: ${TARGETPLATFORM}" && exit 1 ;; \
+        "linux/amd64") OS=linux; ARCH=amd64 ;; \
+        "linux/arm64") OS=linux; ARCH=arm64 ;; \
+        *) echo "Unsupported platform: ${TARGETPLATFORM}" && exit 1 ;; \
     esac && \
     ATMOS_VERSION=${ATMOS_VERSION#v} && \
     curl -1sSLf "https://github.com/cloudposse/atmos/releases/download/v${ATMOS_VERSION}/atmos_${ATMOS_VERSION}_${OS}_${ARCH}" -o /usr/local/bin/atmos && \
