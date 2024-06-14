@@ -19,10 +19,7 @@ find /workspace/examples -name '.envrc' -execdir direnv allow \;
 eval "$(starship init zsh)" 
 
 # Celebrate! 🎉
-if [ ! -f /tmp/.atmos-welcome ]; then
-    timeout --preserve-status 3 confetty
-    touch /tmp/.atmos-welcome
-fi
+timeout --preserve-status 3 confetty
 
 # Show the version of atmos installed
 atmos version
