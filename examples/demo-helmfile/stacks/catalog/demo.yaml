@@ -4,7 +4,7 @@ components:
       metadata:
         type: abstract
         component: nginx
-      vars:
+      values:
       - image:
           tag: "latest"
         service:
