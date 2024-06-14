@@ -41,9 +41,12 @@ and [GitOps capabilities](https://atmos.tools/integrations/github-actions) out o
 > #### Try It Now
 >
 > You can try our tool directly in your browser using GitHub Codespaces
+>
+> <br/>
+>
 > [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cloudposse/atmos/pull/612)
 >
-> Already start one? Find it [here](https://github.com/codespaces).
+> __Already start one? Find it [here](https://github.com/codespaces).__
 >
 
 ## Screenshots
