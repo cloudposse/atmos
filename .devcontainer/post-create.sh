@@ -10,4 +10,4 @@ nohup find /workspace/examples -mindepth 1 -type d -exec sh -c 'echo show_readme
 nohup docker compose -f /workspace/examples/demo-localstack/docker-compose.yml up -d &
 
 # Celebrate! 🎉
-timeout 3 confetty
+timeout --preserve-status 3 confetty

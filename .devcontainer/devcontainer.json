@@ -29,7 +29,8 @@
           "tomasdahlqvist.markdown-admonitions",
           "redhat.vscode-yaml",
           "casualjim.gotemplate",
-          "EditorConfig.EditorConfig"
+          "EditorConfig.EditorConfig",
+          "EthanSK.restore-terminals"
         ],
         "settings": {
             "git.openRepositoryInParentFolders": "always",
@@ -42,6 +43,17 @@
             "workbench.editorAssociations": {   
                 "*.md": "vscode.markdown.preview.editor"
             },
+            "restoreTerminals.runOnStartup": true,
+            "restoreTerminals.terminals": [
+                {
+                  "name": "Atmos",
+                  "commands": ["atmos version"]
+                },
+                {
+                  "name": "confetty",
+                  "commands": ["confetty"]
+                }
+              ],
             "terminal.integrated.tabs.title": "Atmos (${process})",
             "terminal.integrated.tabs.description": "${task}${separator}${local}${separator}${cwdFolder}",
             "terminal.integrated.shell.linux": "/bin/zsh",
