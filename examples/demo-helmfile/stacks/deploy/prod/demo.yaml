@@ -1,12 +1,12 @@
 import:
-- mixins/localstack
+- mixins/k3s
 - catalog/demo
 
 vars:
   stage: prod
 
 components:
-  terraform:
+  helmfile:
     demo:
       metadata:
         type: real

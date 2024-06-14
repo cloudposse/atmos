@@ -1,6 +1,21 @@
 {
     "name": "Atmos Demo Lab",
     "forwardPorts": [80, 443],
+    "portsAttributes": {
+        "80": {
+          "label": "Kubernetes Ingress"
+        },
+        "443": {
+          "label": "Kubernetes Ingress (TLS)"
+        }
+      },
+    "security.workspace.trust.emptyWindow": true,
+    "security.workspace.trust.untrustedFiles": "prompt",
+    "security.workspace.trust.domain": {
+        "*.github.com": true,
+        "*.app.github.dev": true,
+        "localhost": true
+    },
     "build": {
         "dockerfile": "Dockerfile",
         "context": "."

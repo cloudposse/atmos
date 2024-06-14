@@ -29,36 +29,4 @@ releases:
         - path: spec/template/metadata/annotations
           create: true
     values:
-      - image:
-          tag: "latest"
-        service:
-          type: ClusterIP
-          port: 80
-        replicaCount: 1 
-        ingress:
-          enabled: true
-          hostname: fbi.com
-          paths:
-            - /
-          extraHosts:
-            - name: '{{ env "CODESPACE_HOSTNAME" | default "nginx.local" }}'
-              path: /
-            - name: 'localhost'
-              path: /
-        readinessProbe:
-          initialDelaySeconds: 1
-          periodSeconds: 2
-          timeoutSeconds: 1
-          successThreshold: 1
-          failureThreshold: 3
-        persistence:
-          enabled: false
-        extraVolumes:
-          - name: custom-html
-            configMap:
-              name: custom-html
-        extraVolumeMounts:
-          - name: custom-html
-            mountPath: /app/index.html
-            subPath: index.html
-            readOnly: true
+      
