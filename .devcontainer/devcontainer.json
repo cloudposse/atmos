@@ -43,6 +43,7 @@
           "ms-azuretools.vscode-docker",
           "bierner.github-markdown-preview",
           "tomasdahlqvist.markdown-admonitions",
+          "HashiCorp.terraform",
           "redhat.vscode-yaml",
           "casualjim.gotemplate",
           "EditorConfig.EditorConfig"

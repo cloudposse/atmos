@@ -2,6 +2,7 @@
 **/.terraform/*
 *.tfstate
 *.tfstate.*
+**/*.tf.json
 **/planfile
 **/*.planfile
 **/*.kubeconfig

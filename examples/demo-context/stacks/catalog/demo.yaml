@@ -1,0 +1,11 @@
+components:
+  terraform:
+    demo:
+      metadata:
+        type: abstract
+        component: petset
+      providers:
+        context:
+          values:
+            name: petset
+      vars: {}

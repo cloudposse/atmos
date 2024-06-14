@@ -1,0 +1,20 @@
+import:
+- deploy/_defaults
+- catalog/demo
+- mixins/east-coast
+
+terraform:
+  providers:
+    context:
+      values:
+        environment: staging
+        support_email: staging-support@acme.com
+
+components:
+  terraform:
+    demo:
+      metadata:
+        type: real
+      vars:
+        size: 5
+        pet: "whale"

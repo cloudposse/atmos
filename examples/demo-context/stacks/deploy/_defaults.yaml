@@ -1,0 +1,39 @@
+terraform:
+  backend_type: local
+
+  providers:
+    # Configure the context provider
+    context:
+      enabled: true
+      delimiter: "-"
+      property_order:
+        - product
+        - region
+        - environment
+        - name
+        - instance
+      properties:
+        product:
+          required: true
+        region:
+          required: true
+          validation_regex: "^(east|west)$"
+        environment:
+          required: true
+          max_length: 7
+        name:
+          required: true
+        instance: {}
+        component: {}
+        repo: {}
+        stack: {}
+        stack_file: {}
+        support_email:
+          required: true
+          validation_regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+      tags_key_case: title
+      values:
+        product: "acme"
+        component: "{{.atmos_component}}"
+        stack: "{{.atmos_stack}}"
+        stack_file: "{{.atmos_stack_file}}"

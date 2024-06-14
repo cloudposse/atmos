@@ -1,0 +1,19 @@
+import:
+- deploy/_defaults
+- catalog/demo
+- mixins/west-coast
+
+terraform:
+  providers:
+    context:
+      values:
+        environment: dev
+        support_email: dev-support@acme.com
+
+components:
+  terraform:
+    demo:
+      metadata:
+        type: real
+      vars:
+        size: 3
