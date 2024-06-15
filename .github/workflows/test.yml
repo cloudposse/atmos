@@ -122,8 +122,7 @@ jobs:
           image-tag: 'latest'
           install-awslocal: 'true'
           state-action: start
-          state-backend: ephemeral
-          skip-ephemeral-stop: 'true' # We want our instance keep running
+          state-backend: local
 
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
