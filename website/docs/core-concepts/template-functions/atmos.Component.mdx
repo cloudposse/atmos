@@ -26,7 +26,55 @@ Atmos component in a stack, and use it in `Go` templates in other Atmos componen
    [`atmos describe component`](/cli/commands/describe/component#output) can be used.
    A special `outputs` section is also supported to get the outputs (remote state) of the Terraform/OpenTofu `component`.
 
-- `attribute` - attribute name (field) from the `section`
+- `attribute` - attribute name (field) from the `section`. `attribute` is optional, you can use the `section` itself
+  if it's a simple type (e.g. `string`). Any number of attributes can be chained using the dot (`.`) notation.
+  For example, if the fiest attribute is a map, you can get any field from the map:
+
+    ```yaml
+      {{ (atmos.Component "<component>" "<stack>").<section>.<attribute1>.<attribute2>.<field1> }}
+    ```
+
+## Specifying Atmos `stack`
+
+`stack` is the second argument of the `atmos.Component` function, and it can be specified in a few different ways:
+
+  - Hardcoded stack name. Use it if you want to get an output from a component from a different (well-known)
+    stack. For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` output from
+    the `vpc` component from the stack `plat-ue2-prod`:
+
+    ```yaml title="plat-ue2-dev"
+      components:
+        terraform:
+          tgw:
+            vars:
+              vpc_id: '{{ (atmos.Component "vpc" "plat-ue2-prod").outputs.vpc_id }}'
+    ```
+
+  - Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component
+    (for which the `atmos.Component` function is executed):
+
+    ```yaml
+      {{ (atmos.Component "<component>" .stack).<section>.<attribute> }}
+      {{ (atmos.Component "<component>" .atmos_stack).<section>.<attribute> }}
+    ```
+
+    For example, you have a `tgw` component that requires the `vpc_id` output from the `vpc` component from the same stack:
+
+    ```yaml
+      components:
+        terraform:
+          tgw:
+            vars:
+              vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
+    ```
+
+  - Use the `printf` template function to construct the stack name:
+
+    ```yaml
+      {{ (atmos.Component "<component>" .stack).<section>.<attribute> }}
+
+      {{ (atmos.Component "<component>" .atmos_stack).<section>.<attribute> }}
+    ```
 
 ## Examples
 
