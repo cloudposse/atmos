@@ -211,50 +211,50 @@ jobs:
           cd examples/${{ matrix.demo-folder }}
           atmos test
 
-# run other demo tests
-lint:
-  name: "[lint] ${{ matrix.demo-folder }}"
-  needs: build
-  runs-on: ubuntu-latest
-  strategy:
-    matrix:
-      demo-folder:
-        - demo-atlantis
-        - demo-component-manifest
-        - demo-component-versions
-        - demo-context
-        - demo-custom-command
-        - demo-json-validation
-        - demo-library
-        - demo-localstack
-        - demo-opa-validation
-        - demo-opentofu
-        - demo-project
-        - demo-stacks
-        - demo-terraform
-        - demo-terraform-overrides
-        - demo-workflows
-        - demo-yaml-anchors
-        - demo-mock-architecture
-        - demo-stack-templating
-        - demo-multi-cloud
-        - demo-vendoring
+  # run other demo tests
+  lint:
+    name: "[lint] ${{ matrix.demo-folder }}"
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        demo-folder:
+          - demo-atlantis
+          - demo-component-manifest
+          - demo-component-versions
+          - demo-context
+          - demo-custom-command
+          - demo-json-validation
+          - demo-library
+          - demo-localstack
+          - demo-opa-validation
+          - demo-opentofu
+          - demo-project
+          - demo-stacks
+          - demo-terraform
+          - demo-terraform-overrides
+          - demo-workflows
+          - demo-yaml-anchors
+          - demo-mock-architecture
+          - demo-stack-templating
+          - demo-multi-cloud
+          - demo-vendoring
 
-  timeout-minutes: 20
-  steps:
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v4
+    timeout-minutes: 20
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
 
-    - name: Install Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ steps.config.outputs.terraform-version }}
-        terraform_wrapper: false
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ steps.config.outputs.terraform-version }}
+          terraform_wrapper: false
 
-    - name: tflint
-      uses: reviewdog/action-tflint@v1
-      with:
-        github_token: ${{ secrets.github_token }}
-        working_directory: examples/${{ matrix.demo-folder }}/components/terraform
-        flags: "--enable-rule=terraform_unused_declarations --disable-rule=terraform_typed_variables --recursive"
-        fail_on_error: true
+      - name: tflint
+        uses: reviewdog/action-tflint@v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          working_directory: examples/${{ matrix.demo-folder }}/components/terraform
+          flags: "--enable-rule=terraform_unused_declarations --disable-rule=terraform_typed_variables --recursive"
+          fail_on_error: true
