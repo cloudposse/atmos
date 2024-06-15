@@ -5,7 +5,7 @@ export default function Screengrab({ title, command, className, slug, children }
     const [html, setHtml] = useState(null);
 
     useEffect(() => {
-        import(`@site/src/components/screengrabs/${slug}.html`)
+        import(`@site/src/components/Screengrabs/${slug}.html`)
             .then(module => {
                 setHtml(module.default);
             });
