@@ -141,8 +141,6 @@ jobs:
     services:
       server:
         image: "rancher/k3s:latest"
-        command:
-          - 'server'
         ports:
           - 6443:6443  # Kubernetes API Server
           - 80:80      # Ingress controller port 80, localhost:8000
@@ -156,12 +154,12 @@ jobs:
           - .:/output
           - /run:/run
           - /var/run:/var/run
-        options: --privileged
+        options: >
+          --privileged
+          --entrypoint "server"
 
       agent:
         image: "rancher/k3s:latest"
-        command:
-          - 'agent'
         env:
           K3S_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           K3S_URL: https://k3s-server:6443
@@ -169,7 +167,9 @@ jobs:
           - /var/lib/rancher/k3s
           - /run:/run
           - /var/run:/var/run
-        options: --privileged
+        options: >
+          --privileged
+          --entrypoint "agent"
 
     strategy:
       matrix:
