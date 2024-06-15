@@ -152,9 +152,6 @@ jobs:
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
 
-      - name: Install Kustomize binary (required by Helmfile)
-        run: curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash -s -- /usr/local/bin
-
       - name: Install the cloudposse Debian repository
         run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
 
