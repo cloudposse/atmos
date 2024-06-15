@@ -139,7 +139,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      KUBECONFIG: ${{github.workspace}}/output/kubeconfig.yaml
+      KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/output/kubeconfig.yaml
     strategy:
       matrix:
         demo-folder:
@@ -149,18 +149,18 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
-              
+
       - name: Start Docker Compose
         working-directory: examples/${{ matrix.demo-folder }}
         run: docker compose up -d --wait
 
       - name: Debug
         run: |
-          ls -l ${{github.workspace}}/output
+          ls -l examples/${{ matrix.demo-folder }}/output
           docker ps
 
           for i in {1..30}; do
-            ls -l ${{github.workspace}}/output
+            ls -l examples/${{ matrix.demo-folder }}/output
             docker ps
             sleep 1
           done
