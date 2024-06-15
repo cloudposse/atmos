@@ -155,12 +155,11 @@ jobs:
         run: docker compose up -d --wait
 
       - name: Debug
+        working-directory: examples/${{ matrix.demo-folder }}
         run: |
-          ls -l examples/${{ matrix.demo-folder }}/output
-          docker ps
-
           for i in {1..30}; do
-            ls -l examples/${{ matrix.demo-folder }}/output
+            ls -l
+            find . -type f -name 'kubeconfig.yaml'
             docker ps
             sleep 1
           done
