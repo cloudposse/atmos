@@ -159,7 +159,7 @@ jobs:
         run: sudo apt-get -y install kubectl helmfile helm
 
       - name: Install helm-diff plugin
-        run: helm plugin install https://github.com/databus23/helm-diff"
+        run: helm plugin install https://github.com/databus23/helm-diff
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
