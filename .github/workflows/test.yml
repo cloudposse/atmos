@@ -151,7 +151,7 @@ jobs:
           K3S_KUBECONFIG_MODE: 666
         volumes:
           - /var/lib/rancher/k3s
-          - .:/output
+          - ${{github.workspace}}/output:/output
           - /run:/run
           - /var/run:/var/run
         options: >-
@@ -180,7 +180,7 @@ jobs:
     steps:
       - name: Debug
         run: |
-          sudo find / -name kubeconfig.yaml
+          ls -l ${{github.workspace}}/output
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
