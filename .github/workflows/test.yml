@@ -165,7 +165,9 @@ jobs:
         run: helm plugin install https://github.com/databus23/helm-diff
 
       - name: Write a default AWS profile to the AWS config file
-        run: echo '[default]' > ~/.aws/config
+        run: |
+          mkdir -p ~/.aws
+          echo '[default]' > ~/.aws/config
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
