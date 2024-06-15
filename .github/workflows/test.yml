@@ -91,6 +91,22 @@ jobs:
     name: "[localstack] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    
+    services:
+      localstack:
+        image: localstack/localstack:1.4.0
+        ports:
+          - 4566:4566
+          - 4510-4559:4510-4559
+        env:
+          SERVICES: s3, iam, lambda, dynamodb, sts, account, ec2
+          DEBUG: 0
+          DOCKER_HOST: unix:///var/run/docker.sock
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+
     strategy:
       matrix:
         demo-folder:
