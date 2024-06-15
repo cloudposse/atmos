@@ -7,6 +7,9 @@ data "context_label" "this" {
 
 # Create tags based on the context. Add the value of the name label to the tags
 data "context_tags" "this" {
+    values = {
+    "type" = var.pet
+  }
 }
 
 module "pet_set" {

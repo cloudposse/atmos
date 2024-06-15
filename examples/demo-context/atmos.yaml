@@ -33,4 +33,14 @@ logs:
   file: "/dev/stderr"
   level: Info
 
-    
+commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - atmos validate stacks
+  - atmos terraform plan demo -s acme-west-dev
+  - atmos terraform plan demo -s acme-west-staging
+  - atmos terraform plan demo -s acme-west-prod
+  - atmos terraform apply demo -s acme-west-dev -auto-approve
+  - atmos terraform apply demo -s acme-west-staging -auto-approve
+  - atmos terraform apply demo -s acme-west-prod -auto-approve

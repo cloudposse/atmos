@@ -17,6 +17,7 @@ data "context_tags" "this" {
 
 locals {
   instance_types = {
+    "alien"    = "👽"  # Alien
     "ant"      = "🐜"  # Ant
     "dog"      = "🐶"  # Dog
     "cat"      = "🐱"  # Cat

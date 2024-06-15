@@ -16,3 +16,8 @@ output "label" {
 output "pet_set" {
   value = [for k, v in module.pet_set : v.name]
 }
+
+output "delimiter" {
+    description = "Delimiter used in the context"
+    value = data.context_config.this.delimiter
+}

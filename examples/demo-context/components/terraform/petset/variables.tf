@@ -1,5 +1,5 @@
 variable "pet" {
-  description = "A list of pets to include in the PetSet"
+  description = "The type of instance to include in the PetSet"
   type        = string
   default     = "dog"
 }

@@ -18,4 +18,4 @@ components:
         type: real
       vars:
         size: 10
-        type: "horse"
+        pet: "alien"

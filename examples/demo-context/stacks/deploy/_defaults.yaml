@@ -25,6 +25,7 @@ terraform:
           required: true
         instance: {}
         component: {}
+        type: {}
         repo: {}
         stack: {}
         stack_file: {}
