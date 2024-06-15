@@ -30,7 +30,8 @@ commands:
 - name: "test"
   description: "Run all tests"
   steps:
-  - atmos validate stacks
+  # FIXME: The JSON schema doesn't support helmfile yet
+  #- atmos validate stacks
   - atmos helmfile apply demo -s dev
 
 # Use Nested Custom Commands to provide easier interface for Docker Compose
