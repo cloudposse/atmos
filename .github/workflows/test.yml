@@ -153,7 +153,7 @@ jobs:
         run: chmod +x /usr/local/bin/atmos
 
       - name: Install the cloudposse Debian repository
-        run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+        run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
 
       - name: Install kubectl, helmfile, and helm
         run: apt-get -y install kubectl helmfile helm
