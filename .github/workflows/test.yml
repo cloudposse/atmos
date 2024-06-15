@@ -91,7 +91,7 @@ jobs:
     name: "[localstack] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
-    
+
     services:
       localstack:
         image: localstack/localstack:1.4.0
@@ -104,6 +104,8 @@ jobs:
           DOCKER_HOST: unix:///var/run/docker.sock
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_REGION: us-east-1 
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
 
@@ -125,20 +127,6 @@ jobs:
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
-
-      - name: Start LocalStack
-        uses: LocalStack/setup-localstack@v0.2.0
-        env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          SERVICES: s3, iam, lambda, dynamodb, sts, account, ec2
-        with:
-          image-tag: 'latest'
-          install-awslocal: 'true'
-          state-action: start
-          state-backend: local
 
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
