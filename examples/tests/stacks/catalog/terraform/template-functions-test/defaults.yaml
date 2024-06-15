@@ -1,0 +1,10 @@
+components:
+  terraform:
+    template-functions-test:
+      command: tofu
+      metadata:
+        # Point to the Terraform component
+        component: "test/template-functions-test"
+      vars:
+        enabled: true
+        name: "test"

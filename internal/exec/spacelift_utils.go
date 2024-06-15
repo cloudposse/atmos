@@ -6,7 +6,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
@@ -103,7 +102,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
 
 		if cliConfig.Stacks.NameTemplate != "" {
-			contextPrefix, err = u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+			contextPrefix, err = ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 			if err != nil {
 				return "", err
 			}

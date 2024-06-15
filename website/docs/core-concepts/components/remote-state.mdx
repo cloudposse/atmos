@@ -337,3 +337,11 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
   the correct stack. For example, if the component is provisioned in a different AWS region (let's say `us-west-2`), we can set `environment = "uw2"`,
   and the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module will get the remote state
   outputs for the Atmos component provisioned in that region
+
+## Read remote state by using `atmos.Component` `Go` template function
+
+Atmos supports an alternative way to read the outputs (remote state) of components directly in Atmos stack manifests by
+using the `atmos.Component` `Go` template function and the `outputs` section instead of using the `remote-state`
+module and configuring Terraform/OpenTofu components to use the module.
+
+For more details, refer to [`atmos.Component` function](/core-concepts/template-functions/atmos.Component).

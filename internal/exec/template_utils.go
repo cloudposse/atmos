@@ -1,4 +1,4 @@
-package utils
+package exec
 
 import (
 	"bytes"
@@ -22,7 +22,9 @@ import (
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	t, err := template.New(tmplName).Funcs(sprig.FuncMap()).Parse(tmplValue)
+	funcs := lo.Assign(FuncMap(context.TODO()), sprig.FuncMap())
+
+	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +89,7 @@ func ProcessTmplWithDatasources(
 		return "", err
 	}
 
-	// Add Gomplate and Sprig functions and datasources
+	// Add Atmos, Gomplate and Sprig functions and datasources
 	funcs := make(map[string]any)
 
 	// Number of processing evaluations/passes
@@ -125,6 +127,9 @@ func ProcessTmplWithDatasources(
 		if cliConfig.Templates.Settings.Sprig.Enabled {
 			funcs = lo.Assign(funcs, sprig.FuncMap())
 		}
+
+		// Atmos functions
+		funcs = lo.Assign(funcs, FuncMap(context.TODO()))
 
 		// Process and add environment variables
 		for k, v := range templateSettings.Env {

@@ -1346,7 +1346,7 @@ func addAffectedSpaceliftAdminStack(
 	var adminStackContextPrefix string
 
 	if cliConfig.Stacks.NameTemplate != "" {
-		adminStackContextPrefix, err = u.ProcessTmpl("spacelift-admin-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		adminStackContextPrefix, err = ProcessTmpl("spacelift-admin-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return nil, err
 		}
@@ -1382,7 +1382,7 @@ func addAffectedSpaceliftAdminStack(
 							var contextPrefix string
 
 							if cliConfig.Stacks.NameTemplate != "" {
-								contextPrefix, err = u.ProcessTmpl("spacelift-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+								contextPrefix, err = ProcessTmpl("spacelift-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 								if err != nil {
 									return nil, err
 								}

@@ -13,7 +13,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -244,7 +243,7 @@ func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
 	error,
 ) {
 	// Process stack config file(s)
-	_, stacksMap, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
+	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		cliConfig,
 		cliConfig.StacksBaseAbsolutePath,
 		cliConfig.TerraformDirAbsolutePath,
@@ -350,7 +349,7 @@ func ProcessStacks(
 			}
 
 			if cliConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
@@ -426,7 +425,9 @@ func ProcessStacks(
 	// Add Atmos component and stack
 	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
+	configAndStacksInfo.ComponentSection["atmos_manifest"] = configAndStacksInfo.StackFile
 
 	// Add Atmos CLI config
 	atmosCliConfig := map[string]any{}
@@ -479,7 +480,14 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	componentSectionProcessed, err := ProcessTmplWithDatasources(
+		cliConfig,
+		settingsSectionStruct,
+		"all-atmos-sections",
+		componentSectionStr,
+		configAndStacksInfo.ComponentSection,
+		true,
+	)
 	if err != nil {
 		// If any error returned from the templates processing, log it and exit
 		u.LogErrorAndExit(err)

@@ -63,7 +63,7 @@ atmos describe component test/test-component-override -s tenant2-ue2-prod
 
 ## Output
 
-The command outputs the final deep-merged component configuration in YAML format.
+The command outputs the final deep-merged component configuration.
 
 The output contains the following sections:
 
@@ -75,19 +75,23 @@ The output contains the following sections:
 
 - `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
 
+- `stack` - same as `atmos_stack`
+
 - `atmos_stack_file` - the stack manifest where the Atmos stack is defined
 
-- `backend` - Terraform backend configuration
+- `atmos_manifest` - same as `atmos_stack_file`
 
-- `backend_type` - Terraform backend type
+- `backend` - Terraform/OpenTofu backend configuration
 
-- `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `helmfile`)
+- `backend_type` - Terraform/OpenTofu backend type
 
-- `component` - the Terraform component for which the Atmos component provides configuration
+- `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `tofu`, `helmfile`)
+
+- `component` - the Terraform/OpenTofu component for which the Atmos component provides configuration
 
 - `component_info` - a block describing the Terraform or Helmfile components that the Atmos component manages. The `component_info` block has the
   following sections:
-  - `component_path` - the filesystem path to the Terraform or Helmfile component
+  - `component_path` - the filesystem path to the Terraform/OpenTofu or Helmfile component
 
   - `component_type` - the type of the component (`terraform` or `helmfile`)
 
@@ -102,9 +106,9 @@ The output contains the following sections:
 
 - `metadata` - component's metadata config
 
-- `remote_state_backend` - Terraform backend config for remote state
+- `remote_state_backend` - Terraform/OpenTofu backend config for remote state
 
-- `remote_state_backend_type` - Terraform backend type for remote state
+- `remote_state_backend_type` - Terraform/OpenTofu backend type for remote state
 
 - `settings` - component settings (free-form map)
 
@@ -113,10 +117,10 @@ The output contains the following sections:
 - `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/integrations/spacelift) is configured for the component in the stack
   and `settings.spacelift.workspace_enabled` is set to `true`)
 
-- `vars` - the final deep-merged component variables that are provided to Terraform and Helmfile when executing `atmos terraform`
-  and `atmos helmfile` commands
+- `vars` - the final deep-merged component variables that are provided to Terraform/OpenTofu and Helmfile when executing
+  `atmos terraform` and `atmos helmfile` commands
 
-- `workspace` - Terraform workspace for the Atmos component
+- `workspace` - Terraform/OpenTofu workspace for the Atmos component
 
 - `imports` - a list of all imports in the Atmos stack (this shows all imports in the stack, related to the component and not)
 
@@ -161,7 +165,7 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
      terraform:
        derived-component-3:
          metadata:
-           component: "test/test-component"  # Point to the Terraform component
+           component: "test/test-component"  # Point to the Terraform/OpenTofu component
            inherits:
              # Inherit all the values from the base component
              - base-component-4

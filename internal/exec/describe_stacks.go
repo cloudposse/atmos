@@ -11,7 +11,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -145,7 +144,7 @@ func ExecuteDescribeStacks(
 						}
 
 						// Find all derived components of the provided components and include them in the output
-						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
+						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
 						if err != nil {
 							return nil, err
 						}
@@ -211,7 +210,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -238,7 +237,9 @@ func ExecuteDescribeStacks(
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+						configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
@@ -262,7 +263,9 @@ func ExecuteDescribeStacks(
 							// Atmos component, stack, and stack manifest file
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
+							componentSection["stack"] = stackName
 							componentSection["atmos_stack_file"] = stackFileName
+							componentSection["atmos_manifest"] = stackFileName
 
 							// Process `Go` templates
 							componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -276,7 +279,14 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := ProcessTmplWithDatasources(
+								cliConfig,
+								settingsSectionStruct,
+								"describe-stacks-all-sections",
+								componentSectionStr,
+								configAndStacksInfo.ComponentSection,
+								true,
+							)
 							if err != nil {
 								return nil, err
 							}
@@ -319,7 +329,7 @@ func ExecuteDescribeStacks(
 						}
 
 						// Find all derived components of the provided components and include them in the output
-						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
+						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
 						if err != nil {
 							return nil, err
 						}
@@ -385,7 +395,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -412,7 +422,9 @@ func ExecuteDescribeStacks(
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+						configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
@@ -428,7 +440,9 @@ func ExecuteDescribeStacks(
 							// Atmos component, stack, and stack manifest file
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
+							componentSection["stack"] = stackName
 							componentSection["atmos_stack_file"] = stackFileName
+							componentSection["atmos_manifest"] = stackFileName
 
 							// Process `Go` templates
 							componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -442,7 +456,14 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := ProcessTmplWithDatasources(
+								cliConfig,
+								settingsSectionStruct,
+								"describe-stacks-all-sections",
+								componentSectionStr,
+								configAndStacksInfo.ComponentSection,
+								true,
+							)
 							if err != nil {
 								return nil, err
 							}

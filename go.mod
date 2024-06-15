@@ -14,7 +14,7 @@ require (
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.17.0
 	github.com/go-git/go-git/v5 v5.12.0
-	github.com/google/go-containerregistry v0.19.1
+	github.com/google/go-containerregistry v0.19.2
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
@@ -22,10 +22,11 @@ require (
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.20.1
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20240607080351-271db412dbcb
+	github.com/hashicorp/terraform-exec v0.21.0
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
-	github.com/lrstanley/bubblezone v0.0.0-20240609171605-b723e5c0b1af
+	github.com/lrstanley/bubblezone v0.0.0-20240615043033-81c0dd750246
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/open-policy-agent/opa v0.65.0
@@ -33,7 +34,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.39.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.9.0
@@ -54,7 +55,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Microsoft/hcsshim v0.11.5 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
-	github.com/ProtonMail/go-crypto v1.0.0 // indirect
+	github.com/ProtonMail/go-crypto v1.1.0-alpha.2 // indirect
 	github.com/Shopify/ejson v1.3.3 // indirect
 	github.com/agext/levenshtein v1.2.2 // indirect
 	github.com/agnivade/levenshtein v1.1.1 // indirect
@@ -150,6 +151,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
+	github.com/hashicorp/terraform-json v0.22.1 // indirect
 	github.com/hashicorp/vault/api v1.6.0 // indirect
 	github.com/hashicorp/vault/sdk v0.5.0 // indirect
 	github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87 // indirect
