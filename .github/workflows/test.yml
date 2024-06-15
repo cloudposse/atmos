@@ -139,7 +139,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/output/kubeconfig.yaml
+      KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/kubeconfig.yaml
     strategy:
       matrix:
         demo-folder:
@@ -154,15 +154,10 @@ jobs:
         working-directory: examples/${{ matrix.demo-folder }}
         run: docker compose up -d --wait
 
-      - name: Debug
+      - name: Test k3s
         working-directory: examples/${{ matrix.demo-folder }}
         run: |
-          for i in {1..30}; do
-            ls -l
-            find . -type f -name 'kubeconfig.yaml'
-            docker ps
-            sleep 1
-          done
+          kubectl get pods --all-namespaces
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
