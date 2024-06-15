@@ -181,6 +181,8 @@ jobs:
       - name: Debug
         run: |
           ls -l ${{github.workspace}}/output
+          docker ps
+          
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
