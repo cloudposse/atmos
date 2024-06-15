@@ -5,7 +5,6 @@ sidebar_label: atmos.Component
 ---
 
 import File from '@site/src/components/File'
-import Terminal from '@site/src/components/Terminal'
 
 The `atmos.Component` template function allows you to read any Atmos section or any attribute from a section for an
 Atmos component in a stack, and use it in `Go` templates in other Atmos component configurations.
@@ -110,22 +109,48 @@ Atmos component in a stack, and use it in `Go` templates in other Atmos componen
 
 ## Examples
 
-The following configurations shows different ways of using the `atmos.Component` template function to read values from
-different Atmos components, including the outputs of other components, directly in Atmos stack manifests.
+The following configurations show different ways of using the `atmos.Component` template function to read values from
+different sections in Atmos components, including the outputs of other components, directly in Atmos stack manifests.
 
 <File>
-</File>
-
 ```yaml
+# Global `settings` section
+# It will be added and deep-merged to the `settings` section of all components
+settings:
+  test: true
+
 components:
   terraform:
-    template-functions-test2:
+    test:
       metadata:
-        # Point to the Terraform component
-        component: "test/template-functions-test2"
+        # Point to the Terraform/OpenTofu component
+        component: "test"
       vars:
-        enabled: true
+        name: "test"
+
+    test1:
+      metadata:
+        # Point to the Terraform/OpenTofu component
+        component: "test1"
+      vars:
+        name: "test1"
+
+    test2:
+      metadata:
+        # Point to the Terraform/OpenTofu component
+        component: "test2"
+      vars:
         name: "test2"
-        # Examples of using Atmos template functions to get the outputs of another Atmos component
-        test_label_id: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+        # Use the `atmos.Component` function to get the outputs of the Atmos component `test1`
+        # The `test1` component must be already provisioned and its outputs stored in the Terraform/OpenTofu state
+        # Atmos will execute `terraform output` on the `test1` component in the same stack to read its outputs
+        test1_id: '{{ (atmos.Component "test1" .stack).outputs.test1_id }}'
+        tags:
+          # Get the `settings.test` field from the `test` component in the same stack
+          test: '{{ (atmos.Component "test" .stack).settings.test }}'
+          # Get the `metadata.component` field from the `test` component in the same stack
+          test_terraform_component: '{{ (atmos.Component "test" .stack).metadata.component }}'
+          # Get the `vars.name` field from the `test1` component in the same stack
+          test1_name: '{{ (atmos.Component "test1" .stack).vars.name }}'
 ```
+</File>
