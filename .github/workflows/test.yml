@@ -178,6 +178,13 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      - name: DEbug
+        run: |
+          echo "KUBECONFIG: $KUBECONFIG"
+          ls -la output/
+          ls -l
+          cat output/*
+          
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -203,11 +210,6 @@ jobs:
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
-
-      - uses: nolar/setup-k3d-k3s@v1
-        with:
-          version: v1.30
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
