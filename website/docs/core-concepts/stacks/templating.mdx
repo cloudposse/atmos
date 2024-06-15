@@ -9,9 +9,13 @@ import Terminal from '@site/src/components/Terminal'
 
 Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
 
-[Sprig Functions](https://masterminds.github.io/sprig/), [Gomplate Functions](https://docs.gomplate.ca/functions/)
-and [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
-are supported as well.
+In the `Go` templates, you can use the following functions and datasources:
+
+ - [Go `text/template` functions](https://pkg.go.dev/text/template#hdr-Functions)
+ - [Sprig Functions](https://masterminds.github.io/sprig/)
+ - [Gomplate Functions](https://docs.gomplate.ca/functions/)
+ - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
+ - [Atmos Template Functions](#atmos-template-functions)
 
 ## Important Note
 
@@ -1007,3 +1011,7 @@ service: net
 ```
 
 The tags will be added to all the AWS resources provisioned by the `vpc` Terraform component in the `plat-ue2-dev` stack.
+
+## Atmos Template Functions
+
+Atmos provides the following template functions for Go’s template language:
