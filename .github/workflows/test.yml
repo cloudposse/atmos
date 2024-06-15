@@ -88,7 +88,7 @@ jobs:
     
   # run localstack demo tests
   localstack:
-    name: LocalStack Demo Tests
+    name: "[localstack] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -99,10 +99,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-artifacts
           path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
@@ -130,7 +133,7 @@ jobs:
 
   # run k3s demo tests
   k3s:
-    name: k3s Demo Tests
+    name: "[k3s] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -141,10 +144,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-artifacts
           path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
@@ -165,7 +171,7 @@ jobs:
 
   # run other demo tests
   mock:
-    name: Other Demo Tests (No Provider Required)
+    name: "[mock] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -194,10 +200,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-artifacts
           path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
