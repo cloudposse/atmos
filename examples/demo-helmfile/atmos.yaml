@@ -27,12 +27,17 @@ logs:
 
 # No arguments or flags are required
 commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - atmos validate stacks
+  - atmos helmfile apply demo -s dev
 
 # Use Nested Custom Commands to provide easier interface for Docker Compose
 - name: "k3s"
   commands:
   - name: "up"
-    description: Start lockstack in the background
+    description: Start k3s in the background
     steps:
       - |
         container_running=$(docker ps -q -f "name=k3s")
