@@ -138,11 +138,9 @@ jobs:
     name: "[k3s] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
-    env:
-      K3S_VERSION: latest
     services:
       server:
-        image: "rancher/k3s:${{ env.K3S_VERSION }}"
+        image: "rancher/k3s:latest"
         command:
           - 'server'
         ports:
@@ -161,7 +159,7 @@ jobs:
         options: --privileged
 
       agent:
-        image: "rancher/k3s:${{ env.K3S_VERSION }}"
+        image: "rancher/k3s:latest"
         command:
           - 'agent'
         env:
