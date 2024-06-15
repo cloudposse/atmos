@@ -109,3 +109,23 @@ Atmos component in a stack, and use it in `Go` templates in other Atmos componen
     :::
 
 ## Examples
+
+The following configurations shows different ways of using the `atmos.Component` template function to read values from
+different Atmos components, including the outputs of other components, directly in Atmos stack manifests.
+
+<File>
+</File>
+
+```yaml
+components:
+  terraform:
+    template-functions-test2:
+      metadata:
+        # Point to the Terraform component
+        component: "test/template-functions-test2"
+      vars:
+        enabled: true
+        name: "test2"
+        # Examples of using Atmos template functions to get the outputs of another Atmos component
+        test_label_id: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+```
