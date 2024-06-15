@@ -154,9 +154,13 @@ jobs:
         working-directory: examples/${{ matrix.demo-folder }}
         run: docker compose up -d --wait
 
-      - name: Test k3s
+      - name: Wait for k3s to start
         working-directory: examples/${{ matrix.demo-folder }}
         run: |
+          until kubectl get pods --all-namespaces >/dev/null 2>&1; do
+            echo "Retrying..."
+            sleep 1
+          done
           kubectl get pods --all-namespaces
 
       - name: Download build artifacts
