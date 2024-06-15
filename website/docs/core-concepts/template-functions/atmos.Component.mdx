@@ -38,7 +38,7 @@ Atmos component in a stack, and use it in `Go` templates in other Atmos componen
 
 `stack` is the second argument of the `atmos.Component` function, and it can be specified in a few different ways:
 
-  - Hardcoded stack name. Use it if you want to get an output from a component from a different (well-known)
+  - Hardcoded stack name. Use it if you want to get an output from a component from a different (well-known and static)
     stack. For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` output from
     the `vpc` component from the stack `plat-ue2-prod`:
 
@@ -58,7 +58,7 @@ Atmos component in a stack, and use it in `Go` templates in other Atmos componen
       {{ (atmos.Component "<component>" .atmos_stack).<section>.<attribute> }}
     ```
 
-    For example, you have a `tgw` component that requires the `vpc_id` output from the `vpc` component from the same stack:
+    For example, you have a `tgw` component that requires the `vpc_id` output from the `vpc` component in the same stack:
 
     ```yaml
       components:
@@ -68,13 +68,35 @@ Atmos component in a stack, and use it in `Go` templates in other Atmos componen
               vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
     ```
 
-  - Use the `printf` template function to construct the stack name:
+  - Use the `printf` template function to construct stack names using static strings and dynamic identifiers:
 
     ```yaml
-      {{ (atmos.Component "<component>" .stack).<section>.<attribute> }}
+      {{ (atmos.Component "<component>" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage)).<section>.<attribute> }}
 
-      {{ (atmos.Component "<component>" .atmos_stack).<section>.<attribute> }}
+      {{ (atmos.Component "<component>" (printf "plat-%s-prod" .vars.environment)).<section>.<attribute> }}
+
+      {{ (atmos.Component "<component>" (printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account)).<section>.<attribute> }}
     ```
 
-## Examples
+    For example, you have a `tgw` component deployed in the stack `plat-ue2-dev`. The `tgw` component requires the
+    `vpc_id` output from the `vpc` component from the same environment (`ue2`) and same stage (`dev`), but from a different
+    tenant `net` (instead of `plat`):
 
+    ```yaml title="plat-ue2-dev"
+      components:
+        terraform:
+          tgw:
+            vars:
+              vpc_id: '{{ (atmos.Component "vpc" (printf "net-%s-%s" .vars.environment .vars.stage)).outputs.vpc_id }}'
+    ```
+
+    <br/>
+
+    :::tip Important
+        By using the `printf "%s-%s-%s"` function, you are constructing stack names using the stack context variables/identifiers.
+
+        For more information on Atmos stack names and how to define them, refer to `stacks.name_pattern` and `stacks.name_template`
+        sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
+    :::
+
+## Examples
