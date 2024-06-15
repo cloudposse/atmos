@@ -133,15 +133,46 @@ jobs:
           cd examples/${{ matrix.demo-folder }}
           atmos test
 
-      - name: Stop LocalStack
-        run: |
-          docker stop ${{ steps.localstack.outputs.container_id }}
-
   # run k3s demo tests
   k3s:
     name: "[k3s] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    env:
+      K3S_VERSION: latest
+    services:
+      server:
+        image: "rancher/k3s:${{ env.K3S_VERSION }}"
+        command:
+          - 'server'
+        ports:
+          - 6443:6443  # Kubernetes API Server
+          - 80:80      # Ingress controller port 80, localhost:8000
+          - 443:443    # Ingress controller port 443, localhost:8443
+        env:
+          K3S_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          K3S_KUBECONFIG_OUTPUT: /output/kubeconfig.yaml
+          K3S_KUBECONFIG_MODE: 666
+        volumes:
+          - /var/lib/rancher/k3s
+          - .:/output
+          - /run:/run
+          - /var/run:/var/run
+        options: --privileged
+
+      agent:
+        image: "rancher/k3s:${{ env.K3S_VERSION }}"
+        command:
+          - 'agent'
+        env:
+          K3S_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          K3S_URL: https://k3s-server:6443
+        volumes:
+          - /var/lib/rancher/k3s
+          - /run:/run
+          - /var/run:/var/run
+        options: --privileged
+
     strategy:
       matrix:
         demo-folder:
