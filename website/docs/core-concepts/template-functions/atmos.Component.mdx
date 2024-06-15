@@ -24,11 +24,20 @@ Atmos component in a stack, and use it in `Go` templates in other Atmos componen
 
 - `section` - Atmos section name. Any section returned by the CLI command
    [`atmos describe component`](/cli/commands/describe/component#output) can be used.
-   A special `outputs` section is also supported to get the outputs (remote state) of the Terraform/OpenTofu `component`.
+   A special `outputs` section is also supported to get the outputs (remote state) of Terraform/OpenTofu components.
+
+    :::note
+      Using the `outputs` section in the `atmos.Component` command is an alternative way to read the outputs (remote state)
+      of a component in a stack directly in Atmos stack manifests instead of using the `remote-state`
+      module and configuring Terraform/OpenTofu components to use the `remote-state` module as described in
+      [Component Remote State](/core-concepts/components/remote-state)
+    :::
+
+    <br/>
 
 - `attribute` - attribute name (field) from the `section`. `attribute` is optional, you can use the `section` itself
   if it's a simple type (e.g. `string`). Any number of attributes can be chained using the dot (`.`) notation.
-  For example, if the fiest attribute is a map, you can get any field from the map:
+  For example, if the first two attributes are maps, you can chain them and get a field from the last map:
 
     ```yaml
       {{ (atmos.Component "<component>" "<stack>").<section>.<attribute1>.<attribute2>.<field1> }}
