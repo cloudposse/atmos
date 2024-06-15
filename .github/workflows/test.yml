@@ -178,13 +178,10 @@ jobs:
 
     timeout-minutes: 20
     steps:
-      - name: DEbug
+      - name: Debug
         run: |
-          echo "KUBECONFIG: $KUBECONFIG"
-          ls -la output/
-          ls -l
-          cat output/*
-          
+          sudo find / -name kubeconfig.yaml
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
