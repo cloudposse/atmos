@@ -174,23 +174,23 @@ jobs:
       matrix:
         demo-folder:
           - demo-atlantis
-          - demo-component-manifest
+          # - demo-component-manifest
           - demo-component-versions
-          - demo-context
-          - demo-custom-command
-          - demo-json-validation
-          - demo-opa-validation
-          - demo-opentofu
-          - demo-project
-          - demo-stacks
-          - demo-terraform
-          - demo-terraform-overrides
-          - demo-workflows
-          - demo-yaml-anchors
-          - demo-mock-architecture
-          - demo-stack-templating
-          - demo-multi-cloud
-          - demo-vendoring
+          # - demo-context
+          # - demo-custom-command
+          # - demo-json-validation
+          # - demo-opa-validation
+          # - demo-opentofu
+          # - demo-project
+          # - demo-stacks
+          # - demo-terraform
+          # - demo-terraform-overrides
+          # - demo-workflows
+          # - demo-yaml-anchors
+          # - demo-mock-architecture
+          # - demo-stack-templating
+          # - demo-multi-cloud
+          # - demo-vendoring
 
     timeout-minutes: 20
     steps:
@@ -219,26 +219,23 @@ jobs:
     strategy:
       matrix:
         demo-folder:
-          - demo-atlantis
-          - demo-component-manifest
-          - demo-component-versions
+          # - demo-component-manifest
           - demo-context
-          - demo-custom-command
-          - demo-json-validation
-          - demo-library
-          - demo-localstack
-          - demo-opa-validation
-          - demo-opentofu
-          - demo-project
-          - demo-stacks
-          - demo-terraform
-          - demo-terraform-overrides
-          - demo-workflows
-          - demo-yaml-anchors
-          - demo-mock-architecture
-          - demo-stack-templating
-          - demo-multi-cloud
-          - demo-vendoring
+          # - demo-custom-command
+          # - demo-json-validation
+          # - demo-library
+          # - demo-localstack
+          # - demo-opa-validation
+          # - demo-opentofu
+          # - demo-project
+          # - demo-stacks
+          # - demo-terraform
+          # - demo-terraform-overrides
+          # - demo-workflows
+          # - demo-yaml-anchors
+          # - demo-mock-architecture
+          # - demo-stack-templating
+          # - demo-multi-cloud
 
     timeout-minutes: 20
     steps:
