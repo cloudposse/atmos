@@ -155,8 +155,10 @@ jobs:
           - /run:/run
           - /var/run:/var/run
         options: >-
+          --name k3s-server
           --privileged
           --entrypoint /bin/k3s-server
+          --restart always
 
       agent:
         image: "rancher/k3s:latest"
@@ -168,8 +170,10 @@ jobs:
           - /run:/run
           - /var/run:/var/run
         options: >-
+          --name k3s-agent
           --privileged
           --entrypoint /bin/k3s-agent
+          --restart always
 
     strategy:
       matrix:
@@ -182,7 +186,6 @@ jobs:
         run: |
           ls -l ${{github.workspace}}/output
           docker ps
-          
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
