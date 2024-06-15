@@ -4,7 +4,29 @@ sidebar_position: 1
 sidebar_label: atmos.Component
 ---
 
-The `atmos.Component` template function allows you to read any Atmos section or any attribute from a section for an
-Atmos component in a stack, and use it in another Atmos component configuration.
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 
-<br/>
+The `atmos.Component` template function allows you to read any Atmos section or any attribute from a section for an
+Atmos component in a stack, and use it in `Go` templates in other Atmos component configurations.
+
+## Usage
+
+```yaml
+  {{ (atmos.Component "<component>" "<stack>").<section>.<attribute> }}
+```
+
+## Arguments
+
+- `component` - Atmos component name
+
+- `stack` - Atmos stack name
+
+- `section` - Atmos section name. Any section returned by the CLI command
+   [`atmos describe component`](/cli/commands/describe/component#output) can be used.
+   A special `outputs` section is also supported to get the outputs (remote state) of the Terraform/OpenTofu `component`.
+
+- `attribute` - attribute name (field) from the `section`
+
+## Examples
+
