@@ -54,7 +54,7 @@ jobs:
 
   # run acceptance tests
   test:
-    name: Test
+    name: Acceptance Tests
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -151,6 +151,18 @@ jobs:
 
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
+
+      - name: Install Kustomize binary (required by Helmfile)
+        run: curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash -s -- /usr/local/bin
+
+      - name: Install the cloudposse Debian repository
+        run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+
+      - name: Install kubectl, helmfile, and helm
+        run: apt-get -y install kubectl helmfile helm
+
+      - name: Install helm-diff plugin
+        run: helm plugin install https://github.com/databus23/helm-diff"
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
