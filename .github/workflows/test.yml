@@ -176,7 +176,7 @@ jobs:
           - demo-atlantis
           # - demo-component-manifest
           - demo-component-versions
-          # - demo-context
+          - demo-context
           # - demo-custom-command
           # - demo-json-validation
           # - demo-opa-validation

@@ -1,6 +1,3 @@
-# Get the context so we can read properties (enabled) from it
-data "context_config" "this" {}
-
 # Create a label based on the context
 data "context_label" "this" {
   values = {
