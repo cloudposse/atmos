@@ -187,6 +187,13 @@ jobs:
           ls -l ${{github.workspace}}/output
           docker ps
 
+          for i in {1..30}; do
+            docker ps
+            docker logs --tail 100 k3s-server
+            docker logs --tail 100 k3s-agent
+            sleep 1
+          done
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
