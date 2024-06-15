@@ -154,9 +154,9 @@ jobs:
           - .:/output
           - /run:/run
           - /var/run:/var/run
-        options: >
+        options: >-
           --privileged
-          --entrypoint "/bin/k3s-server"
+          --entrypoint /bin/k3s-server
 
       agent:
         image: "rancher/k3s:latest"
@@ -167,9 +167,9 @@ jobs:
           - /var/lib/rancher/k3s
           - /run:/run
           - /var/run:/var/run
-        options: >
+        options: >-
           --privileged
-          --entrypoint "/bin/k3s-agent"
+          --entrypoint /bin/k3s-agent
 
     strategy:
       matrix:
