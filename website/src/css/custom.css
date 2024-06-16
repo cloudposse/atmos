@@ -193,6 +193,10 @@ article ul >li, article ol > li {
     margin-bottom: 1em;
 }
 
+article ul li a:first-child, article ol li a:first-child {
+    font-weight: bold;
+}
+
 article h1 {
     margin-top: 1em;
 }
@@ -260,6 +264,16 @@ html[data-theme='dark'] {
 
 .button--lg p {
     margin-bottom: 0.85em;
+}
+
+details a.button.button--lg.button--primary {
+    padding-top: inherit;
+    padding-bottom: inherit;
+    text-decoration: none;
+}
+
+details a.button.button--lg.button--primary p {
+    margin-bottom: inherit;
 }
 
 .header-github-link:hover {

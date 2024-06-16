@@ -34,12 +34,12 @@ Components offer a multitude of applications across various business scenarios. 
 
 Atmos natively supports two kinds of components, but using [custom commands](/core-concepts/custom-commands), the [CLI](/cli) can be extended to support anything (e.g. `docker`, `packer`, `ansible`, etc.)
 
-1. **Terraform:** These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
+1. [Terraform](/core-concepts/components/terraform): These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
    EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find
    the [full library of SweetOps Terraform components on GitHub](https://github.com/cloudposse/terraform-aws-components). By convention, we store
    components in the `components/terraform/` directory within the infrastructure repository.
 
-2. **Helmfiles**: These are stand-alone applications deployed using [`helmfile`](https://github.com/helmfile) to Kubernetes. For example, typical
+2. [Helmfiles](/core-concepts/components/helmfile): These are stand-alone applications deployed using [`helmfile`](https://github.com/helmfile) to Kubernetes. For example, typical
    helmfiles might deploy the DataDog agent, `cert-manager` controller, `nginx-ingress` controller, etc. By convention, we store these types of components in the `components/helmfile/` directory within the infrastructure repository.
 
 ## Terraform Components

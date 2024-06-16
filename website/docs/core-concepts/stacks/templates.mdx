@@ -21,7 +21,7 @@ In `Go` templates, you can use the following functions and datasources:
  - [Sprig Functions](https://masterminds.github.io/sprig/)
  - [Gomplate Functions](https://docs.gomplate.ca/functions/)
  - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
- - [Atmos Template Functions](/core-concepts/template-functions)
+ - [Atmos Template Functions](/core-concepts/stacks/functions)
 
 
 ## Template Evaluations
@@ -29,7 +29,7 @@ In `Go` templates, you can use the following functions and datasources:
 Atmos supports many different ways of configuring and using `Go` templates:
 
 - In [Atmos Custom Commands](/core-concepts/custom-commands)
-- In [Atmos Vendoring](/core-concepts/vendor)
+- In [Atmos Vendoring](/core-concepts/vendor) 
 - In [Atmos Component Vendoring](/core-concepts/vendor/vendor-manifest)
 - In [Imports](/core-concepts/stacks/imports)
 - In [Stack Manifests](/core-concepts/stacks)
@@ -71,11 +71,15 @@ For more details, refer to:
 
 Templating in Atmos stack manifests can be configured in the following places:
 
-- In the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration)
+<dl>
+  <dt>`templates.settings`</dt>
+  <dd>In the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration)</dd>
 
-- In the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks).
-  The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component.
-  Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/stacks/inheritance).
+  <dt> `settings.templates.settings`</dt>
+  <dd>
+    In the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks). The `settings.templates.settings` section can be defined globally per organization, tenant, account, or per component. Atmos deep-merges the configurations from all scopes into the final result using [inheritance](/core-concepts/stacks/inheritance).
+  </dd>
+</dl>
 
 ### Configuring Templating in `atmos.yaml` CLI Config File
 
@@ -491,9 +495,13 @@ The keys of the map are the datasource names (aliases).
 
 The values of the map are the datasource definitions with the following schema:
 
-  - `url` - the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
+<dl>
+  <dt>`url`</dt>
+  <dd>The [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)</dd>
 
-  - `headers` - a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
+  <dt>`headers`</dt>
+  <dd>
+    A map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
     the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers).
     The keys of the map are the header names. The values of the map are lists of values for the header.
 
@@ -506,6 +514,8 @@ The values of the map are the datasource definitions with the following schema:
          accept:
            - "application/json"
       ```
+    </dd>
+</dl>
 
 For example, let's define the following Gomplate datasources in the global `settings` section (this will apply to all
 components in all stacks in the infrastructure):
