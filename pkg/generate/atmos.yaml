@@ -333,7 +333,7 @@ schemas:
     manifest: "../quick-start/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
 # `Go` templates in Atmos manifests
-# https://atmos.tools/core-concepts/stacks/templating
+# https://atmos.tools/core-concepts/stacks/templates
 # https://pkg.go.dev/text/template
 templates:
   settings:
