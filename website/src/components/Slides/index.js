@@ -1,7 +1,7 @@
 import React from "react";
-import styles from "@site/src/components/slides/slides.module.css";
 import ImageGallery from "react-image-gallery";
 import "react-image-gallery/styles/css/image-gallery.css"
+import Styles from "./index.module.css";
 
 // https://github.com/xiaolin/react-image-gallery
 // https://stackoverflow.com/questions/3746725/how-to-create-an-array-containing-1-n
@@ -22,7 +22,7 @@ const images = Array.from({length: 27}, (_, i) => {
 export default function Slides() {
     return (
         <main>
-            <section className={styles.slidesContainer}>
+            <section className={Styles.slidesContainer}>
                 <div className="container">
                     <ImageGallery items={images}
                                   thumbnailPosition={"bottom"}
