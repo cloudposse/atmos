@@ -10,6 +10,7 @@ import TabItem from '@theme/TabItem';
 import Link from '@docusaurus/Link';
 import Intro from '@site/src/components/Intro'
 import LatestRelease from '@site/src/components/LatestRelease'
+import File from '@site/src/components/File'
 
 <Intro>
 There are many ways to install Atmos. Choose the method that works best for you!
@@ -32,6 +33,16 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     ```shell
     brew install atmos
     ```
+
+    #### Pro tip! Use a `Brewfile`
+
+    Create a `Brewfile` in your Atmos project, and add `brew "atmos"`. This way, you can ensure that everyone on your team is using the same version of Atmos.
+
+    <File title="Brewfile">
+    <pre><code>brew "atmos", "<LatestRelease />"</code></pre>
+    </File>
+
+    Then just run `brew install` in the same directory as the `Brewfile`.
   </TabItem>
 
   <TabItem value="deb" label="Debian/Ubuntu">
@@ -141,7 +152,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 </Tabs>
 
 :::note
-The latest version of Atmos might not be available with third party package managers.
+The latest version of Atmos (<LatestRelease />) might not be available with third party package managers.
 :::
 
 

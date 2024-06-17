@@ -193,6 +193,10 @@ article ul >li, article ol > li {
     margin-bottom: 1em;
 }
 
+article ul >li::marker, article ol > li::marker {
+    font-weight: bold;
+}
+
 article ul li a:first-child, article ol li a:first-child {
     font-weight: bold;
 }

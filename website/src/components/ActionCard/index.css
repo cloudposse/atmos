@@ -28,7 +28,7 @@
     margin-right: 100%;
 }
 
-.action-card div a.button.button--lg.button--primary {
+.action-card p > div a.button.button--lg.button--primary {
     margin-right: inherit;
 }
 
