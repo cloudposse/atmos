@@ -1,0 +1,296 @@
+---
+title: Templatie Data Sources
+sidebar_position: 7
+sidebar_label: Data Sources
+id: datasources
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Advanced</PillBox>
+
+<Intro>
+Data sources in Atmos refer to external locations from which Atmos can fetch configuration data. Atmos supports all data sources supported by [Gomplate](https://docs.gomplate.ca/datasources). For example, you can use data sources to fetch JSON metadata from API endpoints or read from various backends like S3 Buckets, AWS SSM Parameter Store, HashiCorp Vault, and many others.
+</Intro>
+
+## Datasources
+
+Currently, Atmos supports all the [Gomplate Datasources](https://docs.gomplate.ca/datasources).
+More data sources will be added in the future (and this doc will be updated). All datasource configurations are defined in the `templates.settings.gomplate.datasources` section in `atmos.yaml` [CLI config file](/cli/configuration) or in the `settings.templates.settings` section of any [Atmos stack manifests](/core-concepts/stacks).
+
+The `templates.settings.gomplate.datasources` section is a map of objects.
+
+The keys of the map are the data source names (aliases) that you will use to refer to them. For example, if you define a data source called `foobar` which has a property called `tag`, you could refer to it like this in a stack manifest: `{{ (datasource "foobar").tag }}`
+
+The values in the map are data source definitions following this schema:
+
+<dl>
+  <dt>`url`</dt>
+  <dd>
+  The [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
+  ll datasources are defined with a URL. As a refresher, a URL is made up of the following components:
+
+    ```plaintext
+    scheme://user@host.com:8080/path?query=string#anchor
+    ```
+  </dd>
+
+  <dt>`headers`</dt>
+  <dd>
+    A map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
+    the [`http` data source](https://docs.gomplate.ca/datasources/#sending-http-headers).
+    The keys of the map are the header names. The values of the map are lists of values for the header.
+
+    The following configuration will result in the
+    [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
+    being sent with the HTTP request to the data source:
+
+       ```yaml
+       headers:
+         accept:
+           - "application/json"
+      ```
+    </dd>
+</dl>
+
+## Types of Data Sources
+
+The following are the types of data sources are supported by Atmos via [Gomplate](https://docs.gomplate.ca/datasources/#url-format).
+
+<dl>
+    <dt>`aws+smp://`</dt>
+    <dd>
+    AWS Systems Manager Parameter Store is a key/value store that supports encryption and versioning.
+    </dd>
+
+    <dt>`aws+sm://`</dt>
+    <dd>
+    AWS Secrets Manager lets you store and retrieve secrets.
+    </dd>
+
+    <dt>`s3://`</dt>
+    <dd>Amazon S3 provides object storage, which is convenient for stashing shared configurations.</dd>
+
+    <dt>`consul://`, `consul+http://`, `consul+https://`</dt>
+    <dd>Use HashiCorp Consul provides as a backend key/value store</dd>
+
+    <dt>`env://`</dt>
+    <dd>Environment variables can be used as data sources, although [template functions](/core-concepts/templates/functions) might make more sense.</dd>
+
+    <dt>`file://`</dt>
+    <dd>Files can be read in any of the supported formats (JSON, YAML). Directories are also supported, just end the URL path with a `/`.</dd>
+
+    <dt>`git://`, `git+file://`, `git+http://`, `git+https://`, `git+ssh://`</dt>
+    <dd>
+    Files can be read from a local or remote git repository, at specific branches or tags. Directory semantics are also supported.
+    </dd>
+
+    <dt>`gs://`</dt>
+    <dd>
+    Google Cloud Storage is the object storage service that is similar to AWS S3.
+    </dd>
+
+    <dt>`http://`, `https://`</dt>
+    <dd>
+    Retrieve data from HTTP/HTTPS endpoints. Custom HTTP headers can also be passed.
+    </dd>
+
+    <dt>`merge://`</dt>
+    <dd>
+    Merge two or more data sources together to produce the final value - useful for resolving defaults. Uses coll.Merge for merging.
+    </dd>
+
+    <dt>`stdin://`</dt>
+    <dd>
+    Read configuration data from standard input.
+    </dd>
+
+    <dt>`vault://`, `vault+http://`, `vault+https://`</dt>
+    <dd>
+    HashiCorp Vault is a popular open-source secret management platform.
+    </dd>
+</dl>
+
+## Environment Variables
+
+Some data sources might need environment variables that are different from the environment variables in Stack configuration. Environment variables may be passed to data soruces when processing and executing templates by defining `env` map.
+It's supported in both the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) and in the 
+`settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks).
+
+For example:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  templates:
+    settings:
+      # Environment variables passed to datasources when evaluating templates
+      # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+      # https://docs.gomplate.ca/functions/aws/#configuring-aws
+      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      env:
+        AWS_PROFILE: "<AWS profile>"
+        AWS_TIMEOUT: 2000
+```
+</File>
+
+This is useful when executing the `datasources` that need to authenticate to cloud APIs. 
+
+For more details, refer to:
+
+- [Configuring AWS](https://docs.gomplate.ca/functions/aws/#configuring-aws)
+- [Configuring GCP](https://docs.gomplate.ca/functions/gcp/#configuring-gcp)
+
+## Configuring Data Sources
+
+For example, let's define the following Gomplate `datasources` in the global `settings` section (this will apply to all
+components in all stacks in the infrastructure):
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        # Timeout in seconds to execute the datasources
+        timeout: 5
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          # 'http' datasource
+          # https://docs.gomplate.ca/datasources/#using-file-datasources
+          ip:
+            url: "https://api.ipify.org?format=json"
+            # https://docs.gomplate.ca/datasources/#sending-http-headers
+            # https://docs.gomplate.ca/usage/#--datasource-header-h
+            headers:
+              accept:
+                - "application/json"
+          # 'file' datasources
+          # https://docs.gomplate.ca/datasources/#using-file-datasources
+          config-1:
+            url: "./config1.json"
+          config-2:
+            url: "file:///config2.json"
+          # `aws+smp` AWS Systems Manager Parameter Store datasource
+          # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+          secret-1:
+            url: "aws+smp:///path/to/secret"
+          # `aws+sm` AWS Secrets Manager datasource
+          # https://docs.gomplate.ca/datasources/#using-awssm-datasource
+          secret-2:
+            url: "aws+sm:///path/to/secret"
+          # `s3` datasource
+          # https://docs.gomplate.ca/datasources/#using-s3-datasources
+          s3-config:
+            url: "s3://mybucket/config/config.json"
+```
+</File>
+
+After the above `datasources` are defined, you can use them in Atmos stack manifests like this:
+
+```yaml
+terraform:
+ vars:
+   tags:
+     tag1: '{{ (datasource "config-1").tag }}'
+     service_name2: '{{ (datasource "config-2").service.name }}'
+     service_name3: '{{ (datasource "s3-config").config.service_name }}'
+
+components:
+  terraform:
+    vpc-1:
+     settings:
+       provisioned_by_ip: '{{ (datasource "ip").ip }}'
+       secret-1: '{{ (datasource "secret-1").secret1.value }}'
+     vars:
+       enabled: '{{ (datasource "config-2").config.enabled }}'
+```
+
+
+<File title="atmos.yaml">
+```yaml
+# https://pkg.go.dev/text/template
+templates:
+  settings:
+    # Enable `Go` templates in Atmos stack manifests
+    enabled: true
+    # https://docs.gomplate.ca
+    # https://docs.gomplate.ca/functions
+    gomplate:
+      # Enable Gomplate functions and datasources in `Go` templates in Atmos stack manifests
+      enabled: true
+      # Timeout in seconds to execute the datasources
+      timeout: 5
+      # https://docs.gomplate.ca/datasources
+      datasources:
+        # 'http' datasource
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        ip:
+          url: "https://api.ipify.org?format=json"
+          # https://docs.gomplate.ca/datasources/#sending-http-headers
+          # https://docs.gomplate.ca/usage/#--datasource-header-h
+          headers:
+            accept:
+              - "application/json"
+        # 'file' datasources
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        config-1:
+          url: "./config1.json"
+        config-2:
+          url: "file:///config2.json"
+        # `aws+smp` AWS Systems Manager Parameter Store datasource
+        # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
+        secret-1:
+          url: "aws+smp:///path/to/secret"
+        # `aws+sm` AWS Secrets Manager datasource
+        # https://docs.gomplate.ca/datasources/#using-awssm-datasource
+        secret-2:
+          url: "aws+sm:///path/to/secret"
+        # `s3` datasource
+        # https://docs.gomplate.ca/datasources/#using-s3-datasources
+        s3-config:
+          url: "s3://mybucket/config/config.json"
+```
+</File>
+
+
+<dt>`templates.settings.gomplate.datasources`</dt>
+<dd>
+A map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions.
+
+The keys of the map are the datasource names (aliases), which are used in `Go` templates in Atmos stack manifests.
+    For example:
+    <File title="stack.yaml">
+    ```yaml
+    terraform:
+    vars:
+        tags:
+        provisioned_by_ip: '{{ (datasource "ip").ip }}'
+        config1_tag: '{{ (datasource "config-1").tag }}'
+        config2_service_name: '{{ (datasource "config-2").service.name }}'
+    ```
+    </File>
+
+    The values of the map are the datasource definitions with the following schema:
+    <dl>
+        <dt>`url`</dt>
+        <dd> the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)</dd>
+
+        <dt>`headers`</dt>
+        <dd>
+        a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers). The keys of the map are the header names. The values of the map are lists of values for the header.
+
+        The following configuration will result in the
+        [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
+        being sent with the HTTP request to the datasource:
+
+            ```yaml
+            headers:
+            accept:
+                - "application/json"
+            ```
+        </dd>
+    </dl>
+</dd>
