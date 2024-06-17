@@ -21,7 +21,7 @@ In `Go` templates, you can use the following functions and datasources:
  - [Sprig Functions](https://masterminds.github.io/sprig/)
  - [Gomplate Functions](https://docs.gomplate.ca/functions/)
  - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
- - [Atmos Template Functions](/core-concepts/stacks/functions)
+ - [Atmos Template Functions](/core-concepts/stacks/templates/functions)
 
 
 ## Template Evaluations
@@ -117,35 +117,7 @@ templates:
       enabled: true
       # Timeout in seconds to execute the datasources
       timeout: 5
-      # https://docs.gomplate.ca/datasources
-      datasources:
-        # 'http' datasource
-        # https://docs.gomplate.ca/datasources/#using-file-datasources
-        ip:
-          url: "https://api.ipify.org?format=json"
-          # https://docs.gomplate.ca/datasources/#sending-http-headers
-          # https://docs.gomplate.ca/usage/#--datasource-header-h
-          headers:
-            accept:
-              - "application/json"
-        # 'file' datasources
-        # https://docs.gomplate.ca/datasources/#using-file-datasources
-        config-1:
-          url: "./config1.json"
-        config-2:
-          url: "file:///config2.json"
-        # `aws+smp` AWS Systems Manager Parameter Store datasource
-        # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
-        secret-1:
-          url: "aws+smp:///path/to/secret"
-        # `aws+sm` AWS Secrets Manager datasource
-        # https://docs.gomplate.ca/datasources/#using-awssm-datasource
-        secret-2:
-          url: "aws+sm:///path/to/secret"
-        # `s3` datasource
-        # https://docs.gomplate.ca/datasources/#using-s3-datasources
-        s3-config:
-          url: "s3://mybucket/config/config.json"
+      datasources: {}
 ```
 </File>
 
@@ -171,44 +143,6 @@ templates:
   <dt>`templates.settings.gomplate.timeout`</dt>
   <dd>Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).</dd>
 
-  <dt>`templates.settings.gomplate.datasources`</dt>
-  <dd>
-    A map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions.
-    
-    The keys of the map are the datasource names (aliases), which are used in `Go` templates in Atmos stack manifests.
-      For example:
-      <File title="stack.yaml">
-      ```yaml
-      terraform:
-        vars:
-          tags:
-            provisioned_by_ip: '{{ (datasource "ip").ip }}'
-            config1_tag: '{{ (datasource "config-1").tag }}'
-            config2_service_name: '{{ (datasource "config-2").service.name }}'
-      ```
-      </File>
-
-    The values of the map are the datasource definitions with the following schema:
-    <dl>
-      <dt>`url`</dt>
-      <dd> the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)</dd>
-
-      <dt>`headers`</dt>
-      <dd>
-      a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers). The keys of the map are the header names. The values of the map are lists of values for the header.
-
-        The following configuration will result in the
-        [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
-        being sent with the HTTP request to the datasource:
-
-          ```yaml
-          headers:
-            accept:
-              - "application/json"
-          ```
-      </dd>
-    </dl>
-  </dd>
 </dl>
 
 :::warning

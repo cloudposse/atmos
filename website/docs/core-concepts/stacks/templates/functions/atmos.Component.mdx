@@ -1,0 +1,168 @@
+---
+title: atmos.Component
+sidebar_position: 1
+sidebar_label: atmos.Component
+description: Read the remote state or configuration of any Atmos component
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `atmos.Component` template function allows reading any Atmos section or any attribute from a section for an
+Atmos component in a stack, and use it in `Go` templates in Atmos component configurations.
+</Intro>
+
+## Usage
+
+```yaml
+  {{ (atmos.Component "<component>" "<stack>").<section>.<attribute> }}
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Atmos component name</dd>
+
+  <dt>`stack`</dt>
+  <dd>Atmos stack name</dd>
+
+  <dt>`section`</dt>
+  <dd>Atmos section name. Any section returned by the CLI command
+  <a href="/cli/commands/describe/component#output">atmos describe component</a> can be used.
+  A special `outputs` section is also supported to get the outputs (remote state) of Terraform/OpenTofu components.</dd>
+
+  <dt>`outputs`</dt>
+  <dd>Using the `outputs` section in the `atmos.Component` command is an convenient way to read the outputs (remote state)
+  of a component in a stack directly in Atmos stack manifests. It is an alternative to using the `remote-state`
+  module and configuring Terraform/OpenTofu components to use the `remote-state` module as described in
+  <a href="/core-concepts/components/terraform/remote-state">Component Remote State</a></dd>
+
+  <dt>`attribute`</dt>
+  <dd>
+  Attribute name (field) from the `section`. `attribute` is optional, you can use the `section` itself
+  if it's a simple type (e.g. `string`). Any number of attributes can be chained using the dot (`.`) notation.
+  For example, if the first two attributes are maps, you can chain them and get a field from the last map:
+  ```yaml
+  {{ (atmos.Component "<component>" "<stack>").<section>.<attribute1>.<attribute2>.<field1> }}
+  ```
+  </dd>
+</dl>
+
+
+## Specifying Atmos `stack`
+
+There are multiple ways you can specify the Atmos stack parameter in the `atmos.Component` function.
+
+The `stack` argument is the second argument of the `atmos.Component` function, and it can be specified in a few different ways:
+
+### Hardcoded Stack Name
+
+Hardcoded stack name. Use it if you want to get an output from a component from a different (well-known and static) stack. For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` output from the `vpc` component from the stack `plat-ue2-prod`:
+
+```yaml title="plat-ue2-dev"
+  components:
+    terraform:
+      tgw:
+        vars:
+          vpc_id: '{{ (atmos.Component "vpc" "plat-ue2-prod").outputs.vpc_id }}'
+```
+
+### Reference the Current Stack Name
+
+Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component (for which the `atmos.Component` function is executed):
+
+```yaml
+  {{ (atmos.Component "<component>" .stack).<section>.<attribute> }}
+  {{ (atmos.Component "<component>" .atmos_stack).<section>.<attribute> }}
+```
+
+For example, you have a `tgw` component that requires the `vpc_id` output from the `vpc` component in the same stack:
+
+```yaml
+  components:
+    terraform:
+      tgw:
+        vars:
+          vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
+```
+
+### Use a Format Function
+
+Use the `printf` template function to construct stack names using static strings and dynamic identifiers. This is convenient when you want to override some identifiers in the stack name:
+
+```yaml
+  {{ (atmos.Component "<component>" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage)).<section>.<attribute> }}
+
+  {{ (atmos.Component "<component>" (printf "plat-%s-prod" .vars.environment)).<section>.<attribute> }}
+
+  {{ (atmos.Component "<component>" (printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account)).<section>.<attribute> }}
+```
+
+For example, you have a `tgw` component deployed in the stack `plat-ue2-dev`. The `tgw` component requires the
+`vpc_id` output from the `vpc` component from the same environment (`ue2`) and same stage (`dev`), but from a different
+tenant `net` (instead of `plat`):
+
+```yaml title="plat-ue2-dev"
+  components:
+    terraform:
+      tgw:
+        vars:
+          vpc_id: '{{ (atmos.Component "vpc" (printf "net-%s-%s" .vars.environment .vars.stage)).outputs.vpc_id }}'
+```
+
+:::tip Important
+    By using the `printf "%s-%s-%s"` function, you are constructing stack names using the stack context variables/identifiers.
+
+    For more information on Atmos stack names and how to define them, refer to `stacks.name_pattern` and `stacks.name_template`
+    sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
+:::
+
+## Examples
+
+The following configurations show different ways of using the `atmos.Component` template function to read values from
+different Atmos sections directly in Atmos stack manifests, including the outputs of other
+(already provisioned) components.
+
+<File>
+```yaml
+# Global `settings` section
+# It will be added and deep-merged to the `settings` section of all components
+settings:
+  test: true
+
+components:
+  terraform:
+    test:
+      metadata:
+        # Point to the Terraform/OpenTofu component
+        component: "test"
+      vars:
+        name: "test"
+
+    test1:
+      metadata:
+        # Point to the Terraform/OpenTofu component
+        component: "test1"
+      vars:
+        name: "test1"
+
+    test2:
+      metadata:
+        # Point to the Terraform/OpenTofu component
+        component: "test2"
+      vars:
+        name: "test2"
+        # Use the `atmos.Component` function to get the outputs of the Atmos component `test1`
+        # The `test1` component must be already provisioned and its outputs stored in the Terraform/OpenTofu state
+        # Atmos will execute `terraform output` on the `test1` component in the same stack to read its outputs
+        test1_id: '{{ (atmos.Component "test1" .stack).outputs.test1_id }}'
+        tags:
+          # Get the `settings.test` field from the `test` component in the same stack
+          test: '{{ (atmos.Component "test" .stack).settings.test }}'
+          # Get the `metadata.component` field from the `test` component in the same stack
+          test_terraform_component: '{{ (atmos.Component "test" .stack).metadata.component }}'
+          # Get the `vars.name` field from the `test1` component in the same stack
+          test1_name: '{{ (atmos.Component "test1" .stack).vars.name }}'
+```
+</File>

@@ -1,0 +1,92 @@
+---
+title: Configure Dependencies Between Components
+sidebar_position: 3
+sidebar_label: Define Dependencies
+id: dependencies
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos supports configuring the relationships between components in the same or different stacks. You can define dependencies between components to ensure that components are deployed in the correct order.
+</Intro>
+
+Before deploying components, it's important to consider the dependencies between components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
+
+:::important Support for Dependencies
+Support for dependencies is reliant on the [integration](/integrations) used and not all integrations support dependencies. 
+
+For example, GitHub Actions do not support dependency order applies, while [Spacelift does](https://docs.spacelift.io/concepts/stack/stack-dependencies).
+:::
+
+You can define component dependencies by using the `settings.depends_on` section. The section used to define all the Atmos components (in
+the same or different stacks) that the current component depends on.
+
+The `settings.depends_on` section is a map of objects. The map keys are just the descriptions of dependencies and can be strings or numbers. Provide meaningful descriptions or numbering so that people can understand what the dependencies are about.
+
+<details>
+<summary>Why is `settings.depends_on` a map instead of a list?</summary>
+
+We originally implemented `settings.depends_on` as a list. However, since it’s not clear how lists should be deep-merged, so we decided to convert it to a map instead. In this map, the keys are lexicographically ordered, and based on that order, the dependencies are managed.
+</details>
+
+
+Each object in the `settings.depends_on` section has the following schema:
+
+- `component` (required) - an Atmos component that the current component depends on
+- `namespace` (optional) - the `namespace` where the Atmos component is provisioned
+- `tenant` (optional) - the `tenant` where the Atmos component is provisioned
+- `environment` (optional) - the `environment` where the Atmos component is provisioned
+- `stage` (optional) - the `stage` where the Atmos component is provisioned
+
+<br/>
+
+The `component` attribute is required. The rest are the context variables and are used to define Atmos stacks other than the current stack.
+For example, you can specify:
+
+- `namespace` if the `component` is from a different Organization
+- `tenant` if the `component` is from a different Organizational Unit
+- `environment` if the `component` is from a different region
+- `stage` if the `component` is from a different account
+- `tenant`, `environment` and `stage` if the component is from a different Atmos stack (e.g. `tenant1-ue2-dev`)
+
+<br/>
+
+In the following example, we specify that the `top-level-component1` component depends on the following:
+
+- The `test/test-component-override` component in the same Atmos stack
+- The `test/test-component` component in Atmos stacks in the `dev` stage
+- The `my-component` component from the `tenant1-ue2-staging` Atmos stack
+
+```yaml
+components:
+  terraform:
+    top-level-component1:
+      settings:
+        depends_on:
+          1:
+            # If the `context` (namespace, tenant, environment, stage) is not provided,
+            # the `component` is from the same Atmos stack as this component
+            component: "test/test-component-override"
+          2:
+            # This component (in any stage) depends on `test/test-component`
+            # from the `dev` stage (in any `environment` and any `tenant`)
+            component: "test/test-component"
+            stage: "dev"
+          3:
+            # This component depends on `my-component`
+            # from the `tenant1-ue2-staging` Atmos stack
+            component: "my-component"
+            tenant: "tenant1"
+            environment: "ue2"
+            stage: "staging"
+      vars:
+        enabled: true
+```
+
+<br/>
+
+:::tip
+
+Refer to [`atmos describe dependents` CLI command](/cli/commands/describe/dependents) for more information.
+
+:::

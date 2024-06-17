@@ -7,10 +7,11 @@ id: inheritance
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
+<Intro>
 Inheritance provides a template-free way to customize Stack configurations. When combined with [imports](/core-concepts/stacks/imports), it provides the ability to combine multiple configurations through ordered deep-merging of configurations. Inheritance is how you manage configuration variations, without resorting to [templating](/core-concepts/stacks/templates).
-
-## Overview
+</Intro>
 
 Atmos supports the following concepts and principles of **Component-Oriented Programming (COP)**:
 
@@ -32,14 +33,18 @@ well, we're able to achieve many of the same benefits.
 Component Inheritance is implemented and used in Atmos by combining two features: [`import`](/core-concepts/stacks/imports)
 and `metadata` component's configuration section.
 
-:::info Definitions
+### Definitions
 
-- **Base Component** is an Atmos component from which other Atmos components inherit all the configuration properties
-- **Derived Component** is an Atmos component that derives the configuration properties from other Atmos components
-
-:::
+<dl>
+<dt>Base Component</dt>
+<dd>is an Atmos component from which other Atmos components inherit all the configuration properties</dd>
+<dt>Derived Component</dt>
+<dd>is an Atmos component that derives the configuration properties from other Atmos components</dd>
+</dl>
 
 # Understanding Inheritance
+
+The concept of inheritance in Atmos is implemented through deep merging. Deep merging involves taking two maps or objects and combining them in a specific order, where the values in the latter map override those in the former. This approach allows us to achieve a template-free way of defining configurations in a logical, predictable, and consistent manner.
 
 ## Single Inheritance
 
