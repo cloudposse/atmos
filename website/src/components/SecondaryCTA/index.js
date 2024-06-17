@@ -4,7 +4,7 @@ import './index.css';
 
 const SecondaryCTA = ({ to, children }) => {
   return (
-        <Link to={to} className="button button--lg button--secondary button--outline button--primary ml20">{children}</Link>
+        <Link to={to} className="button button--lg button--secondary button--outline ml20">{children}</Link>
       )
 };
 

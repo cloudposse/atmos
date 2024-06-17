@@ -294,3 +294,138 @@ The keys of the map are the datasource names (aliases), which are used in `Go` t
         </dd>
     </dl>
 </dd>
+
+
+## Using templates in the URLs of `datasources`
+
+<PillBox>Advanced</PillBox>
+
+Let's suppose that your company uses a centralized software catalog to consolidate all tags for tagging all the cloud
+resources. The tags can include tags per account, per team, per service, billing tags, etc.
+
+:::note
+An example of such a centralized software catalog could be https://backstage.io
+:::
+
+<br/>
+
+Let's also suppose that you have a service to read the tags from the centralized catalog and write them into an S3
+bucket in one of your accounts. The bucket serves as a cache to not hit the external system's API with too many requests 
+and not to trigger rate limiting.
+
+And finally, let's say that in the bucket, you have folders per account (`dev`, `prod`, `staging`). Each folder has a JSON
+file with all the tags defined for all the cloud resources in the accounts.
+
+We can then use the [Gomplate S3 datasource](https://docs.gomplate.ca/datasources/#using-s3-datasources) to read the JSON
+file with the tags for each account and assign the tags to all cloud resources.
+
+In `atmos.yaml`, we figure two evaluations steps of template processing:
+
+<File title="atmos.yaml">
+```yaml
+templates:
+  settings:
+    enabled: true
+    # Number of evaluations to process `Go` templates
+    evaluations: 2
+    gomplate:
+      enabled: true
+```
+</File>
+
+In an Atmos stack manifest, we define the environment variables in the `env` section (AWS profile with permissions to 
+access the S3 bucket), and the `s3-tags` Gomplate datasource.
+
+In the `terraform.vars.tags` section, we define all the tags that are returned from the call to the S3 datasource.
+
+```yaml
+import:
+  # Import the default configuration for all VPCs in the infrastructure
+  - catalog/vpc/defaults
+
+# Global settings
+settings:
+  templates:
+    settings:
+      # Environment variables passed to datasources when evaluating templates
+      # https://docs.gomplate.ca/functions/aws/#configuring-aws
+      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      env:
+        # AWS profile with permissions to access the S3 bucket
+        AWS_PROFILE: "<AWS profile>"
+      gomplate:
+        # Timeout in seconds to execute the datasources
+        timeout: 5
+        # https://docs.gomplate.ca/datasources
+        datasources:
+          # `s3` datasource
+          # https://docs.gomplate.ca/datasources/#using-s3-datasources
+          s3-tags:
+            # The `url` uses a `Go` template with the delimiters `${ }`,
+            # which is processed as first step in the template processing pipeline
+            url: "s3://mybucket/{{ .vars.stage }}/tags.json"
+
+# Global Terraform config
+terraform:
+  # Global variables that are used by all Atmos components
+  vars:
+    tags:
+      atmos_component: "{{ .atmos_component }}"
+      atmos_stack: "{{ .atmos_stack }}"
+      terraform_component: "{{ .component }}"
+      terraform_workspace: "{{ .workspace }}"
+      devops_team: '{{`{{ (datasource "s3-tags").tags.devops_team }}`}}'
+      billing_team: '{{`{{ (datasource "s3-tags").tags.billing_team }}`}}'
+      service: '{{`{{ (datasource "s3-tags").tags.service }}`}}'
+
+# Atmos component configurations
+components:
+  terraform:
+    vpc/1:
+      metadata:
+        component: vpc  # Point to the Terraform component in `components/terraform/vpc` folder
+        inherits:
+          # Inherit from the `vpc/defaults` base Atmos component, which defines the default 
+          # configuration for all VPCs in the infrastructure.
+          # The `vpc/defaults` base component is defined in the `catalog/vpc/defaults` 
+          # manifest (which is imported above).
+          # This inheritance makes the `vpc/1` Atmos component config DRY.
+          - "vpc/defaults"
+      vars:
+        name: "vpc-1"
+```
+
+When executing an Atmos command like `atmos terraform apply vpc/1 -s plat-ue2-dev`, the above template will be processed
+in two evaluation steps:
+
+- Evaluation 1: 
+
+  - `datasources.s3-tags.url` is set to `s3://mybucket/dev/tags.json`
+  
+  - the tags that use the `datasource` templates are set to the following:
+
+    ```yaml
+    devops_team: '{{ (datasource "s3-tags").tags.devops_team }}'
+    billing_team: '{{ (datasource "s3-tags").tags.billing_team }}'
+    service: '{{ (datasource "s3-tags").tags.service }}'
+    ```
+
+- Evaluation 2: 
+    - all `s3-tags` datasources get executed, the JSON file `s3://mybucket/dev/tags.json` with the tags 
+      for the `dev` account is downloaded from the S3 bucket, and the tags are parsed and assigned in the 
+      `terraform.vars.tags` section 
+
+After executing the two evaluation steps, the resulting tags for the Atmos component `vpc/1` in the stack `plat-ue2-dev` 
+would look like this:
+
+```yaml
+atmos_component: vpc/1
+atmos_stack: plat-ue2-dev
+terraform_component: vpc
+terraform_workspace: plat-ue2-dev-vpc-1
+devops_team: dev_networking
+billing_team: billing_net
+service: net
+```
+
+The tags will be added to all the AWS resources provisioned by the `vpc` Terraform component in the `plat-ue2-dev` stack.
