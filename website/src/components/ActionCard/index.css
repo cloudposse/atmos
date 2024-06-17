@@ -28,7 +28,16 @@
     margin-right: 100%;
 }
 
+.action-card div a.button.button--lg.button--primary {
+    margin-right: inherit;
+}
+
 .action-card a.button {
   margin-top: 2em;
+  margin-bottom: 0;
+}
+
+.action-card div a.button {
+  margin-top: 1em;
   margin-bottom: 0;
 }

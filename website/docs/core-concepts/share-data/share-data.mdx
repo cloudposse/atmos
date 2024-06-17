@@ -1,0 +1,41 @@
+---
+title: Share Data Between Components
+sidebar_position: 4
+sidebar_label: Share Data Between Components
+description: Share data between loosely-coupled components in Atmos
+id: share-data
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<Intro>
+Breaking apart your infrastructure into loosely-coupled components is a great way to manage complexity and reuse code. However, sometimes you need to share data between components. In Atmos, you can easily share settings, configuration, and outputs between components.
+
+</Intro>
+
+There are two ways to go about it. Use native terraform support for remote state, to read the outputs from other components, or using template functions in stack configurations.
+
+<KeyPoints>
+- Why you might need to share data between components
+- How to share data between components using Terraform remote state
+- How to use template functions to share data between components in stack configurations
+</KeyPoints>
+
+## Using Remote State
+
+<ActionCard>
+Use how to use Terraform `remote-state` share data between components.
+<PrimaryCTA to="/core-concepts/components/terraform/remote-state">Try Terraform Remote State</PrimaryCTA>
+</ActionCard>
+
+## Using Template Functions
+
+```yaml
+```
+
+<ActionCard>
+Use the `{{ atmos.Component("<something>") }}` template functions share data between components. The function allows reading any Atmos section or any attribute from a section of an Atmos component in a stack.
+<PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Component">Try Template Function</PrimaryCTA>
+</ActionCard>
