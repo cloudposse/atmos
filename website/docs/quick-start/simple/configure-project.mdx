@@ -5,6 +5,8 @@ sidebar_label: 1. Start Your Project
 ---
 import KeyPoints from '@site/src/components/KeyPoints'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 The folder structure for an Atmos project is designed to organize your infrastructure effectively on the file system. It separates configuration from code, ensuring your Terraform root modules are distinct and reusable. 
@@ -41,6 +43,7 @@ separate repositories can be used to manage infrastructure per account (e.g. `de
 
 
 ## Filesystem Layout
+
 
 Here's what it will look like on the filesystem:
 
@@ -121,8 +124,12 @@ The following example provides the simplest filesystem layout that Atmos can wor
    └── vendor.yaml
 ```
 
-<br/>
 
+
+<ActionCard title="Want to go deeper on this topic?">
+    For a deep-dive on configuring projects to work with Atmos, we have additional documentation.
+    <PrimaryCTA to="/core-concepts/projects">Advanced Project Configuration</PrimaryCTA>
+</ActionCard>
 
 
 

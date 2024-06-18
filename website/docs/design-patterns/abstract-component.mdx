@@ -1,22 +1,29 @@
 ---
-title: Abstract Component Atmos Design Pattern
+title: Abstract Component
 sidebar_position: 9
 sidebar_label: Abstract Component
 description: Abstract Component Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import PillBox from '@site/src/components/PillBox'
 
-# Abstract Component
+<PillBox>Atmos Design Pattern</PillBox>
 
-The **Abstract Component** Design Pattern describes the mechanism of deriving Atmos components from one or more **abstract** base components (
-blueprints), allowing reusing the base components' configurations and prohibiting the abstract base component from being provisioned.
+<Intro>
+The **Abstract Component** Design Pattern describes the mechanism of deriving Atmos components from one or more **abstract** base components (blueprints), allowing reusing the base components' configurations and prohibiting the abstract base component from being provisioned.
+</Intro>
 
 Atmos supports two types of components:
 
-- `real` - is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance that can be provisioned
+<dl>
+<dt>`real`</dt>
+<dd>is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance that can be provisioned</dd>
 
-- `abstract` - a component configuration, which cannot be instantiated directly. The concept is borrowed
-  from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming
+<dt>`abstract`</dt>
+<dd>a component configuration, which cannot be instantiated directly. The concept is borrowed
+  from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming</dd>
+</dl>
 
 The type of component is expressed in the `metadata.type` parameter of a given component configuration.
 

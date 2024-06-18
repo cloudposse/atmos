@@ -36,6 +36,12 @@ module.exports = function (context, options) {
               }
             ],
           },
+
+          resolve: {
+            alias: {
+              '@examples': path.resolve(__dirname, 'examples'),
+            }
+          }
         };
       },
     };

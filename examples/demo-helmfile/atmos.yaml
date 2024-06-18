@@ -32,7 +32,10 @@ commands:
   steps:
   # FIXME: The JSON schema doesn't support helmfile yet
   #- atmos validate stacks
-  - atmos helmfile apply demo -s dev
+  # FIXME: `atmos helmfile apply` assumes EKS
+  #- atmos helmfile apply demo -s dev
+  - atmos helmfile generate varfile demo -s dev
+  - helmfile apply -f components/helmfile/nginx/helmfile.yaml --values dev-demo.helmfile.vars.yaml
 
 # Use Nested Custom Commands to provide easier interface for Docker Compose
 - name: "k3s"

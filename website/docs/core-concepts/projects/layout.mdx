@@ -18,11 +18,31 @@ At the root of your project, you’ll typically find an `atmos.yaml` configurati
 - Different ways to organize your project
 </KeyPoints>
 
+To effectively organize an Atmos project, we want to ensure you have specific locations for Atmos to find your configurations and components. At a minimum, we recommend the following folder structure in your project:
 
+## Components Folder
 
-Next, you’ll have a `components/` folder containing all your components, usually organized by your toolchain. For example, all your Terraform components would be in the `terraform/` subfolder within `components/`.
+This folder will contain all your components. Organize the components by toolchain. For example, if you have components for Terraform, place them in a Terraform subfolder (e.g. `components/terraform/vpc`).
 
-Finally, you’ll have your stacks configurations, which are organized into multiple subfolders depending on their purpose:
+## Stack Configurations Folder
+
+Next, you’ll have your stacks configurations, which are organized into multiple subfolders depending on their purpose:
+
+### Schema Validations
+
+### Catalogs
+This should be a separate top-level folder containing your stack configurations. Stack configurations are divided into several parts:
+- **Schemas Folder**: This folder contains the schemas used to validate the stack configurations.
+- **Catalog Folder**: This includes all reusable imports, which can be organized into subfolders based on logical groupings.
+- **Stacks Folder**: This contains the deployable stacks. Each stack is defined in a separate YAML file.
+
+We follow a few conventions in our reference architecture:
+
+### Deployable Stacks
+
+- **Orgs Folder**: Represents the AWS organizations to which you deploy. You might use a folder called deploy if you have a few simple stacks.
+- **Multi-Cloud Projects**: If your project involves multiple clouds, consider additional organizational strategies.
+
 
 ## Recommended Filesystem Layout
 <dl>

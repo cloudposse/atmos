@@ -2,67 +2,56 @@
 title: Atmos Design Patterns
 sidebar_position: 5
 sidebar_label: Use Design Patterns
+sidebar_class_name: hidden
 description: Techniques of Reusable Infrastructure Configuration
 id: design-patterns
 ---
 import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
 
-# Atmos Design Patterns
+<Intro>
+Atmos Design Patterns are a collection of conventions, best practices, concepts, principles and insights derived from our experience building enterprise scale architectures. These are vital for effectively structuring and organizing infrastructures, components, and stacks. They empower implementors and cloud architects alike, by providing access to the collective wisdom of seasoned professionals. 
+</Intro>
 
-Elements of Reusable Infrastructure Configuration
+These patterns serve as a guide for creating solutions that are not only reusable but also robust, flexible, and maintainable. Importantly, they foster convergence amongst engineers on a standard set of recognized patterns, effectively putting a name to the practices and strategies that have proven successful. This standardization aids in streamlining communication and understanding among professionals, enhancing collaboration and efficiency in the field.
+
+<KeyPoints>
+- How utilizing established patterns can simplify complex system architecture.
+- The iterative and challenging process of achieving reusable, adaptable designs.
+- Ways expert architects leverage past solutions to enhance efficiency and drive innovation.
+</KeyPoints>
 
 ## Motivation
 
 The importance of patterns in architecting complex systems has been long recognized across various fields.
 
-A well-architected infrastructure is rich with patterns. Giving careful attention to these patterns during the development of a system can result in
-an architecture that is not only smaller and simpler but also more comprehensible compared to ignoring these patterns.
+A well-architected infrastructure is rich with patterns. Giving careful attention to these patterns during the development of a system can result in an architecture that is not only smaller and simpler but also more comprehensible compared to ignoring these patterns.
 
-Designing for organizational complexity is challenging, and making all the components and configurations reusable is even harder.
-It involves identifying relevant components and configurations, transforming them into reusable artifacts at the appropriate granularity,
-establishing inheritance hierarchies, and defining crucial relationships among them. The design must be specific to the current problem while also
-being sufficiently general to accommodate future challenges and requirements. Additionally, minimizing or avoiding redesign is essential. Seasoned
-architects emphasize that creating a design that is both reusable and flexible is a daunting task, if not impossible, on the first attempt.
+Designing for organizational complexity is challenging, and making all the components and configurations reusable is even harder. It involves identifying relevant components and configurations, transforming them into reusable artifacts at the appropriate granularity, establishing inheritance hierarchies, and defining crucial relationships among them. The design must be specific to the current problem while also being sufficiently general to accommodate future challenges and requirements. Additionally, minimizing or avoiding redesign is essential. Seasoned architects emphasize that creating a design that is both reusable and flexible is a daunting task, if not impossible, on the first attempt.
 
-Nevertheless, experienced architects consistently produce effective designs.
-What do they know that the others don't?
-They possess insights that less-experienced architects may lack. One key aspect of their expertise is the avoidance of solving every problem from
-scratch. Instead, they leverage solutions that have proven successful in the past, applying them repeatedly. This accumulated experience is a crucial
-factor that distinguishes them as experts. Recurrent patterns are evident in well-designed systems, offering solutions to specific design challenges
-and enhancing the flexibility, elegance, and reusability of infrastructure configurations. These patterns enable architects to build upon successful
-designs by drawing on prior experience. An architect who is familiar with such patterns can immediately apply them to design problems without the need
-to rediscover them.
-
-:::info Summary
-
-- Utilizing established patterns simplifies complex system architecture.
-- Achieving reusable, adaptable design is challenging and iterative.
-- Expert architects leverage past solutions to enhance efficiency and innovation.
-
-:::
+Nevertheless, experienced architects consistently produce effective designs. What do they know that the others don't? They possess insights that less-experienced architects may lack. One key aspect of their expertise is the avoidance of solving every problem from scratch. Instead, they leverage solutions that have proven successful in the past, applying them repeatedly. This accumulated experience is a crucial factor that distinguishes them as experts. Recurrent patterns are evident in well-designed systems, offering solutions to specific design challenges and enhancing the flexibility, elegance, and reusability of infrastructure configurations. These patterns enable architects to build upon successful designs by drawing on prior experience. An architect who is familiar with such patterns can immediately apply them to design problems without the need to rediscover them.
 
 ## What is a Design Pattern?
 
 The well-known architect and design theorist [Christopher Alexander](https://en.wikipedia.org/wiki/Christopher_Alexander) said: 
 
 > <q>Each pattern describes a problem which occurs over and over again in our environment, and then describes the core of the solution 
-> to that problem, in such a way that you can use this solution a million times over, without ever doing it the same way twice. <p class="author">— **Christopher Alexander**</p></q>
+> to that problem, in such a way that you can use this solution a million times over, without ever doing it the same way twice. <p className="author">— **Christopher Alexander**</p></q>
 
 
 Even though Christopher Alexander was describing the patterns in construction and buildings, what he said is true about DevOps design patterns.
 
+:::tip Check Out Best Practices
+Also, checkout our [best practices](/best-practices) for more insights on how to design and manage your infrastructure.
+:::
+
 ## What are Atmos Design Patterns?
 
 Atmos Design Patterns capture key concepts, principles, and insights vital for effectively structuring and organizing infrastructures,
-components, and stacks. Inspired by [Cloud Posse's](https://cloudposse.com) extensive real-world experience in assisting
-Funded Startups and Enterprises, these patterns are meticulously developed to tackle organizational complexity. They focus on facilitating
-the creation of multi-account, enterprise-grade environments, specifically designed for the nuanced needs of complex organizations.
+components, and stacks. Inspired by [Cloud Posse's](https://cloudposse.com) extensive real-world experience in assisting Funded Startups and Enterprises, these patterns are meticulously developed to tackle organizational complexity. They focus on facilitating the creation of multi-account, enterprise-grade environments, specifically designed for the nuanced needs of complex organizations.
 
-Atmos Design Patterns empower infrastructure designers and cloud architects by providing access to the collective wisdom of seasoned professionals. 
-These patterns serve as a guide for creating solutions that are not only reusable but also robust, flexible, and maintainable. Importantly, 
-they foster convergence on a standard set of recognized patterns, effectively putting a name to the practices and strategies that have proven 
-successful. This standardization aids in streamlining communication and understanding among professionals, enhancing collaboration and efficiency 
-in the field.
+Atmos Design Patterns empower infrastructure designers and cloud architects by providing access to the collective wisdom of seasoned professionals. These patterns serve as a guide for creating solutions that are not only reusable but also robust, flexible, and maintainable. Importantly, they foster convergence on a standard set of recognized patterns, effectively putting a name to the practices and strategies that have proven successful. This standardization aids in streamlining communication and understanding among professionals, enhancing collaboration and efficiency in the field.
 
 :::info Summary
 
@@ -81,17 +70,10 @@ forms.
 Once you understand the Design Patterns and have experience with them, you won't ever think about infrastructure design in the same way.
 You'll have knowledge and insights that can make your own designs more flexible, modular, reusable, and understandable.
 
-<br/>
-
 :::note
 
-We view this collection of Design Patterns as neither exhaustive nor fixed. Instead, it serves as a documentation of our present ideas, insights and
-knowledge. Your input, whether in the form of comments, critiques, references, or suggestions for Design Patterns we may have overlooked, is highly
-encouraged and appreciated.
+We view this collection of Design Patterns as neither exhaustive nor fixed. Instead, it serves as a documentation of our present ideas, insights and knowledge. Your input, whether in the form of comments, critiques, references, or suggestions for Design Patterns we may have overlooked, is highly encouraged and appreciated.
 
 :::
-
-<br/>
-<br/>
 
 <DocCardList/>

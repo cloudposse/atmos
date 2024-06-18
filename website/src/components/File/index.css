@@ -27,6 +27,10 @@
   border-right: 1px solid #cccccc47;
 }
 
+.file pre {
+  margin-bottom: inherit;
+}
+
 .file div.tab {
 	position: relative;
     top: 2px;
