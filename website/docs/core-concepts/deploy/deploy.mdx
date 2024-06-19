@@ -12,11 +12,11 @@ import Intro from '@site/src/components/Intro';
 </Intro>
 
 
-In Atmos, when we talk about "Deployment" it refers to taking the [fully rendered and deep-merged configuration](/core-concepts/describe) of a [stack](/core-concepts/stacks) and provisioning an instance of one of the components. We call this a "component instance", and it's simply a component that has been deployed in a specific stack.
+In Atmos, when we talk about "Deployment," it refers to taking the [fully rendered and deep-merged configuration](/core-concepts/describe) of a [stack](/core-concepts/stacks) and provisioning an instance of one of the components. We call this a "component instance," and it's simply a component that has been deployed in a specific stack.
 
 ### Deployment in Atmos
 
-Deployment in Atmos can be approached in several ways. 
+Deployment in Atmos can be approached in several ways.
 
 1. **Command Line Deployment**: You can always deploy on the command line using Atmos, which is particularly useful for local development or in environments that are less mature and do not yet have CI/CD capabilities.
 
@@ -26,13 +26,13 @@ Deployment in Atmos can be approached in several ways.
 
 When deploying components, it's important to consider the dependencies between components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
 
-Make sure to [configure dependencies](/core-concepts/stacks/dependencies) between components using the `settings.depends_on` section. 
+Make sure to [configure dependencies](/core-concepts/stacks/dependencies) between components using the `settings.depends_on` section.
 
 ### Managing Dependency Order Between Components
 
-Sometimes components have dependencies on other components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component. 
+Sometimes, components have dependencies on other components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
 
-In Atmos, support of ordered dependencies is reliant on the integration and not all integrations support ordered dependencies. 
+In Atmos, support of ordered dependencies is reliant on the integration and not all integrations support ordered dependencies.
 
 All configurations in Atmos are defined in YAML. If you can write a Terraform module, you can essentially Terraform anything based on the stack configuration. It's important to be aware of dependencies between your components. Depending on the integration mechanism or deployment approach you choose, handling these dependencies can be either built-in or more manual.
 

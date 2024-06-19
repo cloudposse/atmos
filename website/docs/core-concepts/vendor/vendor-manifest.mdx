@@ -17,7 +17,7 @@ It functions a little bit like the `packages.json` file in Node.js or the `go.mo
 
 ## How it works
 
-Atmos searches for the vendoring manifest in the following locations, and uses the first one found:
+Atmos searches for the vendoring manifest in the following locations and uses the first one found:
 
 - In the directory from which the [`atmos vendor pull`](/cli/commands/vendor/pull) command is executed, usually in the root of the infrastructure repo
 
@@ -269,7 +269,7 @@ imports:
 Hierarchical imports are supported at many levels. For example, consider the following vendoring configurations:
 
 <File title="vendor.yaml">
-```yaml 
+```yaml
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -316,7 +316,7 @@ spec:
 </File>
 
 <File title="vendor/vendor4.yaml">
-```yaml 
+```yaml
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:

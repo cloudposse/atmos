@@ -6,7 +6,7 @@ sidebar_position: 3
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-To better understand where Atmos fits in, it may be helpful to understand some of the tooling that has inspired it's design or serve as possible alternatives to its approach.
+To better understand where Atmos fits in, it may be helpful to understand some of the tooling that has inspired its design or serve as possible alternatives to its approach.
 </Intro>
 
 ## Conceptual Inspiration
@@ -31,9 +31,9 @@ However, due to popular demand, Atmos now supports advanced templating and data 
 
 https://helmfile.com
 
-[Helmfile](https://helmfile.com) manages collections of Helm charts with a declarative syntax, combining them into a "stack" for deployment to Kubernetes. It handles environmental configuration, deep merging it and evaluating templates with a Go template engine before passing the values files to Helm. 
+[Helmfile](https://helmfile.com) manages collections of Helm charts with declarative syntax, combining them into a "stack" for deployment to Kubernetes. It handles environmental configuration, deep merging it, and evaluating templates with a Go template engine before passing the values files to Helm.
 
-Atmos draws from Helmfile’s ability to orchestrate multiple Helm charts, applying the concept to Terraform root modules to manage interdependencies and deployment order. It supports environmental configuration through stack configurations that define all the environmental configuration for Terraform root modules. Atmos generates the necessary Terraform `.tfvar` files, much like Helmfile generates Helm values files, ensuring consistent and efficient deployment of Terraform infrastructure.
+Atmos draws from Helmfile’s ability to orchestrate multiple Helm charts, applying the concept to Terraform root modules to manage interdependencies and deployment order. It supports environmental configuration through stack configurations that define all the environmental configurations for Terraform root modules. Atmos generates the necessary Terraform `.tfvar` files, much like Helmfile generates Helm values files, ensuring consistent and efficient deployment of Terraform infrastructure.
 
 ### Helm Charts for Configuration
 
@@ -51,19 +51,14 @@ Atmos Vendoring was heavily inspired by [Vendir from VMWare Tanzu](https://githu
 
 ## General Alternatives
 
-There are many tools in the general category of "task runners" or "workflow automation". 
+There are many tools in the general category of "task runners" or "workflow automation".
 Here are some of the alternatives to Atmos, many of which inspired core functionality in Atmos.
 
 ### Make (Makefile) by Free Software Foundation
 
 https://www.gnu.org/software/make/
 
-Many companies (including Cloud Posse) started by leveraging `make` with `Makefile` and targets to call `terraform`. Using `make` is popular method of
-orchestrating tools, but it has trouble scaling up to support large projects. We know this because [Cloud Posse](https://cloudposse.com/) used it for
-3+ years. The problems we ran into is that `make` targets do not support "natural" parameterization, which leads to a proliferation of environment
-variables that are difficult to validate or hacks like overloading make-targets and parsing them (e.g. `make apply/prod`). Makefiles are unintuitive
-for newcomers because they are first evaluated as a template, and then executed as a script where each line of a target runs in a separate process
-space. Spaces matter too, and it's made worse with inconsistent rules using tabs in some places and spaces in others.
+Many companies (including Cloud Posse) started by leveraging `make` with `Makefile` and targets to call `terraform`. Using `make` is a popular method of orchestrating tools, but it has trouble scaling up to support large projects. We know this because [Cloud Posse](https://cloudposse.com/) used it for 3+ years. The problem we ran into is that `make` targets do not support "natural" parameterization, which leads to a proliferation of environment variables that are difficult to validate or hacks like overloading make-targets and parsing them (e.g. `make apply/prod`). Makefiles are unintuitive for newcomers because they are first evaluated as a template and then executed as a script where each line of a target runs in a separate process space. Spaces matter too, and it's made worse with inconsistent rules using tabs in some places and spaces in others.
 
 ### Mage (Magefile)
 
@@ -113,9 +108,7 @@ There are many tools explicitly designed around how to deploy with Terraform.
 The following is a list of tools that only support Terraform.
 
 :::tip Atmos Differentiators
-Atmos not only supports Terraform, but can be used to manage any CLI. For example, by combining [Custom commands](/core-concepts/custom-commands)
-and [workflows](/core-concepts/workflows), it's possible to support any CLI tool (even the ones listed below) or even reimplement core functionality of
-atmos. That's how extensible it is.
+Atmos supports Terraform and can also be used to manage any command-line tool. For example, by combining [Custom commands](/core-concepts/custom-commands) and [workflows](/core-concepts/workflows), it's possible to support any CLI tool (even the ones listed below) or even reimplement the core functionality of Atmos. That's how extensible it is.
 :::
 
 ### Terragrunt by Gruntwork
@@ -140,7 +133,7 @@ Terrapsace is a tool built in Ruby that provides an opinionated framework for wo
 
 https://github.com/verifa/terraplate
 
-Terraplate is a tool built in Golang that is a lightweight wrapper for terraform the focused on code generation.
+Terraplate is a tool built in Golang that is a lightweight wrapper for Terraform the focused on code generation.
 
 ### Astro by Uber (abandoned)
 
@@ -152,7 +145,7 @@ Astro is a tool built in Golang that provides a YAML DSL for defining all your t
 
 https://github.com/run-x/opta
 
-Opta is tool built in Python that makes Terraform easier by providing high-level constructs and not getting stuck with low-level cloud configurations.
+Opta is a tool built in Python that makes Terraform easier by providing high-level constructs and not getting stuck with low-level cloud configurations.
 
 ### pterradactyl by Nike
 
@@ -162,7 +155,7 @@ Pterradactyl is a library developed to abstract Terraform configuration from the
 
 ### Leverage by Binbash
 
-The Leverage CLI written in Python and intended to orchestrate Leverage Reference Architecture for AWS
+The Leverage CLI is written in Python and intended to orchestrate Leverage Reference Architecture for AWS
 
 https://github.com/binbashar/leverage
 

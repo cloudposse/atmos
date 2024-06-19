@@ -8,7 +8,7 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-THIS IS MISSING
+TODO: THIS IS MISSING
 </Intro>
 
 In the previous steps, we've configured the repository and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
@@ -53,7 +53,7 @@ perform the following steps:
 - Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
 
 <File title="vendor.yaml">
-```yaml 
+```yaml
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -115,7 +115,7 @@ If the component's folder has sub-folders, and you need to vendor them, they hav
 :::
 
 <File title="vendor.yaml">
-```yaml 
+```yaml
 spec:
   sources:
     - component: "vpc-flow-logs-bucket"
@@ -138,12 +138,12 @@ spec:
 ```shell
 Processing vendor config file 'vendor.yaml'
 
-Pulling sources for the component 'vpc' 
-from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.343.1' 
+Pulling sources for the component 'vpc'
+from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.343.1'
 into 'components/terraform/vpc'
 
-Pulling sources for the component 'vpc-flow-logs-bucket' 
-from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.343.1' 
+Pulling sources for the component 'vpc-flow-logs-bucket'
+from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.343.1'
 into 'components/terraform/vpc-flow-logs-bucket/1.343.1'
 
 ```
@@ -208,11 +208,11 @@ module "vpc_flow_logs_bucket" {
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
   version = "1.5.0"
 
-  # Specify the Atmos component name (defined in YAML stack config files) 
+  # Specify the Atmos component name (defined in YAML stack config files)
   # for which to get the remote state outputs
   component = "vpc-flow-logs-bucket"
 
-  # Override the context variables to point to a different Atmos stack if the 
+  # Override the context variables to point to a different Atmos stack if the
   # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region
   stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)

@@ -10,7 +10,7 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute 
+Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute
 to the development and deployment processes. Atmos enhances this validation process in two significant ways with [JSON Schema](https://json-schema.org/) and [OPA](https://www.openpolicyagent.org/) policies.
 </Intro>
 
@@ -26,9 +26,7 @@ JSON Schema is an industry standard and provides a vocabulary to annotate and va
 ### Open Policy Agent (OPA)
 
 The [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA, pronounced “oh-pa”) is another open-source industry standard that provides
-a general-purpose policy engine to unify policy enforcement across your stacks. The OPA language (Rego) is a high-level declarative language for
-specifying policy as code. Atmos has native support for the OPA decision-making engine to enforce policies across all the components in your stacks
-(e.g. for microservice configurations).
+a general-purpose policy engine to unify policy enforcement across your stacks. The OPA language (Rego) is a high-level declarative language for specifying policy as code. Atmos has native support for the OPA decision-making engine to enforce policies across all the components in your stacks (e.g. for microservice configurations).
 
 This is powerful stuff: because you can define many policies, it's possible to validate components differently for different environments or teams.
 
@@ -62,24 +60,24 @@ The command checks and validates the following:
 
   <Terminal title="atmos validate stacks">
     ```console
-    The Atmos component 'vpc' in the stack 'plat-ue2-dev' is defined in more than one 
+    The Atmos component 'vpc' in the stack 'plat-ue2-dev' is defined in more than one
     top-level stack manifest file: orgs/acme/plat/dev/us-east-2-extras, orgs/acme/plat/dev/us-east-2.
-    
-    The component configurations in the stack manifests are different.
-    
+
+    The component configurations in the stack manifest are different.
+
     To check and compare the component configurations in the stack manifests, run the following commands:
     - atmos describe component vpc -s orgs/acme/plat/dev/us-east-2-extras
     - atmos describe component vpc -s orgs/acme/plat/dev/us-east-2
-    
-    You can use the '--file' flag to write the results of the above commands to files 
+
+    You can use the '--file' flag to write the results of the above commands to files
     (refer to https://atmos.tools/cli/commands/describe/component).
-    
-    You can then use the Linux 'diff' command to compare the files line by line and show the differences 
+
+    You can then use the Linux 'diff' command to compare the files line by line and show the differences
     (refer to https://man7.org/linux/man-pages/man1/diff.1.html)
-    
-    When searching for the component 'vpc' in the stack 'plat-ue2-dev', Atmos can't decide which 
-    stack manifest file to use to get configuration for the component. This is a stack misconfiguration.
-    
+
+    When searching for the component 'vpc' in the stack 'plat-ue2-dev', Atmos can't decide which
+    stack manifest file to use to get the configuration for the component. This is a stack misconfiguration.
+
     Consider the following solutions to fix the issue:
 
     - Ensure that the same instance of the Atmos 'vpc' component in the stack 'plat-ue2-dev'

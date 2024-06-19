@@ -10,7 +10,7 @@ import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos natively supports "vendoring," a practice that involves replicating 3rd-party components, stacks, and artifacts within your own repository. This feature is particularly beneficial for managing dependencies in software like Terraform, which do not support pulling root modules remotely by configuration. 
+Atmos natively supports "vendoring," a practice that involves replicating 3rd-party components, stacks, and artifacts within your own repository. This feature is particularly beneficial for managing dependencies in software like Terraform, which do not support pulling root modules remotely by configuration.
 </Intro>
 
 Vendoring standardizes dependency management, encourages enterprise component reuse, and ensures compliance standards adherence. Furthermore, it allows teams to customize and independently manage their vendored components according to their specific requirements.
@@ -51,9 +51,9 @@ While Atmos does not call `vendir`, it functions and supports a subset of the co
 
 Atmos vendoring streamlines component sharing and version control across an enterprise, enhancing efficiency and collaboration while offering the flexibility to customize and manage multiple versions of dependencies, ensuring best practices in DevOps environments.
 
-- **Sharing Components Across an Enterprise**: Utilize Atmos vendoring to access a centralized component library, promoting code reuse and 
+- **Sharing Components Across an Enterprise**: Utilize Atmos vendoring to access a centralized component library, promoting code reuse and
   efficiency across teams (or business units) while enabling customization and independent version control post-vendoring. This approach enhances collaboration without sacrificing the flexibility for teams to tailor components to their specific needs or update them at their preferred pace.
-- **Managing Multiple Versions of Dependencies:** Use Atmos vendoring to manage multiple versions of remote dependencies, 
+- **Managing Multiple Versions of Dependencies:** Use Atmos vendoring to manage multiple versions of remote dependencies,
   effectively implementing version pinning through locally controlled artifacts. By configuring a stacks component directory (e.g., `vpc/v1` or `vpc/v2`), vendoring provides maximum flexibility while still aligning with best practices in DevOps environments.
 - **Reinforce Immutable Infrastructure**: Employ Atmos vendoring to store immutable infrastructure artifacts, guaranteeing that once a committed,
   it remains unaltered throughout its lifecycle, ensuring stability and reliability in deployments.
