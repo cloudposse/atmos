@@ -14,13 +14,13 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The `atmos.yaml` configuration file is used to control the behavior of the `atmos` CLI and how Atmos will work with your project. 
+The `atmos.yaml` configuration file controls the behavior of the `atmos` CLI and how Atmos will work with your project. 
 </Intro>
 
-Therefore, this file should exist in the project repository, along side your Terraform components and Atmos stacks. It's also where you can [configure integrations](/integrations), like with our [GitHub Actions](/integrations/github-actions).
+Therefore, this file should exist in the project repository alongside your Terraform components and Atmos stacks. It's also where you can [configure integrations](/integrations), like with our [GitHub Actions](/integrations/github-actions).
 
 <KeyPoints>
-- How install atmos and make sure you're on a current version
+- How install `atmos` and make sure you're on a current version
 - How to configure `atmos.yaml` for your project's filesystem layout
 - How Atmos identifies stack configurations using context variables and naming patterns
 </KeyPoints>
@@ -28,13 +28,13 @@ Therefore, this file should exist in the project repository, along side your Ter
 
 <Step>
 ## <StepNumber/> Install Atmos
-Let's make sure you've [properly installed Atmos](/install), by running the following command.
+Let's ensure you've [properly installed Atmos](/install) by running the following command.
 
 ```bash
 atmos --version
 ```
 
-You should see something like this... (note, the current release of Atmos is <LatestRelease />)
+You should see something like this... (note, the current release of Atmos is **<LatestRelease />**)
 
 <Screengrab title="atmos help" slug="atmos-version" />
 </Step>
@@ -64,7 +64,7 @@ And here's what all that means...
 <dl>
   <dt>`stacks.name_pattern`</dt>
   <dd>
-    Atmos uses “slugs” to refer to stacks, defined by the name_pattern setting.<br/>
+    Atmos uses “slugs” to refer to stacks, which are defined by the `name_pattern` setting.<br/>
     Instead of relying on file names and locations, which can change, Atmos uses context variables (`namespace`, `tenant`, `environment`, `stage`) 
     to identify the stack. For example, with the command `atmos terraform apply myapp -s dev`, 
     Atmos interprets the slug `dev` using the pattern `{stage}` to locate the correct stack configuration
@@ -84,11 +84,11 @@ And here's what all that means...
 
 ### Path Configuration
 
-Well-known paths are how Atmos knows how to find all your stack configurations, comoponents and workflows.
+Well-known paths are how Atmos finds all your stack configurations, components, and workflows. Here are the essential paths that you need to configure:
 
 <dl>
   <dt>`base_path`</dt>
-  <dd>The base path for components, stacks, and workflows configurations. We set it to an empty string because we've decided to use the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo</dd>
+  <dd>The base path for components, stacks, and workflow configurations. We set it to an empty string because we've decided to use the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo</dd>
 
   <dt>`components.terraform.base_path`</dt>
   <dd>The base path to the Terraform components (Terraform root modules). As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `components.terraform.base_path` to calculate the final path to the Terraform components</dd>
@@ -176,6 +176,6 @@ Initial Atmos configuration can be controlled by these ENV vars:
 
 
 <ActionCard title="Want to go deeper on this topic?">
-    For a deep-dive on configuring the Atmos CLI and all of the sections of the `atmos.yaml`, refer to CLI Configuration.
+    For a deep dive into configuring the Atmos CLI and all of the sections of the `atmos.yaml`, refer to CLI Configuration.
     <PrimaryCTA to="/cli/configuration">Advanced CLI Configuration</PrimaryCTA>
 </ActionCard>

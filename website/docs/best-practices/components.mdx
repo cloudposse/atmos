@@ -112,7 +112,7 @@ This approach decouples your architecture from the configuration, resulting in s
 
 Utilize a centralized [component library](/core-concepts/components/library) to distribute and share components across the
 organization efficiently. This approach enhances discoverability by centralizing where components are stored, preventing
-sprawl and ensuring components are easily accessible to everyone. Employ vendoring to retrieve remote dependencies, like
+sprawl, and ensuring components are easily accessible to everyone. Employ vendoring to retrieve remote dependencies, like
 components, ensuring the practice of immutable infrastructure.
 
 ## Enforce Standards using OPA Policies
@@ -155,7 +155,7 @@ coverage (e.g. with `terratest`) and no one likes to code review machine-generat
 
 If you find yourself in a situation that seems to require code generation, take a step back and consider if that's the right approach.
 - Do not code generate providers to [overcome "limitations" in Terraform](https://github.com/hashicorp/terraform/issues/19932#issuecomment-1817043906),
-  for example to iterate over providers this is a red flag. Instead, architect your components to work with a single provider
+  for example, to iterate over providers. This is a red flag. Instead, architect your components to work with a single provider
 - If you are programatically combining several child modules, consider if they should instead be separated by lifecycle.
 
 When you follow these rules, root modules become highly reusable and your reduce the amount of state managed by a single component, 
@@ -164,12 +164,12 @@ and therefore the blast radius of changes.
 ## Separate Your State by Region
 
 For Disaster Recovery purposes, always strive to keep the state of your components separate by region. 
-You don't want a regional outage to affeect your ability to manage infrastructure in other regions.
+You don't want a regional outage to affect your ability to manage infrastructure in other regions.
 
 ## Limit Providers to One or Two Per Component
 
-Avoid using multiple providers in a single component as it reduces the reusability of the component and increases
+Avoid using multiple providers in a single component, as it reduces the reusability of the component and increases
 the complexity and blast radius of what it manages.
 
-Consider instead, "hub" and "spoke" models, where you each spoke is it's own component with it's own lifecycle.
-In this model, the "spoke" will usually have two providers, one for the current context and one for the "hub".
+Consider instead "hub" and "spoke" models, where each spoke is its own component with its own lifecycle.
+In this model, the "spoke" will usually have two providers, one for the current context and one for the "hub."

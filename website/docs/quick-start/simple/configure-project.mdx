@@ -22,21 +22,15 @@ While you can customize the structure using the `atmos.yaml` configuration, we w
 
 
 Atmos works best with [monorepo](https://en.wikipedia.org/wiki/Monorepo) infrastructure repositories when managing the configurations for components
-and stacks. Multiple monorepos can also be used, for example for different teams or products. Monorepos are recommended because they provide a single
-source of truth for all configurations, and they simplify the management of the infrastructure.
+and stacks. For example, multiple monorepos can also be used for different teams or products. Monorepos are recommended because they provide a single source of truth for all configurations and simplify infrastructure management.
 
 
 <details>
 <summary>What is a monorepo?</summary>
 
-A "monorepo" is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure composed
-of individual components with indepentent lifecycles. Monorepos usually improve collaboration, CI/CD build speed, and overall productivity.
-A monorepo should not be confused with a [monolith](https://en.wikipedia.org/wiki/Monolithic_application), which is a single, often large,
-codebase for an application.
+A "monorepo" is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure composed of individual components with independent lifecycles. Monorepos usually improve collaboration, CI/CD build speed, and overall productivity. A monorepo should not be confused with a [monolith](https://en.wikipedia.org/wiki/Monolithic_application), which is a single, often large, codebase for an application.
 
-Polyrepo architectures consists of several version-controlled repositories for code, configurations and scripts for different parts of the
-infrastructure. For example, depending on various requirements (including security, lifecycle management, access control, audit, etc.),
-separate repositories can be used to manage infrastructure per account (e.g. `dev`, `staging`, `prod`), per service, or per team.
+Polyrepo architectures consist of several version-controlled repositories for code, configurations and scripts for different parts of the infrastructure. For example, depending on various requirements (including security, lifecycle management, access control, audit, etc.), separate repositories can be used to manage infrastructure per account (e.g. `dev`, `staging`, `prod`), per service, or per team.
 </details>
 
 <br/>
