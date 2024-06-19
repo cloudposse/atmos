@@ -19,7 +19,7 @@ Also, be sure to review the [Terraform Best Practices](/best-practices/terraform
 > Anyone can break laws created by people, but I have yet to see anyone break the laws of physics.
 > <p className="author">— **Elon Musk**</p></q>
 
-### Keep Your Components Small to Reduce the Blast Radius of Changes
+## Keep Your Components Small to Reduce the Blast Radius of Changes
 
 Focus on creating single purpose components that small, reusable components that adhere to the UNIX philosophy by doing one thing well. 
 This strategy leads to simpler updates, more straightforward troubleshooting, quicker plan/apply cycles, and a
@@ -29,7 +29,7 @@ Anti-patterns to avoid include:
 - Combining VPCs with databases in the same component
 - Defining every dependency needed by an application in a single component (provided there's no shared lifecycle)
 
-### Split Components By Lifecycle
+## Split Components By Lifecycle
 
 To keep your component small, consider breaking them apart by their Software Development Lifecycle (SDLC). 
 Things that always change together, go together. Things that seldom change together, should be managed separately.
@@ -38,7 +38,7 @@ Keep the coupling loose, and use remote state for cohesion.
 For instance, a VPC, which is rarely destroyed, should be managed separately from more dynamic resources like clusters
 or databases that may frequently scale or undergo updates. 
 
-### Make Them Opinionated, But Not Too Opinionated
+## Make Them Opinionated, But Not Too Opinionated
 
 Ensure components are generalized to prevent the proliferation of similar components, thereby promoting easier testing, 
 reuse, and maintenance.
@@ -49,7 +49,7 @@ The goal is to make 80% of your infrastructure highly reusable with generic sing
 The remaining 20% might need to be specialized for your use case, and that's okay.
 :::
 
-### Avoid Single Resource Components
+## Avoid Single Resource Components
 
 If you find yourself writing a component that is so small, it manages only a single resource e.g. (an IAM Policy), 
 consider if it should be part of a larger component.
@@ -90,26 +90,23 @@ and be aware of the potential downsides. For example, maybe you can safely manag
 
 :::note Do as we say, not as we do
 It is with humility that we state this best practice. Even many of our own Cloud Posse components, do not follow this because
-they were written before we realized the benefits of overwhelming this approach.
+they were written before we realized the overwhelming benefits of this approach.
 :::
 
 ## Write Components as Factories
 
-Google talks about this approach in the post [Resource Factories: A descriptive approach to Terraform](https://medium.com/google-cloud/resource-factories-a-descriptive-approach-to-terraform-581b3ebb59c).
-When you follow this approach, you to create a single component for a single purpose, like a VPC, database, or a Kubernetes cluster.
-Then you can create multiple instances of that component in your stack configuration.
+Google discusses the "factories" approach in the post [Resource Factories: A descriptive approach to Terraform](https://medium.com/google-cloud/resource-factories-a-descriptive-approach-to-terraform-581b3ebb59c). This concept is familiar to every major programming framework, and you can apply it to Terraform too.
 
-It's the same familiar concept used by every major programming framework. And you can do it with Terraform too.
+However, unlike Google's approach of creating the factory inside the component ([which we don't recommend](#avoid-creating-factories-inside-of-components)), we suggest using the stack configuration as the factory and the component as the product.
 
-In the factory pattern, the component is like the "factory class" and when defined in the Stack configuration it is used to create
-and configure multiple component instances. 
+By following this method, you create a single component for a specific purpose, such as a VPC, database, or Kubernetes cluster. Then, you can instantiate multiple instances of that component in your stack configuration.
 
-A component provides specific functionality but is not responsible for its own
-instantiation or configuration; that role is delegated to the factory.
+In the factory pattern, the component acts like the "factory class," and when defined in the stack configuration, it is used to create and configure multiple component instances.
 
-When you follow this approach, you decouple your architecture from the configuration. 
-Your state becomes smaller, and you can manage the lifecycle of each instance independently.
-Most importantly, your components become maximally reusable.
+A component provides specific functionality but is not responsible for its own instantiation or configuration; this responsibility is delegated to the factory.
+
+This approach decouples your architecture from the configuration, resulting in smaller state files and independent lifecycle management for each instance. Most importantly, it maximizes the reusability of your components.
+
 
 ## Use Component Libraries & Vendoring
 

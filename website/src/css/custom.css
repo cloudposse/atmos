@@ -325,6 +325,7 @@ table tr td {
 
 div > ul > li > a.table-of-contents__link.toc-highlight {
     font-weight: 600;
+    line-height: 1.45em;
 }
 
 .pagination-nav__link {
