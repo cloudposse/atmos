@@ -20,13 +20,13 @@ require (
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
 	github.com/hashicorp/go-getter v1.7.4
 	github.com/hashicorp/hcl v1.0.0
-	github.com/hashicorp/hcl/v2 v2.20.1
+	github.com/hashicorp/hcl/v2 v2.21.0
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20240607080351-271db412dbcb
 	github.com/hashicorp/terraform-exec v0.21.0
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
-	github.com/lrstanley/bubblezone v0.0.0-20240615043033-81c0dd750246
+	github.com/lrstanley/bubblezone v0.0.0-20240616011544-69b11dddf9ae
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/open-policy-agent/opa v0.65.0
