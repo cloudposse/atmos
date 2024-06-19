@@ -98,7 +98,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 <Step>
     ### <StepNumber/> Start Your Project
 
-    Create a solid foundation with a well-structured folder layout, embracing best practices and conventions for a consistently organized project.
+    Create a solid foundation with a well-structured folder layout, embracing best practices and conventions for a consistently organized project. By convention, we recommend keeping all configurations separate from your components, which helps ensure your components' reusability across teams.
 
     <details>
     <summary>See Example</summary>
@@ -164,8 +164,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 <Step>
     ### <StepNumber/> Pass Values Between Components
 
-    Use Terraform's native ability to read remote state from any other component, for a "loosely coupled" architecture.
-    Atmos provides [methods to make working with remote state easier](/core-concepts/components/terraform/remote-state).
+    Use Terraform's native ability to read the remote state or configuration of any other component, for a "loosely coupled" architecture. Atmos provides [methods that make this easy](/core-concepts/share-data).
 
     ```mermaid
     classDiagram
@@ -189,14 +188,14 @@ Large root modules are less reusable across teams due to varying requirements, r
 
     <ActionCard>
         Passing state between components is how you build a loosely coupled architecture.
-        <PrimaryCTA to="/core-concepts/components">Learn Remote State</PrimaryCTA>
+        <PrimaryCTA to="/core-concepts/share-data">Learn How</PrimaryCTA>
     </ActionCard>
 </Step>
 
 <Step>
     ### <StepNumber/> Configure Your Components with Stacks
 
-    Configure your environments—development, staging, production—each tailored to different stages of the lifecycle, ensuring smooth transitions and robust deployment strategies. Use imports to keep your configurations DRY and enforce consistency across your stacks.
+    Configure your environments such as development, staging, and production—each tailored to different stages of the lifecycle, ensuring smooth transitions and robust deployment strategies. Use a combination imports and inheritance for a template-free way to keep your configurations DRY and enforce consistency across your stacks.
 
     <details>
     <summary>See Example</summary>
@@ -211,7 +210,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 <Step>
     ### <StepNumber/> Deploy Stacks with Atmos 🚀
 
-    Execute deployments with precision using Terraform's `plan` and `apply` commands, fully integrated with [native GitOps workflows](/integrations) through [GitHub Actions](/integrations/github-actions) for seamless deployment automation.
+    Execute deployments with precision using Terraform's `plan` and `apply` commands, fully integrated with [native GitOps workflows](/integrations) through [GitHub Actions](/integrations/github-actions) for seamless deployment automation. Leverage [workflows](/core-concepts/workflows) to orchestrate more complicated deployments that involve multiple steps.
 
     ```mermaid
     graph LR

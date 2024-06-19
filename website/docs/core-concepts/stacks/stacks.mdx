@@ -32,7 +32,7 @@ Atmos utilizes a custom YAML configuration format for stacks. YAML is ideal beca
 
 ## Use-cases
 
-- **Rapid Environment Provisioning:** Leverage stacks to swiftly set up and replicate development, testing, 
+- **Rapid Environment Provisioning:** Leverage stacks to swiftly set up and replicate development, testing,
   and production environments, ensuring consistency and reducing manual setup errors. This accelerates the development
   cycle and enables businesses to respond quickly to market demands or development needs.
 - **Multi-Tenant Infrastructure Management:** Utilize stacks to manage and isolate resources for different clients or projects
@@ -52,7 +52,7 @@ various [design patterns](/design-patterns/).
 Every stack is uniquely identified by a name. The name is used to reference the stack in the Atmos CLI, or with stack dependencies.
 
 These are computed from either the `name_pattern` (old way) or the more configurable
-`name_template` (new way). These are configured in the `atmos.yaml` configuration file. 
+`name_template` (new way). These are configured in the `atmos.yaml` configuration file.
 
 For example, using the slug, we can reference a stack like this when applying the `vpc` stack in the `us2-dev` environment:
 
@@ -83,7 +83,7 @@ When a component is added to a stack, we call that a "Component Instance"
 <dl>
   <dt>Logical Stacks</dt>
   <dd>
-      Represent the entire environment defined by context variables and global settings in atmos.yaml. 
+      Represent the entire environment defined by context variables and global settings in atmos.yaml.
       Logical stacks are the in-memory representation of the deep-merged configuration.
     </dd>
 
@@ -109,13 +109,13 @@ import:
   # each import is a "Stack" file. The `.yaml` extension is optional, and we do not recommend using it.
   - ue2-globals
 
-# Top-level variables that are inherited by every single component. 
+# Top-level variables that are inherited by every single component.
 # Use these wisely. Too many global vars will pollute the variable namespace.
 vars:
   # Variables can be anything you want. They can be scalars, lists, and maps. Whatever is supported by YAML.
   stage: dev
 
-# There can then be global variables for each type of component. 
+# There can then be global variables for each type of component.
 # Here we set global variables for any "terraform" component.
 terraform:
   vars: { }
@@ -174,19 +174,15 @@ components:
 
 ## Stack Files
 
-Stack files can be very numerous in large cloud environments (think many dozens to hundreds of stack files). To enable the proper organization of
-stack files, SweetOps has established some conventions that are good to follow. However, these are just conventions, and there are no limits enforced
-by the tool.
+Stack files can be very numerous in large cloud environments (think many dozens to hundreds of stack files). To enable the proper organization of stack files, SweetOps has established some conventions that are good to follow. However, these are just conventions, and there are no limits enforced by the tool.
 
-By convention, we recommend to store all Stacks in a `stacks/` folder at the root of your infrastructure repository. This way it's clear where they
-live and helps keep the configuration separate from your code (e.g. HCL).
+By convention, we recommend storing all Stacks in a `stacks/` folder at the root of your infrastructure repository. This way it's clear where they live and helps keep the configuration separate from your code (e.g. HCL).
 
-The filename of individual environment stacks can follow any convention, and the best one will depend on how you model environments at your
-organization.
+The filename of individual environment stacks can follow any convention, and the best one will depend on how you model environments at your organization.
 
 ### Basic Layout
 
-A basic form of organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have so
+A basic form of organization is to follow the naming pattern where each `$environment-$stage.yaml` is a file. This works well until you have so
 many environments and stages.
 
 For example, `$environment` might be `ue2` (for `us-east-2`) and `$stage` might be `prod` which would result in `stacks/ue2-prod.yaml`

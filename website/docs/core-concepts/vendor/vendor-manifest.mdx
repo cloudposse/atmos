@@ -221,7 +221,7 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   The `imports` section defines the additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all sources in the imported manifests in the order they are defined.
 
   :::note
-  The imported file extensions are optional. If an import is defined without an extension, the `.yaml` extension is assumed and used by default.
+  The imported file extensions are optional. Imports that do not include file extensions will default to the `.yaml` extension.
   :::
 
   <File title="vendor.yaml">

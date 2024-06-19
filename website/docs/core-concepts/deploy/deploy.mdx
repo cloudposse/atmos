@@ -18,7 +18,7 @@ In Atmos, when we talk about "Deployment," it refers to taking the [fully render
 
 Deployment in Atmos can be approached in several ways.
 
-1. **Command Line Deployment**: You can always deploy on the command line using Atmos, which is particularly useful for local development or in environments that are less mature and do not yet have CI/CD capabilities.
+1. **Command Line Deployment**: You can always deploy on the command line using Atmos, which is particularly useful for local development or in environments that are less mature and do not yet have CI/CD capabilities. For more complicated deployments, you can leverage [workflows](/core-concepts/workflows) to orchestrate multiple deployments in a specific order or run other commands, including [custom commands](/core-concepts/custom-commands).
 
 2. **CI/CD Integrations**: Atmos supports several common methods for CI/CD, with [GitHub Actions](/integrations/github-actions) being the recommended method. We maintain and invest the most time and effort into GitHub Actions. However, we also support integrations with [Spacelift](/integrations/spacelift) and [Atlantis](/integrations/atlantis).
 

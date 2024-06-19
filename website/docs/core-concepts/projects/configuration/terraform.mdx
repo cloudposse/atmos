@@ -9,11 +9,11 @@ import Intro from '@site/src/components/Intro'
 <Intro>
 Atmos natively supports opinionated workflows for Terraform and [OpenTofu](/core-concepts/projects/configuration/opentofu).
 It's compatible with every version of terraform and designed to work with multiple different versions of Terraform
-concurrently. 
+concurrently.
 </Intro>
 
 Keep in mind that Atmos does not handle the downloading or installation of Terraform; it assumes that any
-required commands are already installed on your system.
+required commands are already installed on your system. To automate this, consider creating a [Custom Command](/core-concepts/custom-commands) to install Terraform.
 
 Atmos provides many settings that are specific to Terraform and OpenTofu.
 
@@ -42,7 +42,7 @@ components:
 
 <dl>
   <dt>components.terraform.apply_auto_approve</dt>
-  <dd>if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without 
+  <dd>if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without
   asking for confirmation when executing `terraform apply` command</dd>
 
   <dt>`components.terraform.deploy_run_init`</dt>

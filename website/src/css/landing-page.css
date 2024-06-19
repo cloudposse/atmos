@@ -81,7 +81,7 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
   height: 100vh;
   width: 100vw;
   justify-content: center;
-  margin-top: 2em; 
+  margin-top: 2em;
   margin-bottom: 2em;
 }
 
@@ -91,7 +91,7 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
 
 .landing-page .intro h1 {
   font-size: 3em;
-}  
+}
 
 .landing-page .intro h2 {
   margin-bottom: 1rem;
@@ -100,13 +100,13 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
 
 .landing-page .intro h3 {
   font-size: 1.5em;
-}  
+}
 
 .landing-page header h1, .landing-page header h3 {
   text-align: center;
 }
 
-.landing-page .hero img {   
+.landing-page .hero img {
     min-width: 50%;
     width: 100%;
     height: auto;
@@ -116,8 +116,8 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
   box-sizing: border-box;
   height: calc(90vh);
   flex-direction: column;
-  justify-content: space-between; 
-  padding: 0px 0; 
+  justify-content: space-between;
+  padding: 0px 0;
 }
 
 .hero__cta {
@@ -213,7 +213,7 @@ strong.underline::after {
 }
 
 .landing-page .alternate-section .terminal {
-    max-width: 52%;
+    max-width: 50vw;
 }
 
 .landing-page .terminal pre.screengrab {
