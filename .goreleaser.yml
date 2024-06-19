@@ -42,7 +42,7 @@ release:
   replace_existing_artifacts: true
   mode: keep-existing
   make_latest: false
-  name_template: 'v{{.Tag}}'
+  name_template: '{{.Tag}}'
   target_commitish: "{{ .Branch }}"
 ## ----- DO NOT CHANGE ----- ##
 
