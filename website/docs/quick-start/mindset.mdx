@@ -14,17 +14,17 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-    Atmos can change how you think about the Terraform code you write to build your infrastructure. 
+    Atmos can change how you think about the Terraform code you write to build your infrastructure.
 
-    When you design cloud architectures with Atmos, you will first break them apart into pieces called components. Then, you will implement Terraform "root modules" for each of those components. Finally, compose your components in any way you like using stacks, without need to write any code or messy templates.
+    When you design cloud architectures with Atmos, you will first break them apart into pieces called components. Then, you will implement Terraform "root modules" for each of those components. Finally, compose your components in any way you like using stacks, without the need to write any code or messy templates for code generation.
 </Intro>
 
-In this tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components. To ensure your components are highly reusable, parameterize them with variables. 
-Design them to serve a single purpose, making them the smallest possible unit of infrastructure in a typical 
-software development lifecycle (SDLC). Group pieces that usually change together and separate those that change independently.
+In this tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components. To ensure your components are highly reusable, parameterize them with variables.
+Design them to serve a single purpose, making them the smallest possible unit of infrastructure in a typical
+software development lifecycle (SDLC). Group pieces that usually change together, and separate those that change independently.
 
 
-You're about discover a new way to think about terraform... 
+You're about to discover a new way to think about terraform...
 
 <Link
     to="/quick-start/simple"
@@ -41,9 +41,9 @@ You're about discover a new way to think about terraform...
 
 <h1> Your Architecture is Made up of Components</h1>
 
-Start by thinking about your architecture in terms its logical components.
+Start by thinking about your architecture in terms of its logical components.
 
-For example, let’s take a typical architecture of a modern website. Its components might include a network, a cluster, some applications running on it, a database to store data, a cache, and maybe some object storage.
+For example, let’s consider the architecture of a typical modern website. Its components might include a network, a cluster, some applications running on it, a database to store data, a cache, and maybe some object storage.
 
 ```mermaid
 ---
@@ -74,17 +74,17 @@ graph TD
 Each of these logical pieces is a component and typically changes independently.
 
 They are loosely related and this relationship forms a stack. A stack logically combines components without tightly coupling them,
-ensuring each component’s state is separate. This approach minimizes the blast radius of changes, keeps the state separate, and 
-allows teams to own components. Plus, it encourages reuse since there is a finite number ways to express infrastructure.
+ensuring each component’s state is separate. This approach minimizes the blast radius of changes, keeps the state separate, and
+allows teams to own components. Plus, it encourages reuse since there is a finite number of ways to express infrastructure.
 
-Then, to implement this architecture with Atmos, you will usually follow these same five steps everytime.
+Then, to implement this architecture with Atmos, you will usually follow these same five steps every time.
 
 <details>
 <summary>Why don't we just put everything into a single "Root module"?</summary>
 
 The goal should be to build a loosely coupled [service-oriented architecture (SOA)](https://en.wikipedia.org/wiki/Service-oriented_architecture). Like with modern app design, we should avoid monolithic infrastructure code. Decoupling our infrastructure into [components](/core-concepts/components) ensures resilience and maintainability.
 
-When place all the infrastructure into a single "root module" we end up with a [Terralith](/terms/terralith), which is roughly [Stage-2 of the Terraform maturity path](/introduction/why-atmos/stage-2). All your eggs are in one basket.
+When we place all the infrastructure into a single "root module," we end up with a [Terralith](/terms/terralith), which is roughly [Stage-2 of the Terraform maturity path](/introduction/why-atmos/stage-2). All your eggs are in one basket.
 
 - Massive blast radius for every change
 - Brittle and prolonged plan/apply cycles
@@ -106,7 +106,7 @@ Large root modules are less reusable across teams due to varying requirements, r
     </details>
 
     <ActionCard>
-        Projects are organized into a well-structured folder layout, embracing best practices and conventions for a consistentl organized project.
+        Projects are organized into a well-structured folder layout, embracing best practices and conventions for a consistently organized project.
         <PrimaryCTA to="/core-concepts/stacks">Learn About Projects</PrimaryCTA>
     </ActionCard>
 
@@ -115,11 +115,11 @@ Large root modules are less reusable across teams due to varying requirements, r
 <Step>
     ### <StepNumber/> Write Your Components (e.g. Terraform Root Modules)
 
-    For each of the components in your architecture, write a Terraform root module.
+    For each component in your architecture, write a Terraform root module.
 
-    Use your existing Terraform root modules or create new ones. As your component library grows, you’ll need to write fewer new components, enabling faster development cycles through reuse of infrastructure components across projects.
+    Use your existing Terraform root modules or create new ones. As your component library grows, you’ll need to write fewer new components, enabling faster development cycles by reusing infrastructure components across projects.
 
-    Try to reuse 80% of your components across projects, and only write new ones when you have to.
+    Try to reuse 80% of your components across projects, and only write new ones when necessary.
 
 
     ```mermaid
@@ -149,7 +149,7 @@ Large root modules are less reusable across teams due to varying requirements, r
     ```
     <i>Each component stands alone as its own “root module.” Think of them as layers if it helps.</i>
 
-    What you should end up with are "root modules" for each of these pieces. Something like this... 
+    What you should end up with are "root modules" for each of these pieces. Something like this...
     <details>
     <summary>See Example</summary>
     <Screengrab title="Write your Components" command="# Then write your terraform root modules..." slug="demo-stacks/write-your-components" />
@@ -178,7 +178,7 @@ Large root modules are less reusable across teams due to varying requirements, r
         }
 
         class Cluster["Kubernetes Cluster (root module)"] {
-            needs: vpc_id 
+            needs: vpc_id
         }
 
         Network --> TerraformStateBackend : Stores Output
@@ -237,7 +237,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 
 This brief introduction covered the essentials of designing cloud architectures that can be used with Atmos.
 
-Now you can start with your first an Atmos project! Try out our [Simple](/quick-start/simple)/[Advanced](/quick-start/advanced) Quick Start, 
+Now you can start with your first Atmos project! Try out our [Simple](/quick-start/simple)/[Advanced](/quick-start/advanced) Quick Start,
 or delve deeper into the [syntax and concepts](/core-concepts) used in this tutorial.
 
 <Link

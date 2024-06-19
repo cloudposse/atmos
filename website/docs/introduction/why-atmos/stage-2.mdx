@@ -9,7 +9,7 @@ import Link from '@docusaurus/Link'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-As developers grow more comfortable with Terraform, they often transition to a more ambitious approach of automating everything. This results in creating a monolithic "root module", also known as a [Terralith](/terms/terralith). 
+As developers grow more comfortable with Terraform, they often transition to a more ambitious approach of automating everything. This results in creating a monolithic "root module," also known as a [Terralith](/terms/terralith).
 </Intro>
 
 This stage is characterized by an expansive,
@@ -28,16 +28,15 @@ all-encompassing Terraform configuration that attempts to manage every aspect of
 6. No practical way to separate responsibilities
 :::
 
-After a while, it becomes scary to apply the changes, because literally anything can go wrong. Deployments are often interrupted by transient errors, 
-expiring credentials and API rate limits, that require frequent and manual retries. To get around these problems or as a workaround 
-for cycles, developers perform targeted applies (e.g. `terraform apply -target`), which is an anti-pattern. 
+After a while, it becomes scary to apply the changes because, literally, anything can go wrong. Deployments are often interrupted by transient errors,
+expiring credentials, and API rate limits that require frequent and manual retries. To get around these problems or as a workaround
+for cycles, developers perform targeted applies (e.g. `terraform apply -target`), which is an anti-pattern.
 Unfortunately, it will take developers a few more stages of toil [to realize the inefficiencies of this approach (stage 5)](/introduction/why-atmos/stage-5).
 
 ## Realization
 
-When developers first started using Terraform, they didn’t appreciate the purpose behind modules. 
-Everything seemed easy enough just using plain resources. But as the codebase grew, the need for structure and organization became
-clear. Now, it all makes sense, and developers commit to writing [everything new as a module](/introduction/why-atmos/stage-3).
+When developers first started using Terraform, they didn’t appreciate the purpose behind modules.
+Everything seemed easy enough; just using plain resources worked. However, as the codebase grew, the need for structure and organization became clear. Now, it all makes sense, and developers commit to writing [everything new as a module](/introduction/why-atmos/stage-3).
 
 <Link
     to="/introduction/why-atmos/nirvana"

@@ -9,7 +9,7 @@ import Link from '@docusaurus/Link'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Developers recognize the pitfalls of having all environments in one root module. After having refactored their code heavily into modules, Developers realize it was a bad idea to define dev, staging and prod, all in the same root module. Developers realize terraform gets very slow and brittle when a root module is too large.
+Developers recognize the pitfalls of having all environments in one root module. After having refactored their code heavily into modules, Developers realized it was a bad idea to define dev, staging and prod, all in the same root module. Developers realize terraform gets very slow and brittle when a root module is too large.
 </Intro>
 
 1. Initiate the split of the monolithic root module into smaller, more manageable units while incorporating additional feature flags
@@ -28,8 +28,8 @@ Developers recognize the pitfalls of having all environments in one root module.
 
 ## Realization
 
-After refactoring to smaller "root modules", now there are some dependencies between them, including shared configurations 
-that were once easily passed between resources, but are now variable inputs. 
+After refactoring to smaller "root modules", now there are some dependencies between them, including shared configurations
+that were once easily passed between resources, but are now variable inputs.
 
 Developers hate repeating themselves, so attention shifts to [DRY Configuration](/introduction/why-atmos/stage-6).
 
