@@ -14,7 +14,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The `atmos.yaml` configuration file controls the behavior of the `atmos` CLI and how Atmos will work with your project. 
+The `atmos.yaml` configuration file controls the behavior of the `atmos` CLI and how Atmos will work with your project.
 </Intro>
 
 Therefore, this file should exist in the project repository alongside your Terraform components and Atmos stacks. It's also where you can [configure integrations](/integrations), like with our [GitHub Actions](/integrations/github-actions).
@@ -44,7 +44,7 @@ You should see something like this... (note, the current release of Atmos is **<
 To configure Atmos to work with your project, we'll create a file called `atmos.yaml` to tell Atmos where to find the
 Terraform components and Atmos stacks. Almost everything in Atmos is configurable via this file.
 
-Below is the minimum recommended configuration for Atmos to work with Terraform and to configure [Atmos components](/core-concepts/components) 
+Below is the minimum recommended configuration for Atmos to work with Terraform and to configure [Atmos components](/core-concepts/components)
 and [Atmos stacks](/core-concepts/stacks). Copy this YAML config below into your `atmos.yaml` file.
 
 <br/>
@@ -65,8 +65,8 @@ And here's what all that means...
   <dt>`stacks.name_pattern`</dt>
   <dd>
     Atmos uses “slugs” to refer to stacks, which are defined by the `name_pattern` setting.<br/>
-    Instead of relying on file names and locations, which can change, Atmos uses context variables (`namespace`, `tenant`, `environment`, `stage`) 
-    to identify the stack. For example, with the command `atmos terraform apply myapp -s dev`, 
+    Instead of relying on file names and locations, which can change, Atmos uses context variables (`namespace`, `tenant`, `environment`, `stage`)
+    to identify the stack. For example, with the command `atmos terraform apply myapp -s dev`,
     Atmos interprets the slug `dev` using the pattern `{stage}` to locate the correct stack configuration
     in the stacks directory.
   </dd>
@@ -75,7 +75,7 @@ And here's what all that means...
   <dd>
     Set to `Info` to see the most helpful logs. You can also set it to `Trace` to see all the logs, which is helpful for debugging.
   </dd>
-  
+
   <dt>`logs.file`</dt>
   <dd>
     Set to `/dev/stderr` to send all of Atmos output to the standard error stream. This is useful when running Atmos in a CI/CD pipeline.
@@ -111,7 +111,7 @@ Well-known paths are how Atmos finds all your stack configurations, components, 
 <summary>Advanced Options</summary>
 <dl>
   <dt>components.terraform.apply_auto_approve</dt>
-  <dd>if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without 
+  <dd>if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without
   asking for confirmation when executing `terraform apply` command</dd>
 
   <dt>`components.terraform.deploy_run_init`</dt>

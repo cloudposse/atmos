@@ -9,7 +9,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The folder structure for an Atmos project is designed to organize your infrastructure effectively on the file system. It separates configuration from code, ensuring your Terraform root modules are distinct and reusable. 
+The folder structure for an Atmos project is designed to organize your infrastructure effectively on the file system. It separates configuration from code, ensuring your Terraform root modules are distinct and reusable.
 </Intro>
 
 While you can customize the structure using the `atmos.yaml` configuration, we will start with a simple layout to get you started.
@@ -63,13 +63,13 @@ Atmos requires a few common directories and files, which need to be configured i
 <dl>
   <dt>`components/` directory (required)</dt>
   <dd>contains centralized component configurations</dd>
-  
+
   <dt>`stacks/` directory (required)</dt>
   <dd>contains centralized stack configurations</dd>
-  
+
   <dt>`atmos.yaml` (required)</dt>
   <dd>Atmos CLI config file</dd>
-  
+
   <dt>`vendor.yaml` (optional)</dt>
   <dd>Atmos vendor config file</dd>
 
@@ -113,7 +113,7 @@ The following example provides the simplest filesystem layout that Atmos can wor
    │
    │   # Atmos CLI configuration
    ├── atmos.yaml
-   │ 
+   │
    │   # Atmos vendoring configuration
    └── vendor.yaml
 ```

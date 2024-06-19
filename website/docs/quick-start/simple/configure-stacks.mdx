@@ -13,24 +13,24 @@ components into your "Stack" that you depend on.
 </Intro>
 
 If you think of your "components" as applications, then Stacks are simply which components you depend on and the settings that you want
-to pass to them. If you make your components highly reusable, it usually means they will need to accept a lot of configuration. 
+to pass to them. If you make your components highly reusable, it usually means they will need to accept a lot of configuration.
 
 **This is what makes Atmos so powerful:** you can import and inherit configurations in a logical way to keep your configurations DRY and consistent.
 
 <KeyPoints>
 - How to specify the configuration for your Terraform "root modules" using Atmos Stacks
-- How to organize Atmos Stacks into a Service Catalog 
+- How to organize Atmos Stacks into a Service Catalog
 - How to use imports and inheritance for DRY configurations
 - How Atmos identifies components using context variables and naming patterns
 </KeyPoints>
 
-Stack configurations are merely all the settings for your components. They can be organized in any way you like, 
+Stack configurations are merely all the settings for your components. They can be organized in any way you like,
 but we recommend a hierarchical layout. We share some [different ways to organize your stacks in the Catalog](/core-concepts/stacks/catalogs),
 but for this example we will use a simple layout.
 
 ## Create Catalog for Reusable Configurations
 
-Atmos supports the concept of a [Service Catalog](/core-concepts/stacks/catalogs), which is where you can define all 
+Atmos supports the concept of a [Service Catalog](/core-concepts/stacks/catalogs), which is where you can define all
 of your default configurations.
 
 All the common default settings for each Atmos component should be in a separate file in the `stacks/catalog` directory.
