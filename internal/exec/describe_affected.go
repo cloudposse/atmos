@@ -118,6 +118,10 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		includeDependents = true
 	}
 
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+	}
+
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 
@@ -139,10 +143,6 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-	}
-
-	if verbose {
-		cliConfig.Logs.Level = u.LogLevelTrace
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("\nAffected components and stacks: \n"))
