@@ -8,15 +8,11 @@ description: Use this command to pull sources and mixins from remote repositorie
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
-This command implements [Atmos Vendoring](/core-concepts/vendor/). Use this command to download sources from local and remote 
+This command implements [Atmos Vendoring](/core-concepts/vendor/). Use this command to download sources from local and remote
 repositories for Terraform and Helmfile components and stacks.
 :::
 
-<br/>
-
 <Screengrab title="atmos vendor pull --help" slug="atmos-vendor-pull--help" />
-
-<br/>
 <br/>
 
 With Atmos vendoring, you can copy components and other artifacts from the following sources:
@@ -112,8 +108,6 @@ The following config can be used to download the `vpc` component from an AWS pub
       version: "latest"
   ```
 
-<br/>
-
 :::tip
 Run `atmos vendor pull --help` to see all the available options
 :::
@@ -128,8 +122,6 @@ atmos vendor pull -c echo-server --type helmfile
 atmos vendor pull --tags dev,test
 atmos vendor pull --tags networking --dry-run
 ```
-
-<br/>
 
 :::note
 

@@ -59,8 +59,6 @@ components:
             - trigger-administrative-policy
 ```
 
-<br/>
-
 
 ## OpenTofu Support
 
@@ -71,11 +69,11 @@ To make OpenTofu the default, add the following to your top-level stack manifest
 ```yaml
 settings:
   spacelift:
-    # Use OpenTofu    
+    # Use OpenTofu
     terraform_workflow_tool: OPEN_TOFU
 ```
 
-Similarly, to override this behavior, or to only configure it on specific components, add the following to the component 
+Similarly, to override this behavior, or to only configure it on specific components, add the following to the component
 configuration:
 
 ```yaml
@@ -108,8 +106,6 @@ Each object in the `settings.depends_on` section has the following schema:
 - `environment` (optional) - the `environment` where the Atmos component is provisioned
 - `stage` (optional) - the `stage` where the Atmos component is provisioned
 
-<br/>
-
 The `component` attribute is required. The rest are the context variables and are used to define Atmos stacks other than the current stack.
 For example, you can specify:
 
@@ -118,8 +114,6 @@ For example, you can specify:
 - `environment` if the `component` is from a different region
 - `stage` if the `component` is from a different account
 - `tenant`, `environment` and `stage` if the component is from a different Atmos stack (e.g. `tenant1-ue2-dev`)
-
-<br/>
 
 In the following example, we specify that the `top-level-component1` component depends on the following:
 
@@ -152,8 +146,6 @@ components:
       vars:
         enabled: true
 ```
-
-<br/>
 
 :::tip
 

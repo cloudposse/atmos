@@ -76,7 +76,7 @@ To be able to use the `env` function from both templating engines, you can do on
 - Use the `env` function from one templating engine, and disable the other templating engine by using the
   `templates.settings.sprig.enabled` and `templates.settings,gomplate.enabled` settings
 
-- Enable both engines and use the Gomplate's `env` function via its 
+- Enable both engines and use the Gomplate's `env` function via its
   [`getenv`](https://docs.gomplate.ca/functions/env/#examples) alias
 
 :::
@@ -153,13 +153,13 @@ except the following settings are not supported in the `settings.templates.setti
 
 These settings are not supported for the following reasons:
 
-- You can't disable templating in the stack manifests which are being processed by Atmos as `Go` templates 
+- You can't disable templating in the stack manifests which are being processed by Atmos as `Go` templates
 
-- If you define the `delimiters` in the `settings.templates.settings` section in stack manifests, 
-  the `Go` templating engine will think that the delimiters specify the beginning and the end of template strings, will 
+- If you define the `delimiters` in the `settings.templates.settings` section in stack manifests,
+  the `Go` templating engine will think that the delimiters specify the beginning and the end of template strings, will
   try to evaluate it, which will result in an error
 
-As an example, let's define templating configuration for the entire organization in the `stacks/orgs/acme/_defaults.yaml` 
+As an example, let's define templating configuration for the entire organization in the `stacks/orgs/acme/_defaults.yaml`
 stack manifest:
 
 <File title="stacks/orgs/acme/_defaults.yaml">
@@ -191,12 +191,12 @@ settings:
 Atmos deep-merges the configurations from the `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks)
 with the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) using [inheritance](/core-concepts/stacks/inheritance).
 
-The `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks) takes precedence over 
+The `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks) takes precedence over
 the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration), allowing you to define the global
 `datasources` in `atmos.yaml` and then add or override `datasources` in Atmos stack manifests for the entire organization,
 tenant, account, or per component.
 
-For example, taking into account the configurations described above in `atmos.yaml` [CLI config file](/cli/configuration) 
+For example, taking into account the configurations described above in `atmos.yaml` [CLI config file](/cli/configuration)
 and in the `stacks/orgs/acme/_defaults.yaml` stack manifest, the final `datasources` map will look like this:
 
 <File title="stacks/orgs/acme/_defaults.yaml">
@@ -226,7 +226,7 @@ gomplate:
 ```
 </File>
 
-Note that the `config-1` datasource from `atmos.yaml` was overridden with the `config-1` datasource from the 
+Note that the `config-1` datasource from `atmos.yaml` was overridden with the `config-1` datasource from the
 `stacks/orgs/acme/_defaults.yaml` stack manifest. The `timeout` attribute was overridden as well.
 
 You can now use the `datasources` in `Go` templates in all Atmos sections that support `Go` templates.
@@ -245,14 +245,10 @@ You can use `Go` templates in the following Atmos sections to refer to values in
   - `component`
   - `metadata.component`
 
-<br/>
-
 :::tip
-In the template tokens, you can refer to any value in any section that the Atmos command 
+In the template tokens, you can refer to any value in any section that the Atmos command
 [`atmos describe component <component> -s <stack>`](/cli/commands/describe/component) generates
 :::
-
-<br/>
 
 For example, let's say we have the following component configuration using `Go` templates:
 
@@ -306,11 +302,11 @@ component:
 ```
 </File>
 
-When executing Atmos commands like `atmos describe component` and `atmos terraform plan/apply`, Atmos processes all the template tokens 
+When executing Atmos commands like `atmos describe component` and `atmos terraform plan/apply`, Atmos processes all the template tokens
 in the manifest and generates the final configuration for the component in the stack:
 
 <Terminal title="atmos describe component vpc -s plat-ue2-dev">
-```yaml 
+```yaml
 settings:
   setting1: 1
   setting2: 2
@@ -356,38 +352,38 @@ vars:
 Atmos supports many different ways of configuring and using `Go` templates:
 
 - In [Atmos Custom Commands](/core-concepts/custom-commands)
-- In [Atmos Vendoring](/core-concepts/vendor) 
+- In [Atmos Vendoring](/core-concepts/vendor)
 - In [Atmos Component Vendoring](/core-concepts/vendor/vendor-manifest)
 - In [Imports](/core-concepts/stacks/imports)
 - In [Stack Manifests](/core-concepts/stacks)
 
-### Phases 
+### Phases
 
 These templates are processed in different phases and use different context:
 
 - `Go` templates in [Atmos Custom Commands](/core-concepts/custom-commands) are processed when the custom commands are
-  executed. The execution context can be specified by using the `component_config` section. If a custom command defines 
+  executed. The execution context can be specified by using the `component_config` section. If a custom command defines
   a `component_config` section with `component` and `stack`, Atmos generates the config for the component in the stack
   and makes it available in the `{{ .ComponentConfig.xxx.yyy.zzz }}` template variables,
-  exposing all the component sections that are returned by the `atmos describe component <component> -s <stack>` CLI 
+  exposing all the component sections that are returned by the `atmos describe component <component> -s <stack>` CLI
   command
 
 - `Go` templates in [Atmos Vendoring](/core-concepts/vendor) and [Atmos Component Vendoring](/core-concepts/vendor/vendor-manifest)
-  are processed when the CLI command [`atmos vendor pull`](/cli/commands/vendor/pull) is executed. The templates in 
+  are processed when the CLI command [`atmos vendor pull`](/cli/commands/vendor/pull) is executed. The templates in
   the vendoring manifests support the `{{.Version}}` variable, and the execution context is provided in the `version` attribute
 
-- [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) are used in imported stack 
-  manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static 
+- [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) are used in imported stack
+  manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static
   `context` section. Atmos processes `Go` templates in imports as the **very first** phase of the stack processing pipeline.
-  When executing the [CLI commands](/cli/commands), Atmos parses and executes the templates using the provided static 
+  When executing the [CLI commands](/cli/commands), Atmos parses and executes the templates using the provided static
   `context`, processes all imports, and finds stacks and components
 
-- `Go` templates in Atmos stack manifests, on the other hand, are processed as the **very last** phase of the stack processing 
+- `Go` templates in Atmos stack manifests, on the other hand, are processed as the **very last** phase of the stack processing
   pipeline (after all imports are processed, all stack configurations are deep-merged, and the component in the stack is found).
-  For the context (template variables), it uses all the component's attributes returned from the 
+  For the context (template variables), it uses all the component's attributes returned from the
   [`atmos describe component`](/cli/commands/describe/component) CLI command
 
-These mechanisms, although all using `Go` templates, serve different purposes, use different contexts, and are executed 
+These mechanisms, although all using `Go` templates, serve different purposes, use different contexts, and are executed
 in different phases of the stack processing pipeline.
 
 For more details, refer to:
@@ -516,8 +512,6 @@ chart_values:
           }
 ```
 
-<br/>
-
 The `printf` template function is also supported and can be used instead of **double curly braces + backtick + double curly braces**.
 
 The following examples produce the same result:
@@ -551,13 +545,11 @@ chart_values:
 ## Excluding Templates in Imports from Processing by Atmos
 
 If you are using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and `Go` templates
-in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go` 
+in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go`
 template processing two times (two passes):
 
   - When importing the manifest and processing the template tokens using the variables from the provided `context` object
   - After finding the component in the stack as the final step in the processing pipeline
-
-<br/>
 
 For example, we can define the following configuration in the `stacks/catalog/eks/eks_cluster.tmpl` template file:
 
@@ -575,8 +567,6 @@ components:
           atmos_stack: "{{ .atmos_stack }}"
           terraform_workspace: "{{ .workspace }}"
 ```
-
-<br/>
 
 Then we import the template into a top-level stack providing the context variables for the import in the `context` object:
 
@@ -607,9 +597,7 @@ components:
           terraform_workspace: <no value>
 ```
 
-<br/>
-
-The second pass of template processing will not replace the tokens in `tags` because they are already processed in the 
+The second pass of template processing will not replace the tokens in `tags` because they are already processed in the
 first pass (importing) and the values `<no value>` are generated.
 
 To deal with this, use **double curly braces + backtick + double curly braces** instead of just **double curly braces**
@@ -629,8 +617,6 @@ components:
           atmos_stack: "{{`{{ .atmos_stack }}`}}"
           terraform_workspace: "{{`{{ .workspace }}`}}"
 ```
-
-<br/>
 
 Atmos will first process the import and replace the template tokens using the variables from the `context`.
 Then in the second pass the tokens in `tags` will be replaced with the correct values.
@@ -683,7 +669,7 @@ components:
           tag2: "{{\"{{`{{ .atmos_component }}`}}\"}}"
 ```
 
-When executing an Atmos command like `atmos terraform plan vpc -s <stack>`, the above template will be processed 
+When executing an Atmos command like `atmos terraform plan vpc -s <stack>`, the above template will be processed
 in three phases:
 
 - Evaluation 1
@@ -707,15 +693,13 @@ in three phases:
   - `vpc.vars.tags.tag1` is `vpc-vpc`
   - `vpc.vars.tags.tag2` is set to `vpc`
 
-<br/>
-
 :::warning
 
 The above example shows the supported functionality in Atmos templating.
 You can use it for some use-cases, but it does not mean that you **should** use it just for the sake of using, since
 it's not easy to read and understand what data we have after each evaluation step.
 
-The following use-case describes a practical approach to using evaluation steps in Atmos templates to work 
+The following use-case describes a practical approach to using evaluation steps in Atmos templates to work
 with `datasources`.
 
 :::

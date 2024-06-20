@@ -309,19 +309,13 @@ vars:
 # Other defaults for the `staging` stage/account
 ```
 
-<br/>
-
 ### Configure Organization Defaults
-
-<br/>
 
 :::note
 The `_defaults.yaml` files in the organization, tenant, account and region folders is the recommended way to define the stack manifests with the
 default configurations for organizations, OUs/tenants, accounts and regions. The `_defaults.yaml` files themselves are not top-level Atmos stacks,
 they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
 :::
-
-<br/>
 
 In `stacks/orgs/org1/_defaults.yaml`, add the following config:
 
@@ -531,8 +525,6 @@ The **Organizational Structure Configuration** pattern has the following limitat
 - The configuration described by the pattern can be complex for very simple infrastructures (e.g. just one organization, one organizational
   unit, a few accounts and regions)
 
-<br/>
-
 :::note
 
 Even if you are just starting with a very simple infrastructure (e.g. just one organization, one organizational unit, a few accounts, one or a few
@@ -542,8 +534,6 @@ In the future, when you modify your infrastructure to provision multi-organizati
 easy to extend the configuration without changing anything for the exiting environments.
 
 :::
-
-<br/>
 
 ## Related Patterns
 

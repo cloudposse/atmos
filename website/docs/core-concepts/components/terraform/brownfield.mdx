@@ -82,8 +82,6 @@ components:
         vpc_flow_logs_bucket_arn: "arn:aws:s3::/my-vpc-flow-logs-bucket"
 ```
 
-<br/>
-
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket-1` Atmos
 component in the `ue2-dev` Atmos stack:
 
@@ -105,8 +103,6 @@ components:
           # `vpc-flow-logs-bucket/defaults` base Atmos component
           - vpc-flow-logs-bucket/defaults
 ```
-
-<br/>
 
 ### Configure and Provision the `vpc` Component
 
@@ -179,8 +175,6 @@ components:
         vpc_flow_logs_traffic_type: "ALL"
 ```
 
-<br/>
-
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc/1` Atmos component in
 the `ue2-dev` stack:
 
@@ -213,8 +207,6 @@ components:
         # for the `infra/vpc-flow-logs-bucket` Terraform component
         vpc_flow_logs_bucket_component_name: vpc-flow-logs-bucket-1
 ```
-
-<br/>
 
 Having the stacks configured as shown above, we can now provision the `vpc/1` Atmos component in the `ue2-dev` stack
 by executing the following Atmos commands:

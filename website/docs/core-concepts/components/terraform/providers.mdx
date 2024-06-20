@@ -43,8 +43,6 @@ the `components/terraform/vpc/providers.tf` file:
    ```
 </File>
 
-<br/>
-
 In this example, the `aws` provider block includes the region and IAM role required for Terraform to communicate
 with the AWS services.
 
@@ -69,8 +67,6 @@ For example, the `providers` section at the global scope can look like this:
     ```
 </File>
 
-<br/>
-
 Similarly, it can be defined (or overridden) at the OU/tenant, account and region scopes in the corresponding
 `_defaults.yaml` stack manifests.
 
@@ -89,8 +85,6 @@ section. For example, the following config can be used to override the `assume_r
     ```
 </File>
 
-<br/>
-
 You can include the `providers` sections in any Atmos stack manifest at any level of inheritance. Atmos will process,
 deep-merge and override all the `providers` configurations for a component in the following order:
 
@@ -98,14 +92,10 @@ deep-merge and override all the `providers` configurations for a component in th
 - Base component scope (`component.terraform.<base_component>.providers` section)
 - Current component scope (`component.terraform.<component>.providers` section)
 
-<br/>
-
 :::tip
 Refer to [Atmos Component Inheritance](/core-concepts/stacks/inheritance) for more information on all types of component inheritance
 supported by Atmos
 :::
-
-<br/>
 
 When you define the `providers` sections, Atmos processes the inheritance chain for a component and generates a
 file `providers_override.tf.json` in the component's folder with the final values for all the defined providers.
@@ -133,8 +123,6 @@ For example:
     ```
 </Terminal>
 
-<br/>
-
 The generated `providers_override.tf.json` file would look like this:
 
 <File title="providers_override.tf.json">
@@ -150,8 +138,6 @@ The generated `providers_override.tf.json` file would look like this:
     }
     ```
 </File>
-
-<br/>
 
 Terraform then uses the values in the generated `providers_override.tf.json` to
 [override](https://developer.hashicorp.com/terraform/language/files/override) the parameters for all the providers in the file.
@@ -183,8 +169,6 @@ For example:
     ```
 </File>
 
-<br/>
-
 :::warning
 
 The above example uses a list of configuration blocks for the `aws` provider.
@@ -198,8 +182,6 @@ configuring the `settings.list_merge_strategy` in the `atmos.yaml` CLI config fi
 For more details, refer to [Atmos CLI Settings](/cli/configuration/#settings).
 
 :::
-
-<br/>
 
 ## References
 

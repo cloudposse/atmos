@@ -29,15 +29,11 @@ workflows:
       - command: terraform apply eks/alb-controller -auto-approve
 ```
 
-<br/>
-
 :::note
 
 The workflow name can be anything you want, and the workflows can also be parameterized.
 
 :::
-
-<br/>
 
 If you define this workflow in the file `workflow1.yaml`, it can we executed like this to provision
 the `vpc`, `eks/cluster` and `eks/alb-controller` [Atmos Components](/core-concepts/components) into
@@ -46,8 +42,6 @@ the `tenant1-ue2-dev` [Atmos Stack](/core-concepts/stacks):
 ```shell
 atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
 ```
-
-<br/>
 
 :::tip
 
@@ -295,8 +289,6 @@ To run this workflow for the `tenant1-ue2-dev` stack, execute the following comm
 atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev
 ```
 
-<br/>
-
 The following workflow executes `terraform plan` on `test/test-component-override-2` component in all stacks.
 In this case, the stack is specified inline for each workflow command.
 
@@ -320,8 +312,6 @@ To run this workflow, execute the following command:
 ```console
 atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1
 ```
-
-<br/>
 
 The following workflow is similar to the above, but the stack for each command is specified in the step-level `stack` attribute.
 
@@ -380,8 +370,6 @@ The Atmos stack used by the workflow commands of type `atmos` can be specified i
   ```console
   atmos workflow my-workflow -f workflow1 -s tenant1-ue2-dev
   ```
-
-<br/>
 
 ### Stack Presedence
 

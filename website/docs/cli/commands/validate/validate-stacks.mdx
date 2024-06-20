@@ -12,8 +12,6 @@ import Terminal from '@site/src/components/Terminal'
 Use this command to validate Atmos stack manifest configurations.
 :::
 
-<br/>
-
 <Screengrab title="atmos validate stacks --help" slug="atmos-validate-stacks--help" />
 
 ## Usage
@@ -23,8 +21,6 @@ Execute the `validate stacks` command like this:
 ```shell
 atmos validate stacks
 ```
-
-<br/>
 
 This command validates Atmos stack manifests and checks the following:
 
@@ -70,8 +66,6 @@ This command validates Atmos stack manifests and checks the following:
           (refer to https://atmos.tools/core-concepts/stacks/inheritance)
         ```
     </Terminal>
-
-<br/>
 
 :::tip
 Run `atmos validate stacks --help` to see all the available options
@@ -123,8 +117,6 @@ For this to work, configure the following:
   ATMOS_SCHEMAS_ATMOS_MANIFEST=stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
   atmos validate stacks --schemas-atmos-manifest stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   ```
-
-<br/>
 
 In case of any validation errors (invalid YAML syntax, Atmos manifest JSON Schema errors, invalid imports, etc.), you'll get an output from the
 command similar to the following:

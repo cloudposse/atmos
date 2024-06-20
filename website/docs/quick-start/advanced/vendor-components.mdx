@@ -26,13 +26,9 @@ One way to create the Terraform components is to copy them into the correspondin
   [vpc](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/vpc)
   into the `components/terraform/vpc` folder
 
-<br/>
-
 :::note
 The recommended way to vendor the components is to execute the `atmos vendor pull` CLI command.
 :::
-
-<br/>
 
 :::tip
 
@@ -42,8 +38,6 @@ For more information about Atmos Vendoring and the `atmos vendor pull` CLI comma
 - [atmos vendor pull](/cli/commands/vendor/pull)
 
 :::
-
-<br/>
 
 To vendor the components from the open-source component repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components),
 perform the following steps:
@@ -107,8 +101,6 @@ spec:
 ```
 </File>
 
-<br/>
-
 
 <details>
 <summary>Advanced Configuration</summary>
@@ -159,8 +151,6 @@ into 'components/terraform/vpc-flow-logs-bucket/1.343.1'
 
 After the command is executed, the filesystem layout should look like this:
 
-<br/>
-
 ```console
    │   # Centralized stacks configuration
    ├── stacks
@@ -188,8 +178,6 @@ After the command is executed, the filesystem layout should look like this:
 
 </Step>
 
-
-<br/>
 
 Each component follows the [Standard Module Structure](https://developer.hashicorp.com/terraform/language/modules/develop/structure) that Terraform
 recommends. There are a few additions:
@@ -254,8 +242,6 @@ component's directory (e.g. `components/terraform/vpc`), and we don't want to re
 
 :::
 
-<br/>
-
 For this to work for both the `atmos` CLI and the Terraform `utils` provider, we recommend doing one of the following:
 
 - Put `atmos.yaml` at `/usr/local/etc/atmos/atmos.yaml` on local host and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root
@@ -275,7 +261,5 @@ For this to work for both the `atmos` CLI and the Terraform `utils` provider, we
   root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
   var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
-
-<br/>
 
 For a complete description of how Atmos components use remote state, refer to [Component Remote State](/core-concepts/components/terraform/remote-state).

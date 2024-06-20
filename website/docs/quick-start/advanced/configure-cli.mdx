@@ -21,8 +21,6 @@ For the purpose of this Quick Start, below is the minimum configuration required
 configure [Atmos components](/core-concepts/components) and [Atmos stacks](/core-concepts/stacks). Copy the YAML config below into your `atmos.yaml`
 file.
 
-<br/>
-
 <File title="atmos.yaml">
 ```yaml
 # CLI config is loaded from the following locations (from lowest to highest priority):
@@ -38,9 +36,9 @@ file.
 # Base path for components, stacks and workflows configurations.
 # Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
 # Supports both absolute and relative paths.
-# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
+# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path'
 # and 'workflows.base_path' are independent settings (supporting both absolute and relative paths).
-# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
+# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path'
 # and 'workflows.base_path' are considered paths relative to 'base_path'.
 base_path: ""
 
@@ -115,8 +113,6 @@ schemas:
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 </File>
-
-<br/>
 
 The `atmos.yaml` configuration file defines the following sections.
 

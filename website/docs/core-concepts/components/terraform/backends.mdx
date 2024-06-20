@@ -83,8 +83,6 @@ terraform {
 ```
 </Terminal>
 
-<br/>
-
 In the example, `terraform_locks` is a DynamoDB table used for state locking. DynamoDB is recommended for locking when using the S3 backend to ensure
 safe concurrent access.
 
@@ -110,8 +108,6 @@ terraform {
 ```
 </Terminal>
 
-<br/>
-
 - Configure Terraform S3 backend with Atmos to automatically generate a backend file for each Atmos component. This is the recommended way
 of configuring Terraform state backend since it offers many advantages and will save you from manually creating a backend configuration file for
 each component
@@ -129,16 +125,12 @@ components:
 ```
 </Terminal>
 
-<br/>
-
 - Configure the S3 backend in one of the `_defaults.yaml` manifests. You can configure it for the entire Organization, or per OU/tenant, or per
 region, or per account.
 
 :::note
 The `_defaults.yaml` manifests contain the default settings for Organizations, Organizational Units and accounts.
 :::
-
-<br/>
 
 To configure the S3 backend for the entire Organization, add the following config in `stacks/orgs/acme/_defaults.yaml`:
 
@@ -157,8 +149,6 @@ terraform:
       role_arn: "arn:aws:iam::xxxxxxxx:role/IAM Role with permissions to access the Terraform backend"
 ```
 </Terminal>
-
-<br/>
 
 - (This step is optional) For each component, you can add `workspace_key_prefix` similar to the following:
 
@@ -181,14 +171,10 @@ components:
 ```
 </Terminal>
 
-<br/>
-
 Note that this is optional. If you don’t add `backend.s3.workspace_key_prefix` to the component manifest, the Atmos component name will be used
 automatically (which is this example is `vpc`). `/` (slash) in the Atmos component name will be replaced with `-` (dash).
 
 We usually don’t specify `workspace_key_prefix` for each component and let Atmos use the component name as `workspace_key_prefix`.
-
-<br/>
 
 Once all the above is configured, when you run the commands `atmos terraform plan vpc -s <stack>`
 or `atmos terraform apply vpc -s <stack>`, before executing the Terraform commands, Atmos will [deep-merge](#terraform-backend-inheritance)
@@ -216,8 +202,6 @@ config JSON file `backend.tf.json` in the component's folder, similar to the fol
 ```
 </Terminal>
 
-<br/>
-
 You can also generate the backend configuration file for a component in a stack by executing the
 command [atmos terraform generate backend](/cli/commands/terraform/generate-backend). Or generate the backend configuration files for all components
 by executing the command [atmos terraform generate backends](/cli/commands/terraform/generate-backends).
@@ -244,8 +228,6 @@ terraform:
 ```
 </Terminal>
 
-<br/>
-
 For each component, you can optionally add the `key` parameter similar to the following:
 
 <Terminal>
@@ -259,8 +241,6 @@ components:
           key: "my-component"
 ```
 </Terminal>
-
-<br/>
 
 If the `key` is not specified for a component, Atmos will use the component name (`my-component` in the example above)
 to auto-generate the `key` parameter in the format `<component-name>.terraform.tfstate` replacing `<component-name>`
@@ -288,8 +268,6 @@ similar to the following example:
 ```
 </Terminal>
 
-<br/>
-
 ## Google Cloud Storage Backend
 
 [`gcs`](https://developer.hashicorp.com/terraform/language/settings/backends/gcs) backend stores the state as an object
@@ -310,8 +288,6 @@ terraform:
 ```
 </Terminal>
 
-<br/>
-
 For each component, you can optionally add the `prefix` parameter similar to the following:
 
 <Terminal>
@@ -325,8 +301,6 @@ components:
           prefix: "my-component"
 ```
 </Terminal>
-
-<br/>
 
 If the `prefix` is not specified for a component, Atmos will use the component name (`my-component` in the example above)
 to auto-generate the `prefix`. In the component name, all occurrences of `/` (slash) will be replaced with `-` (dash).
@@ -351,8 +325,6 @@ similar to the following example:
 ```
 </Terminal>
 
-<br/>
-
 ## Terraform Cloud Backend
 
 [Terraform Cloud](https://developer.hashicorp.com/terraform/cli/cloud/settings) backend uses a `cloud` block to specify
@@ -374,8 +346,6 @@ terraform:
 ```
 </Terminal>
 
-<br/>
-
 For each component, you can optionally specify the `workspaces.name` parameter similar to the following:
 
 <Terminal>
@@ -390,8 +360,6 @@ components:
             name: "my-component-workspace"
 ```
 </Terminal>
-
-<br/>
 
 If `auto_generate_backend_file` is set to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section,
 Atmos will [deep-merge](#terraform-backend-inheritance) the backend configurations from the `_defaults.yaml` manifests and
@@ -414,8 +382,6 @@ similar to the following example:
 ```
 </Terminal>
 
-<br/>
-
 Instead of specifying the `workspaces.name` parameter for each component in the component manifests, you can use
 the `{terraform_workspace}` token in the `cloud` backend config in the `_defaults.yaml` manifest.
 The token `{terraform_workspace}` will be automatically replaced by Atmos with the Terraform workspace for each component.
@@ -435,8 +401,6 @@ terraform:
         name: "{terraform_workspace}"
 ```
 </Terminal>
-
-<br/>
 
 :::tip
 Refer to [Terraform Workspaces in Atmos](/core-concepts/components/terraform/workspaces) for more information on how
@@ -469,8 +433,6 @@ terraform:
 ```
 </Terminal>
 
-<br/>
-
 Add the following config to the `dev` stack manifest in `stacks/orgs/acme/plat/dev/_defaults.yaml`:
 
 <Terminal title="stacks/orgs/acme/plat/dev/_defaults.yaml">
@@ -484,8 +446,6 @@ terraform:
       role_arn: "IAM Role with permissions to access the 'dev' Terraform backend"
 ```
 </Terminal>
-
-<br/>
 
 Add the following config to the `staging` stack manifest in `stacks/orgs/acme/plat/staging/_defaults.yaml`:
 
@@ -501,8 +461,6 @@ terraform:
 ```
 </Terminal>
 
-<br/>
-
 Add the following config to the `prod` stack manifest in `stacks/orgs/acme/plat/prod/_defaults.yaml`:
 
 <Terminal title="stacks/orgs/acme/plat/prod/_defaults.yaml">
@@ -516,8 +474,6 @@ terraform:
       role_arn: "IAM Role with permissions to access the 'prod' Terraform backend"
 ```
 </Terminal>
-
-<br/>
 
 When you provision the `vpc` component into the `dev` account (by executing the command `atmos terraform apply vpc -s plat-ue2-dev`), Atmos will
 deep-merge the backend configuration from the Organization-level manifest with the configuration from the `dev` manifest, and will automatically
@@ -544,8 +500,6 @@ add `workspace_key_prefix` for the component, generating the following final dee
 ```
 </Terminal>
 
-<br/>
-
 In the same way, you can create different Terraform backends per Organizational Unit, per region, per account (or a group of accounts, e.g. `prod`
 and `non-prod`), or even per component or a set of components (e.g. root-level components like `account` and IAM roles can have a separate backend),
 and then configure parts of the backend config in the corresponding Atmos stack manifests. Atmos will deep-merge all the parts from the
@@ -565,8 +519,6 @@ many Atmos components that provide configuration for the Terraform component.
 For more information on configuring and provision multiple instances of a Terraform component,
 refer to [Multiple Component Instances Atmos Design Patterns](/design-patterns/multiple-component-instances)
 :::
-
-<br/>
 
 For example, the following config shows how to define two Atmos
 components, `vpc/1` and `vpc/2`, which both point to the same Terraform component `vpc`:
@@ -617,8 +569,6 @@ components:
 ```
 </Terminal>
 
-<br/>
-
 If we manually create a `backend.tf` file for the `vpc` Terraform component in the `components/terraform/vpc` folder
 using `workspace_key_prefix: "vpc"`, then both `vpc/1` and `vpc/2` Atmos components will use the same `workspace_key_prefix`, and they will
 not function correctly.
@@ -651,8 +601,6 @@ For example, when the command `atmos terraform apply vpc/1 -s plat-ue2-dev` is e
 ```
 </Terminal>
 
-<br/>
-
 Similarly, when the command `atmos terraform apply vpc/2 -s plat-ue2-dev` is executed, the following `backend.tf.json` file is generated in the
 `components/terraform/vpc` folder:
 
@@ -676,8 +624,6 @@ Similarly, when the command `atmos terraform apply vpc/2 -s plat-ue2-dev` is exe
 }
 ```
 </Terminal>
-
-<br/>
 
 The generated files will have different `workspace_key_prefix` attribute auto-generated by Atmos.
 

@@ -18,16 +18,12 @@ or [Visual Studio Code](https://code.visualstudio.com/), the schema can offer au
 all sections in them, are
 correct.
 
-<br/>
-
 :::tip
 
 A list of editors that support validation using [JSON Schema](https://json-schema.org/) can be
 found [here](https://json-schema.org/implementations#editors).
 
 :::
-
-<br/>
 
 ### Validate Atmos Manifests on the Command Line
 
@@ -60,8 +56,6 @@ For this to work, configure the following:
   ATMOS_SCHEMAS_ATMOS_MANIFEST=stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json atmos validate stacks
   atmos validate stacks --schemas-atmos-manifest stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   ```
-
-<br/>
 
 In case of any validation errors (invalid YAML syntax, Atmos manifest JSON Schema errors, invalid imports, etc.), you'll get an output from the
 command similar to the following:
@@ -142,8 +136,6 @@ invalid stack manifest 'catalog/invalid-yaml-and-schema/invalid-yaml-7.yaml'
 yaml: line 4: could not find expected ':'
 ```
 </Terminal>
-
-<br/>
 
 ## References
 

@@ -200,8 +200,6 @@ components:
         ipv4_primary_cidr_block: 10.9.0.0/18
 ```
 
-<br/>
-
 To provision the `vpc` component into the `plat-ue2-prod` top-level stack, execute the following command:
 
 ```shell
@@ -218,7 +216,7 @@ atmos terraform apply vpc/defaults -s plat-ue2-prod
 the following error will be thrown:
 
 ```console
-abstract component 'vpc/defaults' cannot be provisioned since it's explicitly prohibited from 
+abstract component 'vpc/defaults' cannot be provisioned since it's explicitly prohibited from
 being deployed by 'metadata.type: abstract' attribute
 ```
 

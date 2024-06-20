@@ -62,8 +62,6 @@ components:
 ```
 </File>
 
-<br/>
-
 When you provision the `vpc` component in the stack `ue2-dev` by executing the following command:
 
 <Terminal>
@@ -71,8 +69,6 @@ When you provision the `vpc` component in the stack `ue2-dev` by executing the f
     atmos terraform apply vpc -s ue2-dev
     ```
 </Terminal>
-
-<br/>
 
 Atmos computes the workspace name to be `ue2-dev`. Any Atmos Terraform command other than `init`, using this stack,
 will cause Atmos to select this workspace, creating it if needed. (This leaves the workspace selected as a side effect
@@ -124,8 +120,6 @@ components:
 ```
 </File>
 
-<br/>
-
 When you provision the components by executing the commands:
 
 <Terminal>
@@ -134,8 +128,6 @@ When you provision the components by executing the commands:
     atmos terraform apply vpc/2 -s ue2-dev
     ```
 </Terminal>
-
-<br/>
 
 Atmos computes the workspace names as `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively,
 and selects the appropriate workspace for each component (again, creating it if needed).
@@ -171,8 +163,6 @@ components:
 ```
 </File>
 
-<br/>
-
 When you provision the components by executing the commands:
 
 <Terminal>
@@ -181,8 +171,6 @@ When you provision the components by executing the commands:
     atmos terraform apply vpc/2 -s ue2-dev
     ```
 </Terminal>
-
-<br/>
 
 Atmos sets the Terraform workspace `vpc-1-workspace-override` for the `vpc/1` component, and
 `ue2-dev-vpc-2-workspace-override` for the `vpc/2` component.
@@ -198,14 +186,10 @@ The following context tokens are supported by the `metadata.terraform_workspace_
 - `{component}`
 - `{base-component}`
 
-<br/>
-
 :::tip
 For more information on Atmos base and derived components, and to understand the `{base-component}` token,
 refer to [Atmos Component Inheritance](/core-concepts/stacks/inheritance)
 :::
-
-<br/>
 
 ## References
 

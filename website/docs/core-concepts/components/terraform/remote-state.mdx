@@ -61,8 +61,6 @@ configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-
 We will provision the two Terraform components in the `ue2-dev` Atmos stack (in the `dev` AWS account by setting `stage = "dev"` and in
 the `us-east-2` region by setting `environment = "ue2"`).
 
-<br/>
-
 ### Configure and Provision the `vpc-flow-logs-bucket` Component
 
 In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
@@ -85,8 +83,6 @@ components:
         lifecycle_rule_enabled: false
         traffic_type: "ALL"
 ```
-
-<br/>
 
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket-1` Atmos component in the `ue2-dev` Atmos
 stack:
@@ -116,8 +112,6 @@ components:
         traffic_type: "REJECT"
 ```
 
-<br/>
-
 Having the stacks configured as shown above, we can now provision the `vpc-flow-logs-bucket-1` Atmos component into the `ue2-dev` stack by executing
 the following Atmos commands:
 
@@ -125,8 +119,6 @@ the following Atmos commands:
 atmos terraform plan vpc-flow-logs-bucket-1 -s ue2-dev
 atmos terraform apply vpc-flow-logs-bucket-1 -s ue2-dev
 ```
-
-<br/>
 
 ### Configure and Provision the `vpc` Component
 
@@ -207,8 +199,6 @@ components:
         vpc_flow_logs_traffic_type: "ALL"
 ```
 
-<br/>
-
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc/1` Atmos component in the `ue2-dev` stack:
 
 ```yaml title="stacks/ue2-dev.yaml"
@@ -255,8 +245,6 @@ components:
         # set `vpc_flow_logs_bucket_environment_name`
         # vpc_flow_logs_bucket_environment_name: uw2
 ```
-
-<br/>
 
 Having the stacks configured as shown above, we can now provision the `vpc/1` Atmos component into the `ue2-dev` stack by
 executing the following Atmos commands:

@@ -7,21 +7,15 @@ import Terminal from '@site/src/components/Terminal'
 
 Atmos workflows are a way of combining multiple commands into executable units of work.
 
-<br/>
-
 :::tip
 Refer to [Atmos Workflows](/core-concepts/workflows) for more information about configuring workflows
 :::
-
-<br/>
 
 :::note
 You can use [Atmos Custom Commands](/core-concepts/custom-commands) in [Atmos Workflows](/core-concepts/workflows),
 and [Atmos Workflows](/core-concepts/workflows)
 in [Atmos Custom Commands](/core-concepts/custom-commands)
 :::
-
-<br/>
 
 To define workflows, add the following configurations:
 
@@ -141,18 +135,12 @@ atmos workflow validate-all-vpc-flow-logs -f validation
 atmos workflow validate-all-vpc -f validation
 ```
 
-<br/>
-
 :::tip
 Refer to [atmos workflow](/cli/commands/workflow) for more information on the `atmos workflow` CLI command
 :::
 
-<br/>
-
 The `atmos workflow` CLI command supports the `--dry-run` flag. If passed, the command will just print information about
 the executed workflow steps without executing them. For example:
-
-<br/>
 
 
 <Terminal title="atmos workflow plan-all-vpc -f networking --dry-run">

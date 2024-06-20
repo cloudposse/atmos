@@ -14,7 +14,7 @@ The `stacks` section of the `atmos.yaml` defines how Atmos locates and manages y
 </Intro>
 
 :::important
-Do not confuse this configuration with [stack configuration](/core-concepts/stacks). 
+Do not confuse this configuration with [stack configuration](/core-concepts/stacks).
 This configuration below is defined in the `atmos.yaml` and instructs atmos where to find
 your stack configurations.
 :::
@@ -61,8 +61,6 @@ stacks:
   `atmos terraform apply <component> -s <top-level-stack>`
   :::
 
-<br/>
-
 - `stacks.excluded_paths` tells Atmos which paths from `stacks.included_paths` to exclude. For example, we will exclude the config files that don't
   contain the top-level stack manifests, but just define the default values that get imported into top-level stack manifests
 
@@ -71,8 +69,6 @@ stacks:
   default configurations for organizations, OUs/tenants, accounts and regions. The `_defaults.yaml` files themselves are not top-level Atmos stacks,
   they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
   :::
-
-<br/>
 
 - `stacks.name_pattern` configures the name pattern for the top-level Atmos stacks using the context variables `namespace`, `tenant`, `environment`
   and `stage` as the tokens. Depending on the structure of your organization, OUs, accounts and regions, set `stacks.name_pattern` to the
@@ -146,10 +142,6 @@ stacks:
     If `stacks.name_template` is specified, `stacks.name_pattern` will be ignored.
     :::
 
-<br/>
-
 :::tip
 Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to configure the `stacks` section in `atmos.yaml` for different use-cases
 :::
-
-<br/>

@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 
 <Intro>
 Atmos natively supports the concept of "vendoring" individual components by defining a `component.yaml` inside of the component
-directory, which is making a copy of 3rd-party components or other dependencies in your own repo. 
+directory, which is making a copy of 3rd-party components or other dependencies in your own repo.
 </Intro>
 
 ## Examples
@@ -77,8 +77,6 @@ spec:
       filename: introspection.mixin.tf
 ```
 
-<br/>
-
 :::warning
 
 The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
@@ -96,8 +94,6 @@ spec:
       # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
       - "**/modules/**"
 ```
-
-<br/>
 
 ### Vendoring Modules as Components
 

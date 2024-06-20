@@ -49,8 +49,6 @@ In this example, we'll use the structure described by the [Layered Stack Configu
 Design Pattern.
 :::
 
-<br/>
-
 In the following structure, we have many different Terraform components (Terraform root modules) in the `components/terraform` folder.
 
 In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
@@ -71,8 +69,6 @@ We use the `terraform.overrides` section in each layer manifest to override the 
 components in the layer will get the `Layer` and `Team` tags).
 
 Finally, we import all the layer manifests into the top-level stacks.
-
-<br/>
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -339,7 +335,7 @@ Import the required layers into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` t
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -358,7 +354,7 @@ Import the required layers into the `stacks/orgs/acme/plat/dev/us-west-2.yaml` t
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-west-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-west-2` manifests
   # define the top-level Atmos stack `plat-uw2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-west-2
@@ -377,7 +373,7 @@ Import the required layers into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` 
 
 ```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
 import:
-  # The `orgs/acme/plat/prod/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/prod/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-prod`
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-east-2
@@ -391,8 +387,6 @@ import:
   - layers/networking
   - layers/eks
 ```
-
-<br/>
 
 Similarly, import the required layers into the other top-level stacks for the other organizations, OUs/tenants, accounts and regions.
 Make sure to import only the layers that define the component that need to be provisioned in the stacks.

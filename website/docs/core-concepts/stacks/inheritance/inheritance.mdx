@@ -85,8 +85,6 @@ classDiagram
       }
 ```
 
-<br/>
-
 ### Single Inheritance Example
 
 Let's say we want to provision two VPCs with different settings into the same AWS account.
@@ -115,8 +113,6 @@ components:
 ```
 </File>
 
-<br/>
-
 In the configuration above, the following **Component-Oriented Programming** concepts are implemented:
 
 - **Abstract Components**: `atmos` component `vpc-defaults` is marked as abstract in `metadata.type`. This makes the component non-deployable, and it
@@ -131,8 +127,8 @@ In the configuration above, the following **Component-Oriented Programming** con
 Component Inheritance is one of the principles of [Component-Oriented Programming (COP)](https://en.wikipedia.org/wiki/Component-based_software_engineering)
 supported by Atmos.
 
-The concept is borrowed from [Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming)) 
-to logically organize complex configurations in a way that makes conceptual sense. The side effect of this are extremely DRY and reusable 
+The concept is borrowed from [Object-Oriented Programming](https://en.wikipedia.org/wiki/Inheritance_(object-oriented_programming))
+to logically organize complex configurations in a way that makes conceptual sense. The side effect of this are extremely DRY and reusable
 configurations.
 
 [Component-Oriented Configuration](https://en.wikipedia.org/wiki/Component-based_software_engineering) is a reuse-based approach to defining,
@@ -156,12 +152,10 @@ implementing and composing loosely-coupled independent components into systems.
 </details>
 
 
-<br/>
-
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the derived VPC components in the `ue2-dev` stack:
 
 <File title="stacks/ue2-dev.yaml">
-```yaml 
+```yaml
 # Import the base component configuration from the `catalog`.
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 # File extensions are optional (if not specified, `.yaml` is used by default).
@@ -200,8 +194,6 @@ components:
 ```
 </File>
 
-<br/>
-
 In the configuration above, the following **Component-Oriented Programming** concepts are implemented:
 
 - **Component Inheritance**: In the `ue2-dev` stack (`stacks/ue2-dev.yaml` stack config file), the Atmos components `vpc/1` and `vpc/2` inherit from
@@ -211,8 +203,6 @@ In the configuration above, the following **Component-Oriented Programming** con
 - **Dynamic Polymorphism**: The derived `vpc/1` and `vpc/2` components override and use the base component properties to be able to provision the same
   Terraform configuration many times but with different settings
 
-<br/>
-
 Having the components in the stack configured as shown above, we can now provision the `vpc/1` and `vpc/2` components into the `ue2-dev` stack by
 executing the following `atmos` commands:
 
@@ -220,8 +210,6 @@ executing the following `atmos` commands:
 atmos terraform apply vpc/1 -s ue2-dev
 atmos terraform apply vpc/2 -s ue2-dev
 ```
-
-<br/>
 
 As we can see, using the principles of **Component-Oriented Programming (COP)**, we are able to define two (or more) components with
 different settings, and provision them into the same (or different) environment (account/region) using the same Terraform code (which is
@@ -237,8 +225,6 @@ Multiple Inheritance is used when an Atmos component inherits from more than one
 In the diagram below, `ComponentA` and `ComponentB` are the base components. `ComponentC` is a derived components, it inherits all the
 configurations (`vars`, `settings`, `env` and other sections) from `ComponentA` and `ComponentB`, and can override the default values
 from `ComponentA` and `ComponentB`.
-
-<br/>
 
 ```mermaid
 classDiagram
@@ -265,15 +251,11 @@ classDiagram
           &nbsp;&nbsp;&nbsp;&nbsp;- ComponentB&nbsp;&nbsp;
       }
 ```
-
-<br/>
 <br/>
 
 Multiple Inheritance allows a component to inherit from many base components or mixins, each base component having its own inheritance chain,
 effectively making it an inheritance matrix. It uses a method similar to Method Resolution Order (MRO) using
 the [C3 linearization](https://en.wikipedia.org/wiki/C3_linearization) algorithm, which is how Python supports multiple inheritance.
-
-<br/>
 
 :::info
 
@@ -285,8 +267,6 @@ meant to be provisioned and does not have any physical implementation - it just 
 components.
 
 :::
-
-<br/>
 
 Multiple Inheritance, similarly to Single Inheritance, is defined by the `metadata.inherits` section in the component
 configuration. `metadata.inherits` is a list of component or mixins names from which the current component inherits.
@@ -305,20 +285,14 @@ Atmos will recursively deep-merge all the base components of `componentA` (each 
 then all the base components of `componentB` (each component overriding its base), then the two results are deep-merged together with `componentB`
 inheritance chain overriding the values from `componentA` inheritance chain.
 
-<br/>
-
 :::caution
 All the base components/mixins referenced by `metadata.inherits` must be already defined in the Stack configuration, either by using an `import`
 statement or by explicitly defining them in the Stack configuration. The `metadata.inhertis` statement does not imply that we are importing anything.
 :::
 
-<br/>
-
 ### Multiple Inheritance Example
 
 Here is a concrete example:
-
-<br/>
 
 <File title="stack.yaml">
 ```yaml
@@ -338,8 +312,8 @@ components:
         # `abstract` makes the component protected from being deployed.
         type: real
         # Terraform component. Must exist in `components/terraform` folder.
-        # If not specified, it's assumed that this component `test/test-component-override-3` 
-        # is also a Terraform component in 
+        # If not specified, it's assumed that this component `test/test-component-override-3`
+        # is also a Terraform component in
         # `components/terraform/test/test-component-override-3` folder.
         component: "test/test-component"
         # Multiple inheritance.
@@ -351,8 +325,6 @@ components:
           - "mixin/test-2"
 ```
 </File>
-
-<br/>
 
 In the configuration above, all the base components and mixins are processed and deep-merged in the order they are specified in the `inherits` list:
 
@@ -378,11 +350,9 @@ Atmos component: test/test-component-override-3
 Terraform component: test/test-component
 Terraform command: apply
 Stack: tenant1-ue2-dev
-Inheritance: test/test-component-override-3 -> mixin/test-2 -> mixin/test-1 -> 
+Inheritance: test/test-component-override-3 -> mixin/test-2 -> mixin/test-1 ->
              test/test-component-override-2 -> test/test-component-override -> test/test-component
 ```
-
-<br/>
 
 The `Inheritance` output shows the multiple inheritance steps that Atmos performed and deep-merged into the final configuration, including
 the variables which are sent to the Terraform component `test/test-component` that is being provisioned.
@@ -401,8 +371,6 @@ sections) from both `ComponentB` and `ComponentA`.
 
 Note that `ComponentB` overrides the values from `ComponentA`.
 `ComponentC` overrides the values from both `ComponentB` and `ComponentA`.
-
-<br/>
 
 ```mermaid
 classDiagram
@@ -433,8 +401,6 @@ classDiagram
       }
 ```
 
-<br/>
-
 ### Hierarchical Inheritance
 
 <PillBox>Advanced</PillBox>
@@ -443,8 +409,6 @@ Hierarchical Inheritance is a combination of Multiple Inheritance and Multilevel
 
 In Hierarchical Inheritance, every component can act as a base component for one or more child (derived) components, and each derived component can
 inherit from one of more base components.
-
-<br/>
 
 ```mermaid
 classDiagram
@@ -530,8 +494,6 @@ classDiagram
       }
 ```
 
-<br/>
-
 In the diagram above:
 
 - `ComponentA` is the base component of the whole hierarchy
@@ -543,8 +505,6 @@ In the diagram above:
 - `ComponentE` is an example of using both Multiple Inheritance and Multilevel Inheritance.
   It inherits from `ComponentB` and `ComponentH` directly, and from `ComponentA` via Multilevel Inheritance
 
-<br/>
-
 For `ComponentE`, the inherited components are processed and deep-merged in the order they are specified in the `inherits` list:
 
 - `ComponentB` overrides the configuration from `ComponentA`
@@ -552,8 +512,6 @@ For `ComponentE`, the inherited components are processed and deep-merged in the 
 - `ComponentH` overrides the configuration from `ComponentB` and `ComponentA` (since it's defined after `ComponentB` in the `inherits` section)
 
 - And finally, `ComponentE` overrides `ComponentH`, `ComponentB` and `ComponentA`
-
-<br/>
 
 For `ComponentG`:
 
@@ -604,11 +562,7 @@ components:
 ```
 </File>
 
-<br/>
-
 This configuration can be represented by the following diagram:
-
-<br/>
 
 ```mermaid
 classDiagram
@@ -650,8 +604,6 @@ classDiagram
       }
 ```
 
-<br/>
-
 In the configuration above, `derived-component-1` inherits from `base-component-1`.
 
 `derived-component-2` inherits from `base-component-2` and `derived-component-1` via Multiple Inheritance, and from `base-component-1` via Multilevel
@@ -691,8 +643,6 @@ Inheritance: derived-component-2 -> derived-component-1 -> base-component-1 -> b
 
 Note that the `hierarchical_inheritance_test` variable was inherited from `base-component-1` because it overrode the configuration
 from `base-component-2`.
-
-<br/>
 
 If we change the order of the components in the `inherits` list for `derived-component-2`:
 

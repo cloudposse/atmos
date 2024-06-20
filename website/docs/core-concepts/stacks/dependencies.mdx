@@ -13,7 +13,7 @@ Atmos supports configuring the relationships between components in the same or d
 Before deploying components, it's important to consider the dependencies between components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
 
 :::important Support for Dependencies
-Support for dependencies is reliant on the [integration](/integrations) used and not all integrations support dependencies. 
+Support for dependencies is reliant on the [integration](/integrations) used and not all integrations support dependencies.
 
 For example, GitHub Actions do not support dependency order applies, while [Spacelift does](https://docs.spacelift.io/concepts/stack/stack-dependencies).
 :::
@@ -38,8 +38,6 @@ Each object in the `settings.depends_on` section has the following schema:
 - `environment` (optional) - the `environment` where the Atmos component is provisioned
 - `stage` (optional) - the `stage` where the Atmos component is provisioned
 
-<br/>
-
 The `component` attribute is required. The rest are the context variables and are used to define Atmos stacks other than the current stack.
 For example, you can specify:
 
@@ -48,8 +46,6 @@ For example, you can specify:
 - `environment` if the `component` is from a different region
 - `stage` if the `component` is from a different account
 - `tenant`, `environment` and `stage` if the component is from a different Atmos stack (e.g. `tenant1-ue2-dev`)
-
-<br/>
 
 In the following example, we specify that the `top-level-component1` component depends on the following:
 
@@ -82,8 +78,6 @@ components:
       vars:
         enabled: true
 ```
-
-<br/>
 
 :::tip
 

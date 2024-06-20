@@ -64,8 +64,6 @@ helmfile:
 
 You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance. The scope of the `override` configuration is limited to all the Atmos components defined within the manifest and all its imports up until that point. In other words, the `overrides` configuration defined within a stack manifest does not affect any other components defined in different stack manifests for the same top-level stack.
 
-<br/>
-
 :::tip
 Refer to [Atmos Component Inheritance](/core-concepts/stacks/inheritance) for more information on all types of component inheritance
 supported by Atmos
@@ -119,8 +117,7 @@ Suppose that we want to change some variables in the `vars` and `env` sections a
 
 If we added a global or Terraform level `vars`, `env` or `settings` sections to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml` or to the Team manifest `stacks/teams/testing.yaml`, then all the components in the `tenant1/dev/us-west-2` top-level stack would be modified, including those managed by the `devops` Team.
 
-To solve this, we could individually modify the `vars`, `env` and `settings` sections in all the components managed by the `testing` Team, but the entire configuration would not be DRY and reusable. That's where the __overrides__ pattern comes into play. To make the configuration DRY and
-configured only in one place, use the `overrides` section.
+To solve this, we could individually modify the `vars`, `env` and `settings` sections in all the components managed by the `testing` Team, but the entire configuration would not be DRY and reusable. That's where the __overrides__ pattern comes into play. To make the configuration DRY and configured only in one place, use the `overrides` section.
 
 For example, we want to override some values in the `env`, `vars` and `setings` sections for all the components managed by the `testing` Team:
 
@@ -184,8 +181,6 @@ In the manifest above, we configure the following:
   the `testing` Team will get the new ENV variable value (but not the Terraform components). The Helmfile `overrides` are deep-merged with the
   global `overrides` and takes higher priority (it will override the same keys from the global `overrides`).
 
-<br/>
-
 To confirm that the components managed by the `testing` Team get the new values from the `overrides` sections, execute the following
 commands:
 
@@ -219,7 +214,7 @@ env:
 
 settings:
   spacelift:
-    # The `autodeploy` setting was overridden with the value 
+    # The `autodeploy` setting was overridden with the value
     # from `terraform.overrides.settings.spacelift.autodeploy`
     autodeploy: true
     workspace_enabled: true
@@ -235,8 +230,6 @@ vars:
 ```
 </Terminal>
 
-<br/>
-
 To confirm that the components managed by the `devops` Team are not affected by the `overrides` for the `testing` Team, execute the following
 command:
 
@@ -245,7 +238,7 @@ command:
 # The `command` is not overridden
 command: terraform
 
-# The component does not get the `overrides` section since it's not defined 
+# The component does not get the `overrides` section since it's not defined
 # for the components managed by the `devops` Team
 overrides: {}
 
@@ -263,8 +256,6 @@ settings:
 The `top-level-component1` component managed by the `devops` Team does not get affected by the `overrides` sections for the `testing` Team,
 and the sections `vars`, `env`, `settings` and `command` are not updated with the values from the `overrides` configuration.
 
-<br/>
-
 :::tip
-Refer to [`atmos describe component`](/cli/commands/describe/component) CLI command for more details
+Refer to [`atmosxw describe component`](/cli/commands/describe/component) CLI command for more details
 :::

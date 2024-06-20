@@ -116,7 +116,7 @@ The following are the types of data sources are supported by Atmos via [Gomplate
 ## Environment Variables
 
 Some data sources might need environment variables that are different from the environment variables in Stack configuration. Environment variables may be passed to data soruces when processing and executing templates by defining `env` map.
-It's supported in both the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) and in the 
+It's supported in both the `templates.settings` section in `atmos.yaml` [CLI config file](/cli/configuration) and in the
 `settings.templates.settings` section in [Atmos stack manifests](/core-concepts/stacks).
 
 For example:
@@ -136,7 +136,7 @@ settings:
 ```
 </File>
 
-This is useful when executing the `datasources` that need to authenticate to cloud APIs. 
+This is useful when executing the `datasources` that need to authenticate to cloud APIs.
 
 For more details, refer to:
 
@@ -307,10 +307,8 @@ resources. The tags can include tags per account, per team, per service, billing
 An example of such a centralized software catalog could be https://backstage.io
 :::
 
-<br/>
-
 Let's also suppose that you have a service to read the tags from the centralized catalog and write them into an S3
-bucket in one of your accounts. The bucket serves as a cache to not hit the external system's API with too many requests 
+bucket in one of your accounts. The bucket serves as a cache to not hit the external system's API with too many requests
 and not to trigger rate limiting.
 
 And finally, let's say that in the bucket, you have folders per account (`dev`, `prod`, `staging`). Each folder has a JSON
@@ -333,7 +331,7 @@ templates:
 ```
 </File>
 
-In an Atmos stack manifest, we define the environment variables in the `env` section (AWS profile with permissions to 
+In an Atmos stack manifest, we define the environment variables in the `env` section (AWS profile with permissions to
 access the S3 bucket), and the `s3-tags` Gomplate datasource.
 
 In the `terraform.vars.tags` section, we define all the tags that are returned from the call to the S3 datasource.
@@ -385,9 +383,9 @@ components:
       metadata:
         component: vpc  # Point to the Terraform component in `components/terraform/vpc` folder
         inherits:
-          # Inherit from the `vpc/defaults` base Atmos component, which defines the default 
+          # Inherit from the `vpc/defaults` base Atmos component, which defines the default
           # configuration for all VPCs in the infrastructure.
-          # The `vpc/defaults` base component is defined in the `catalog/vpc/defaults` 
+          # The `vpc/defaults` base component is defined in the `catalog/vpc/defaults`
           # manifest (which is imported above).
           # This inheritance makes the `vpc/1` Atmos component config DRY.
           - "vpc/defaults"
@@ -398,10 +396,10 @@ components:
 When executing an Atmos command like `atmos terraform apply vpc/1 -s plat-ue2-dev`, the above template will be processed
 in two evaluation steps:
 
-- Evaluation 1: 
+- Evaluation 1:
 
   - `datasources.s3-tags.url` is set to `s3://mybucket/dev/tags.json`
-  
+
   - the tags that use the `datasource` templates are set to the following:
 
     ```yaml
@@ -410,12 +408,12 @@ in two evaluation steps:
     service: '{{ (datasource "s3-tags").tags.service }}'
     ```
 
-- Evaluation 2: 
-    - all `s3-tags` datasources get executed, the JSON file `s3://mybucket/dev/tags.json` with the tags 
-      for the `dev` account is downloaded from the S3 bucket, and the tags are parsed and assigned in the 
-      `terraform.vars.tags` section 
+- Evaluation 2:
+    - all `s3-tags` datasources get executed, the JSON file `s3://mybucket/dev/tags.json` with the tags
+      for the `dev` account is downloaded from the S3 bucket, and the tags are parsed and assigned in the
+      `terraform.vars.tags` section
 
-After executing the two evaluation steps, the resulting tags for the Atmos component `vpc/1` in the stack `plat-ue2-dev` 
+After executing the two evaluation steps, the resulting tags for the Atmos component `vpc/1` in the stack `plat-ue2-dev`
 would look like this:
 
 ```yaml

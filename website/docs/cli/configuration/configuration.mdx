@@ -36,14 +36,10 @@ The CLI config is loaded from the following locations (from lowest to highest pr
 
 Each configuration file discovered is deep-merged with the preceeding configurations.
 
-<br/>
-
 :::tip Pro-Tip
 Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
 names/paths (double-star/globstar `**` is supported as well)
 :::
-
-<br/>
 
 ## Default CLI Configuration
 
@@ -110,18 +106,12 @@ templates:
 ```
 </File>
 
-<br/>
-
 If Atmos does not find an `atmos.yaml` file and the default CLI config is used, and if you set the ENV variable `ATMOS_LOGS_LEVEL` to `Debug`
 (e.g. `export ATMOS_LOGS_LEVEL=Debug`) before executing Atmos commands, you'll see the following message:
-
-<br/>
 
 <Terminal>
 ![`atmos` CLI command mode 1](/img/cli/atmos.yaml/atmos-default-cli-config-message.png)
 </Terminal>
-
-<br/>
 
 What follows are all the sections of the `atmos.yaml` configuration file.
 
@@ -265,16 +255,12 @@ integrations:
 ```
 </File>
 
-<br/>
-
 :::tip
 For more information, refer to Atmos Integrations.
 - [GitHub Actions](/integrations/github-actions)
 - [Atlantis](/integrations/atlantis)
 - [Spacelift](/integrations/spacelift)
 :::
-
-<br/>
 
 ## Schemas
 
@@ -307,15 +293,11 @@ schemas:
 ```
 </File>
 
-<br/>
-
 :::tip
 For more information, refer to:
 - [Atmos Manifests Validation](/cli/schemas)
 - [Atmos Component Validation](/core-concepts/validate)
 :::
-
-<br/>
 
 ## Logs
 
@@ -359,8 +341,6 @@ logs:
 ```
 </File>
 
-<br/>
-
 <Terminal title="atmos describe affected">
 ```console
 Checking out Git ref 'refs/remotes/origin/HEAD' ...
@@ -397,8 +377,6 @@ Affected components and stacks:
 ````
 </Terminal>
 
-<br/>
-
 With `logs.level: Trace`, and `logs.file: "/dev/stdout"`, all the messages and the command's JSON output will be printed
 to the console to the `/dev/stdout` standard output.
 
@@ -417,8 +395,6 @@ logs:
   level: Trace
 ```
 </File>
-
-<br/>
 
 Now when the `atmos describe affected` command is executed, the additional messages are printed to `/dev/stderr`,
 but the command's JSON output is printed to `/dev/stdout`, allowing `jq` to parse it without errors.
@@ -456,8 +432,6 @@ BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
 ````
 </Terminal>
 
-<br/>
-
 ## Aliases
 
 CLI command aliases are configured in the `aliases` section.
@@ -484,8 +458,6 @@ aliases:
 ```
 </File>
 
-<br/>
-
 Execute an alias as you would any Atmos native or custom command:
 
 <Terminal title="'atmos ls' command alias">
@@ -501,8 +473,6 @@ plat-uw2-staging
 ```
 </Terminal>
 
-<br/>
-
 The aliases configured in the `aliases` section automatically appear in Atmos help, and are shown as
 `alias for '<command>'`.
 
@@ -511,8 +481,6 @@ For example:
 <Terminal title="atmos --help">
     ![`atmos --help`](/img/cli/help/atmos-help-command-3.png)
 </Terminal>
-
-<br/>
 
 An alias automatically supports all command line arguments and flags that the aliased command accepts.
 
@@ -532,8 +500,6 @@ are supported as well.
 :::tip
 For more details, refer to [Atmos Stack Manifest Templating](/core-concepts/stacks/templates)
 :::
-
-<br/>
 
 <File title="atmos.yaml">
 ```yaml
@@ -569,8 +535,6 @@ templates:
           url: "file:///config2.json"
 ```
 </File>
-
-<br/>
 
 - `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
   If set to `false`, Atmos will not process `Go` templates in stack manifests
@@ -615,8 +579,6 @@ templates:
               - "application/json"
          ```
 
-<br/>
-
 :::warning
 
 Some functions are present in both [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/).
@@ -632,8 +594,6 @@ enable/disable the [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](
 functions.
 
 :::
-
-<br/>
 
 
 ## Environment Variables

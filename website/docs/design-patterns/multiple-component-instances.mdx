@@ -34,7 +34,7 @@ The **Multiple Component Instances** pattern provides the following benefits:
 
 - The defaults for the components are defined in just one place making the entire
   configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-  
+
 ## Example
 
 The following example shows the Atmos stack and component configurations to provision two Atmos components (`vpc/1` and `vpc/2`) that use the
@@ -184,8 +184,6 @@ components:
         ipv4_primary_cidr_block: 10.10.0.0/18
         map_public_ip_on_launch: false
 ```
-
-<br/>
 
 To provision the components in the stack, execute the following commands:
 

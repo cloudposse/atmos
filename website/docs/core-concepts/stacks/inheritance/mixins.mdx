@@ -16,7 +16,7 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 Mixins are reusable snippets of configurations (like regions, tags, etc) included in stack configurations to avoid repetition and enhance modularity. They allow for defining common settings, variables, or configurations once and applying them efficiently across various stacks.
 </Intro>
 
-:::important 
+:::important
 Mixins are treated the same as all other imports in Atmos, with no special handling or technical distinction.
 :::
 
@@ -40,7 +40,7 @@ For example, let's define a mixin with the defaults for operating in the `us-eas
 vars:
   region: us-east-1   # the canonical cloud region
   availability_zones: # the designated availability zones to use in this region
-  - us-east-1a  
+  - us-east-1a
   - us-east-1b
 ```
 
@@ -81,11 +81,9 @@ terraform:
     # ...
 ```
 
-<br/>
-
 :::tip Use Mixins for Naming Conventions
 This simple example highlights a simple fix for one of the most common issues in enterprise organizations: naming inconsistency.
-Using a mixin is a great way for organizations ensure naming conventions are followed consistently. 
+Using a mixin is a great way for organizations ensure naming conventions are followed consistently.
 
 For example, there are many ways developers will define `production`.
 
@@ -101,6 +99,6 @@ For example, there are many ways developers will define `production`.
 To avoid this situation, use the mixin `mixins/stage/prod` and always use the appropriate naming convention.
 
 <ActionCard>
-Mixins are really just a [Design Pattern](/design-patterns/component-catalog-with-mixins) for [`imports`](/core-concepts/stacks/imports) that uses [inheritance](/core-concepts/stacks/inheritance) to alter the Stack configuration in some deliberate way. 
+Mixins are really just a [Design Pattern](/design-patterns/component-catalog-with-mixins) for [`imports`](/core-concepts/stacks/imports) that uses [inheritance](/core-concepts/stacks/inheritance) to alter the Stack configuration in some deliberate way.
 <PrimaryCTA to="/design-patterns/component-catalog-with-mixins">Learn Design Pattern</PrimaryCTA>
 </ActionCard>

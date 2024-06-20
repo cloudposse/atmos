@@ -12,18 +12,12 @@ import Intro from '@site/src/components/Intro'
 Use this command to generate a repository configuration (`atlantis.yaml`) for Atlantis.
 </Intro>
 
-<br/>
-
 <Screengrab title="atmos atlantis generate repo-config --help" slug="atmos-atlantis-generate-repo-config--help"/>
-
-<br/>
 <br/>
 
 ```shell
 atmos atlantis generate repo-config [options]
 ```
-
-<br/>
 
 :::tip
 Run `atmos atlantis generate repo-config --help` to see all the available options
@@ -86,8 +80,6 @@ atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true
 | `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                                                                                                                    | no       |
 | `--verbose`          | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                                                                                                                    | no       |
 | `--clone-target-ref` | Clone the target reference with which to compare the current branch.<br/>`atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true`<br/><br/>The flag is only used when `--affected-only=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory | no       |
-
-<br/>
 
 :::info
 
