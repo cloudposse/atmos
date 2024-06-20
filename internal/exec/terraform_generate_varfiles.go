@@ -3,15 +3,15 @@ package exec
 import (
 	"errors"
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/convert"
-	"github.com/mitchellh/mapstructure"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -212,11 +212,28 @@ func ExecuteTerraformGenerateVarfiles(
 					}
 				}
 
+				configAndStacksInfo.Context = context
+				configAndStacksInfo.Stack = stackName
 				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 				configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 				configAndStacksInfo.ComponentSection["stack"] = stackName
 				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
+
+				// Terraform workspace
+				workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+				if err != nil {
+					return err
+				}
+				componentSection["workspace"] = workspace
+				configAndStacksInfo.ComponentSection["workspace"] = workspace
+
+				// Atmos component, stack, and stack manifest file
+				componentSection["atmos_component"] = componentName
+				componentSection["atmos_stack"] = stackName
+				componentSection["stack"] = stackName
+				componentSection["atmos_stack_file"] = stackFileName
+				componentSection["atmos_manifest"] = stackFileName
 
 				// Process `Go` templates
 				componentSectionStr, err := u.ConvertToYAML(componentSection)

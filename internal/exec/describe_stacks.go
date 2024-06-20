@@ -235,6 +235,7 @@ func ExecuteDescribeStacks(
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
+						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 						configAndStacksInfo.ComponentSection["stack"] = stackName
@@ -252,6 +253,13 @@ func ExecuteDescribeStacks(
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
+							// Atmos component, stack, and stack manifest file
+							componentSection["atmos_component"] = componentName
+							componentSection["atmos_stack"] = stackName
+							componentSection["stack"] = stackName
+							componentSection["atmos_stack_file"] = stackFileName
+							componentSection["atmos_manifest"] = stackFileName
+
 							// Terraform workspace
 							workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 							if err != nil {
@@ -259,13 +267,6 @@ func ExecuteDescribeStacks(
 							}
 							componentSection["workspace"] = workspace
 							configAndStacksInfo.ComponentSection["workspace"] = workspace
-
-							// Atmos component, stack, and stack manifest file
-							componentSection["atmos_component"] = componentName
-							componentSection["atmos_stack"] = stackName
-							componentSection["stack"] = stackName
-							componentSection["atmos_stack_file"] = stackFileName
-							componentSection["atmos_manifest"] = stackFileName
 
 							// Process `Go` templates
 							componentSectionStr, err := u.ConvertToYAML(componentSection)
