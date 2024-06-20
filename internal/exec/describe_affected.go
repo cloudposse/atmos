@@ -207,7 +207,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		}(resp.Body)
 
 		if resp.StatusCode != http.StatusOK {
-			err = fmt.Errorf("\nError uploading the affected components and stacks to %s\nStatus: %s", url, resp.Status)
+			err = fmt.Errorf("\nError uploading the affected components and stacks to %s\nStatus: %s\n", url, resp.Status)
 			return err
 		}
 
