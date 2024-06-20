@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -94,6 +95,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	upload, err := flags.GetBool("upload")
+	if err != nil {
+		return err
+	}
+
 	cloneTargetRef, err := flags.GetBool("clone-target-ref")
 	if err != nil {
 		return err
@@ -104,13 +110,14 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	var affected []schema.Affected
+	var localRepoHead *plumbing.Reference
 
 	if repoPath != "" {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, localRepoHead, _, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks, includeSettings)
 	} else if cloneTargetRef {
-		affected, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, localRepoHead, _, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks, includeSettings)
 	} else {
-		affected, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, localRepoHead, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks, includeSettings)
 	}
 
 	if err != nil {
@@ -134,6 +141,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	err = printOrWriteToFile(format, file, affected)
 	if err != nil {
 		return err
+	}
+
+	// Upload the affected components and stacks to a specified endpoint
+	if upload {
+		fmt.Println(localRepoHead.Hash())
 	}
 
 	return nil
