@@ -1,7 +1,10 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
+	c "github.com/cloudposse/atmos/pkg/convert"
+	"github.com/mitchellh/mapstructure"
 	"path"
 	"path/filepath"
 	"strings"
@@ -81,14 +84,21 @@ func ExecuteTerraformGenerateVarfiles(
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
+	var metadataSection map[any]any
 	var varsSection map[any]any
+	var settingsSection map[any]any
+	var envSection map[any]any
+	var providersSection map[any]any
+	var overridesSection map[any]any
+	var backendSection map[any]any
+	var backendTypeSection string
 
 	for stackFileName, stackSection := range stacksMap {
 		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
 			continue
 		}
 
-		if terraformSection, ok = componentsSection["terraform"].(map[string]any); !ok {
+		if terraformSection, ok = componentsSection[cfg.TerraformSectionName].(map[string]any); !ok {
 			continue
 		}
 
@@ -102,19 +112,44 @@ func ExecuteTerraformGenerateVarfiles(
 				u.SliceContainsString(components, componentName) {
 
 				// Component vars
-				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
+				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
 					continue
 				}
 
 				// Component metadata
-				metadataSection := map[any]any{}
-				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
 						// Don't include abstract components
 						if componentType == "abstract" {
 							continue
 						}
 					}
+				}
+
+				if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
+					settingsSection = map[any]any{}
+				}
+
+				if envSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
+					envSection = map[any]any{}
+				}
+
+				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
+					providersSection = map[any]any{}
+				}
+
+				if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
+					overridesSection = map[any]any{}
+				}
+
+				// Component backend
+				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
+					backendSection = map[any]any{}
+				}
+
+				// Backend type
+				if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
+					backendTypeSection = ""
 				}
 
 				// Find terraform component.
@@ -132,13 +167,97 @@ func ExecuteTerraformGenerateVarfiles(
 					terraformComponent,
 				)
 
+				configAndStacksInfo := schema.ConfigAndStacksInfo{
+					ComponentFromArg:          componentName,
+					ComponentMetadataSection:  metadataSection,
+					ComponentVarsSection:      varsSection,
+					ComponentSettingsSection:  settingsSection,
+					ComponentEnvSection:       envSection,
+					ComponentProvidersSection: providersSection,
+					ComponentOverridesSection: overridesSection,
+					ComponentBackendSection:   backendSection,
+					ComponentBackendType:      backendTypeSection,
+					ComponentSection: map[string]any{
+						cfg.VarsSectionName:        varsSection,
+						cfg.MetadataSectionName:    metadataSection,
+						cfg.SettingsSectionName:    settingsSection,
+						cfg.EnvSectionName:         envSection,
+						cfg.ProvidersSectionName:   providersSection,
+						cfg.OverridesSectionName:   overridesSection,
+						cfg.BackendSectionName:     backendSection,
+						cfg.BackendTypeSectionName: backendTypeSection,
+					},
+				}
+
+				if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+					configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
+				}
+
 				// Context
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				stackName, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+
+				// Stack name
+				var stackName string
+				if cliConfig.Stacks.NameTemplate != "" {
+					stackName, err = ProcessTmpl("terraform-generate-varfiles-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					if err != nil {
+						return err
+					}
+				} else {
+					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+					if err != nil {
+						return err
+					}
+				}
+
+				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+				configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+				configAndStacksInfo.ComponentSection["stack"] = stackName
+				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
+
+				// Process `Go` templates
+				componentSectionStr, err := u.ConvertToYAML(componentSection)
 				if err != nil {
 					return err
+				}
+
+				var settingsSectionStruct schema.Settings
+				err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+				if err != nil {
+					return err
+				}
+
+				componentSectionProcessed, err := ProcessTmplWithDatasources(
+					cliConfig,
+					settingsSectionStruct,
+					"terraform-generate-varfiles",
+					componentSectionStr,
+					configAndStacksInfo.ComponentSection,
+					true,
+				)
+				if err != nil {
+					return err
+				}
+
+				componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+				if err != nil {
+					if !cliConfig.Templates.Settings.Enabled {
+						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+							errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+								"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+							err = errors.Join(err, errors.New(errorMessage))
+						}
+					}
+					u.LogErrorAndExit(err)
+				}
+
+				componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+
+				if i, ok := componentSection[cfg.VarsSectionName].(map[any]any); ok {
+					varsSection = i
 				}
 
 				// Check if `stacks` filter is provided

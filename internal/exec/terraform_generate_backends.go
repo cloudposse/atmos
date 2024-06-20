@@ -84,6 +84,7 @@ func ExecuteTerraformGenerateBackends(
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
+	var metadataSection map[any]any
 	var varsSection map[any]any
 	var settingsSection map[any]any
 	var envSection map[any]any
@@ -99,7 +100,7 @@ func ExecuteTerraformGenerateBackends(
 			continue
 		}
 
-		if terraformSection, ok = componentsSection["terraform"].(map[string]any); !ok {
+		if terraformSection, ok = componentsSection[cfg.TerraformSectionName].(map[string]any); !ok {
 			continue
 		}
 
@@ -113,7 +114,6 @@ func ExecuteTerraformGenerateBackends(
 				u.SliceContainsString(components, componentName) {
 
 				// Component metadata
-				metadataSection := map[any]any{}
 				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
 						// Don't include abstract components
@@ -121,6 +121,20 @@ func ExecuteTerraformGenerateBackends(
 							continue
 						}
 					}
+				}
+
+				// Component backend
+				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
+					continue
+				}
+
+				// Backend type
+				if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
+					continue
+				}
+
+				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
+					varsSection = map[any]any{}
 				}
 
 				if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
@@ -137,16 +151,6 @@ func ExecuteTerraformGenerateBackends(
 
 				if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
 					overridesSection = map[any]any{}
-				}
-
-				// Component backend
-				if backendSection, ok = componentSection["backend"].(map[any]any); !ok {
-					continue
-				}
-
-				// Backend type
-				if backendTypeSection, ok = componentSection["backend_type"].(string); !ok {
-					continue
 				}
 
 				// Find terraform component.
@@ -191,9 +195,6 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				// Context
-				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
-					varsSection = map[any]any{}
-				}
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
