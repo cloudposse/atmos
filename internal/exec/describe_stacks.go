@@ -3,13 +3,13 @@ package exec
 import (
 	"errors"
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/convert"
-	"github.com/mitchellh/mapstructure"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )

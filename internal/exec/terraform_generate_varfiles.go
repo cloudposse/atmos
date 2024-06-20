@@ -2,10 +2,11 @@ package exec
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -64,7 +65,13 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
-func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
+func ExecuteTerraformGenerateVarfiles(
+	cliConfig schema.CliConfiguration,
+	fileTemplate string,
+	format string,
+	stacks []string,
+	components []string,
+) error {
 	stacksMap, _, err := FindStacksMap(cliConfig, false)
 	if err != nil {
 		return err
