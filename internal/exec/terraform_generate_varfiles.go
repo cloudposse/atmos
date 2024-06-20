@@ -136,7 +136,7 @@ func ExecuteTerraformGenerateVarfiles(
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+				stackName, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
 				if err != nil {
 					return err
 				}
@@ -148,7 +148,7 @@ func ExecuteTerraformGenerateVarfiles(
 					u.SliceContainsString(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, contextPrefix) {
+					u.SliceContainsString(stacks, stackName) {
 
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
@@ -187,7 +187,7 @@ func ExecuteTerraformGenerateVarfiles(
 					u.LogDebug(cliConfig, fmt.Sprintf("varfile: %s", fileName))
 					u.LogDebug(cliConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
 					u.LogDebug(cliConfig, fmt.Sprintf("atmos component: %s", componentName))
-					u.LogDebug(cliConfig, fmt.Sprintf("atmos stack: %s", contextPrefix))
+					u.LogDebug(cliConfig, fmt.Sprintf("atmos stack: %s", stackName))
 					u.LogDebug(cliConfig, fmt.Sprintf("stack config file: %s", stackFileName))
 				}
 			}

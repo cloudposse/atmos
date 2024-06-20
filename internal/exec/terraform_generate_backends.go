@@ -1,14 +1,17 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -82,8 +85,12 @@ func ExecuteTerraformGenerateBackends(
 	var terraformSection map[string]any
 	var componentSection map[string]any
 	var varsSection map[any]any
+	var settingsSection map[any]any
+	var envSection map[any]any
+	var providersSection map[any]any
+	var overridesSection map[any]any
 	var backendSection map[any]any
-	var backendType string
+	var backendTypeSection string
 	processedTerraformComponents := map[string]any{}
 	fileTemplateProvided := fileTemplate != ""
 
@@ -107,7 +114,7 @@ func ExecuteTerraformGenerateBackends(
 
 				// Component metadata
 				metadataSection := map[any]any{}
-				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
 						// Don't include abstract components
 						if componentType == "abstract" {
@@ -116,13 +123,29 @@ func ExecuteTerraformGenerateBackends(
 					}
 				}
 
+				if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
+					settingsSection = map[any]any{}
+				}
+
+				if envSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
+					envSection = map[any]any{}
+				}
+
+				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
+					providersSection = map[any]any{}
+				}
+
+				if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
+					overridesSection = map[any]any{}
+				}
+
 				// Component backend
 				if backendSection, ok = componentSection["backend"].(map[any]any); !ok {
 					continue
 				}
 
 				// Backend type
-				if backendType, ok = componentSection["backend_type"].(string); !ok {
+				if backendTypeSection, ok = componentSection["backend_type"].(string); !ok {
 					continue
 				}
 
@@ -141,6 +164,32 @@ func ExecuteTerraformGenerateBackends(
 					terraformComponent,
 				)
 
+				configAndStacksInfo := schema.ConfigAndStacksInfo{
+					ComponentFromArg:          componentName,
+					ComponentMetadataSection:  metadataSection,
+					ComponentVarsSection:      varsSection,
+					ComponentSettingsSection:  settingsSection,
+					ComponentEnvSection:       envSection,
+					ComponentProvidersSection: providersSection,
+					ComponentOverridesSection: overridesSection,
+					ComponentBackendSection:   backendSection,
+					ComponentBackendType:      backendTypeSection,
+					ComponentSection: map[string]any{
+						cfg.VarsSectionName:        varsSection,
+						cfg.MetadataSectionName:    metadataSection,
+						cfg.SettingsSectionName:    settingsSection,
+						cfg.EnvSectionName:         envSection,
+						cfg.ProvidersSectionName:   providersSection,
+						cfg.OverridesSectionName:   overridesSection,
+						cfg.BackendSectionName:     backendSection,
+						cfg.BackendTypeSectionName: backendTypeSection,
+					},
+				}
+
+				if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+					configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
+				}
+
 				// Context
 				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
 					varsSection = map[any]any{}
@@ -148,9 +197,71 @@ func ExecuteTerraformGenerateBackends(
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+
+				// Stack name
+				var stackName string
+				if cliConfig.Stacks.NameTemplate != "" {
+					stackName, err = ProcessTmpl("terraform-generate-backends-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					if err != nil {
+						return err
+					}
+				} else {
+					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+					if err != nil {
+						return err
+					}
+				}
+
+				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+				configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+				configAndStacksInfo.ComponentSection["stack"] = stackName
+				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
+
+				// Process `Go` templates
+				componentSectionStr, err := u.ConvertToYAML(componentSection)
 				if err != nil {
 					return err
+				}
+
+				var settingsSectionStruct schema.Settings
+				err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+				if err != nil {
+					return err
+				}
+
+				componentSectionProcessed, err := ProcessTmplWithDatasources(
+					cliConfig,
+					settingsSectionStruct,
+					"terraform-generate-backends",
+					componentSectionStr,
+					configAndStacksInfo.ComponentSection,
+					true,
+				)
+				if err != nil {
+					return err
+				}
+
+				componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+				if err != nil {
+					if !cliConfig.Templates.Settings.Enabled {
+						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+							errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+								"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+							err = errors.Join(err, errors.New(errorMessage))
+						}
+					}
+					u.LogErrorAndExit(err)
+				}
+
+				componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+
+				if i, ok := componentSection[cfg.BackendSectionName].(map[any]any); ok {
+					backendSection = i
+				}
+
+				if i, ok := componentSection[cfg.BackendTypeSectionName].(string); ok {
+					backendTypeSection = i
 				}
 
 				var backendFilePath string
@@ -163,7 +274,7 @@ func ExecuteTerraformGenerateBackends(
 					u.SliceContainsString(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, contextPrefix) {
+					u.SliceContainsString(stacks, stackName) {
 
 					// If '--file-template' is not specified, don't check if we've already processed the terraform component,
 					// and write the backends to the terraform components folders
@@ -208,7 +319,7 @@ func ExecuteTerraformGenerateBackends(
 					u.LogDebug(cliConfig, fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
 
 					if format == "json" {
-						componentBackendConfig, err := generateComponentBackendConfig(backendType, backendSection, "")
+						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "")
 						if err != nil {
 							return err
 						}
@@ -218,7 +329,7 @@ func ExecuteTerraformGenerateBackends(
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteTerraformBackendConfigToFileAsHcl(cliConfig, backendFileAbsolutePath, backendType, backendSection)
+						err = u.WriteTerraformBackendConfigToFileAsHcl(cliConfig, backendFileAbsolutePath, backendTypeSection, backendSection)
 						if err != nil {
 							return err
 						}
