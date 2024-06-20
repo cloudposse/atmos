@@ -96,7 +96,7 @@ body {
     font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     font-size: 17px;
     line-height: 30px;
-    
+
 }
 
 .language-console pre > code, .language-text pre > code  {
@@ -110,7 +110,7 @@ nav.navbar {
 }
 */
 
-/* Uncomment to shift carets to the left 
+/* Uncomment to shift carets to the left
 .menu__link {
     order: 1;
 }
@@ -244,7 +244,7 @@ article h1 {
     --ifm-button-color: #ccc;
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 
-    
+
 }
 
 html[data-theme='dark'] {
@@ -499,4 +499,9 @@ html[data-theme='dark'] .markdown h3 {
 .docusaurus-mermaid-container + i {
     display: block;
     margin-bottom: 1em;
+}
+
+
+sub {
+    filter: opacity(0.5);
 }

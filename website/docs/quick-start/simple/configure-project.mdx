@@ -83,16 +83,11 @@ You can clone it and tweak it to your own needs. The example should be a good st
 
 :::
 
-Atmos separates code from configuration (separation of concerns). The code is in the `components` directories and the configurations for different environments are in the `stacks` directory. This allows the code (Terraform and Helmfile components) to be environment-agnostic, meaning the components don't know and don't care how and where they will be provisioned. They can be provisioned into many accounts and regions - the configurations for different environments are defined in the `stacks` directory.
-
-<br/>
+Atmos separates code from configuration ([separation of concerns](https://en.wikipedia.org/wiki/Separation_of_concerns)). All the code is stored in the `components` directories, and the configurations for different environments are stored in the `stacks` directory. This allows the code (Terraform root modules and Helmfile components) to be environment-agnostic, meaning the components don't know and don't care how and where they will be provisioned. They can be provisioned into many accounts and regions - the configurations for different environments are defined in the `stacks` directory.
 
 :::note
-While it's recommended to use the directory names as shown above, the `stacks` and `components` directory names and filesystem locations are
-configurable in the `atmos.yaml` CLI config file. Refer to [Configure CLI](/quick-start/advanced/configure-cli) for more details.
+While it's recommended to use the directory names as shown above, the `stacks` and `components` directory names and filesystem locations are configurable in the `atmos.yaml` CLI config file. Refer to [Configure CLI](/quick-start/advanced/configure-cli) for more details.
 :::
-
-<br/>
 
 The following example provides the simplest filesystem layout that Atmos can work with:
 
@@ -116,8 +111,6 @@ The following example provides the simplest filesystem layout that Atmos can wor
    │   # Atmos vendoring configuration
    └── vendor.yaml
 ```
-
-
 
 <ActionCard title="Want to go deeper on this topic?">
     For a deep dive into configuring projects to work with Atmos, we have additional documentation.

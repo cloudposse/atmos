@@ -14,7 +14,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-When you design cloud architectures with Atmos, you will first break them apart into pieces called [components](/core-concepts/components). Then, you will implement [Terraform "root modules"](/core-concepts/components/terraform) for each of those components.
+When you [design cloud architectures with Atmos](/quick-start/mindset), you will first break them apart into pieces called [components](/core-concepts/components). Then, you will implement [Terraform "root modules"](/core-concepts/components/terraform) for each of those components.
 </Intro>
 
 After we're done with this, we'll show you [how you connect your components using stacks](/quick-start/simple/configure-stacks), so that everything comes together.
@@ -28,14 +28,15 @@ After we're done with this, we'll show you [how you connect your components usin
 <Step>
 
 <Step>
-## <StepNumber/> Decide what it should do
+## <StepNumber/> Decide what your component should do
+
 Once we consider our infrastructure in terms of components, we need to determine the specific functions each component must perform.
 
-Design them to serve a single purpose, making them the smallest possible unit of infrastructure in a typical software development lifecycle (SDLC). Group pieces usually change together and separate those that change independently.
+We recommend following the [Single Responsibility Principle (SRP)](https://en.wikipedia.org/wiki/Single-responsibility_principle). That is, design components to serve a single purpose, making them the smallest possible unit of infrastructure in a typical software development lifecycle (SDLC). Group pieces usually change together as one component and separate those that change independently (or seldom).
 
 We discuss some of the [best practices for components](/best-practices/components) in our documentation.
 
-Since our goal is to retrieve the current weather, let's create a component that will do just that.
+In this case, since our goal is to retrieve the current weather, let's create a component that will do just that.
 
 </Step>
 
