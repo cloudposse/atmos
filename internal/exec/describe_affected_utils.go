@@ -447,8 +447,8 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
-	u.LogTrace(cliConfig, fmt.Sprintf("Target repo HEAD: %s", remoteRepoHead))
+	u.LogTrace(cliConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
+	u.LogTrace(cliConfig, fmt.Sprintf("Base HEAD: %s", remoteRepoHead))
 
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {

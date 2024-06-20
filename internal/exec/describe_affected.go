@@ -1,8 +1,13 @@
 package exec
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
@@ -109,15 +114,19 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
 
+	if upload {
+		includeDependents = true
+	}
+
 	var affected []schema.Affected
-	var localRepoHead *plumbing.Reference
+	var headHead, baseHead *plumbing.Reference
 
 	if repoPath != "" {
-		affected, localRepoHead, _, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, headHead, baseHead, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks, includeSettings)
 	} else if cloneTargetRef {
-		affected, localRepoHead, _, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, headHead, baseHead, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks, includeSettings)
 	} else {
-		affected, localRepoHead, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, headHead, baseHead, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks, includeSettings)
 	}
 
 	if err != nil {
@@ -145,7 +154,61 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	// Upload the affected components and stacks to a specified endpoint
 	if upload {
-		fmt.Println(localRepoHead.Hash())
+		baseUrl := os.Getenv(cfg.AtmosProBaseUrlEnvVarName)
+		if baseUrl == "" {
+			baseUrl = cfg.AtmosProDefaultBaseUrl
+		}
+		url := fmt.Sprintf("%s/%s", baseUrl, cfg.AtmosProDefaultEndpoint)
+
+		token := os.Getenv(cfg.AtmosProTokenEnvVarName)
+
+		body := map[string]any{
+			"head_sha": headHead.Hash().String(),
+			"base_sha": baseHead.Hash().String(),
+			"stacks":   affected,
+		}
+
+		bodyJson, err := u.ConvertToJSON(body)
+		if err != nil {
+			return err
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("\nUploading the affected components and stacks to %s", url))
+
+		bodyReader := bytes.NewReader([]byte(bodyJson))
+		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+
+		if token != "" {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		}
+
+		client := http.Client{
+			Timeout: 10 * time.Second,
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+				u.LogError(err)
+			}
+		}(resp.Body)
+
+		if resp.StatusCode != http.StatusOK {
+			err = fmt.Errorf("\nError uploading the affected components and stacks to %s\nStatus: %s", url, resp.Status)
+			return err
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("\nUploaded the affected components and stacks to %s\n", url))
 	}
 
 	return nil

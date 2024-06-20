@@ -60,4 +60,10 @@ const (
 	LogsFileFlag  = "--logs-file"
 
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
+
+	// Atmos Pro
+	AtmosProTokenEnvVarName   = "ATMOS_PRO_TOKEN"
+	AtmosProBaseUrlEnvVarName = "ATMOS_PRO_BASE_URL"
+	AtmosProDefaultBaseUrl    = "https://app.cloudposse.com"
+	AtmosProDefaultEndpoint   = "api/affected-stacks"
 )
