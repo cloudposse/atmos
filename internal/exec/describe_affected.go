@@ -124,13 +124,14 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
+	var repoUrl string
 
 	if repoPath != "" {
-		affected, headHead, baseHead, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks, includeSettings)
 	} else if cloneTargetRef {
-		affected, headHead, baseHead, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks, includeSettings)
 	} else {
-		affected, headHead, baseHead, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks, includeSettings)
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks, includeSettings)
 	}
 
 	if err != nil {
@@ -153,6 +154,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Upload the affected components and stacks to a specified endpoint
+	// https://www.digitalocean.com/community/tutorials/how-to-make-http-requests-in-go
 	if upload {
 		baseUrl := os.Getenv(cfg.AtmosProBaseUrlEnvVarName)
 		if baseUrl == "" {
@@ -165,6 +167,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		body := map[string]any{
 			"head_sha": headHead.Hash().String(),
 			"base_sha": baseHead.Hash().String(),
+			"repo_url": repoUrl,
 			"stacks":   affected,
 		}
 

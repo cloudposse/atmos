@@ -39,7 +39,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
 		cliConfig.Logs.Level = u.LogLevelTrace
@@ -52,18 +52,18 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Get the Git config of the local repo
 	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
@@ -75,18 +75,18 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	}
 
 	if len(keys) == 0 {
-		return nil, nil, nil, localRepoIsNotGitRepoError
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
 	}
 
-	// Get the origin URL of the current remoteRepo
+	// Get the URL of the repo
 	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
 	if len(remoteUrls) == 0 {
-		return nil, nil, nil, localRepoIsNotGitRepoError
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
 	}
 
 	repoUrl := remoteUrls[0]
 	if repoUrl == "" {
-		return nil, nil, nil, localRepoIsNotGitRepoError
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
 	}
 
 	// Clone the remote repo
@@ -101,7 +101,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// Create a temp dir to clone the remote repo to
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
 	defer removeTempDir(cliConfig, tempDir)
@@ -132,12 +132,12 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	if sshKeyPath != "" {
 		sshKeyContent, err := os.ReadFile(sshKeyPath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, "", err
 		}
 
 		sshPublicKey, err := ssh.NewPublicKeys("git", sshKeyContent, sshKeyPassword)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, "", err
 		}
 
 		// Use the SSH key to clone the repo
@@ -150,12 +150,12 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 	remoteRepo, err := git.PlainClone(tempDir, false, &cloneOptions)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
 	remoteRepoHead, err := remoteRepo.Head()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
 	if ref != "" {
@@ -170,7 +170,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, "", err
 		}
 
 		checkoutOptions := git.CheckoutOptions{
@@ -182,7 +182,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 		err = w.Checkout(&checkoutOptions)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, "", err
 		}
 
 		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
@@ -199,10 +199,10 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		includeSettings,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
-	return affected, localRepoHead, remoteRepoHead, nil
+	return affected, localRepoHead, remoteRepoHead, repoUrl, nil
 }
 
 // ExecuteDescribeAffectedWithTargetRefCheckout checks out the target reference,
@@ -214,7 +214,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
 		cliConfig.Logs.Level = u.LogLevelTrace
@@ -227,26 +227,47 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the local repo
-	_, err = localRepo.Config()
+	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
 
+	// Get the remotes of the local repo
+	keys := []string{}
+	for k := range localRepoConfig.Remotes {
+		keys = append(keys, k)
+	}
+
+	if len(keys) == 0 {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
+	// Get the URL of the repo
+	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
+	if len(remoteUrls) == 0 {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
+	repoUrl := remoteUrls[0]
+	if repoUrl == "" {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
 	// Create a temp dir for the target ref
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
 	defer removeTempDir(cliConfig, tempDir)
@@ -267,7 +288,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	}
 
 	if err = cp.Copy(localRepoPath, tempDir, copyOptions); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
@@ -277,13 +298,13 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the target ref
 	_, err = remoteRepo.Config()
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	if sha != "" {
@@ -291,7 +312,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, "", err
 		}
 
 		checkoutOptions := git.CheckoutOptions{
@@ -303,7 +324,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		err = w.Checkout(&checkoutOptions)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, "", err
 		}
 
 		u.LogTrace(cliConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
@@ -317,7 +338,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, "", err
 		}
 
 		checkoutOptions := git.CheckoutOptions{
@@ -335,7 +356,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 					"\nrefer to https://atmos.tools/cli/commands/describe/affected for more details", ref)
 				err = errors.New(errorMessage)
 			}
-			return nil, nil, nil, err
+			return nil, nil, nil, "", err
 		}
 
 		u.LogTrace(cliConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
@@ -352,10 +373,10 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		includeSettings,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
-	return affected, localRepoHead, remoteRepoHead, nil
+	return affected, localRepoHead, remoteRepoHead, repoUrl, nil
 }
 
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
@@ -366,7 +387,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	localPath := "."
 
@@ -375,34 +396,55 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the local repo
-	_, err = localRepo.Config()
+	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
+
+	// Get the remotes of the local repo
+	keys := []string{}
+	for k := range localRepoConfig.Remotes {
+		keys = append(keys, k)
+	}
+
+	if len(keys) == 0 {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
+	// Get the URL of the repo
+	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
+	if len(remoteUrls) == 0 {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
+	repoUrl := remoteUrls[0]
+	if repoUrl == "" {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
 
 	remoteRepo, err := git.PlainOpenWithOptions(targetRefPath, &git.PlainOpenOptions{
 		DetectDotGit:          false,
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the remote target repo
 	_, err = remoteRepo.Config()
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
@@ -416,10 +458,10 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		includeSettings,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
-	return affected, localRepoHead, remoteRepoHead, nil
+	return affected, localRepoHead, remoteRepoHead, repoUrl, nil
 }
 
 func executeDescribeAffected(
