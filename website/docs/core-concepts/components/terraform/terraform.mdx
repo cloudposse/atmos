@@ -2,7 +2,7 @@
 title: Terraform Root Modules
 sidebar_position: 3
 sidebar_label: Terraform Root Modules
-description: Learn why Atmos can change how you think about the Terraform modules that you use to build your infrastructure. 
+description: Learn why Atmos can change how you think about the Terraform modules that you use to build your infrastructure.
 id: terraform
 ---
 import DocCardList from '@theme/DocCardList'
@@ -10,7 +10,7 @@ import KeyPoints from '@site/src/components/KeyPoints'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use Atmos to provision your Terraform root modules and manage their configurations consistently and repeatably, 
+Use Atmos to provision your Terraform root modules and manage their configurations consistently and repeatably
 by leveraging imports and inheritance for DRY configurations and reduced blast radius of changes.
 </Intro>
 
@@ -20,43 +20,43 @@ by leveraging imports and inheritance for DRY configurations and reduced blast r
 - How to use Terraform with Atmos
 </KeyPoints>
 
-Atmos can change how you think about the Terraform modules that you use to build your infrastructure. 
+Atmos can change how you think about the Terraform modules that you use to build your infrastructure.
 
-When you design cloud architectures with Atmos, you will first break it apart into pieces called components. 
-Then, you will implement Terraform "root modules" for each of your components. 
-To make them highly reusable, they should serve a "single purpose" so that they are the smallest possible 
+When you design cloud architectures with Atmos, you will first break it apart into pieces called components.
+Then, you will implement Terraform "root modules" for each of your components.
+To make them highly reusable, they should serve a "single purpose" so that they are the smallest possible
 unit of infrastructure managed in the software development lifecycle (SDLC).
-Finally, you will connect your components together using stacks, so that everything comes together. 
+Finally, you will connect your components together using stacks, so that everything comes together.
 
 In the [Quick Start](/quick-start/simple) tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components.
 
+
 ## What is Terraform?
 
-Terraform is a command-line utility or interpreter (like Perl or Ruby), that processes infrastructure configurations 
-written in ["HashiCorp's Configuration Language" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning. 
-Its chief role is to delineate and structure infrastructure definitions. 
+Terraform is a command-line utility or interpreter (like Perl or Ruby), that processes infrastructure configurations
+written in ["HashiCorp's Configuration Language" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning.
+Its chief role is to delineate and structure infrastructure definitions. Terraform by itself is not a framework.
 
 :::note Disambiguation
-The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the 
+The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
 HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
 :::
-
 
 <details>
 <summary>Fun Fact!</summary>
 
-HCL is backward compatible with JSON, although it's not a strict superset of JSON. 
-HCL is more human-friendly and readable, while JSON is often used for machine-generated configurations. 
-This means you can write Terraform configurations in HCL or JSON, and Terraform will understand them. 
+HCL is backward compatible with JSON, although it's not a strict superset of JSON.
+HCL is more human-friendly and readable, while JSON is often used for machine-generated configurations.
+This means you can write Terraform configurations in HCL or JSON, and Terraform will understand them.
 This feature is particularly useful for programmatically generating configurations or integration with systems that already use JSON.
 </details>
 
 ## How has Terraform HCL Evolved?
 
-Terraform's HCL started strictly as a configuration language, not a markup or programming language, although has evolved
-considerably over the years. 
+Terraform's HCL started strictly as a configuration language, not a markup or programming language, although it has evolved
+considerably over the years.
 
-As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating fetatures typical
+As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating features typical
 of programming languages (albeit without a debugger!). This shift enriched infrastructure definitions, positioning HCL
 more as a [domain-specific programming language (DSL)](https://en.wikipedia.org/wiki/Domain-specific_language) for
 defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result,
@@ -93,28 +93,16 @@ When considering Terraform in the context of large-scale organizations or enterp
 
 A lot of the same challenges faced by NodeJS, Docker, Helm and Kubernetes also exist in Terraform as well.
 
-- Making modules more maintainable and organized, especially for large projects
-- Better support for large-scale service-oriented architectures
-- Easier ways to define, run, and scale services collectively
-- Better orchestration, management, and deployment of multiple services
+**Challenges in Terraform are centered around Root Modules:**
+- **Large-Scale Architectures**: Providing better support for large-scale service-oriented architectures
+- **Composition**: Making it straightforward to compose architectures of multiple "root modules"
+- **Code Reusability and Maintainability**: Simplifying the definition and reuse of "root modules"
+- **Ordered Dependencies**: Handling orchestration, management, and deployment of multiple loosely coupled "root modules"
+- **Sharing State**: Sharing state between "root modules"
+- **CI/CD Automation**: Enhancing CI/CD automation, especially in monorepos, when there are no rollback capabilities
 
-<details>
-<summary>Here's a more exhaustive list</summary>
-
-- **Lack of DRY Configurations**: Terraform does not inherently support hierarchical configurations. There's no support for [deep merging configurations](https://github.com/hashicorp/terraform/issues/24987), making manual `varfile` maintenance unscalable. This makes it more difficult to enforce organizational standards, security controls, tagging, and policies.
-- **State Management**: Managing Terraform's state, especially at scale, lacks inherent strategies for handling complexities such as access controls, multi-region, and Disaster Recovery (DR).
-- **Limited Modularization**: Structuring configurations modularly while promoting code reuse is cumbersome.
-- **Manual Initialization**: Backend initialization, module downloads, and other setup tasks require manual steps before executing `terraform apply`. This ties into the need for some kind of workflow tool.
-- **Dependency Management**: Community edition of Terraform doesn't provide any mechanisms for orchestrating dependencies among root modules.
-- **Absence of Stack Management**: Organizing configurations into structured stacks isn't a built-in feature of the community edition.
-- **Lack of Automatic Dependency Ordering**: Standalone Terraform doesn't inherently determine execution order based on inter-stack dependencies.
-- **No Native Workflow Automation and Standardization**: Dynamic workflow executions, such as having a unified workflow both in CI/CD platforms like GitHub Actions (GHA) and locally, are not inherently supported. Workflow standardization and automation capabilities do not exist, making provisioning and management tasks more manual, or relying on custom scripts, Makefiles, or other tooling.
-- **Basic Environment Management**: Managing configurations across multiple environments can become complex without higher-level tooling.
-</details>
-
-For each of these challenges, a tailored solution is essential. Ultimately, the goal is to make Terraform more scalable, maintainable, and developer-friendly, especially in complex and large-scale environments.
-
-HashiCorp primarily offers foundational guidance on Terraform and pushes companies instead toward Terraform Enterprise. In fact, it's held back features from entering into the Terraform core that would make it more standalone. HashiCorp does not thoroughly address how to solve the above challenges using Terraform. While suitable for some, it may not meet the scalability demands of enterprise, especially as they embark on their Terraform adoption journey.
+These are not language problems. These are framework problems. Without a coherent framework, Terraform is hard to use at scale.
+Ultimately, the goal is to make Terraform more scalable, maintainable, and developer-friendly, especially in complex and large-scale environments.
 
 ## Refresher on Terraform Concepts
 
@@ -126,19 +114,19 @@ HashiCorp primarily offers foundational guidance on Terraform and pushes compani
     them a primary method for reducing repetition in Terraform HCL code; it's how you DRY up your HCL code.</dd>
 
 <dt>Root Modules</dt>
-<dd>Root modules in Terraform are the topmost modules that can call child modules or directly use Terraform code. 
-    The key distinction between root and child modules is that root modules maintain Terraform state, 
-    typically stored in a remote state backend like S3. Root modules cannot call other root modules, 
+<dd>Root modules in Terraform are the topmost modules that can call child modules or directly use Terraform code.
+    The key distinction between root and child modules is that root modules maintain Terraform state,
+    typically stored in a remote state backend like S3. Root modules cannot call other root modules,
     but they can access the outputs of any other root module using Remote State.</dd>
 
 <dt>State Backends</dt>
-<dd>State Backends are where the desired state of your infrastructure code is stored. 
-    It's always defined exactly once per "root module". This where the computed state of your HCL code is stored, 
-    and it is what `terraform apply` will execute. The most common state backend is object storage 
+<dd>State Backends are where the desired state of your infrastructure code is stored.
+    It's always defined exactly once per "root module". This where the computed state of your HCL code is stored,
+    and it is what `terraform apply` will execute. The most common state backend is object storage
     like S3, but there are many other types of state backends available.</dd>
 
 <dt>Remote State</dt>
-<dd>Remote state refers to the concept of retrieving the outputs from other root modules. 
+<dd>Remote state refers to the concept of retrieving the outputs from other root modules.
     Terraform natively supports passing information between "root modules" without any additional tooling,
     a capability we rely on in Atmos.</dd>
 </dl>
@@ -147,7 +135,7 @@ HashiCorp primarily offers foundational guidance on Terraform and pushes compani
 :::info Disambiguation
 
 - **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) and stored typically in `components/terraform/$name` that consists of the resources defined in the `.tf` files in a working directory
-  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc))
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start-advanced/components/terraform/vpc))
 
 - **Stack** provides configuration (variables and other settings) for a Terraform Component and is defined in one or more Atmos stack manifests
   (a.k.a. stack conffig files)

@@ -2,7 +2,7 @@
 title: Component Best Practices
 sidebar_position: 1
 sidebar_label: Components
-description: Learn the opinionated "Best Practices" for using Components with Atmos 
+description: Learn the opinionated "Best Practices" for using Components with Atmos
 id: components
 ---
 import Intro from '@site/src/components/Intro'
@@ -15,13 +15,13 @@ scalable, and reliable systems, ensuring a smooth and effective infrastructure m
 
 Also, be sure to review the [Terraform Best Practices](/best-practices/terraform) for additional guidance on using Terraform with Atmos.
 
-> <q>Physics is the law, everything else is a recommendation. 
+> <q>Physics is the law, everything else is a recommendation.
 > Anyone can break laws created by people, but I have yet to see anyone break the laws of physics.
 > <p className="author">— **Elon Musk**</p></q>
 
 ## Keep Your Components Small to Reduce the Blast Radius of Changes
 
-Focus on creating single purpose components that small, reusable components that adhere to the UNIX philosophy by doing one thing well. 
+Focus on creating single purpose components that small, reusable components that adhere to the UNIX philosophy by doing one thing well.
 This strategy leads to simpler updates, more straightforward troubleshooting, quicker plan/apply cycles, and a
 clearer separation of responsibilities. Best of all, your state remains small and complexity remains manageable.
 
@@ -31,19 +31,19 @@ Anti-patterns to avoid include:
 
 ## Split Components By Lifecycle
 
-To keep your component small, consider breaking them apart by their Software Development Lifecycle (SDLC). 
+To keep your component small, consider breaking them apart by their Software Development Lifecycle (SDLC).
 Things that always change together, go together. Things that seldom change together, should be managed separately.
 Keep the coupling loose, and use remote state for cohesion.
 
 For instance, a VPC, which is rarely destroyed, should be managed separately from more dynamic resources like clusters
-or databases that may frequently scale or undergo updates. 
+or databases that may frequently scale or undergo updates.
 
 ## Make Them Opinionated, But Not Too Opinionated
 
-Ensure components are generalized to prevent the proliferation of similar components, thereby promoting easier testing, 
+Ensure components are generalized to prevent the proliferation of similar components, thereby promoting easier testing,
 reuse, and maintenance.
 
-:::important Don't Treat Components like Child Modules 
+:::important Don't Treat Components like Child Modules
 Don't force users to use generic components if that will radically complicate the configuration.
 The goal is to make 80% of your infrastructure highly reusable with generic single purpose components.
 The remaining 20% might need to be specialized for your use case, and that's okay.
@@ -51,14 +51,14 @@ The remaining 20% might need to be specialized for your use case, and that's oka
 
 ## Avoid Single Resource Components
 
-If you find yourself writing a component that is so small, it manages only a single resource e.g. (an IAM Policy), 
+If you find yourself writing a component that is so small, it manages only a single resource e.g. (an IAM Policy),
 consider if it should be part of a larger component.
 
 :::tip Stack Configurations are Not a Replacement for Terraform
 The biggest risk for newcomers to Atmos is to over architect components into extremely DRY single-purpose components.
-Stack configurations in YAML should not just be a proxy for terraform resources. 
+Stack configurations in YAML should not just be a proxy for terraform resources.
 
-Use terraform for its strengths, compliment it with YAML when it makes sense for very straight forward configuration. 
+Use terraform for its strengths, compliment it with YAML when it makes sense for very straight forward configuration.
 :::
 
 
@@ -82,18 +82,18 @@ Examples of anti-patterns include:
 - Using a `for_each` loop to create multiple DNS records from a variable input
   (you may hit rate limits when you zones get large enough; it's happened to us)
 
-Instead, leverage [Stack configurations to serve as factories](/core-concepts/stacks) for provisioning multiple component instances. 
+Instead, leverage [Stack configurations to serve as factories](/core-concepts/stacks) for provisioning multiple component instances.
 This approach keeps the state isolated and scales efficiently with the increasing number of component instances.
 
-Please note, it's perfectly fine to use `for_each` loops sometimes to provision lots of resources, just use it with moderation 
-and be aware of the potential downsides. For example, maybe you can safely manage a collection of resources this way.
+Please note, it's perfectly fine to use `for_each` loops sometimes to provision groups of resources, just use them with moderation
+and be aware of the potential downsides, such as creating massive states with a wide blast radius. For example, maybe you can safely manage a collection of resources this way.
 
 :::note Do as we say, not as we do
 It is with humility that we state this best practice. Even many of our own Cloud Posse components, do not follow this because
 they were written before we realized the overwhelming benefits of this approach.
 :::
 
-## Write Components as Factories
+## Use Components Inside of Factories
 
 Google discusses the "factories" approach in the post [Resource Factories: A descriptive approach to Terraform](https://medium.com/google-cloud/resource-factories-a-descriptive-approach-to-terraform-581b3ebb59c). This concept is familiar to every major programming framework, and you can apply it to Terraform too.
 
@@ -114,11 +114,6 @@ Utilize a centralized [component library](/core-concepts/components/library) to 
 organization efficiently. This approach enhances discoverability by centralizing where components are stored, preventing
 sprawl, and ensuring components are easily accessible to everyone. Employ vendoring to retrieve remote dependencies, like
 components, ensuring the practice of immutable infrastructure.
-
-## Enforce Standards using OPA Policies
-
-Apply component validation within stacks to establish policies governing component usage. These policies can be tailored
-as needed, allowing the same component to be validated differently depending on its context of use.
 
 ## Organize Related Components with Folders
 
@@ -156,14 +151,14 @@ coverage (e.g. with `terratest`) and no one likes to code review machine-generat
 If you find yourself in a situation that seems to require code generation, take a step back and consider if that's the right approach.
 - Do not code generate providers to [overcome "limitations" in Terraform](https://github.com/hashicorp/terraform/issues/19932#issuecomment-1817043906),
   for example, to iterate over providers. This is a red flag. Instead, architect your components to work with a single provider
-- If you are programatically combining several child modules, consider if they should instead be separated by lifecycle.
+- If you are programmatically combining several child modules, consider if they should instead be separated by lifecycle.
 
-When you follow these rules, root modules become highly reusable and your reduce the amount of state managed by a single component, 
-and therefore the blast radius of changes.
+When you follow these rules, root modules become highly reusable, and you reduce the amount of state managed by a single component,
+and therefore, the blast radius of changes.
 
 ## Separate Your State by Region
 
-For Disaster Recovery purposes, always strive to keep the state of your components separate by region. 
+For Disaster Recovery purposes, always strive to keep the state of your components separate by region.
 You don't want a regional outage to affect your ability to manage infrastructure in other regions.
 
 ## Limit Providers to One or Two Per Component

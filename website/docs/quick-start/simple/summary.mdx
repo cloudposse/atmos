@@ -14,7 +14,7 @@ Atmos provides unlimited flexibility in defining and configuring stacks and comp
 
 <KeyPoints title="What you have learned">
 - Terraform "root modules" are deployed as components that are organized in sub-folders within `components/terraform` by type, team, operations, or any other category.
-- Stacks define the configuration of your "root modules", and can have arbitrary names and be located anywhere in the `stacks/` directory; Atmos finds stacks using a "slug" which is based on context variables like `namespace`, `tenant`, `environment`, and `stage`.
+- Stacks define the configuration of your "root modules", and can have arbitrary names and located anywhere in the `stacks/` directory; Atmos finds stacks using a "slug".
 - Terraform components can be reused any number of times by giving them unique names in the stack configurations
   and pointing them to the same Terraform root module.
 </KeyPoints>

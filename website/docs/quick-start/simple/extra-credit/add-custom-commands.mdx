@@ -6,6 +6,8 @@ sidebar_label: Add Custom Commands
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Atmos can be easily extended to support any number of custom CLI commands. For example, imagine you wanted to add a command
@@ -24,59 +26,19 @@ In this Quick Start guide, we'll define two custom commands to list the Atmos st
 ```yaml
 # Custom CLI commands
 commands:
-  - name: list
-    description: Execute 'atmos list' commands
-    # subcommands
-    commands:
-      - name: stacks
-        description: |
-          List all Atmos stacks.
-        steps:
-          - >
-            atmos describe stacks --sections none | grep -e "^\S" | sed s/://g
-      - name: components
-        description: |
-          List all Atmos components in all stacks or in a single stack.
+- name: ip
+  description: Return my current IP
+  steps:
+    - curl -s https://ifconfig.me
+    - echo
 
-          Example usage:
-            atmos list components
-            atmos list components -s plat-ue2-dev
-            atmos list components --stack plat-uw2-prod
-            atmos list components -s plat-ue2-dev --type abstract
-            atmos list components -s plat-ue2-dev -t enabled
-            atmos list components -s plat-ue2-dev -t disabled
-        flags:
-          - name: stack
-            shorthand: s
-            description: Name of the stack
-            required: false
-          - name: type
-            shorthand: t
-            description: Component types - abstract, enabled, or disabled
-            required: false
-        steps:
-          - >
-            {{ if .Flags.stack }}
-              {{ if eq .Flags.type "enabled" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r .key
-              {{ else if eq .Flags.type "disabled" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r .key
-              {{ else if eq .Flags.type "abstract" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r .key
-              {{ else }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-              {{ end }}
-            {{ else }}
-              {{ if eq .Flags.type "enabled" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else if eq .Flags.type "disabled" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else if eq .Flags.type "abstract" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else }}
-                atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-              {{ end }}
-            {{ end }}
+# Use Nested Custom Commands
+- name: "github"
+  commands:
+  - name: "status"
+    description: This command returns the number of stargazers for a GitHub repository
+    steps:
+      - curl -s https://www.githubstatus.com/api/v2/status.json | jq -r .status.description
 ```
 </File>
 
@@ -104,3 +66,8 @@ vpc
 vpc-flow-logs-bucket
 ```
 </Terminal>
+
+<ActionCard title="Want to go deeper on this topic?">
+    Custom commands can accept flags, arguments, and even advanced templating.
+    <PrimaryCTA to="/core-concepts/custom-commands">Learn More</PrimaryCTA>
+</ActionCard>

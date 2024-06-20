@@ -55,7 +55,7 @@ perform the following steps:
 Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
 
 <File title="vendor.yaml">
-```yaml 
+```yaml
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -120,7 +120,7 @@ If the component's folder has sub-folders, and you need to vendor them, they hav
 :::
 
 <File title="vendor.yaml">
-```yaml 
+```yaml
 spec:
   sources:
     - component: "vpc-flow-logs-bucket"
@@ -146,12 +146,12 @@ Execute the command `atmos vendor pull` from the root of the repo.
 ```shell
 Processing vendor config file 'vendor.yaml'
 
-Pulling sources for the component 'vpc' 
-from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.343.1' 
+Pulling sources for the component 'vpc'
+from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.343.1'
 into 'components/terraform/vpc'
 
-Pulling sources for the component 'vpc-flow-logs-bucket' 
-from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.343.1' 
+Pulling sources for the component 'vpc-flow-logs-bucket'
+from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.343.1'
 into 'components/terraform/vpc-flow-logs-bucket/1.343.1'
 
 ```
@@ -212,11 +212,11 @@ module "vpc_flow_logs_bucket" {
   source  = "cloudposse/stack-config/yaml//modules/remote-state"
   version = "1.5.0"
 
-  # Specify the Atmos component name (defined in YAML stack config files) 
+  # Specify the Atmos component name (defined in YAML stack config files)
   # for which to get the remote state outputs
   component = "vpc-flow-logs-bucket"
 
-  # Override the context variables to point to a different Atmos stack if the 
+  # Override the context variables to point to a different Atmos stack if the
   # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region
   stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
   tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
@@ -231,7 +231,7 @@ module "vpc_flow_logs_bucket" {
 
 ## Remote State Notes
 
-The [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module uses the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) 
+The [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module uses the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils)
 Terraform provider to read Atmos configuration and obtain the remote state for Atmos components.
 
 Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
@@ -269,8 +269,8 @@ For this to work for both the `atmos` CLI and the Terraform `utils` provider, we
   set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
 
 - When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
-  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/rootfs/usr/local/etc/atmos/atmos.yaml)
-  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/Dockerfile)
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/Dockerfile)
   by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
   root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV

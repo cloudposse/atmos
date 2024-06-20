@@ -21,8 +21,8 @@ infrastructure. For example, depending on various requirements (including securi
 In this Quick Start guide, we will be using a monorepo to provision the following resources into multiple AWS accounts (`dev`, `staging`, `prod`)
 and regions (`us-east-2` and `us-west-2`):
 
-- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc-flow-logs-bucket)
-- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/components/terraform/vpc)
+- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/quick-start-advanced/components/terraform/vpc-flow-logs-bucket)
+- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start-advanced/components/terraform/vpc)
 
 ## Common Directories and Files
 
@@ -102,7 +102,7 @@ This means that `atmos.yaml` file must be at a location in the file system where
 
 Initial Atmos configuration can be controlled by these ENV vars:
 
-- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Path to a folder where the `atmos.yaml` CLI config file is located (just the folder without 
+- `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Path to a folder where the `atmos.yaml` CLI config file is located (just the folder without
    the file name)
 
 - `ATMOS_BASE_PATH` - base path to `components` and `stacks` folders
@@ -124,8 +124,8 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
   set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
 
 - When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
-  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/rootfs/usr/local/etc/atmos/atmos.yaml)
-  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/Dockerfile)
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/Dockerfile)
   by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
   root of the repo. Note that the [Atmos Quick Start example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
@@ -154,6 +154,6 @@ layout:
 
 :::tip
 
-For a Quick Start example, refer to [Atmos Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start)
+For a Quick Start example, refer to [Atmos Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start-advanced)
 
 :::

@@ -88,3 +88,9 @@ When you define [YAML anchors](https://yaml.org/spec/1.2.2/#3222-anchors-and-ali
 same file. This is not an Atmos limitation, but how YAML works. For example, do not work together with [imports](/core-concepts/stacks/imports),
 where you define an anchor in one stack configuration and try to use it in another.
 :::
+
+
+## Enforce Standards using OPA Policies
+
+Apply OPA or JSON Schema validation within stacks to establish policies governing component usage. These policies can be tailored
+as needed, allowing the same component to be validated differently depending on its context of use.

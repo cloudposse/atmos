@@ -21,8 +21,8 @@ Everything in the [`atmos` CLI](/cli) is configurable. The defaults are establis
 be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
 Think of this file as where you [bootstrap the settings or configuration of your project](/core-concepts/projects). If you'll be using
-[terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior) 
-you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)), 
+[terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior)
+you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)),
 the base path location of the components, and so forth.
 
 ## Configuration File (`atmos.yaml`)
@@ -112,7 +112,7 @@ templates:
 
 <br/>
 
-If Atmos does not find an `atmos.yaml` file and the default CLI config is used, and if you set the ENV variable `ATMOS_LOGS_LEVEL` to `Debug` 
+If Atmos does not find an `atmos.yaml` file and the default CLI config is used, and if you set the ENV variable `ATMOS_LOGS_LEVEL` to `Debug`
 (e.g. `export ATMOS_LOGS_LEVEL=Debug`) before executing Atmos commands, you'll see the following message:
 
 <br/>
@@ -165,8 +165,8 @@ The `settings` section configures Atmos global settings.
 <dl>
   <dt>`settings.list_merge_strategy`</dt>
   <dd>
-    Specifies how lists are merged in Atmos stack manifests. 
-  
+    Specifies how lists are merged in Atmos stack manifests.
+
     The following strategies are supported:
     <dl>
       <dt>`replace`</dt>
@@ -371,8 +371,8 @@ BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
 
 Changed files:
 
-examples/quick-start/Dockerfile
-examples/quick-start/atmos.yaml
+examples/quick-start-advanced/Dockerfile
+examples/quick-start-advanced/atmos.yaml
 
 Affected components and stacks:
 
@@ -380,7 +380,7 @@ Affected components and stacks:
    {
       "component": "vpc",
       "component_type": "terraform",
-      "component_path": "examples/quick-start/components/terraform/vpc",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
       "stack": "plat-uw2-prod",
       "stack_slug": "plat-uw2-prod-vpc",
       "affected": "stack.vars"
@@ -388,7 +388,7 @@ Affected components and stacks:
    {
       "component": "vpc",
       "component_type": "terraform",
-      "component_path": "examples/quick-start/components/terraform/vpc",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
       "stack": "plat-ue2-prod",
       "stack_slug": "plat-ue2-prod-vpc",
       "affected": "stack.vars"
@@ -439,7 +439,7 @@ BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
    {
       "component": "vpc",
       "component_type": "terraform",
-      "component_path": "examples/quick-start/components/terraform/vpc",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
       "stack": "plat-uw2-prod",
       "stack_slug": "plat-uw2-prod-vpc",
       "affected": "stack.vars"
@@ -447,7 +447,7 @@ BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
    {
       "component": "vpc",
       "component_type": "terraform",
-      "component_path": "examples/quick-start/components/terraform/vpc",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
       "stack": "plat-ue2-prod",
       "stack_slug": "plat-ue2-prod-vpc",
       "affected": "stack.vars"

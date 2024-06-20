@@ -98,7 +98,7 @@ on the command line by executing the command `atmos validate stacks`.
 For this to work, configure the following:
 
 - Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
-  in  [`stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
+  in  [`stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
 
 - Configure the following section in the `atmos.yaml` [CLI config file](/cli/configuration)
 
@@ -131,7 +131,7 @@ command similar to the following:
 
 <Terminal title="atmos validate stacks">
 ```console
-no matches found for the import 'globals/tenant1-globals-does-not-exist' in the 
+no matches found for the import 'globals/tenant1-globals-does-not-exist' in the
 file 'catalog/invalid-yaml-and-schema/invalid-import-1.yaml'
 
 invalid import in the file 'catalog/invalid-yaml-and-schema/invalid-import-2.yaml'
@@ -152,7 +152,7 @@ yaml: line 2: block sequence entries are not allowed in this context
 invalid stack manifest 'catalog/invalid-yaml-and-schema/invalid-yaml-7.yaml'
 yaml: line 4: could not find expected ':'
 
-Atmos manifest JSON Schema validation error in the 
+Atmos manifest JSON Schema validation error in the
 file 'catalog/invalid-yaml-and-schema/invalid-import-5.yaml':
 {
   "valid": false,
@@ -178,7 +178,7 @@ file 'catalog/invalid-yaml-and-schema/invalid-import-5.yaml':
   ]
 }
 
-Atmos manifest JSON Schema validation error in the 
+Atmos manifest JSON Schema validation error in the
 file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
 {
   "valid": false,

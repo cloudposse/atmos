@@ -1,12 +1,15 @@
 .note {
   margin-top: 1em;
   margin-bottom: 1em;
+  display: flex;
 }
 
 .note > strong {
   color: #177bb6;
+  margin-right: 0.5em;
+  text-wrap: nowrap;
 }
 
-[data-theme='dark'] .note {
-
+[data-theme='dark'] .note > p {
+  filter: opacity(0.5);
 }

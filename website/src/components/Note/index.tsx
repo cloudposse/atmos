@@ -5,7 +5,8 @@ import './index.css';
 const Note = ({ title = "NOTE", children }) => {
   return (
     <div className="note" >
-      <strong>{title}: </strong>{children}
+      <strong>{title}: </strong>
+      <p>{children}</p>
     </div>
   );
 };
