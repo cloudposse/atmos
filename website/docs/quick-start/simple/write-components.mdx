@@ -21,12 +21,10 @@ When you [design cloud architectures with Atmos](/quick-start/mindset), you will
 After we're done with this, we'll show you [how you connect your components using stacks](/quick-start/simple/configure-stacks), so that everything comes together.
 
 <KeyPoints>
-- Where to put your components
-- How to think about components
-- How to use Terraform "root modules" as components
+- Where to place your components
+- How to write a suitable Terraform root module to use as a component
+- How to make your components reusable and other considerations
 </KeyPoints>
-
-<Step>
 
 <Step>
 ## <StepNumber/> Decide what your component should do
@@ -41,6 +39,7 @@ In this case, since our goal is to retrieve the current weather, let's create a 
 
 </Step>
 
+<Step>
 ## <StepNumber/> Create a Directory for Your Component
 
 The implementation for the component (e.g. HCL code) will be stored in a directory under the `components/` folder corresponding to the toolchain used (e.g. `terraform/`). For Terraform, place your component in the `components/terraform` directory. Inside this directory, create a folder to store your component’s Terraform code, which serves as the root module. Since our component is a simple Terraform root module, we will create a directory called `weather` to store the Terraform code for our weather component.

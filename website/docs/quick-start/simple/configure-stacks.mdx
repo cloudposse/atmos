@@ -47,23 +47,31 @@ can be overridden in the derived Atmos components by using [Atmos Component Inhe
 
 When executing the [CLI commands](/cheatsheets/commands), Atmos does not use the stack file names and their filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names (stack manifest names) can be anything, and they can be in any folder in any sub-folder in the `stacks` directory.
 
-For example, when executing the `atmos terraform apply vpc -s plat-ue2-dev`
-command, the Atmos stack `plat-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"`
-(see [Configure CLI](/quick-start/advanced/configure-cli)) and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second
-part is `environment`, and the third part is `stage`. Then Atmos searches for the top-level stack manifest (in the `stacks` directory)
-where `tenant: plat`, `environment: ue2` and `stage: dev` are defined (inline or via imports).
+For example, when executing the `atmos terraform apply station -s dev` command, the Atmos stack `dev` is specified by the `-s` flag. By looking at `name_pattern: "{stage}"` (see [Configure CLI](/quick-start/advanced/configure-cli)) and processing the tokens, Atmos knows that the `stage` is `dev`. This `name_pattern` also supports `{namespace}`, `{tenant}`, and `{environment}`.
+
+<dl>
+  <dt>`{namespace}`</dt>
+  <dd>Corresponds to `var.namespace` in the stack configuration.</dd>
+
+  <dt>`{tenant}`</dt>
+  <dd>Corresponds to `var.tenant` in the stack configuration.</dd>
+
+  <dt>`{environment}`</dt>
+  <dd>Corresponds to `var.environment` in the stack configuration.</dd>
+
+  <dt>`{stage}`</dt>
+  <dd>Corresponds to `var.stage` in the stack configuration.</dd>
+</dl>
 
 Atmos top-level stacks can be configured using a Basic Layout or a Hierarchical Layout.
 
-The Basic Layout can be used when you have a very simple configuration using just a few accounts and regions.
-The Hierarchical Layout should be used when you have a very complex organization, for example, with many AWS Organizational Units (which Atmos
-refers to as tenants) and dozens of AWS accounts and regions.
+The Basic Layout can be used when you have a very simple configuration using just a few stages. A more Hierarchical Layout should be used when you have a very complex organization, for example, with many AWS Organizational Units (which Atmos refers to as tenants) and dozens of AWS accounts and regions.
 
 ### Basic Layout
 
 A basic form of stack organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have so many environments and stages.
 
-For example, `$stage` might be `prod` which would result in `stacks/deploy/prod.yaml`
+For example, `$stage` might be `prod`, which would result in `stacks/deploy/prod.yaml`
 
 In our example, the filesystem layout for the stacks uses a Basic Layout with `dev`, `staging` and `prod` and
 would look like this:
@@ -119,6 +127,8 @@ components:
 So the complete baseline definition for our weather station configuration might look something like the following.
 
 <EmbedFile filePath="examples/quick-start-simple/stacks/catalog/station.yaml" />
+
+<Note>It's important to quote strings that start with zeros (e.g., `0001`) in YAML to prevent them from being interpreted as integers. This is how YAML processes it, and not something special about Atmos.</Note>
 
 ### Define the Environment-specific Configurations
 

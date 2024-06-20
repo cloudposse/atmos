@@ -3,7 +3,9 @@
   border: 1px solid #ddd; /* Light border around the container */
   border-radius: 20px; /* Rounded corners */
   padding: 20px; /* Padding inside the container */
-  margin: 20px 0; /* Margin around the container */
+  margin-top: 3em;
+  margin-bottom: 3em;
+
 }
 
 [data-theme='dark'] .key-points {
