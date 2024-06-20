@@ -1,0 +1,12 @@
+.note {
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+.note > strong {
+  color: #177bb6;
+}
+
+[data-theme='dark'] .note {
+
+}

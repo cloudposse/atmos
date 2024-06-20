@@ -12,6 +12,7 @@ import StepNumber from '@site/src/components/StepNumber'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Note from '@site/src/components/Note'
 
 <Intro>
 When you [design cloud architectures with Atmos](/quick-start/mindset), you will first break them apart into pieces called [components](/core-concepts/components). Then, you will implement [Terraform "root modules"](/core-concepts/components/terraform) for each of those components.
@@ -76,14 +77,32 @@ With Atmos, you use native HCL Terraform code without any special extensions to 
 
 To make the best use of Atmos, ensure your root modules are highly reusable, so they should accept parameters so it can be deployed multiple times without conflicts. This means provisioning resources with unique names.
 
+### Implement `variables.tf`
+
+<EmbedFile filePath="examples/demo-stacks/components/terraform/myapp/variables.tf" />
+<EmbedFile filePath="examples/demo-stacks/components/terraform/myapp/main.tf" />
+
 
 <details>
 <summary>How do we recommend ensuring unique resource names?</summary>
 
 Cloud Posse's [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) module makes this easier by turning naming into a standardized, programmatically enforced convention. Setting the null label parameters ensures unique resource names and enforces consistency across your team and organization.
 
-__NOTE:__ In our example, we will keep it simple to focus on the basics, so we will not use this module.
+<Note>In our example, we will keep it simple to focus on the basics, so we will not use this module.</Note>
 </details>
+
+### Implement `outputs.tf`
+
+<EmbedFile filePath="examples/demo-stacks/components/terraform/myapp/outputs.tf" />
+
+### Implement `versions.tf`
+
+<EmbedFile filePath="examples/demo-stacks/components/terraform/myapp/versions.tf" />
+
+
+## Wrap up
+
+Now that you have a Terraform "root module", you can use it as a component in your Atmos stacks, and deploy it any number of times, tweaking the configuration as needed. We will show you [how to do that in the next step](/quick-start/simple/configure-stacks).
 
 
 <ActionCard title="Want to go deeper on this topic?">

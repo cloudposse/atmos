@@ -505,3 +505,7 @@ html[data-theme='dark'] .markdown h3 {
 sub {
     filter: opacity(0.5);
 }
+
+.markdown h3 {
+    margin-top: 3em;
+}
