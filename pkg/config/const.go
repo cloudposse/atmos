@@ -62,8 +62,9 @@ const (
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro
-	AtmosProTokenEnvVarName   = "ATMOS_PRO_TOKEN"
-	AtmosProBaseUrlEnvVarName = "ATMOS_PRO_BASE_URL"
-	AtmosProDefaultBaseUrl    = "https://app.cloudposse.com"
-	AtmosProDefaultEndpoint   = "api/affected-stacks"
+	AtmosProBaseUrlEnvVarName  = "ATMOS_PRO_BASE_URL"
+	AtmosProEndpointEnvVarName = "ATMOS_PRO_ENDPOINT"
+	AtmosProTokenEnvVarName    = "ATMOS_PRO_TOKEN"
+	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
+	AtmosProDefaultEndpoint    = "api/affected-stacks"
 )

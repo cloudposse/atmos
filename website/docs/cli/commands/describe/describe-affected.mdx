@@ -201,21 +201,21 @@ Affected components and stacks:
 
 ## Flags
 
-| Flag                               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Required |
-|:-----------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                                                                                                                                                                                   | no       |
-| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                                                                                                                                                                                 | no       |
-| `--file`                           | If specified, write the result to the file                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | no       |
-| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                                                                                                                                                                                                                                                                                                                                                                 | no       |
-| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                                                                                                                                                                                | no       |
-| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                                                                                                                                                                                      | no       |
-| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                                                                                                                                                                                | no       |
-| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                                                                                                                                                                                | no       |
-| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                                                                                                                                                                           | no       |
-| `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory                                                                                                                                                         | no       |
-| `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                                                                                                                                                                            | no       |
-| `--include-settings`               | Include the `settings` section for each affected component.<br/>`atmos describe affected --include-settings=true`                                                                                                                                                                                                                                                                                                                                                                                               | no       |
-| `--upload`                         | Upload the affected components and stacks to a specified endpoint for<br/>further processing in a CI/CD pipeline.<br/><br/>`atmos describe affected --upload=true`<br/><br/>Atmos will perform an HTTP POST request to the endpoint<br/>`${ATMOS_PRO_BASE_URL}/api/affected-stacks`<br/>where the base URL is defined using the `ATMOS_PRO_BASE_URL` environment variable.<br/>The `token` for the `Authorization: Bearer <token>` header can be specified<br/>using the `ATMOS_PRO_TOKEN` environment variable | no       |
+| Flag                               | Description                                                                                                                                                                                                                                                                                                                                                                                                  | Required |
+|:-----------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
+| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                                                                                | no       |
+| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                                                                              | no       |
+| `--file`                           | If specified, write the result to the file                                                                                                                                                                                                                                                                                                                                                                   | no       |
+| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                                                                                                                                                                                                                                                              | no       |
+| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                                                                             | no       |
+| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                                                                                   | no       |
+| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                                                                             | no       |
+| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                                                                             | no       |
+| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                                                                        | no       |
+| `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory                                                      | no       |
+| `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                                                                         | no       |
+| `--include-settings`               | Include the `settings` section for each affected component.<br/>`atmos describe affected --include-settings=true`                                                                                                                                                                                                                                                                                            | no       |
+| `--upload`                         | Upload the affected components and stacks to a specified HTTP endpoint.<br/><br/>`atmos describe affected --upload=true`<br/><br/>Atmos will perform an HTTP POST request<br/>to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,<br/>where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,<br/>and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable. | no       |
 
 ## Output
 
@@ -715,3 +715,58 @@ private repo which is not itself):
     ```shell
     atmos describe affected --repo-path $GITHUB_WORKSPACE
     ```
+
+## Upload the affected components and stacks to an HTTP endpoint
+
+If the `--upload=true` command-line flag is passed, Atmos will upload the affected components and stacks to a
+specified HTTP endpoint.
+
+The endpoint can process the affected components and their dependencies in a CI/CD pipeline (e.g. execute
+`terraform apply` on all the affected components in the stacks and all dependencies).
+
+Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`, where the base URL
+is defined by the `ATMOS_PRO_BASE_URL` environment variable, and the URL path is defined by the `ATMOS_PRO_ENDPOINT`
+environment variable.
+
+An [Authorization](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization) header
+`Authorization: Bearer $ATMOS_PRO_TOKEN` will be added to the HTTP request (if the `ATMOS_PRO_TOKEN` environment
+variable is set) to provide credentials to authenticate with the server.
+
+:::note
+If the `--upload=true` command-line flag is passed, the `--include-dependencies` flag is automatically set to `true`,
+so the affected components will always be uploaded with their dependencies (if they are configured in Atmos stack manifests).
+:::
+
+The payload of the HTTP POST request will be a JSON object with the following schema:
+
+<Terminal title="Payload of 'atmos describe affected --upload=true' command">
+  ```json
+    {
+       "base_sha": "6746ba4df9e87690c33297fe740011e5ccefc1f9",
+       "head_sha": "5360d911d9bac669095eee1ca1888c3ef5291084",
+       "repo_url": "https://github.com/cloudposse/atmos",
+       "stacks": [
+          {
+            "component": "vpc",
+            "component_type": "terraform",
+            "component_path": "examples/quick-start/components/terraform/vpc",
+            "stack": "plat-ue2-dev",
+            "stack_slug": "plat-ue2-dev-vpc",
+            "affected": "stack.vars",
+            "included_in_dependents": false,
+            "dependents": [...]
+          }
+      ]
+   }
+  ```
+</Terminal>
+
+where:
+
+- `base_sha` - the Git commit SHA of the base branch against which the changes in the current commit are compared
+
+- `head_sha` - the SHA of the current Git commit
+
+- `repo_url` - the URL of the current repository
+
+- `stacks` - a list of affected components and stacks with their dependencies

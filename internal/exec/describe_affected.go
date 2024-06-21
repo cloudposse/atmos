@@ -155,14 +155,16 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	// Upload the affected components and stacks to a specified endpoint
 	// https://www.digitalocean.com/community/tutorials/how-to-make-http-requests-in-go
-	if upload {
+	if upload && len(affected) > 0 {
 		baseUrl := os.Getenv(cfg.AtmosProBaseUrlEnvVarName)
 		if baseUrl == "" {
 			baseUrl = cfg.AtmosProDefaultBaseUrl
 		}
-		url := fmt.Sprintf("%s/%s", baseUrl, cfg.AtmosProDefaultEndpoint)
-
-		token := os.Getenv(cfg.AtmosProTokenEnvVarName)
+		endpoint := os.Getenv(cfg.AtmosProEndpointEnvVarName)
+		if endpoint == "" {
+			endpoint = cfg.AtmosProDefaultEndpoint
+		}
+		url := fmt.Sprintf("%s/%s", baseUrl, endpoint)
 
 		body := map[string]any{
 			"head_sha": headHead.Hash().String(),
@@ -186,6 +188,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 		req.Header.Set("Content-Type", "application/json")
 
+		// Authorization header
+		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization
+		token := os.Getenv(cfg.AtmosProTokenEnvVarName)
 		if token != "" {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 		}
