@@ -5,6 +5,9 @@ sidebar_label: 5. Deploy Everything
 ---
 import KeyPoints from '@site/src/components/KeyPoints'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import SecondaryCTA from '@site/src/components/SecondaryCTA'
 
 <Intro>
 After you've written your components and configured your stacks, now we're ready to deploy them!
@@ -27,9 +30,6 @@ atmos terraform apply myapp -s staging
 
 atmos terraform apply myapp -s prod
 ```
-
-<br/>
-
 
 Alternatively, you can execute the configured [Atmos workflow](/quick-start/advanced/create-workflows) to provision all the components in all the stacks:
 
@@ -55,3 +55,14 @@ Let's consider what Atmos does when executing the command `atmos terraform apply
 
 - And lastly, Atmos writes the final deep-merged variables into a `.tfvar.json` file in the component directory and then
   executes `terraform apply -var-file ...` command
+
+<ActionCard title="Ready to take the next step?">
+     Now that you’ve seen Atmos in action, you can explore the extra credit!
+
+     Or take a moment to explore its core concepts. You have only just scratched the surface of Atmos. Atmos is a powerful enterprise-grade framework with so **much more to offer**!
+
+    <div>
+      <PrimaryCTA to="/quick-start/simple/extra-credit">Extra Credit</PrimaryCTA>
+      <SecondaryCTA to="/core-concepts">Deep Dive</SecondaryCTA>
+    </div>
+</ActionCard>

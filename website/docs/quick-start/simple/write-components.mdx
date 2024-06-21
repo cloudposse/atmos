@@ -12,6 +12,7 @@ import StepNumber from '@site/src/components/StepNumber'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import SecondaryCTA from '@site/src/components/SecondaryCTA'
 import Note from '@site/src/components/Note'
 
 <Intro>
@@ -113,15 +114,16 @@ In object-oriented parlance, think of your outputs as the “public” attribute
 
 <EmbedFile filePath="examples/quick-start-simple/components/terraform/weather/outputs.tf" />
 <Note>Technically outputs can be placed in any file, but the standard convention in Terraform is to place them usually in `outputs.tf`.</Note>
-
-## Wrap up
-
-Now that you have a Terraform "root module", you can use it as a component in your Atmos stacks, and deploy it any number of times, tweaking the configuration as needed. We will show you [how to do that in the next step](/quick-start/simple/configure-stacks).
-
-<ActionCard title="Want to go deeper on this topic?">
-    Terraform "root modules" implement the stateful pieces of your infrastructure. Learn how to use them effectively with Atmos.
-    <PrimaryCTA to="/core-concepts/components/terraform">Terraform Root Modules</PrimaryCTA>
-</ActionCard>
-
 </Step>
 
+
+
+<ActionCard title="Ready to take the next step?">
+    Now that you have a Terraform "root module", you can use it as a component in your Atmos stacks, and deploy it any number of times, tweaking the configuration as needed.
+
+    We will show you [how to do that in the next step](/quick-start/simple/configure-stacks).
+    <div>
+      <PrimaryCTA to="/quick-start/simple/configure-stacks">Next Step</PrimaryCTA>
+      <SecondaryCTA to="/core-concepts/components/terraform">Deep Dive</SecondaryCTA>
+    </div>
+</ActionCard>
