@@ -325,6 +325,9 @@ table tr td {
 
 div > ul > li > a.table-of-contents__link.toc-highlight {
     font-weight: 600;
+}
+
+a.table-of-contents__link {
     line-height: 1.45em;
 }
 
