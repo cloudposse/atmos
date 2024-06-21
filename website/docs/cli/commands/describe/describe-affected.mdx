@@ -133,8 +133,8 @@ Total 4215 (delta 658), reused 911 (delta 511), pack-reused 3058
 
 Checked out Git ref 'refs/heads/main'
 
-Current working repo HEAD: 7d37c1e890514479fae404d13841a2754be70cbf refs/heads/describe-affected
-Remote repo HEAD: 40210e8d365d3d88ac13c0778c0867b679bbba69 refs/heads/main
+Current HEAD: 7d37c1e890514479fae404d13841a2754be70cbf refs/heads/describe-affected
+Base HEAD: 40210e8d365d3d88ac13c0778c0867b679bbba69 refs/heads/main
 
 Changed files:
 
@@ -763,10 +763,24 @@ The payload of the HTTP POST request will be a JSON object with the following sc
 
 where:
 
-- `base_sha` - the Git commit SHA of the base branch against which the changes in the current commit are compared
+<dl>
+    <dt>`base_sha`</dt>
+    <dd>
+        the Git commit SHA of the base branch against which the changes in the current commit are compared
+    </dd>
 
-- `head_sha` - the SHA of the current Git commit
+    <dt>`head_sha`</dt>
+    <dd>
+        the SHA of the current Git commit
+    </dd>
 
-- `repo_url` - the URL of the current repository
+    <dt>`repo_url`</dt>
+    <dd>
+        the URL of the current repository
+    </dd>
 
-- `stacks` - a list of affected components and stacks with their dependencies
+    <dt>`stacks`</dt>
+    <dd>
+        a list of affected components and stacks with their dependencies
+    </dd>
+</dl>
