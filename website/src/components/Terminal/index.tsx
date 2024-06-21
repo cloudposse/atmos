@@ -1,7 +1,8 @@
 import React from 'react';
+import Typewriter from '@site/src/components/Typewriter';
 import './index.css';
 
-export default function Terminal({ title, className, children }) {
+export default function Terminal({ title, command, className, children }) {
     return (
         <div className={className}>
             <div className="terminal">
@@ -13,7 +14,7 @@ export default function Terminal({ title, className, children }) {
                     </div>
                     <h1>{title}</h1>
                 </div>
-                <div className="viewport">{children}</div>
+                <div className="viewport">{command && <div className="command"><span className="prompt">&gt;</span><Typewriter>{command}</Typewriter></div>}<div>{children}</div></div>
             </div>
         </div>
     );

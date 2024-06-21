@@ -19,7 +19,11 @@
 /* Animation */
 .animate .typing {
   animation: typing 3s steps(18) 1s 1 normal both,
-             blinkTextCursor 500ms steps(44) infinite normal;
+             blinkTextCursor 500ms steps(44) 5 normal;
+}
+
+.hiddenCursor .typewriter  > tt {
+  border-right: none;
 }
 
 @keyframes typing {

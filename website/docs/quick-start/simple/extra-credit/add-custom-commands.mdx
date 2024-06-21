@@ -8,6 +8,7 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Note from '@site/src/components/Note'
 
 <Intro>
 Atmos can be easily extended to support any number of custom CLI commands. For example, imagine you wanted to add a command
@@ -16,9 +17,9 @@ like `atmos reload-database`, you can do that with custom commands.
 
 Custom commands are defined in the `commands` section in `atmos.yaml` CLI configuration file.
 
-:::tip
+<Note title="TIP">
 Refer to [Atmos Custom Commands](/core-concepts/custom-commands) for more information about Atmos Custom Commands
-:::
+</Note>
 
 In this Quick Start guide, we'll define two custom commands to list the Atmos stacks in the infrastructure and the components in the stacks.
 
@@ -42,28 +43,19 @@ commands:
 ```
 </File>
 
-Run the following Atmos command to list all stacks in the infrastructure:
+Run the following Atmos command to get the current GitHub status.
 
-<Terminal title="atmos list stacks">
+<Terminal command="atmos github status">
 ```console
-plat-gbl-dev
-plat-gbl-prod
-plat-gbl-staging
-plat-ue2-dev
-plat-ue2-prod
-plat-ue2-staging
-plat-uw2-dev
-plat-uw2-prod
-plat-uw2-staging
+All Systems Operational
 ```
 </Terminal>
 
-Run the following Atmos command to list all components in the stack `plat-ue2-dev`:
+Run the following Atmos command to retrieve your current public IP address.
 
-<Terminal title="atmos list components -s plat-ue2-dev">
+<Terminal command="atmos ip">
 ```console
-vpc
-vpc-flow-logs-bucket
+13.37.13.37
 ```
 </Terminal>
 

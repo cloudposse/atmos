@@ -139,3 +139,17 @@
     padding: 0.3em;
     background: transparent;
 }
+
+.terminal .command .prompt {
+    color: green;
+    padding-left: 0;
+    font-weight: bold;
+    font-size: 1.2em;
+    position: relative;
+    top: 2px;
+}
+
+.terminal .command {
+    padding-left: 1em;
+    display: flex;
+}
