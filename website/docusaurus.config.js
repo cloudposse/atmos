@@ -78,6 +78,12 @@ const config = {
             },
         ],
         [
+            'docusaurus-plugin-sentry',
+            {
+              DSN: 'b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
+            },
+          ],
+        [
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
         ]
     ],

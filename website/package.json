@@ -31,6 +31,7 @@
     "clsx": "^2.1.1",
     "custom-loaders": "file:plugins/custom-loaders",
     "docusaurus-plugin-image-zoom": "^2.0.0",
+    "docusaurus-plugin-sentry": "^2.0.0",
     "html-loader": "^5.0.0",
     "marked": "^13.0.0",
     "node-fetch": "^3.3.2",
