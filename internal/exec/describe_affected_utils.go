@@ -490,7 +490,7 @@ func executeDescribeAffected(
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
-	u.LogTrace(cliConfig, fmt.Sprintf("Base HEAD: %s", remoteRepoHead))
+	u.LogTrace(cliConfig, fmt.Sprintf("BASE: %s", remoteRepoHead))
 
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
@@ -1506,6 +1506,8 @@ func addDependentsToAffected(cliConfig schema.CliConfiguration, affected *[]sche
 			if err != nil {
 				return err
 			}
+		} else {
+			a.Dependents = []schema.Dependent{}
 		}
 	}
 
@@ -1529,6 +1531,8 @@ func addDependentsToDependents(cliConfig schema.CliConfiguration, dependents *[]
 			if err != nil {
 				return err
 			}
+		} else {
+			d.Dependents = []schema.Dependent{}
 		}
 	}
 

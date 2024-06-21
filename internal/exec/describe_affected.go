@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
+	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -114,8 +115,10 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
 
+	// When uploading, always include dependents and settings for all affected components
 	if upload {
 		includeDependents = true
+		includeSettings = true
 	}
 
 	if verbose {
@@ -155,7 +158,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	// Upload the affected components and stacks to a specified endpoint
 	// https://www.digitalocean.com/community/tutorials/how-to-make-http-requests-in-go
-	if upload && len(affected) > 0 {
+	if upload {
 		baseUrl := os.Getenv(cfg.AtmosProBaseUrlEnvVarName)
 		if baseUrl == "" {
 			baseUrl = cfg.AtmosProDefaultBaseUrl
@@ -166,11 +169,20 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		}
 		url := fmt.Sprintf("%s/%s", baseUrl, endpoint)
 
+		// Parse the repo URL
+		gitURL, err := giturl.NewGitURL(repoUrl)
+		if err != nil {
+			return err
+		}
+
 		body := map[string]any{
-			"head_sha": headHead.Hash().String(),
-			"base_sha": baseHead.Hash().String(),
-			"repo_url": repoUrl,
-			"stacks":   affected,
+			"head_sha":   headHead.Hash().String(),
+			"base_sha":   baseHead.Hash().String(),
+			"repo_url":   repoUrl,
+			"repo_name":  gitURL.GetRepoName(),
+			"repo_owner": gitURL.GetOwnerName(),
+			"repo_host":  gitURL.GetHostName(),
+			"stacks":     affected,
 		}
 
 		bodyJson, err := u.ConvertToJSON(body)

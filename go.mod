@@ -9,7 +9,7 @@ require (
 	github.com/arsham/figurine v1.3.0
 	github.com/bmatcuk/doublestar/v4 v4.6.1
 	github.com/charmbracelet/bubbles v0.18.0
-	github.com/charmbracelet/bubbletea v0.26.4
+	github.com/charmbracelet/bubbletea v0.26.5
 	github.com/charmbracelet/lipgloss v0.11.0
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.17.0
@@ -26,6 +26,7 @@ require (
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
+	github.com/kubescape/go-git-url v0.0.30
 	github.com/lrstanley/bubblezone v0.0.0-20240616011544-69b11dddf9ae
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
@@ -90,6 +91,7 @@ require (
 	github.com/bytecodealliance/wasmtime-go/v3 v3.0.2 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/chainguard-dev/git-urls v1.0.2 // indirect
 	github.com/charmbracelet/x/ansi v0.1.2 // indirect
 	github.com/charmbracelet/x/input v0.1.2 // indirect
 	github.com/charmbracelet/x/term v0.1.1 // indirect
@@ -254,6 +256,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	inet.af/netaddr v0.0.0-20230525184311-b8eac61e914a // indirect
 	k8s.io/client-go v0.26.2 // indirect
+	k8s.io/utils v0.0.0-20230220204549-a5ecb0141aa5 // indirect
 	oras.land/oras-go/v2 v2.3.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )

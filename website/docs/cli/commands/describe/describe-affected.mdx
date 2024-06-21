@@ -134,7 +134,7 @@ Total 4215 (delta 658), reused 911 (delta 511), pack-reused 3058
 Checked out Git ref 'refs/heads/main'
 
 Current HEAD: 7d37c1e890514479fae404d13841a2754be70cbf refs/heads/describe-affected
-Base HEAD: 40210e8d365d3d88ac13c0778c0867b679bbba69 refs/heads/main
+BASE: 40210e8d365d3d88ac13c0778c0867b679bbba69 refs/heads/main
 
 Changed files:
 
@@ -236,7 +236,7 @@ Each object has the following schema:
   "file": ".....",
   "folder": ".....",
   "dependents": [],
-  "included_in_dependents": "true | false"
+  "included_in_dependents": "true | false",
   "settings": {}
 }
 ```
@@ -266,7 +266,7 @@ where:
 - `folder` - if the Atmos component depends on an external folder, and any file in the folder was changed (see `affected.folder` below),
   the `folder` attributes shows the modified folder
 
-- `dependents` - list of components that depend on the current affected component. It will be included only if the
+- `dependents` - list of components that depend on the current affected component. It will be populated only if the
   command-line flag `--include-dependents=true` is passed (to take dependencies into account) and there are other components
   that depend on the affected component in the stack.
   Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` property is
@@ -733,8 +733,9 @@ An [Authorization](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Aut
 variable is set) to provide credentials to authenticate with the server.
 
 :::note
-If the `--upload=true` command-line flag is passed, the `--include-dependencies` flag is automatically set to `true`,
-so the affected components will always be uploaded with their dependencies (if they are configured in Atmos stack manifests).
+If the `--upload=true` command-line flag is passed, the `--include-dependencies` and `--include-settings` flags are
+automatically set to `true`, so the affected components will be uploaded with their dependencies and settings
+(if they are configured in Atmos stack manifests).
 :::
 
 The payload of the HTTP POST request will be a JSON object with the following schema:
@@ -745,6 +746,9 @@ The payload of the HTTP POST request will be a JSON object with the following sc
        "base_sha": "6746ba4df9e87690c33297fe740011e5ccefc1f9",
        "head_sha": "5360d911d9bac669095eee1ca1888c3ef5291084",
        "repo_url": "https://github.com/cloudposse/atmos",
+       "repo_host": "github.com",
+       "repo_name": "atmos",
+       "repo_owner": "cloudposse",
        "stacks": [
           {
             "component": "vpc",
@@ -754,7 +758,8 @@ The payload of the HTTP POST request will be a JSON object with the following sc
             "stack_slug": "plat-ue2-dev-vpc",
             "affected": "stack.vars",
             "included_in_dependents": false,
-            "dependents": []
+            "dependents": [],
+            "settings": {}
           }
       ]
    }
@@ -779,8 +784,23 @@ where:
         the URL of the current repository
     </dd>
 
+    <dt>`repo_name`</dt>
+    <dd>
+        the name of the current repository
+    </dd>
+
+    <dt>`repo_owner`</dt>
+    <dd>
+        the owner of the current repository
+    </dd>
+
+    <dt>`repo_host`</dt>
+    <dd>
+        the host of the current repository
+    </dd>
+
     <dt>`stacks`</dt>
     <dd>
-        a list of affected components and stacks with their dependencies
+        a list of affected components and stacks with their dependencies and settings
     </dd>
 </dl>
