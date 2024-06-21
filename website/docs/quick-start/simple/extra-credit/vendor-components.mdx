@@ -2,121 +2,50 @@
 title: Vendor Dependencies
 sidebar_position: 2
 sidebar_label: Vendor Dependencies
+description: Learn how to vendor components from remote sources
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Note from '@site/src/components/Note'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Step from '@site/src/components/Step'
+import StepNumber from '@site/src/components/StepNumber'
 
 <Intro>
-TODO: THIS IS MISSING
+In the previous steps, we wrote our own component from scratch. In practice, you'll often want to reuse components that are already available in the open-source community, or within your organization. To do that, you'll leverage vendoring.
 </Intro>
 
-In the previous steps, we've configured the repository and decided to provision the `vpc-flow-logs-bucket` and `vpc` Terraform
-components into three AWS accounts (`dev`, `staging`, `prod`) in the two AWS regions (`us-east-2` and `us-west-2`).
-We've also configured the Atmos CLI in the `atmos.yaml` CLI config file to search for the Terraform components in
-the `components/terraform` directory.
+Vendoring is driven by the `atmos vendor pull` command. It allows you to pull in components from remote sources, like Git repositories, and place them in your project's filesystem. This way, you can reuse components across multiple projects. The vendoring process is defined in the `vendor.yaml` file, which specifies the components to pull in, where to place them, and how to filter them.
 
-Next step is to create the Terraform components `vpc-flow-logs-bucket` and `vpc`.
-
-One way to create the Terraform components is to copy them into the corresponding folders in your repo:
-
-- Copy the `vpc-flow-logs-bucket` component from the open-source component repository
-  [vpc-flow-logs-bucket](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/vpc-flow-logs-bucket)
-  into the `components/terraform/vpc-flow-logs-bucket` folder
-
-- Copy the `vpc` component from the open-source component repository
-  [vpc](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/vpc)
-  into the `components/terraform/vpc` folder
-
-:::note
-The recommended way to vendor the components is to execute the `atmos vendor pull` CLI command.
-:::
-
-:::tip
-
+<Note>
 For more information about Atmos Vendoring and the `atmos vendor pull` CLI command, refer to:
-
 - [Atmos Vendoring](/core-concepts/vendor)
 - [atmos vendor pull](/cli/commands/vendor/pull)
+</Note>
 
-:::
+Let's kick the tires on this, by vendoring some more components from the [`demo-library`](https://github.com/cloudposse/atmos/tree/main/examples/demo-library).
 
-To vendor the components from the open-source component repository [terraform-aws-components](https://github.com/cloudposse/terraform-aws-components),
-perform the following steps:
+<Step>
+## <StepNumber/> Create Vendor Manifest
 
-- Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
+Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
 
 <File title="vendor.yaml">
 ```yaml
 apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
-  name: example-vendor-config
-  description: Atmos vendoring manifest
-spec:
-  # `imports` or `sources` (or both) must be defined in a vendoring manifest
-  imports: []
-
-  sources:
-    # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
-    # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
-    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
-    # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
-    # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
-    - component: "vpc"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
-      version: "1.398.0"
-      targets:
-        - "components/terraform/vpc"
-      # Only include the files that match the 'included_paths' patterns.
-      # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
-      # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
-      # https://en.wikipedia.org/wiki/Glob_(programming)
-      # https://github.com/bmatcuk/doublestar#patterns
-      included_paths:
-        - "**/*.tf"
-      excluded_paths:
-        - "**/providers.tf"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags networking`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - networking
-    - component: "vpc-flow-logs-bucket"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-      version: "1.398.0"
-      targets:
-        - "components/terraform/vpc-flow-logs-bucket"
-      included_paths:
-        - "**/*.tf"
-      excluded_paths:
-        - "**/providers.tf"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags networking,storage`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - storage
-```
-</File>
-
-:::warning
-
-The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
-If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
-
-:::
-
-<File title="vendor.yaml">
-```yaml
+  name: my-vendor-config
+  description: Example Atmos vendoring manifest
 spec:
   sources:
-    - component: "vpc-flow-logs-bucket"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-      version: "1.398.0"
+    - component: "ipinfo"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref={{.Version}}"
+      version: "main"
       targets:
-        - "components/terraform/vpc-flow-logs-bucket"
+        - "components/terraform/{{.Component}}"
       included_paths:
         - "**/*.tf"
         # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
@@ -124,94 +53,102 @@ spec:
 ```
 </File>
 
-- Execute the command `atmos vendor pull` from the root of the repo
-
-<Terminal title="atmos vendor pull">
-```shell
-Processing vendor config file 'vendor.yaml'
-
-Pulling sources for the component 'vpc'
-from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.343.1'
-into 'components/terraform/vpc'
-
-Pulling sources for the component 'vpc-flow-logs-bucket'
-from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.343.1'
-into 'components/terraform/vpc-flow-logs-bucket/1.343.1'
-
-```
-</Terminal>
-
-After the command is executed, the filesystem layout should look like this:
-
-```console
-   │   # Centralized stacks configuration
-   ├── stacks
-   │  
-   │   # Centralized components configuration. Components are broken down by tool
-   └── components
-       └── terraform   # Terraform components (Terraform root modules)
-           ├── vpc
-           │   ├── context.tf
-           │   ├── main.tf
-           │   ├── outputs.tf
-           │   ├── providers.tf
-           │   ├── remote-state.tf
-           │   ├── variables.tf
-           │   ├── versions.tf
-           │   └── vpc-flow-logs.tf
-           └── vpc-flow-logs-bucket
-               ├── context.tf
-               ├── main.tf
-               ├── outputs.tf
-               ├── providers.tf
-               ├── variables.tf
-               └── versions.tf
-```
-
-Each component follows the [Standard Module Structure](https://developer.hashicorp.com/terraform/language/modules/develop/structure) that Terraform
-recommends. There are a few additions:
-
+Let's unpack what's going on here. The `sources` section defines a list of components to pull in. Each component has the following attributes:
 <dl>
-  <dt>context.tf</dt>
+  <dt>`component`</dt>
+  <dd>The name of the component to pull in.</dd>
+
+  <dt>`source`</dt>
+  <dd>The source of the component. It can be a Git repository URL with an optional reference to a specific version. The `{{.Version}}` token is a placeholder for the version of the component. In this example, we're pulling in the `ipinfo` component from the `atmos` repository from the `examples/demo-library` folder.</dd>
+
+  <dt>`version`</dt>
+  <dd>The version (git ref) of the component to pull in. In this example, we're pulling in the `main` branch, but in practice you will usually pin to a tag or major release.</dd>
+
+  <dt>`targets`</dt>
+  <dd>The target directories where the component will be placed. In this example, we're placing the `ipinfo` component in the `components/terraform/ipinfo` directory, because we reference the `{{ .Component }}`</dd>
+
+  <dt>`included_paths`</dt>
   <dd>
-    This file contains all the common variables that Terraform modules and components consume (to make the component's `variables.tf`
-    file DRY). This is a standard file that is copied into each component. The file also defines the context
-    variables (`namespace`, `tenant`, `environment`, `stage`) which are used by Atmos to search for Atmos stacks when executing
-    the [CLI commands](/cheatsheets/commands)
+  A list of file paths to include in the vendored component. In this example, we're including all `.tf` files and any files in the `modules` sub-folder.
+    <Note>
+  The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+  If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+  </Note>
   </dd>
 
-  <dt>remote-state.tf in the vpc component</dt>
-  <dd>
-    This file configures the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
-    for the `vpc-flow-logs-bucket` component. The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` Terraform component to
-    configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html) and store them in the S3 bucket
-  </dd>
+  <dt>`excluded_paths`</dt>
+  <dd>A list of file paths to exclude from the vendored component.</dd>
+
 </dl>
 
-<File title="main.tf">
-```hcl
-module "vpc_flow_logs_bucket" {
-  count = local.vpc_flow_logs_enabled ? 1 : 0
 
-  source  = "cloudposse/stack-config/yaml//modules/remote-state"
-  version = "1.5.0"
+If you have a lot of dependencies, it can be helpful to break them down into smaller, more manageable pieces. You can do this by importing other vendoring configurations. Just define the `imports` section in the `vendor.yaml` file.
 
-  # Specify the Atmos component name (defined in YAML stack config files)
-  # for which to get the remote state outputs
-  component = "vpc-flow-logs-bucket"
-
-  # Override the context variables to point to a different Atmos stack if the
-  # `vpc-flow-logs-bucket` Atmos component is provisioned in another AWS account, OU or region
-  stage       = try(coalesce(var.vpc_flow_logs_bucket_stage_name, module.this.stage), null)
-  tenant      = try(coalesce(var.vpc_flow_logs_bucket_tenant_name, module.this.tenant), null)
-  environment = try(coalesce(var.vpc_flow_logs_bucket_environment_name, module.this.environment), null)
-
-  # `context` input is a way to provide the information about the stack (using the context
-  # variables `namespace`, `tenant`, `environment`, `stage` defined in the stack config)
-  context = module.this.context
-}
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: my-vendor-config
+  description: Example Atmos vendoring manifest
+spec:
+  imports: vendor/**.yaml
 ```
 </File>
+
+In this example, could add additional vendoring configurations in the `vendor/` directory, and they will be imported into the main vendoring configuration.
+
+
+</Step>
+
+<Step>
+  ## <StepNumber/> Pull the Components
+  Execute the command `atmos vendor pull` from the root of the repo
+
+  <Terminal command="atmos vendor pull">
+  ```shell
+  Processing vendor config file 'vendor.yaml'
+
+  Pulling sources for the component 'ipinfo'
+  from 'github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main'
+  into 'components/terraform/ipinfo'
+  ```
+  </Terminal>
+
+  After the command completes, the filesystem layout should look like this (in addition to any other files you already had):
+
+  ```console
+     │
+     ├── stacks/
+     │
+     └── components/
+         └── terraform/   # Terraform root modules
+             └── ipinfo/  # Vendored component
+                 ├── main.tf
+                 ├── outputs.tf
+                 ├── providers.tf
+                 ├── variables.tf
+                 └── versions.tf
+  ```
+</Step>
+
+
+<Step>
+  ## <StepNumber/> Configure Component in Stack
+
+  Now that the component is vendored, you can use it in your stack configurations. For example, you can include the `ipinfo` component in your stack configuration like this:
+
+  <File title="stacks/catalog/ipinfo.yaml">
+  ```yaml
+  terraform:
+    components:
+      ipinfo:
+        metadata:
+          component: ipinfo
+        vars: {}
+  ```
+  </File>
+</Step>
 
 
 <ActionCard title="Want to go deeper on this topic?">
