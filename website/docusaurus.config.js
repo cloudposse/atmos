@@ -45,7 +45,7 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
-                    
+
                     {
                         from: '/reference/terraform-limitations',
                         to: '/introduction/why-atmos'
@@ -67,6 +67,14 @@ const config = {
             '@docusaurus/plugin-google-tag-manager',
             {
                 containerId: 'GTM-KQ62MGX9',
+            },
+        ],
+        [
+            "posthog-docusaurus",
+            {
+              apiKey: "phc_G3idXOACKt4vIzgRu2FVP8ORO1D2VlkeEwX9mE2jDvT",
+              appUrl: "https://us.i.posthog.com",
+              enableInDevelopment: false, // optional
             },
         ],
         [
@@ -97,7 +105,7 @@ const config = {
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),
                 },
-            
+
             }),
         ],
     ],
@@ -187,11 +195,11 @@ const config = {
             colorMode: {
                 // "light" | "dark"
                 defaultMode: 'dark',
-          
+
                 // Hides the switch in the navbar
                 // Useful if you want to force a specific mode
                 disableSwitch: false,
-          
+
                 // Should respect the user's color scheme preference
                 // "light" | "dark" | "system"
                 respectPrefersColorScheme: false,
@@ -199,9 +207,9 @@ const config = {
 
               mermaid: {
                 theme: {
-                    light: 'neutral', 
-                    dark: 'dark', 
-                    
+                    light: 'neutral',
+                    dark: 'dark',
+
                 },
               },
         }),
