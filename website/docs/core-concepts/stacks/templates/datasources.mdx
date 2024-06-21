@@ -29,11 +29,12 @@ The values in the map are data source definitions following this schema:
 <dl>
   <dt>`url`</dt>
   <dd>
-  The [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
-  ll datasources are defined with a URL. As a refresher, a URL is made up of the following components:
+  All data sources are defined as a [URL](https://docs.gomplate.ca/datasources/#url-format).
+
+  As a refresher, a Gomplate Data Source URL is made up of the following components:
 
     ```plaintext
-    scheme://user@host.com:8080/path?query=string#anchor
+    scheme://user@host.com:8080/path?query=string#fragment
     ```
   </dd>
 
@@ -201,11 +202,11 @@ terraform:
 components:
   terraform:
     vpc-1:
-     settings:
-       provisioned_by_ip: '{{ (datasource "ip").ip }}'
-       secret-1: '{{ (datasource "secret-1").secret1.value }}'
-     vars:
-       enabled: '{{ (datasource "config-2").config.enabled }}'
+      settings:
+        provisioned_by_ip: '{{ (datasource "ip").ip }}'
+        secret-1: '{{ (datasource "secret-1").secret1.value }}'
+      vars:
+        enabled: '{{ (datasource "config-2").config.enabled }}'
 ```
 
 
@@ -265,11 +266,11 @@ The keys of the map are the datasource names (aliases), which are used in `Go` t
     <File title="stack.yaml">
     ```yaml
     terraform:
-    vars:
+      vars:
         tags:
-        provisioned_by_ip: '{{ (datasource "ip").ip }}'
-        config1_tag: '{{ (datasource "config-1").tag }}'
-        config2_service_name: '{{ (datasource "config-2").service.name }}'
+          provisioned_by_ip: '{{ (datasource "ip").ip }}'
+          config1_tag: '{{ (datasource "config-1").tag }}'
+          config2_service_name: '{{ (datasource "config-2").service.name }}'
     ```
     </File>
 
@@ -288,7 +289,7 @@ The keys of the map are the datasource names (aliases), which are used in `Go` t
 
             ```yaml
             headers:
-            accept:
+              accept:
                 - "application/json"
             ```
         </dd>
@@ -306,6 +307,8 @@ resources. The tags can include tags per account, per team, per service, billing
 :::note
 An example of such a centralized software catalog could be https://backstage.io
 :::
+
+<br/>
 
 Let's also suppose that you have a service to read the tags from the centralized catalog and write them into an S3
 bucket in one of your accounts. The bucket serves as a cache to not hit the external system's API with too many requests

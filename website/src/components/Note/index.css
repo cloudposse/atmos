@@ -4,6 +4,10 @@
   display: flex;
 }
 
+.note > p:last-child {
+  margin-bottom: 0;
+}
+
 .note > strong {
   color: #177bb6;
   margin-right: 0.5em;

@@ -174,7 +174,7 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
     margin-bottom: 2.5em;
 }
 
-.theme-admonition.alert.alert--secondary {
+.theme-admonition.alert{
     margin-top: 3em;
     margin-bottom: 4em;
 }

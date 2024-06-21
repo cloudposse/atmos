@@ -13,6 +13,11 @@
     box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
 }
 
+.markdown .terminal {
+    margin-top: 3em;
+    margin-bottom: 3em;
+}
+
 .terminal span.token.plain {
     /* Add little dots to the terminal that represent spaces */
     background-image: radial-gradient(circle, #ffffff38 1px, transparent 1px);
@@ -27,7 +32,7 @@
 
     align-items: center;
     width: 100%;
-    min-width: 100%;    
+    min-width: 100%;
     position: relative;
     left: -60px;
     color: #fff;

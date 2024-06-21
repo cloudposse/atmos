@@ -9,6 +9,7 @@ import KeyPoints from '@site/src/components/KeyPoints'
 import Note from '@site/src/components/Note'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import File from '@site/src/components/File'
 
 <Intro>
 Terraform natively supports the concept of remote state and there's a very easy way to access the outputs of one Terraform component in another component. We simplify this using the `remote-state` module, which is stack-aware and can be used to access the remote state of a component in the same or a different Atmos stack.
@@ -63,10 +64,10 @@ the `us-east-2` region by setting `environment = "ue2"`).
 
 ### Configure and Provision the `vpc-flow-logs-bucket` Component
 
-In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos
-component:
+In the `stacks/catalog/vpc-flow-logs-bucket.yaml` file, add the following default configuration for the `vpc-flow-logs-bucket/defaults` Atmos component:
 
-```yaml title="stacks/catalog/vpc-flow-logs-bucket.yaml"
+<File title="stacks/catalog/vpc-flow-logs-bucket.yaml">
+```yaml
 components:
   terraform:
     vpc-flow-logs-bucket/defaults:
@@ -83,11 +84,13 @@ components:
         lifecycle_rule_enabled: false
         traffic_type: "ALL"
 ```
+</File>
 
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket-1` Atmos component in the `ue2-dev` Atmos
 stack:
 
-```yaml title="stacks/ue2-dev.yaml"
+<File title="stacks/ue2-dev.yaml">
+```yaml
 # Import the base Atmos component configuration from the `catalog`.
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 # File extensions are optional (if not specified, `.yaml` is used by default).
@@ -111,6 +114,7 @@ components:
         # Override the default variables from the base component
         traffic_type: "REJECT"
 ```
+</File>
 
 Having the stacks configured as shown above, we can now provision the `vpc-flow-logs-bucket-1` Atmos component into the `ue2-dev` stack by executing
 the following Atmos commands:
@@ -129,7 +133,8 @@ In the `components/terraform/infra/vpc/remote-state.tf` file, configure the
 [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to obtain the remote state
 for the `vpc-flow-logs-bucket-1` Atmos component:
 
-```hcl title="components/terraform/infra/vpc/remote-state.tf"
+<File title="components/terraform/infra/vpc/remote-state.tf">
+```hcl
 module "vpc_flow_logs_bucket" {
   count = local.vpc_flow_logs_enabled ? 1 : 0
 
@@ -151,11 +156,13 @@ module "vpc_flow_logs_bucket" {
   context = module.this.context
 }
 ```
+</File>
 
 In the `components/terraform/infra/vpc/vpc-flow-logs.tf` file, configure the `aws_flow_log` resource for the `vpc` Terraform component to use the
 remote state output `vpc_flow_logs_bucket_arn` from the `vpc-flow-logs-bucket-1` Atmos component:
 
-```hcl title="components/terraform/infra/vpc/vpc-flow-logs.tf"
+<File title="components/terraform/infra/vpc/vpc-flow-logs.tf">
+```hcl
 locals {
   enabled               = module.this.enabled
   vpc_flow_logs_enabled = local.enabled && var.vpc_flow_logs_enabled
@@ -174,10 +181,12 @@ resource "aws_flow_log" "default" {
   tags = module.this.tags
 }
 ```
+</File>
 
 In the `stacks/catalog/vpc.yaml` file, add the following default config for the `vpc/defaults` Atmos component:
 
-```yaml title="stacks/catalog/vpc.yaml"
+<File title="stacks/catalog/vpc.yaml">
+```yaml
 components:
   terraform:
     vpc/defaults:
@@ -198,10 +207,12 @@ components:
         vpc_flow_logs_log_destination_type: s3
         vpc_flow_logs_traffic_type: "ALL"
 ```
+</File>
 
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc/1` Atmos component in the `ue2-dev` stack:
 
-```yaml title="stacks/ue2-dev.yaml"
+<File title="stacks/ue2-dev.yaml">
+```yaml
 # Import the base component configuration from the `catalog`.
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 # File extensions are optional (if not specified, `.yaml` is used by default).
@@ -245,6 +256,7 @@ components:
         # set `vpc_flow_logs_bucket_environment_name`
         # vpc_flow_logs_bucket_environment_name: uw2
 ```
+</File>
 
 Having the stacks configured as shown above, we can now provision the `vpc/1` Atmos component into the `ue2-dev` stack by
 executing the following Atmos commands:

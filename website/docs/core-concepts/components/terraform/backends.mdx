@@ -32,32 +32,14 @@ Atmos supports all the backends supported by Terraform:
 By default, Terraform will use a backend called [local](https://developer.hashicorp.com/terraform/language/settings/backends/local), which stores
 Terraform state on the local filesystem, locks that state using system APIs, and performs operations locally.
 
-Terraform's local backend is designed for development and testing purposes and is generally not recommended for production use. There are several
-reasons why using the local backend in a production environment may not be suitable:
+Terraform's local backend is designed for development and testing purposes and is generally not recommended for production use. There are several reasons why using the local backend in a production environment may not be suitable:
 
-- **State Management**: The local backend stores the Terraform state file on the local file system. In a production environment, it's crucial to have
-a robust and scalable solution for managing the Terraform state. Storing state locally can lead to issues with collaboration, concurrency, and
-consistency.
+- **Not Suitable for Collaboration**: Local backend doesn't support easy state sharing.
+- **No Concurrency and Locking**: Local backend lacks locking, leading to race conditions when multiple users modify the state.
+- **Lacks Durability and Backup**: Local backend has no durability or backup. Machine failures can lead to data loss.
+- **Unsuitable for CI/CD**: Local backend isn't ideal for CI/CD pipelines.
 
-- **Concurrency and Locking**: When multiple users or automation processes are working with Terraform concurrently, it's essential to ensure that only
-one process can modify the infrastructure at a time. The local backend lacks built-in support for locking mechanisms that prevent multiple Terraform
-instances from modifying the state simultaneously. This can lead to race conditions and conflicting changes.
-
-- **Collaboration**: In a production environment with multiple team members, it's important to have a centralized and shared state. The local backend
-does not provide a way to easily share the state across different team members or systems. A remote backend, such as Amazon S3, Azure Storage, or
-HashiCorp Consul, is more suitable for collaboration.
-
-- **Durability and Backup**: The local backend does not provide durability or backup features. If the machine where Terraform is run experiences
-issues, there's a risk of losing the state file, leading to potential data loss. Remote backends offer better durability and often provide features
-for versioning and backup.
-
-- **Remote Execution and Automation**: In production, it's common to use Terraform in automated workflows, such as continuous integration/continuous
-deployment (CI/CD) pipelines. Remote backends are better suited for these scenarios, allowing for seamless integration with automation tools and
-supporting the deployment of infrastructure as code in a reliable and controlled manner.
-
-To address these concerns, it's recommended to use one of the supported remote backends, such as Amazon S3, Azure Storage, Google Cloud Storage,
-HashiCorp Consul, or Terraform Cloud, for production environments. Remote backends provide better scalability, collaboration support, and durability,
-making them more suitable for managing infrastructure at scale in production environments.
+To address these concerns, it's recommended to use one of the supported remote backends, such as Amazon S3, Azure Storage, Google Cloud Storage, HashiCorp Consul, or Terraform Cloud, for production environments. Remote backends provide better scalability, collaboration support, and durability, making them more suitable for managing infrastructure at scale in production environments.
 
 ## AWS S3 Backend
 
