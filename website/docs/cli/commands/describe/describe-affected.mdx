@@ -722,7 +722,7 @@ If the `--upload=true` command-line flag is passed, Atmos will upload the affect
 specified HTTP endpoint.
 
 The endpoint can process the affected components and their dependencies in a CI/CD pipeline (e.g. execute
-`terraform apply` on all the affected components in the stacks and all dependencies).
+`terraform apply` on all the affected components in the stacks and all the dependencies).
 
 Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`, where the base URL
 is defined by the `ATMOS_PRO_BASE_URL` environment variable, and the URL path is defined by the `ATMOS_PRO_ENDPOINT`
