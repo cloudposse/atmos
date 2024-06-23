@@ -154,11 +154,11 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	var err error
 
 	if repoPath != "" {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, false, false)
+		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, false, false)
 	} else if cloneTargetRef {
-		affected, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, false, false)
+		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, false, false)
 	} else {
-		affected, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, false, false)
+		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, false, false)
 	}
 
 	if err != nil {
