@@ -37,7 +37,7 @@ Atmos is extensible to accommodate any tooling, including enterprise-scale Terra
 > [!TIP]
 > ### You can try out `atmos` directly in your browser using GitHub Codespaces
 >
-> [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=reorg&repo=cloudposse/atmos&skip_quickstart=true) 
+> [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=cloudposse/atmos&skip_quickstart=true)
 >
 > <i>Already start one? Find it [here](https://github.com/codespaces).</i>
 >
@@ -54,7 +54,7 @@ Atmos is extensible to accommodate any tooling, including enterprise-scale Terra
 
 [Atmos](https://atmos.tools) centralizes the DevOps chain and cloud automation/orchestration into a robust command-line tool,
 streamlining environments and workflows into straightforward CLI commands. Leveraging advanced hierarchical configurations,
-it efficiently orchestrates both local and CI/CD pipeline tasks, optimizing infrastructure management for engineers and cloud 
+it efficiently orchestrates both local and CI/CD pipeline tasks, optimizing infrastructure management for engineers and cloud
 architects alike. You can then run the CLI anywhere, such as locally or in CI/CD.
 
 The Atmos project consists of a command-line tool, a `Go` library, and even a terraform provider.  It provides numerous
