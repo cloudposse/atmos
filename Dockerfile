@@ -7,6 +7,10 @@ ARG BUILDPLATFORM
 ARG ATMOS_VERSION
 
 SHELL ["/bin/bash", "-c"]
+
+# Check if ATMOS_VERSION is set
+RUN if [ -z "$ATMOS_VERSION" ]; then echo "ERROR: ATMOS_VERSION argument must be set" && exit 1; fi
+
 # Update the package list and install curl and git
 RUN apt-get update && apt-get install -y curl git
 
@@ -32,5 +36,6 @@ RUN case ${TARGETPLATFORM} in \
         *) echo "Unsupported platform: ${TARGETPLATFORM}" && exit 1 ;; \
     esac && \
     ATMOS_VERSION=${ATMOS_VERSION#v} && \
+    echo "Downloading Atmos v${ATMOS_VERSION} for ${OS}/${ARCH}" && \
     curl -1sSLf "https://github.com/cloudposse/atmos/releases/download/v${ATMOS_VERSION}/atmos_${ATMOS_VERSION}_${OS}_${ARCH}" -o /usr/local/bin/atmos && \
     chmod +x /usr/local/bin/atmos
