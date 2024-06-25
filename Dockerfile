@@ -6,28 +6,29 @@ ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG ATMOS_VERSION
 
-SHELL ["/bin/bash", "-c"]
-
 # Check if ATMOS_VERSION is set
 RUN if [ -z "$ATMOS_VERSION" ]; then echo "ERROR: ATMOS_VERSION argument must be set" && exit 1; fi
 
-# Update the package list and install curl and git
-RUN apt-get update && apt-get install -y curl git
+# Set SHELL to use bash and enable pipefail
+SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 
-# Install the Cloud Posse Debian repository
-RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
-
-# Install OpenTofu
-RUN curl -1sSLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb
-
-# Install Kustomize binary (required by Helmfile)
-RUN curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash -s -- /usr/local/bin
-
-# Install toolchain used with Atmos
-RUN apt-get -y install terraform kubectl helmfile helm
-
-# Install the helm-diff plugin required by Helmfile
-RUN helm plugin install https://github.com/databus23/helm-diff
+RUN set -ex; \
+    # Update the package list
+    apt-get update; \
+    # Install curl and git
+    apt-get -y install  --no-install-recommends curl git ca-certificates; \
+    # Install the Cloud Posse Debian repository
+    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash -x; \
+    # Install OpenTofu
+    curl -1sSLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb; \
+    # Install Kustomize binary (required by Helmfile)
+    curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- /usr/local/bin; \
+    # Install toolchain used with Atmos \
+    apt-get -y install --no-install-recommends terraform kubectl helmfile helm; \
+    # Install the helm-diff plugin required by Helmfile
+    helm plugin install https://github.com/databus23/helm-diff; \
+    # Clean up the package lists to keep the image clean
+    rm -rf /var/lib/apt/lists/*
 
 # Install Atmos from the GitHub Release
 RUN case ${TARGETPLATFORM} in \
