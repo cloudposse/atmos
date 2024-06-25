@@ -68,6 +68,7 @@ install_via_binary_download() {
 # Function to install via Homebrew
 install_via_brew() {
 	export HOMEBREW_NO_INSTALL_CLEANUP=1
+	export HOMEBREW_NO_ENV_HINTS=1
 	echo "Using Homebrew package manager..."
 	brew install atmos
 }
