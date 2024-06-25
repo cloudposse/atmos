@@ -111,6 +111,9 @@ jobs:
         # Optional category for the results (used to differentiate multiple results for one commit)
         category: hadolint
         wait-for-processing: true
+        # https://github.com/hadolint/hadolint?tab=readme-ov-file#rules
+        # DL3008 Pin versions in apt-get install
+        ignore: DL3008
 
   # run localstack demo tests
   localstack:
