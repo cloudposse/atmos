@@ -91,6 +91,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
     - uses: hadolint/hadolint-action@v3.1.0
       id: hadolint
       with:
