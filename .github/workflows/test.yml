@@ -92,8 +92,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: hadolint/hadolint-action@v3.1.0
+      id: hadolint
       with:
         dockerfile: Dockerfile
+
+    - name: "Job Summary"
+      run: |
+        echo "## Docker Lint (${{ steps.hadolint.outcome }})" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "${HADOLINT_RESULTS}"  >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
 
   # run localstack demo tests
   localstack:
