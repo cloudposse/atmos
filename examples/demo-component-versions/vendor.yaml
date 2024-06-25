@@ -23,19 +23,17 @@ spec:
     <<: *library
     version: "main"
 
-  - &v1
-    <<: *library
-    version: "main"
+  #- &v1
+  #  <<: *library
+  #  version: "v1.83.0"
 
   sources:
-  - <<: *v1
-    component: "github/stargazers"
+  # We need to wait for the first release of the library to use this
+  #- <<: *v1
+  #  component: "github/stargazers"
 
-  - <<: *v1
-    component: "weather"
-
-  - <<: *v1
-    component: "ipinfo"
+  #- <<: *v1
+  #  component: "weather"
 
   - <<: *main
     component: "ipinfo"
