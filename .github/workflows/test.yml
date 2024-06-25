@@ -86,6 +86,14 @@ jobs:
       format: binary
     secrets: inherit
 
+  docker:
+    name: "Docker Lint"
+    needs: build
+    runs-on: ubuntu-latest
+    - uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: Dockerfile
+
   # run localstack demo tests
   localstack:
     name: "[localstack] ${{ matrix.demo-folder }}"
