@@ -30,8 +30,7 @@ commands:
 - name: "test"
   description: "Run all tests"
   steps:
-  # FIXME: The JSON schema doesn't support helmfile yet
-  #- atmos validate stacks
+  - atmos validate stacks
   # FIXME: `atmos helmfile apply` assumes EKS
   #- atmos helmfile apply demo -s dev
   - atmos helmfile generate varfile demo -s dev
@@ -84,4 +83,4 @@ commands:
       steps:
         - find . -type f -name "*.tfstate" -delete
         - echo "Deleted all state files"
-    
+

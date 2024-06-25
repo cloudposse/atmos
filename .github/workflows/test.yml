@@ -140,6 +140,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/kubeconfig.yaml
+      ATMOS_LOGS_LEVEL: Debug
     strategy:
       matrix:
         demo-folder:
