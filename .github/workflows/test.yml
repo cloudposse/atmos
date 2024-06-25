@@ -142,9 +142,8 @@ jobs:
       KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/kubeconfig.yaml
     strategy:
       matrix:
-        demo-folder: []
-        # Tests for helmfile currently broken
-        # - demo-helmfile
+        demo-folder:
+          - demo-helmfile
 
     timeout-minutes: 20
     steps:

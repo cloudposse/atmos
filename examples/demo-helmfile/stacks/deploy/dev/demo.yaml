@@ -2,7 +2,7 @@ import:
 - mixins/k3s
 - catalog/demo
 
-values:
+vars:
   stage: dev
 
 components:

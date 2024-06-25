@@ -4,13 +4,13 @@ components:
       metadata:
         type: abstract
         component: nginx
-      values:
-      - image:
+      vars:
+        image:
           tag: "latest"
         service:
           type: ClusterIP
           port: 80
-        replicaCount: 1 
+        replicaCount: 1
         ingress:
           enabled: true
           hostname: fbi.com
