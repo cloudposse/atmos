@@ -1,16 +1,18 @@
 ---
-title: Component Catalog with Mixins Atmos Design Pattern
+title: Component Catalog with Mixins
 sidebar_position: 6
 sidebar_label: Component Catalog with Mixins
 description: Component Catalog with Mixins Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import PillBox from '@site/src/components/PillBox'
 
-# Component Catalog with Mixins
+<PillBox>Atmos Design Pattern</PillBox>
 
-The **Component Catalog with Mixins** Design Pattern is a variation of the [Component Catalog](/design-patterns/component-catalog) pattern, with the
-difference being that we first create parts of a component's configuration related to different environments (e.g. in `mixins` folder), then
-assemble environment-specific manifests from the parts, and then import the environment-specific manifests themselves into the top-level stacks.
+<Intro>
+The **Component Catalog with Mixins** Design Pattern is a variation of the [Component Catalog](/design-patterns/component-catalog) pattern, with the difference being that we first create parts of a component's configuration related to different environments (e.g. in `mixins` folder), then assemble environment-specific manifests from the parts, and then import the environment-specific manifests themselves into the top-level stacks.
+</Intro>
 
 It's similar to how [Helm](https://helm.sh/) and [helmfile](https://helmfile.readthedocs.io/en/latest/#environment) handle environments.
 
@@ -61,7 +63,6 @@ The **Component Catalog with Mixins** Design Pattern prescribes the following:
   | `stacks/catalog/vpc/mixins/org1.yaml`          | Component manifest with settings for `org1` organization   |
   | `stacks/catalog/vpc/mixins/org2.yaml`          | Component manifest with settings for `org2` organization   |
 
-  <br/>
 
   :::note
   Having the environment-specific manifests in the component's catalog makes the most sense for multi-Org, multi-OU and/or
@@ -69,7 +70,6 @@ The **Component Catalog with Mixins** Design Pattern prescribes the following:
   into multiple Org/OU top-level stack manifests.
   :::
 
-  <br/>
 
 - In the component's catalog folder, add manifests for specific environments by assembling the corresponding mixins together (using imports). For
   example:
@@ -89,7 +89,6 @@ The **Component Catalog with Mixins** Design Pattern prescribes the following:
   | `stacks/catalog/vpc/org2-plat-uw2-prod.yaml`    | Manifest for the `org2` organization, `plat` tenant, `uw2` region, `prod` account    |
   | `stacks/catalog/vpc/org2-plat-uw2-staging.yaml` | Manifest for the `org2` organization, `plat` tenant, `uw2` region, `staging` account |
 
-  <br/>
 
 - Import the environment manifests into the top-level stacks. For example:
 
@@ -438,4 +437,4 @@ using the following patterns:
 ## References
 
 - [Catalogs](/core-concepts/stacks/catalogs)
-- [Mixins](/core-concepts/stacks/mixins)
+- [Mixins](/core-concepts/stacks/inheritance/mixins)

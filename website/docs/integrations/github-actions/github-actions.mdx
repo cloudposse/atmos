@@ -1,36 +1,30 @@
 ---
 title: GitHub Actions
 sidebar_position: 1
-sidebar_label: GitHub Actions
-description: GitHub Actions.
+sidebar_label: GitHub Actions 🚀
+description: Use GitHub Actions with Atmos
 id: gitHub-actions
 ---
+import File from '@site/src/components/File'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
-import File from '@site/src/components/File';
-import DocCardList from "@theme/DocCardList";
+<Intro>
+GitHub Actions are a powerful way to automate your workflows with Atmos. Use these actions to plan, apply, and manage your Terraform infrastructure with Atmos.
+</Intro>
 
-# GitHub Actions
+This collection of GitHub Actions is designed to work specifically with Atmos in an opinionated manner, enabling you to implement a modern change management system entirely within the native GitHub UI. These Actions use the standard [`atmos.yaml` configuration](/cli/configuration/#integrations) and [some backing services](#requirements) designed to properly manage Terraform plan files, including their invalidation. 
 
-:::tip Important!
+These GitHub Actions stribe to be cloud-agnostic; however, most of our instructions focus on AWS, where we predominantly use them. None of these actions require hardcoded credentials, and all work using GitHub OIDC and GitHub Apps managed by your organization. These Actions do not require any subscriptions and are based entirely on open source.
 
-**Please note!** GitHub Actions versions usage depends of the Atmos versions. Please follow this table
-
-
-:::
-
-| Github action                                                                                                                      | Atmos `< 1.63.0`                                                                              | Atmos `>= 1.63.0`                                                                             |
-|------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| [`github-action-atmos-affected-stacks`](https://github.com/cloudposse/github-action-atmos-affected-stacks)                         | [`v2`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v2)             | [`v1`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v1)             |
-| [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan)                           | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v1)              | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v2)              |
-| [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply)                         | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v1)             | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v2)             |
-| [`github-action-atmos-terraform-drift-remediation`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation) | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1) | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v2) |
-| [`github-action-atmos-terraform-drift-detection`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection)     | [`v0`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0)   | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v1)   |
+## GitHub Actions for Atmos
 
 <DocCardList/>
 
 ## Requirements
 
-This GitHub Action depends on a few resources:
+GitHub Actions that utilize "plan file" storage depends on a few resources:
 * **S3 bucket** for storing planfiles
 * **DynamoDB table** for retrieving metadata about planfiles
 * **2x IAM roles** for "planning" and accessing the "state" bucket
@@ -40,7 +34,7 @@ This GitHub Action depends on a few resources:
 
 This action can use any S3 Bucket to keep track of your planfiles. Just ensure the bucket is properly locked down since planfiles may contain secrets.
 
-For example, [vendor in](/core-concepts/components/vendoring) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/core-concepts/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
+For example, [vendor in](/core-concepts/vendor) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/core-concepts/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
 
 <File title="stacks/catalog/s3-bucket/gitops.yaml">
 ```yaml
@@ -144,3 +138,21 @@ integrations:
 For actions that use atmos `< 1.63.0` the settings passed as github action inputs.
 Please follow documentation for each action to see the required inputs.
 
+
+## Compatibility Matrix
+
+:::important Important!
+
+Our GitHub Actions depend on specific versions of Atmos. 
+
+Please refer to the table below.
+
+:::
+
+| Github action                                                                                                                      | Atmos `< 1.63.0`                                                                              | Atmos `>= 1.63.0`                                                                             |
+|------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| [`github-action-atmos-affected-stacks`](https://github.com/cloudposse/github-action-atmos-affected-stacks)                         | [`v2`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v2)             | [`v1`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v1)             |
+| [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan)                           | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v1)              | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v2)              |
+| [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply)                         | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v1)             | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v2)             |
+| [`github-action-atmos-terraform-drift-remediation`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation) | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1) | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v2) |
+| [`github-action-atmos-terraform-drift-detection`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection)     | [`v0`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0)   | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v1)   |

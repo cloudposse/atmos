@@ -1,0 +1,29 @@
+.key-points {
+  background-color: transparent; /* Light background color for the container */
+  border: 1px solid #ddd; /* Light border around the container */
+  border-radius: 20px; /* Rounded corners */
+  padding: 20px; /* Padding inside the container */
+  margin-top: 3em;
+  margin-bottom: 3em;
+
+}
+
+[data-theme='dark'] .key-points {
+    color: #67ffded2;
+    border: 1px solid #67ffded2;
+}
+
+.key-points h2 {
+  margin-top: 0; /* Remove top margin */
+  font-size: 1.5em; /* Adjust font size */
+}
+
+.key-points ul {
+  padding-left: 20px; /* Indent the list */
+  margin: 10px 0; /* Margin for the list */
+}
+
+.key-points li {
+  margin-bottom: 10px; /* Space between list items */
+  font-size: 1.1em; /* Slightly larger font size for list items */
+}

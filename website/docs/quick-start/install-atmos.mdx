@@ -1,18 +1,26 @@
 ---
 title: Install Atmos
 sidebar_label: Install Atmos
-sidebar_position: 2
+sidebar_position: 3
+slug: /install
+id: install-atmos
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import Link from '@docusaurus/Link';
+import Intro from '@site/src/components/Intro'
+import LatestRelease from '@site/src/components/LatestRelease'
+import File from '@site/src/components/File'
 
-There are many ways to install Atmos.
+<Intro>
+There are many ways to install Atmos. Choose the method that works best for you!
+</Intro>
 
+To check what version of Atmos you have installed, just run `atmos version`. The latest version of Atmos is <LatestRelease />.
 
-To check what version of Atmos you have installed, just run `atmos version`.
+To find the latest available version of Atmos, visit the [Releases Page](https://github.com/cloudposse/atmos/releases). The latest version will always be available for download here.
 
-To find the latest available version of Atmos, visit the [Releases Page](https://github.com/cloudposse/atmos/releases). The latest version will
-always be available for download here.
+## Using OS Package Managers
 
 Atmos has native packages for macOS and every major Linux distribution. We also supply binary releases for Windows.
 
@@ -25,6 +33,16 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     ```shell
     brew install atmos
     ```
+
+    #### Pro tip! Use a `Brewfile`
+
+    Create a `Brewfile` in your [Atmos project](/core-concepts/projects), and add `brew "atmos"`. This way, you can ensure that everyone on your team is using the same version of Atmos.
+
+    <File title="Brewfile">
+    <pre><code>brew "atmos", "<LatestRelease />"</code></pre>
+    </File>
+
+    Then just run `brew install` in the same directory as the `Brewfile`.
   </TabItem>
 
   <TabItem value="deb" label="Debian/Ubuntu">
@@ -101,7 +119,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     go install github.com/cloudposse/atmos@latest
     ```
 
-    __NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1`
+    __NOTE:__ Since the version is passed in via `-ldflags` during the build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1`
     when running `atmos version`.
   </TabItem>
 
@@ -134,7 +152,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 </Tabs>
 
 :::note
-The latest version of Atmos might not be available with third party package managers.
+The latest version of Atmos (<LatestRelease />) might not be available with third-party package managers.
 :::
 
 
@@ -150,3 +168,12 @@ The latest version of Atmos might not be available with third party package mana
 - Rename the downloaded file to `atmos` (optional)
 - Add the execution bit to the binary (e.g. on Linux and Mac, run `chmod u+x atmos`)
 - Place the binary somewhere on your `PATH` (e.g. on Linux and Mac: `mv atmos /usr/local/bin/`)
+
+
+## Next Steps
+
+Now, try one of our Quick Start guides to get started with Atmos
+
+<Link to="/quick-start/simple" className="button button--lg button--primary"><p>Simple Tutorial</p></Link>
+<Link to="/quick-start/advanced" className="button button--lg button--outline button--primary ml20"><p>Advanced Tutorial</p></Link>
+

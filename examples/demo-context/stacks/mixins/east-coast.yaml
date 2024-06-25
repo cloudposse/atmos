@@ -1,0 +1,5 @@
+terraform:
+  providers:
+    context:
+      values:
+        region: west

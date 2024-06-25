@@ -1,0 +1,155 @@
+/* Terminal Styling */
+.terminal {
+    min-width: 100%;
+    color: #ccc;
+    /*background: #171717; */
+    background: #070e12;
+    margin-top: 10px;
+    margin-bottom: 1em;
+    line-height: 0.8em;
+    border-radius: 10px;
+    padding: 0.5em;
+    border: 1px solid #cccccc36;
+    box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
+}
+
+.markdown .terminal {
+    margin-top: 3em;
+    margin-bottom: 3em;
+}
+
+.terminal span.token.plain {
+    /* Add little dots to the terminal that represent spaces */
+    background-image: radial-gradient(circle, #ffffff38 1px, transparent 1px);
+    background-size: 9px 20px;
+}
+
+.terminal h1 {
+    text-align: center;
+    font-size: 1em;
+    font-family: monospace;
+    flex-grow: 1;
+
+    align-items: center;
+    width: 100%;
+    min-width: 100%;
+    position: relative;
+    left: -60px;
+    color: #fff;
+    font-weight: bold;
+    padding-right: 80px;
+    padding-left: 80px;
+
+    white-space: nowrap;
+    overflow: hidden;
+    max-width: 60%;
+    text-overflow: ellipsis;
+}
+
+/* The container for the dots, representing a window control bar */
+.terminal .window-bar {
+    display: flex;
+    justify-content: space-between;
+}
+
+.terminal .language-shell.theme-code-block {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal pre.prism-code.language-console {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal .language-yaml.theme-code-block {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal .language-json.theme-code-block {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal .language-console.theme-code-block
+{
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal pre.prism-code.language-json {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal pre.prism-code.language-yaml {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal pre.prism-code.language-shell {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal .viewport {
+    max-height: 450px;
+    overflow: auto;
+}
+.terminal .window-controls {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    width: 60px; /* Adjust the width as needed */
+}
+
+/* General styles for each dot */
+.terminal .control-dot {
+    width: 12px; /* Dot size */
+    height: 12px; /* Dot size */
+    border-radius: 50%; /* Makes the dot circular */
+    margin: 0 4px; /* Spacing between dots */
+}
+
+/* Specific color for each dot */
+.terminal .close-dot {
+    background-color: #ff605c; /* Red color */
+}
+
+.terminal .minimize-dot {
+    background-color: #ffbd44; /* Yellow color */
+}
+
+.terminal .maximize-dot {
+    background-color: #00ca56; /* Green color */
+}
+
+.terminal pre.screengrab {
+    line-height: 0.95em;
+    letter-spacing: -0.009em;
+    padding: 0.3em;
+    background: transparent;
+}
+
+.terminal .command .prompt {
+    color: green;
+    padding-left: 0;
+    font-weight: bold;
+    font-size: 1.2em;
+    position: relative;
+    top: 2px;
+}
+
+.terminal .command {
+    padding-left: 1em;
+    display: flex;
+}

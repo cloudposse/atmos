@@ -498,7 +498,7 @@ func ProcessStacks(
 		if !cliConfig.Templates.Settings.Enabled {
 			if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 				errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
-					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
 				err = errors.Join(err, errors.New(errorMessage))
 			}
 		}

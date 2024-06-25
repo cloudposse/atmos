@@ -1,0 +1,161 @@
+---
+title: Atmos Alternatives & Inspirations
+sidebar_label: Alternatives
+sidebar_position: 3
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+To better understand where Atmos fits in, it may be helpful to understand some of the tooling that has inspired its design or serve as possible alternatives to its approach.
+</Intro>
+
+## Conceptual Inspiration
+
+Atmos is inspired by the follow frameworks or tooling.
+
+### React for JavaScript
+
+https://react.dev/
+
+[React’s](https://react.dev/) component-based architecture serves as a key inspiration for Atmos. By breaking down UIs into reusable components, React simplifies the development of complex applications. Similarly, Atmos promotes modularity in infrastructure as code, allowing components to be reused across different environments and projects. For example, in Atmos, any Terraform "root module" may be used as a component.
+
+### Kustomize for Kubernetes
+
+https://kustomize.io/
+
+[Kustomize](https://kustomize.io/) introduces a template-free way to customize Kubernetes configurations, focusing on overlays and inheritance to manage configuration variations. Atmos adopts a similar approach, enabling users to import, overlay, and override configurations efficiently, thereby simplifying the management of complex infrastructure setups, all without relying on templating.
+
+However, due to popular demand, Atmos now supports advanced templating and data sources in addition to the original template-free configurations. Templating complicates configurations and should be used solely as an escape hatch for when the first-class concepts of imports and inheritance are insufficient.
+
+### Helmfile for Helm Charts
+
+https://helmfile.com
+
+[Helmfile](https://helmfile.com) manages collections of Helm charts with declarative syntax, combining them into a "stack" for deployment to Kubernetes. It handles environmental configuration, deep merging it, and evaluating templates with a Go template engine before passing the values files to Helm.
+
+Atmos draws from Helmfile’s ability to orchestrate multiple Helm charts, applying the concept to Terraform root modules to manage interdependencies and deployment order. It supports environmental configuration through stack configurations that define all the environmental configurations for Terraform root modules. Atmos generates the necessary Terraform `.tfvar` files, much like Helmfile generates Helm values files, ensuring consistent and efficient deployment of Terraform infrastructure.
+
+### Helm Charts for Configuration
+
+https://helm.sh/
+
+[Helm Charts](https://helm.sh/) provide a packaging format for deploying applications on Kubernetes, simplifying the processes of defining, installing, and upgrading even the most complex applications. Similarly, Atmos organizes Terraform configurations into reusable, versioned modules, facilitating consistent and repeatable infrastructure deployments.
+
+The concept is that if your root modules are sufficiently parameterized, they function much like Helm charts. You only need to supply the appropriate values to achieve the desired configuration.
+
+### Vendir by Tanzu
+
+https://github.com/carvel-dev/vendir
+
+Atmos Vendoring was heavily inspired by [Vendir from VMWare Tanzu](https://github.com/carvel-dev/vendir), which served as the basis for our initial implementation. However, after using it, we realized we only needed a simpler subset of Vendir’s full functionality. Therefore, we implemented our own version using [HashiCorp’s GoGetter (MPL-2.0) library](https://github.com/hashicorp/go-getter). Additionally, we’ve added support for OCI, allowing Vendoring to pull configurations from anywhere. This advanced feature enables consistent and declarative pulling of configurations not just for components, but also for stack configurations or any dependencies you have.
+
+## General Alternatives
+
+There are many tools in the general category of "task runners" or "workflow automation".
+Here are some of the alternatives to Atmos, many of which inspired core functionality in Atmos.
+
+### Make (Makefile) by Free Software Foundation
+
+https://www.gnu.org/software/make/
+
+Many companies (including Cloud Posse) started by leveraging `make` with `Makefile` and targets to call `terraform`. Using `make` is a popular method of orchestrating tools, but it has trouble scaling up to support large projects. We know this because [Cloud Posse](https://cloudposse.com/) used it for 3+ years. The problem we ran into is that `make` targets do not support "natural" parameterization, which leads to a proliferation of environment variables that are difficult to validate or hacks like overloading make-targets and parsing them (e.g. `make apply/prod`). Makefiles are unintuitive for newcomers because they are first evaluated as a template and then executed as a script where each line of a target runs in a separate process space. Spaces matter too, and it's made worse with inconsistent rules using tabs in some places and spaces in others.
+
+### Mage (Magefile)
+
+https://magefile.org/
+
+Mage is a make/rake-like build tool using native Golang and plain-old `Go` functions. Mage then automatically provides a CLI to call them as
+Makefile-like runnable targets.
+
+### Task (Taskfile)
+
+https://github.com/go-task/task
+
+Task is a task runner and build tool that aims to be simpler and easier to use than GNU Make.
+
+:::info
+Atmos supports native [workflows](/core-concepts/workflows) that have very similar schema to "Taskfile", only they can be defined together
+with [Stacks](/core-concepts/stacks) or as standalone workflow files.
+:::
+
+### Variant
+
+https://github.com/mumoshu/variant
+https://github.com/mumoshu/variant2 (second generation)
+
+Variant lets you wrap all your scripts and CLIs into a modern CLI and a single-executable that can run anywhere.
+
+:::info
+The earliest versions of `atmos` were built on top of [`variant2`](https://github.com/mumoshu/variant2) until we decided to rewrite it from the ground
+up in pure Go. Atmos supports native [workflows](/core-concepts/workflows) which provide similar benefits.
+:::
+
+### AppBuilder by Choria
+
+https://github.com/choria-io/appbuilder
+
+AppBuilder is a tool built in Golang to create a friendly CLI command that wraps your operational tools.
+
+:::info
+Atmos is heavily inspired by the excellent schema provided by AppBuilder and has implemented a similar interface as part of
+our [Custom Commands](/core-concepts/custom-commands).
+:::
+
+## Terraform-specific Tooling Alternatives
+
+There are many tools explicitly designed around how to deploy with Terraform.
+
+The following is a list of tools that only support Terraform.
+
+:::tip Atmos Differentiators
+Atmos supports Terraform and can also be used to manage any command-line tool. For example, by combining [Custom commands](/core-concepts/custom-commands) and [workflows](/core-concepts/workflows), it's possible to support any CLI tool (even the ones listed below) or even reimplement the core functionality of Atmos. That's how extensible it is.
+:::
+
+### Terragrunt by Gruntwork
+
+https://github.com/gruntwork-io/terragrunt
+
+Terragrunt is a tool built in Golang that is a thin wrapper for Terraform that provides extra tools for working with multiple Terraform modules.
+
+### Terramate by Mineros
+
+https://github.com/mineiros-io/terramate
+
+Terramate is a tool built in Golang for managing multiple Terraform stacks with support for change detection and code generation.
+
+### Terraspace (Terrafile) by Bolt Ops
+
+https://github.com/boltops-tools/terraspace
+
+Terrapsace is a tool built in Ruby that provides an opinionated framework for working with Terraform.
+
+### Terraplate by Verifa
+
+https://github.com/verifa/terraplate
+
+Terraplate is a tool built in Golang that is a lightweight wrapper for Terraform the focused on code generation.
+
+### Astro by Uber (abandoned)
+
+https://github.com/uber/astro
+
+Astro is a tool built in Golang that provides a YAML DSL for defining all your terraform projects and then running them.
+
+### Opta by Run X
+
+https://github.com/run-x/opta
+
+Opta is a tool built in Python that makes Terraform easier by providing high-level constructs and not getting stuck with low-level cloud configurations.
+
+### pterradactyl by Nike
+
+https://github.com/Nike-Inc/pterradactyl
+
+Pterradactyl is a library developed to abstract Terraform configuration from the Terraform environment setup.
+
+### Leverage by Binbash
+
+The Leverage CLI is written in Python and intended to orchestrate Leverage Reference Architecture for AWS
+
+https://github.com/binbashar/leverage
+

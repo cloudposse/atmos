@@ -1,18 +1,21 @@
 ---
-title: Organizational Structure Configuration Atmos Design Pattern
+title: Organizational Structure Configuration
 sidebar_position: 4
 sidebar_label: Organizational Structure Configuration
 description: Organizational Structure Configuration Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
-# Organizational Structure Configuration
+<PillBox>Atmos Design Pattern</PillBox>
 
+<Intro>
 The **Organizational Structure Configuration** pattern describes core concepts and best practices to structure and organize components
 and stacks to design for organizational complexity and provision multi-account enterprise-grade environments.
+</Intro>
 
-The pattern is used to model multi-region infrastructures for organizations with multiple organizational units/departments/tenants and multiple
-accounts.
+The pattern is frequently used to model multi-region infrastructures for organizations with multiple organizational units/departments/tenants and multiple accounts.
 
 ## Use-cases
 
@@ -306,19 +309,13 @@ vars:
 # Other defaults for the `staging` stage/account
 ```
 
-<br/>
-
 ### Configure Organization Defaults
-
-<br/>
 
 :::note
 The `_defaults.yaml` files in the organization, tenant, account and region folders is the recommended way to define the stack manifests with the
 default configurations for organizations, OUs/tenants, accounts and regions. The `_defaults.yaml` files themselves are not top-level Atmos stacks,
 they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
 :::
-
-<br/>
 
 In `stacks/orgs/org1/_defaults.yaml`, add the following config:
 
@@ -528,8 +525,6 @@ The **Organizational Structure Configuration** pattern has the following limitat
 - The configuration described by the pattern can be complex for very simple infrastructures (e.g. just one organization, one organizational
   unit, a few accounts and regions)
 
-<br/>
-
 :::note
 
 Even if you are just starting with a very simple infrastructure (e.g. just one organization, one organizational unit, a few accounts, one or a few
@@ -539,8 +534,6 @@ In the future, when you modify your infrastructure to provision multi-organizati
 easy to extend the configuration without changing anything for the exiting environments.
 
 :::
-
-<br/>
 
 ## Related Patterns
 
@@ -557,4 +550,4 @@ easy to extend the configuration without changing anything for the exiting envir
 ## References
 
 - [Catalogs](/core-concepts/stacks/catalogs)
-- [Mixins](/core-concepts/stacks/mixins)
+- [Mixins](/core-concepts/stacks/inheritance/mixins)

@@ -5,33 +5,37 @@ label: Introduction
 sidebar_label: Introduction
 sidebar_position: 1
 keywords: [atmos, terraform, helmfile, introduction]
-title: Automated Terraform Management & Orchestration Software (ATMOS)
+title: Getting Started with Atmos
 description: >-
-  Atmos is the Ultimate Terraform Environment Configuration and Orchestration Tool for DevOps to manage complex configurations with ease.
+  Atmos is a Component Oriented Framework and Orchestration Tool for DevOps that makes it easy to automate Terraform Environments and manage complex configurations with ease.
   It's compatible with Terraform and many other tools.
 ---
-
 import ReactPlayer from 'react-player'
 import Link from '@docusaurus/Link'
+import Intro from '@site/src/components/Intro'
 
+<h3>Atmos is a cloud architecture framework for native Terraform. </h3>
 
-Use Atmos to easily compose complex architectures based on Terraform with very [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) configuration. 
-Concepts like [Stacks](/core-concepts/stacks) and [Components](/core-concepts/components)
-help you overcome most of [Terraform's limitations](/reference/terraform-limitations/)
-by using [established conventions](/core-concepts) and proven [design patterns](/design-patterns/).
+<Intro>
+Use Atmos to break your architecture into reusable [Components](/core-concepts/components) that you implement using [Terraform "root modules"](/core-concepts/components/terraform). Then, tie everything together using [Stack](/core-concepts/stacks) configurations defined in YAML.
+</Intro>
+
+If you're familiar with mainstream programming frameworks, then you'll feel right at home with Atmos. It's a cloud-agnostic framework for managing your cloud infrastructure using native Terraform. You'll benefit from a [well-organized project layout](/core-concepts/projects), [best practices](/best-practices/), [design patterns](/design-patterns/), and a [supportive community](/community) ready to help.
+
+If you're [new to Terraform or struggling to manage your infrastructure at scale](/introduction/why-atmos), then [Atmos is you](/introduction/why-atmos/nirvana). It's been [proven to work for countless venture-backed startups and enterprises](https://cloudposse.com), and we're confident it will work for you too.
 
 #### Are you tired of doing Terraform the old way? Try the new way.
 
 <Link
-    to="/quick-start"
+    to="/quick-start/mindset"
     className="button button--lg button--primary">
-    Get Started
+    Try Quick Start
 </Link>
 
 <Link
-    to="#live-demo-of-atmos"
+    to="/core-concepts"
     className="button button--lg button--outline button--primary ml20">
-    Live Demo
+    Learn Atmos
 </Link>
 
 
@@ -42,20 +46,18 @@ an interactive UI in the terminal. Use the arrow keys to select stacks and compo
 
 ![Atmos Screenshot](../../../docs/demo.gif)
 
-<br/>
-
 In Atmos, you can easily search and navigate your configuration from the built-in UI.
 
 ![`atmos` CLI command example 2](/img/cli/atmos/atmos-cli-command-1.png)
 
 ## Introduction
 
-With Atmos, you gain simplified control over your cloud resources, enabling you to manage unlimited environments, services, 
-and configurations using simple, clear YAML configuration files. Best of all, it works without writing a single line of HCL or code generation. 
+With Atmos, you gain simplified control over your cloud resources, enabling you to manage unlimited environments, services,
+and configurations using simple, clear YAML configuration files. Best of all, it works without writing a single line of HCL or code generation.
 This approach not only ensures that your infrastructure's deployment and scaling are as straightforward as executing a single command,
  but also cleanly separates your configuration from your Terraform code keeping it portable, thereby streamlining the entire process.
 
-Designed to operate seamlessly across diverse environments—be it production, staging, development, or testing — Atmos integrates 
+Designed to operate seamlessly across diverse environments—be it production, staging, development, or testing — Atmos integrates
 perfectly into continuous integration (CI/CD) workflows with its [GitHub Actions](/integrations/github-actions/) or support for other [TACOS](/integrations/).
 It offers a comprehensive set of commands for managing the lifecycle of your cloud infrastructure, from creation to maintenance and beyond.
 
@@ -70,18 +72,18 @@ operational mastery and innovation faster, transforming their infrastructure man
 At a high-level, Atmos is responsible for managing the configuration that gets passed to [Components](/terms/component) when they are instantiated.
 
 To make this less abstract, we're going to focus on Terraform and how configuration gets passed to it.
-The secret to scaling architectures with Terraform, is to decompose it into smaller root modules. We want to keep these root modules 
-as generic and reusable as possible by parameterizing them. In doing so, we shift the complexity from the HCL code, to managing
-the configuration itself. In terraform, there is the concept of variable files (aka "var files"), 
-which are JSON-esque configuration files and how external configuration is passed to `terraform plan` using 
-the [`-var-file` argument](https://developer.hashicorp.com/terraform/language/values/variables#variable-definitions-tfvars-files). 
+The secret to scaling architectures with Terraform, is to decompose it into smaller root modules. We want to keep these root modules
+as generic and reusable as possible by parameterizing them. In doing so, we shift the complexity from the HCL code to managing
+the configuration itself. In terraform, there is the concept of variable files (aka "var files"),
+which are JSON-esque configuration files and how external configuration is passed to `terraform plan` using
+the [`-var-file` argument](https://developer.hashicorp.com/terraform/language/values/variables#variable-definitions-tfvars-files).
 All we need to do is tap into this power, and pass our own configuration that comes from Atmos.
 
-With Atmos, we organize our configuration into [Stacks](/core-concepts/stacks). Stacks are YAML manifests that compose all the 
+With Atmos, we organize our configuration into [Stacks](/core-concepts/stacks). Stacks are YAML manifests that compose all the
 [Components](/core-concepts/components) (e.g. Terraform root modules) we need to bring up our environment. For example, in its
-simplest form, we may have `production`, `dev`, and `staging` stacks.  We can then deploy any of these stacks to provision 
-everything using Terraform. All that Atmos does, is deep-merge the variables from the stack configurations and produce a single "var file" 
-that we pass to the `terraform plan`. There's very little magic, which is how to ensure future compatibility with Terraform and 
+simplest form, we may have `production`, `dev`, and `staging` stacks.  We can then deploy any of these stacks to provision
+everything using Terraform. All that Atmos does is deep-merge the variables from the stack configurations and produce a single "var file"
+that we pass to the `terraform plan`. There's very little magic, which is how to ensure future compatibility with Terraform and
 interoperability with the entire Terraform ecosystem.
 
 :::info Summary
@@ -134,7 +136,7 @@ downloaded hundreds of millions of times.
 
 
 :::tip Become a part of our Movement
-We encourage you to become a part of our movement and make a significant impact on the industry as a whole. 
+We encourage you to become a part of our movement and make a significant impact on the industry as a whole.
 
 Join us on [Slack](https://slack.cloudposse.com/) or tune-in on our [Weekly "DevOps" Office Hours](https://cloudposse.com/office-hours/)
 :::
@@ -165,12 +167,10 @@ It might help to also understand what Atmos is not attempting to replace:
 Here's a live demo we did on [our weekly "Office Hours"](https://cloudposse.com/office-hours/).
 
 <ReactPlayer className={"react-player"} controls url='https://www.youtube.com/watch?v=0dFEixCK0Wk&t=1415s'/>
-<br/>
-
 ## How do we make money?
 
-[Cloud Posse](https://cloudposse.com/) sells [reference architectures for AWS](https://cloudposse.com/services/) that are based on Atmos and Terraform. 
-Our typical customers are <strong>Funded Startups</strong> and <strong>Enterprises</strong> that want to leverage AWS together with platforms 
+[Cloud Posse](https://cloudposse.com/) sells [reference architectures for AWS](https://cloudposse.com/services/) that are based on Atmos and Terraform.
+Our typical customers are <strong>Funded Startups</strong> and <strong>Enterprises</strong> that want to leverage AWS together with platforms
 like GitHub, GitHub Actions, Datadog, OpsGenie, Okta, etc.
 
 ## Next Steps

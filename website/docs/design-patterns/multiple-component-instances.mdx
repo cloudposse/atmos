@@ -1,19 +1,20 @@
 ---
-title: Multiple Component Instances Atmos Design Pattern
+title: Multiple Component Instances
 sidebar_position: 10
 sidebar_label: Multiple Component Instances
 description: Multiple Component Instances Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
-# Multiple Component Instances
+<PillBox>Atmos Design Pattern</PillBox>
 
-The **Multiple Component Instances** Design Pattern describes how to provision many instances of a Terraform component in the same environment by
-configuring multiple Atmos component instances.
+<Intro>
+The **Multiple Component Instances** Design Pattern describes how to provision multiple instances of a single Terraform component in the same environment by configuring multiple Atmos component instances.
+</Intro>
 
-An Atmos component can have any name that can be different from the Terraform component name. More than one instance of the same Terraform component
-(with the same or different settings) can be provisioned into the same environment by defining multiple Atmos components that provide configuration
-for the Terraform component.
+An Atmos component can have any name that can be different from the Terraform component name. More than one instance of the same Terraform component (with the same or different settings) can be provisioned into the same environment by defining multiple Atmos components that provide configuration for the Terraform component.
 
 For example, two different Atmos components `vpc/1` and `vpc/2` can provide configuration for the same Terraform component `vpc`.
 
@@ -33,7 +34,7 @@ The **Multiple Component Instances** pattern provides the following benefits:
 
 - The defaults for the components are defined in just one place making the entire
   configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-  
+
 ## Example
 
 The following example shows the Atmos stack and component configurations to provision two Atmos components (`vpc/1` and `vpc/2`) that use the
@@ -183,8 +184,6 @@ components:
         ipv4_primary_cidr_block: 10.10.0.0/18
         map_public_ip_on_launch: false
 ```
-
-<br/>
 
 To provision the components in the stack, execute the following commands:
 

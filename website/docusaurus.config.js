@@ -5,8 +5,11 @@
 // https://docusaurus.io/docs/markdown-features/code-blocks#line-highlighting
 // https://github.com/FormidableLabs/prism-react-renderer/tree/master/packages/prism-react-renderer/src/themes
 
+const path = require('path');
+
 const lightCodeTheme = require('prism-react-renderer').themes.vsDark;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
+const latestReleasePlugin = require('./plugins/fetch-latest-release');
 
 const BASE_URL = '';
 
@@ -26,12 +29,14 @@ const config = {
     projectName: 'atmos',
 
     // Even if you don't use internalization, you can use this field to set useful
-    // metadata like html lang. For example, if your site is Chinese, you may want
-    // to replace "en" with "zh-Hans".
+    // metadata like html lang.
     i18n: {
         defaultLocale: 'en',
         locales: ['en'],
     },
+
+    scripts: [
+    ],
 
     plugins: [
         [
@@ -40,11 +45,11 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
-                    /*
+
                     {
-                        from: '/cli',
-                        to: '/cli/configuration'
-                    }*/
+                        from: '/reference/terraform-limitations',
+                        to: '/introduction/why-atmos'
+                    }
                 ],
             },
         ],
@@ -64,6 +69,23 @@ const config = {
                 containerId: 'GTM-KQ62MGX9',
             },
         ],
+        [
+            "posthog-docusaurus",
+            {
+              apiKey: "phc_G3idXOACKt4vIzgRu2FVP8ORO1D2VlkeEwX9mE2jDvT",
+              appUrl: "https://us.i.posthog.com",
+              enableInDevelopment: false, // optional
+            },
+        ],
+        [
+            'docusaurus-plugin-sentry',
+            {
+              DSN: 'b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
+            },
+          ],
+        [
+            path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
+        ]
     ],
 
     presets: [
@@ -89,17 +111,17 @@ const config = {
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),
                 },
-            
+
             }),
         ],
     ],
-
     themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
         ({
             docs: {
                 sidebar: {
                     hideable: true,
+                    autoCollapseCategories: true,
                 },
             },
             navbar: {
@@ -114,54 +136,43 @@ const config = {
                 },
                 items: [
                     {
+                        label: `Latest Release`,
+                        href: `https://github.com/cloudposse/atmos/releases/latest`,
+                        position: 'left',
+                        className: 'latest-release-link'  // Add a class to identify this link
+                    },
+                    {
                         type: 'doc',
                         docId: 'introduction/index',
                         position: 'left',
-                        label: 'Docs',
+                        label: 'Learn',
                     },
                     {
                         to: '/cli',
                         position: 'left',
-                        label: 'CLI'
+                        label: 'Reference'
                     },
                     {
-                        type: 'dropdown',
                         label: 'Community',
-                        position: 'right',
-                        items: [
-                            {
-                                label: 'GitHub Discussions',
-                                href: 'https://ask.sweetops.com/',
-                            },
-                            {
-                                label: 'Community',
-                                href: 'https://sweetops.com/',
-                            },
-                            {
-                                label: 'Slack',
-                                href: 'https://slack.sweetops.com/',
-                            },
-                            {
-                                label: 'Slack Archives',
-                                href: 'https://archive.sweetops.com/atmos/',
-                            },
-                            {
-                                label: 'Office Hours',
-                                href: 'https://cloudposse.com/office-hours/',
-                            },
-                        ],
+                        position: 'left',
+                        to: '/community'
                     },
+                    // Algolia search configuration
                     {
-                        to: 'https://cloudposse.com/services/',
-                        label: 'Get Help',
+                        type: 'search',
                         position: 'right',
-                        className: 'button button--primary navbar-cta-button'
                     },
                     {
                         href: 'https://github.com/cloudposse/atmos',
                         position: 'right',
                         className: 'header-github-link',
                         'aria-label': 'GitHub repository',
+                    },
+                    {
+                        to: 'https://cloudposse.com/services/',
+                        label: 'Get Help',
+                        position: 'right',
+                        className: 'button button--primary navbar-cta-button'
                     }
                 ],
             },
@@ -190,16 +201,28 @@ const config = {
             colorMode: {
                 // "light" | "dark"
                 defaultMode: 'dark',
-          
+
                 // Hides the switch in the navbar
                 // Useful if you want to force a specific mode
                 disableSwitch: false,
-          
+
                 // Should respect the user's color scheme preference
                 // "light" | "dark" | "system"
                 respectPrefersColorScheme: false,
               },
+
+              mermaid: {
+                theme: {
+                    light: 'neutral',
+                    dark: 'dark',
+
+                },
+              },
         }),
+
+    customFields: {
+        latestRelease: 'v0.0.0', // initial placeholder
+        },
 
     markdown: {
         mermaid: true,

@@ -2,15 +2,19 @@
 title: Component Updater
 sidebar_position: 20
 sidebar_label: Component Updater
+description: Easily update your vendored components with Pull Requests
 ---
-
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Admonition from '@theme/Admonition';
 
-**Efficient Automation for Component Updates**
+<Intro>
+Keep your infrastructure repositories current with the latest versions of [vendored components](/core-concepts/vendor) using the [Atmos Component Updater GitHub Action](https://github.com/cloudposse/github-action-atmos-component-updater). This powerful action simplifies and accelerates the management of component updates across repositories by using pull requests, ensuring that updates are processed quickly, accurately, and without hassle.
+</Intro>
 
 Use Cloud Posse's GitHub Action for updating [Atmos components](/core-concepts/components/) (e.g. [like the ones provided by Cloud Posse](https://github.com/cloudposse/terraform-aws-components/)) to streamline your infrastructure management.
 
-Keep your infrastructure repositories current with the latest versions of components using the [Cloud Posse GitHub Actions for Updating Atmos Components](https://github.com/cloudposse/github-action-atmos-component-updater). This powerful action simplifies and accelerates the management of component updates using pull requests, ensuring that updates are processed quickly, accurately, and without hassle.
+
 
 With its customizable features, you can design an automated workflow tailored to your needs, making infrastructure repository maintenance more efficient and less error-prone.
 
@@ -112,12 +116,9 @@ You may notice that we pass a generated token from a GitHub App to `github-acces
 
 1. Create a new GitHub App
 2. Name this new app whatever you prefer. For example, `Atmos Component Updater [<YOUR NAMESPACE>]`.
-
-:::tip GitHub Requires Unique App Names
-
-GitHub requires all GitHub Apps to have unique names. The name you select for this GitHub App can be whatever you'd prefer. For example, an `acme` organization might name their GitHub App `Atmos Component Updater [ACME]`.
-
-:::
+  <Admonition type="tip" title="GitHub Requires Unique App Names">
+  GitHub requires all GitHub Apps to have globally unique names. The name you select for this GitHub App can be whatever you'd prefer, so long as it's not already in use. For example, an `acme` organization might name their GitHub App `Atmos Component Updater [ACME]`.
+  </Admonition>
 
 3. List a Homepage URL of your choosing. This is required by GitHub, but you can use any URL. For example use our documentation page: `https://atmos.tools/integrations/github-actions/component-updater/`
 4. (Optional) Add an icon for your new app (See below)

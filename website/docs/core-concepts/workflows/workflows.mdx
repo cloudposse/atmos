@@ -1,20 +1,18 @@
 ---
 title: Workflows
-sidebar_position: 3
-sidebar_label: Workflows
+sidebar_position: 7
+sidebar_label: Automate Workflows
 ---
 
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 
+<Intro>
 Workflows are a way of combining multiple commands into one executable unit of work.
+</Intro>
 
-<br/>
-
-:::note
-You can use [Atmos Custom Commands](/core-concepts/custom-commands) in Atmos Workflows, and Atmos Workflows
-in [Atmos Custom Commands](/core-concepts/custom-commands)
-:::
+You can use [Atmos Custom Commands](/core-concepts/custom-commands) in Atmos Workflows, and Atmos Workflows in [Atmos Custom Commands](/core-concepts/custom-commands)
 
 ## Simple Example
 
@@ -31,15 +29,11 @@ workflows:
       - command: terraform apply eks/alb-controller -auto-approve
 ```
 
-<br/>
-
 :::note
 
 The workflow name can be anything you want, and the workflows can also be parameterized.
 
 :::
-
-<br/>
 
 If you define this workflow in the file `workflow1.yaml`, it can we executed like this to provision
 the `vpc`, `eks/cluster` and `eks/alb-controller` [Atmos Components](/core-concepts/components) into
@@ -48,8 +42,6 @@ the `tenant1-ue2-dev` [Atmos Stack](/core-concepts/stacks):
 ```shell
 atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
 ```
-
-<br/>
 
 :::tip
 
@@ -72,9 +64,9 @@ In `atmos.yaml` CLI config file, add the following sections related to Atmos wor
 # Base path for components, stacks and workflows configurations.
 # Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
 # Supports both absolute and relative paths.
-# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
+# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path'
 # and 'workflows.base_path' are independent settings (supporting both absolute and relative paths).
-# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' 
+# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path'
 # and 'workflows.base_path' are considered paths relative to 'base_path'.
 base_path: ""
 
@@ -86,15 +78,19 @@ workflows:
 
 where:
 
-- `base_path` - the base path for components, stacks and workflows configurations
+<dl>
+  <dt>`base_path`</dt>
+  <dd>The base path for components, stacks and workflows configurations</dd>
 
-- `workflows.base_path` - the base path to Atmos workflow files
+  <dt>`workflows.base_path`</dt>
+  <dd>The base path to Atmos workflow files</dd>
+</dl>
 
-### Create Workflow Files and Define Workflows
+### Create Workflow Files
 
 In `atmos.yaml`, we set `workflows.base_path` to `stacks/workflows`. The folder is relative to the root of the repository.
 
-Refer to [networking.yaml](https://github.com/cloudposse/atmos/tree/master/examples/quick-start/stacks/workflows/networking.yaml) for an example.
+Refer to [networking.yaml](https://github.com/cloudposse/atmos/tree/master/examples/quick-start-advanced/stacks/workflows/networking.yaml) for an example.
 
 We put the workflow files into the folder. The workflow file names can be anything you want, but we recommend naming them according to the functions
 they perform, e.g. create separate workflow files per environment, account, team, or service.
@@ -107,6 +103,8 @@ account.
 
 You can segregate the workflow files even further, e.g. per account and service. For example, in the workflow
 file `stacks/workflows/workflows-dev-eks.yaml` you can define all EKS-related workflows for the `dev` account.
+
+### Use Workflow Schema
 
 Workflow files must confirm to the following schema:
 
@@ -143,32 +141,30 @@ Each workflow definition must confirm to the following schema:
         type: shell  # required for the steps of type `shell`
 ```
 
-where:
+### Schema Definitions
 
-- `description` - the workflow description
+<dl>
+  <dt>`description`</dt>
+  <dd>The workflow description</dd>
 
-- `stack` - workflow-level Atmos stack (optional). If specified, all workflow steps of type `atmos` will be executed for this Atmos stack. It can be
-  overridden in each step or on the command line by using the `--stack` flag (`-s` for shorthand)
+  <dt>`stack`</dt>
+  <dd>Workflow-level Atmos stack (optional). If specified, all workflow steps of type `atmos` will be executed for this Atmos stack. It can be overridden in each step or on the command line by using the `--stack` flag (`-s` for shorthand)</dd>
 
-- `steps` - a list of workflow steps which are executed sequentially in the order they are specified
+  <dt>`steps`</dt>
+  <dd>A list of workflow steps which are executed sequentially in the order they are specified</dd>
 
-Each step is configured using the following attributes:
+  <dt>`command`</dt>
+  <dd>The command to execute. Can be either an Atmos [CLI command](/cli/commands) (without the `atmos` binary name in front of it, for example `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute</dd>
 
-- `command` - the command to execute. Can be either an Atmos [CLI command](/cli/commands) (without the `atmos` binary name in front of it,
-  for example `command: terraform apply vpc`), or a shell script. The type of the command is specified by the `type` attribute
+  <dt>`name`</dt>
+  <dd>Step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step` is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the index of the step (the index starts with 1, so the first generated step name would be `step1`).</dd>
 
-- `name` - step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step`
-  is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the index of the
-  step (the index starts with 1, so the first generated step name would be `step1`).
+  <dt>`type`</dt>
+  <dd>The type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command` is an Atmos [CLI command](/cli/commands). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`, Atmos prepends the `atmos` binary name to the provided command before executing it</dd>
 
-- `type` - the type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command`
-  is an Atmos [CLI command](/cli/commands). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`,
-  Atmos prepends the `atmos` binary name to the provided command before executing it
-
-- `stack` - step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the
-  workflow-level  `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)
-
-<br/>
+  <dt>`stack`</dt>
+  <dd>Step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the workflow-level `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)</dd>
+</dl>
 
 :::note
 
@@ -269,7 +265,7 @@ workflows:
   terraform-plan-all-test-components:
     description: |
       Run 'terraform plan' on 'test/test-component' and all its derived components.
-      The stack must be provided on the command line: 
+      The stack must be provided on the command line:
       `atmos workflow terraform-plan-all-test-components -f workflow1 -s <stack>`
     steps:
       # Inline scripts are also supported
@@ -292,8 +288,6 @@ To run this workflow for the `tenant1-ue2-dev` stack, execute the following comm
 ```console
 atmos workflow terraform-plan-all-test-components -f workflow1 -s tenant1-ue2-dev
 ```
-
-<br/>
 
 The following workflow executes `terraform plan` on `test/test-component-override-2` component in all stacks.
 In this case, the stack is specified inline for each workflow command.
@@ -318,8 +312,6 @@ To run this workflow, execute the following command:
 ```console
 atmos workflow terraform-plan-test-component-override-2-all-stacks -f workflow1
 ```
-
-<br/>
 
 The following workflow is similar to the above, but the stack for each command is specified in the step-level `stack` attribute.
 
@@ -348,17 +340,17 @@ To run this workflow, execute the following command:
 atmos workflow terraform-plan-test-component-override-3-all-stacks -f workflow1
 ```
 
-## Atmos Stacks in Workflows
+## Working with Atmos Stacks in Workflows
 
-Atmos stack for the workflow commands of type `atmos` can be specified in four different ways:
+The Atmos stack used by the workflow commands of type `atmos` can be specified in four different ways:
 
-- Inline in the command itself
+### Inline in the command itself
   ```yaml
   steps:
     - command: terraform plan test/test-component-override-2 -s tenant1-ue2-dev
   ```
 
-- In the workflow-level `stack` attribute
+### In the workflow-level `stack` attribute
   ```yaml
   workflows:
     my-workflow:
@@ -367,19 +359,19 @@ Atmos stack for the workflow commands of type `atmos` can be specified in four d
         - command: terraform plan test/test-component
   ```
 
-- In the step-level `stack` attribute
+### In the step-level `stack` attribute
   ```yaml
   steps:
     - command: terraform plan test/test-component
       stack: tenant1-ue2-dev
   ```
 
-- On the command line
+### On the command line
   ```console
   atmos workflow my-workflow -f workflow1 -s tenant1-ue2-dev
   ```
 
-<br/>
+### Stack Presedence
 
 The stack defined inline in the command itself has the lowest priority, it can and will be overridden by any other stack definition.
 The step-level stack will override the workflow-level stack. The command line `--stack` option will override all other stacks defined in the workflow

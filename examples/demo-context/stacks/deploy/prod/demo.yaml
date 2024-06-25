@@ -1,0 +1,21 @@
+import:
+- deploy/_defaults
+- catalog/demo
+- mixins/east-coast
+
+
+terraform:
+  providers:
+    context:
+      values:
+        environment: prod
+        support_email: prod-support@acme.com
+
+components:
+  terraform:
+    demo:
+      metadata:
+        type: real
+      vars:
+        size: 10
+        pet: "alien"

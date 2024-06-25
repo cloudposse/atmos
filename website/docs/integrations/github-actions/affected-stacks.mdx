@@ -2,15 +2,20 @@
 title: Affected Stacks
 sidebar_position: 30
 sidebar_label: Affected Stacks
+description: Identify the affected stacks and components in a pull request
 ---
-
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 
-**Streamline Your Change Management Process**
+<Intro>
+The [Atmos Affected Stacks GitHub Action](https://github.com/cloudposse/github-action-atmos-affected-stacks) makes it easy identify the affected [atmos stacks](/core-concepts/stacks/) for a pull request. Use it to build a matrix so you can run other actions based on what was affected.
+</Intro>
 
-The [Atmos Affected Stacks GitHub Action](https://github.com/cloudposse/github-action-atmos-affected-stacks) empowers you to easily identify the affected [atmos stacks](/core-concepts/stacks/) for a pull request so you can gain better insights into the impact of your pull requests. It works by installing Atmos and running [`atmos describe affected`](/cli/commands/describe/affected), and outputs a comprehensive list of affected stacks, both as raw output and as a matrix to be used in subsequent GitHub action jobs.
+This GitHub Action installs Atmos, then runs [`atmos describe affected`](/cli/commands/describe/affected), and outputs a comprehensive list of affected stacks, both as raw output and as a matrix to be used in subsequent GitHub action jobs.
 
 Discover more details, including the full list of `inputs` and `outputs`, in the [GitHub Action repository](https://github.com/cloudposse/github-action-atmos-affected-stacks) on GitHub.
+
+## How it works
 
 The [`describe affected`](/cli/commands/describe/affected) command works by comparing two different Git commits to generate a list of affected Atmos components and stacks. It assumes that the current repo root is a Git checkout and accepts a parameter to specify the second commit.
 

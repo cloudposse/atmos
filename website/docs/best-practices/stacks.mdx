@@ -1,0 +1,96 @@
+---
+title: Stacks Best Practices
+sidebar_position: 1
+sidebar_label: Stacks
+description: Learn the opinionated "Best Practices" for using Stacks with Atmos
+id: stacks
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Here are some essential best practices to follow when designing the Stack configurations that describe your architectures. These guidelines are intended to help developers and operators think about how they model the configuration of their infrastructure in Atmos, for maximum clarity and long-term maintainability.
+</Intro>
+
+> <q>Physics is the law, everything else is a recommendation.
+> Anyone can break laws created by people, but I have yet to see anyone break the laws of physics.
+> <p className="author">— **Elon Musk**</p></q>
+
+## Define Factories in Stack Configurations
+
+Avoid creating factories inside of components, which make them overly complicate and succumb to their massive state.
+Instead, use stack configurations to serve as factories for provisioning multiple component instances.
+This approach keeps the state isolated and scales efficiently with the increasing number of component instances.
+
+## Treat Stack Templates like an Escape Hatch
+
+Apply them carefully and only when necessary. Using templates instead of inheritance can make stack configurations complex
+and hard to manage. Be careful using stack templates together with the [factory pattern](#define-factories-in-stack-configurations).
+
+The simplest templates are the best templates. Using variable interpolation is perfectly fine, but avoid using complex logic,
+conditionals, and loops in templates. If you find yourself needing to do this, consider if you are solving the problem in the right way.
+
+## Avoid Too Many Levels of Imports
+
+It's very difficult for others to follow relationships when there are too many nested levels and overrides.
+
+:::warning Complexity rashes
+
+**If you have more than (3) levels of imports, you're probably developing a complexity rash.**
+
+Overly DRY configurations can lead to complexity rashes that are difficult to debug and maintain,
+and impossible for newcomers to understand.
+
+:::
+
+## Balance DRY Principles with Configuration Clarity
+
+Avoid overly DRY configuration as it leads to complexity rashes. Sometimes repeating configuration is beneficial
+for maintenance and clarity.
+
+In recent years, the DevOps industry has often embraced the DRY (Don’t Repeat Yourself) principle to an extreme.
+(And Atmos delivers!) While DRY aims to reduce redundancy and improve maintainability by eliminating duplicate code,
+overzealous application of this principle leads to complications and rigidity.
+
+DRY is not a panacea. In fact, sometimes a bit of repetition is **beneficial**, particularly when anticipating future
+divergence in configurations or functionality. A balance between DRY and WET (Write Everything Twice) can offer more
+flexibility, and make it easier to see the entire context in one place without needing to trace through multiple abstractions
+or indirections
+
+Here’s why:
+
+1. **Cognitive Load:** The more you strive for DRYness, the more indirection and abstraction layers you introduce.
+    This makes it harder for developers because they need to navigate through multiple layers of imports and abstractions
+    to grasp the complete picture.
+2. **Plan for Future Divergence:** When initially similar configurations are likely diverge over time,
+    keeping them separate will make future changes easier.
+3.	**Premature Optimization:** Over-optimizing for DRYess may be a form of premature optimization. It’s important to recognize
+    when to prioritize flexibility and clarity over minimal repetition.
+
+## Reserve Code Generation for Stack Configuration
+
+While we generally advise against using code generation for application logic (components), it's beneficial for
+creating configurations where appropriate, such as developer environments and SaaS tenants.
+These configurations ought to be committed.
+
+Also, consider if you can [use templates](/core-concepts/stacks/templates) instead.
+
+## Use Mixin Pattern for Snippets of Stack Configuration
+
+Employ the [mixin pattern](/core-concepts/stacks/inheritance/mixins) for clarity when there there is brief configuration snippets that are reusable. Steer clear
+of minimal stack configurations simply for the sake of DRYness as it frequently leads to too many levels of imports.
+
+## Use YAML Anchors to DRY Configuration
+
+YAML anchors are pretty sweet and you don’t get those with tfvars.
+
+:::important YAML Anchors Gotchas
+When you define [YAML anchors](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), they can only be used within the scope of the
+same file. This is not an Atmos limitation, but how YAML works. For example, do not work together with [imports](/core-concepts/stacks/imports),
+where you define an anchor in one stack configuration and try to use it in another.
+:::
+
+
+## Enforce Standards using OPA Policies
+
+Apply OPA or JSON Schema validation within stacks to establish policies governing component usage. These policies can be tailored
+as needed, allowing the same component to be validated differently depending on its context of use.

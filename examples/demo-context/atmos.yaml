@@ -1,0 +1,46 @@
+base_path: "./"
+
+schemas:
+  atmos:
+    manifest: "schemas/atmos-manifest.json"
+
+# https://pkg.go.dev/text/template
+templates:
+  settings:
+    enabled: true
+    evaluations: 2
+    sprig:
+      enabled: true
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+
+  name_template: "{{.providers.context.values.product}}-{{.providers.context.values.region}}-{{.providers.context.values.environment}}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - atmos validate stacks
+  - atmos terraform plan demo -s acme-west-dev
+  - atmos terraform plan demo -s acme-west-staging
+  - atmos terraform plan demo -s acme-west-prod
+  - atmos terraform apply demo -s acme-west-dev -auto-approve
+  - atmos terraform apply demo -s acme-west-staging -auto-approve
+  - atmos terraform apply demo -s acme-west-prod -auto-approve

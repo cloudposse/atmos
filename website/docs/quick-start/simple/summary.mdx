@@ -1,0 +1,35 @@
+---
+title: Where to go from here...
+sidebar_position: 8
+sidebar_label: Next Steps
+---
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Atmos provides unlimited flexibility in defining and configuring stacks and components in the stacks.
+</Intro>
+
+<KeyPoints title="What you have learned">
+- Terraform "root modules" are deployed as components that are organized in sub-folders within `components/terraform` by type, team, operations, or any other category.
+- Stacks define the configuration of your "root modules", and can have arbitrary names and located anywhere in the `stacks/` directory; Atmos finds stacks using a "slug".
+- Terraform components can be reused any number of times by giving them unique names in the stack configurations
+  and pointing them to the same Terraform root module.
+</KeyPoints>
+
+All the above makes Atmos an ideal framework for organizing infrastructure, designing for organizational complexity, and provisioning multi-account environments for very complex organizations.
+
+As you continue to poke around, here are some suggestions for what to do next:
+
+1. [Review Atmos Design Patterns](/design-patterns)
+2. [Use GitHub Actions](/integrations/github-actions)
+3. [Try the Advanced Tutorial](/quick-start/advanced)
+
+<ActionCard title="Next Steps">
+    Now that you’ve seen Atmos in action, take a moment to explore its core concepts.
+
+    You have only just scratched the surface of Atmos. Atmos is a powerful enterprise-grade framework with so **much more to offer**!
+    <PrimaryCTA to="/core-concepts">Learn Core Concepts</PrimaryCTA>
+</ActionCard>

@@ -1,0 +1,66 @@
+---
+title: Add Custom Commands
+sidebar_position: 9
+sidebar_label: Add Custom Commands
+description: Extend Atmos with your own custom CLI commands
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Note from '@site/src/components/Note'
+
+<Intro>
+Atmos can be easily extended to support any number of custom CLI commands. For example, imagine you wanted to add a command
+like `atmos reload-database`, you can do that with custom commands.
+</Intro>
+
+Custom commands are defined in the `commands` section in `atmos.yaml` CLI configuration file.
+
+<Note title="TIP">
+Refer to [Atmos Custom Commands](/core-concepts/custom-commands) for more information about Atmos Custom Commands
+</Note>
+
+In this Quick Start guide, we'll define two custom commands to list the Atmos stacks in the infrastructure and the components in the stacks.
+
+<File title="atmos.yaml">
+```yaml
+# Custom CLI commands
+commands:
+- name: ip
+  description: Return my current IP
+  steps:
+    - curl -s https://ifconfig.me
+    - echo
+
+# Use Nested Custom Commands
+- name: "github"
+  commands:
+  - name: "status"
+    description: This command returns the number of stargazers for a GitHub repository
+    steps:
+      - curl -s https://www.githubstatus.com/api/v2/status.json | jq -r .status.description
+```
+</File>
+
+Run the following Atmos command to get the current GitHub status.
+
+<Terminal command="atmos github status">
+```console
+All Systems Operational
+```
+</Terminal>
+
+Run the following Atmos command to retrieve your current public IP address.
+
+<Terminal command="atmos ip">
+```console
+13.37.13.37
+```
+</Terminal>
+
+<ActionCard title="Want to go deeper on this topic?">
+    Custom commands can accept flags, arguments, and even advanced templating.
+    <PrimaryCTA to="/core-concepts/custom-commands">Learn More</PrimaryCTA>
+</ActionCard>

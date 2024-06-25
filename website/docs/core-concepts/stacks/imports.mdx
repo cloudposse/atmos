@@ -1,23 +1,30 @@
 ---
-title: Stack Imports
-sidebar_position: 5
-sidebar_label: Imports
+title: Import Stack Configurations
+sidebar_position: 3
+sidebar_label: Import Configurations
 id: imports
 ---
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 
-Imports are how we reduce duplication of configurations by creating reusable baselines. The imports should be thought of almost like blueprints. Once
-a reusable catalog of Stacks exists, robust architectures can be easily created simply by importing those blueprints.
+<Intro>
+As your stacks grow taller with more and more component configurations, it often makes sense to start splitting them apart into different files. That's why you might want to take advantage of imports. This helps you keep your stack files smaller so they are easier to understand, while reuseing their configuration in multiple places.
+</Intro>
 
-Imports may be used in Stack configurations together with [inheritance](/core-concepts/components/inheritance)
-and [mixins](/core-concepts/stacks/mixins) to produce an exceptionally DRY configuration in a way that is logically organized and easier to maintain
-for your team.
+Each import overlays on top of others, and gets deep merged. Then we support [inheritance](/core-concepts/stacks/inheritance) and overrides to manage configuration variations, all without relying on templating. When none of these other methods work for your use-case, we provide an "Escape Hatch" with [templating](/core-concepts/stacks/templates).
 
-:::info
-The mechanics of mixins and inheritance apply only to the [Stack](/core-concepts/stacks) configurations. Atmos knows nothing about the underlying
-components (e.g. terraform), and does not magically implement inheritance for HCL. However, by designing highly reusable components that do one thing
-well, we're able to achieve many of the same benefits.
+## Use cases
+- **DRY Configuration:** Imports are how we reduce duplication of configurations.
+- **Configuration Blueprints:** Define reusable baselines or "defaults". Think of them almost as blueprints, that you can reuse anytime you want some particular combination of components in a stack.
+- **Service Catalogs:** Provide a "Service Catalog" for your team with reusable configurations that anyone can use to easily compose architectures with golden-path configurations.
+
+:::warning Pitfalls!
+Imports can make your configurations harder to understand if overused. Review our [best practices](/best-practices/stacks) for practical guidance.
 :::
+
+Imports may be used in Stack configurations together with [inheritance](/core-concepts/stacks/inheritance)
+and [mixins](/core-concepts/stacks/inheritance/mixins) to produce an exceptionally DRY configuration in a way that is logically organized and easier to maintain
+for your team.
 
 ## Configuration
 
@@ -48,7 +55,7 @@ import:
 
 We recommend placing all baseline "imports" in the `stacks/catalog` folder, however, they can exist anywhere.
 
-Use [mixins](/core-concepts/stacks/mixins) for reusable snippets of configurations that alter the behavior of Stacks in some way.
+Use [mixins](/core-concepts/stacks/inheritance/mixins) for reusable snippets of configurations that alter the behavior of Stacks in some way.
 
 ## Imports Schema
 
@@ -89,12 +96,12 @@ where:
 - `context` - (map) An optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
   a [Go template](https://pkg.go.dev/text/template))
 
-- `skip_templates_processing` - (boolean) Skip template processing for the imported file. Can be used if the imported file uses `Go` templates 
+- `skip_templates_processing` - (boolean) Skip template processing for the imported file. Can be used if the imported file uses `Go` templates
   to configure external systems, e.g. Datadog
 
-- `ignore_missing_template_values` - (boolean) Ignore the missing template values in the imported file. Can be used if the imported file uses `Go` 
-  templates to configure external systems, e.g. Datadog. In this case, Atmos will process all template values that are provided in the `context`, 
-  and will skip the missing values in the templates for the external systems without throwing an error. The `ignore_missing_template_values` setting 
+- `ignore_missing_template_values` - (boolean) Ignore the missing template values in the imported file. Can be used if the imported file uses `Go`
+  templates to configure external systems, e.g. Datadog. In this case, Atmos will process all template values that are provided in the `context`,
+  and will skip the missing values in the templates for the external systems without throwing an error. The `ignore_missing_template_values` setting
   is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file,
   while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values
 
@@ -141,16 +148,12 @@ components:
           flavor: "{{ .flavor }}"
 ```
 
-<br/>
-
 :::note
 
 Since `Go` processes templates as text files, we can parameterize the Atmos component name `eks-{{ .flavor }}/cluster` and any values in any
 sections (`vars`, `settings`, `env`, `backend`, etc.), and even the `import` section in the imported file (if the file imports other configurations).
 
 :::
-
-<br/>
 
 Then we can import the template into a top-level stack multiple times providing different context variables to each import:
 
@@ -159,7 +162,7 @@ import:
   - path: "mixins/region/us-west-2"
   - path: "orgs/cp/tenant1/test1/_defaults"
 
-  # This import with the provided context will dynamically generate 
+  # This import with the provided context will dynamically generate
   # a new Atmos component `eks-blue/cluster` in the current stack
   - path: "catalog/terraform/eks_cluster_tmpl"
     context:
@@ -168,7 +171,7 @@ import:
       service_1_name: "blue-service-1"
       service_2_name: "blue-service-2"
 
-  # This import with the provided context will dynamically generate 
+  # This import with the provided context will dynamically generate
   # a new Atmos component `eks-green/cluster` in the current stack
   - path: "catalog/terraform/eks_cluster_tmpl"
     context:
@@ -220,8 +223,6 @@ vars:
   tenant: tenant1
 ```
 
-<br/>
-
 ## Hierarchical Imports with Context
 
 Atmos supports hierarchical imports with context.
@@ -258,8 +259,6 @@ components:
         tags:
           flavor: "{{ .flavor }}"
 ```
-
-<br/>
 
 Then we can import the template into a top-level stack multiple times providing different context variables to each import and to the imports for
 the entire inheritance chain (which `catalog/terraform/eks_cluster_tmpl_hierarchical` imports itself):
@@ -300,8 +299,6 @@ import:
       stage: "test1"
 ```
 
-<br/>
-
 In the case of hierarchical imports, Atmos performs the following steps:
 
 - Processes all the imports in the `import` section in the current configuration in the order they are specified providing the `context` to all
@@ -341,8 +338,6 @@ vars:
     flavor: blue
   tenant: tenant1
 ```
-
-<br/>
 
 :::warning Handle with Care
 
@@ -391,8 +386,8 @@ components:
         {{- end }}
 ```
 
-The `iam_managed_policy_arns` and `iam_source_policy_documents` variables will be included in the component configuration only if the 
-provided `context` object has the `iam_managed_policy_arns` and `iam_source_policy_documents` fields. 
+The `iam_managed_policy_arns` and `iam_source_policy_documents` variables will be included in the component configuration only if the
+provided `context` object has the `iam_managed_policy_arns` and `iam_source_policy_documents` fields.
 
 ## Summary
 
@@ -402,5 +397,5 @@ for [EKS blue-green deployment](https://aws.amazon.com/blogs/containers/kubernet
 
 ## Related
 
-- [Configure CLI](/quick-start/configure-cli)
-- [Create Atmos Stacks](/quick-start/create-atmos-stacks)
+- [Configure CLI](/quick-start/advanced/configure-cli)
+- [Create Atmos Stacks](/quick-start/advanced/create-atmos-stacks)

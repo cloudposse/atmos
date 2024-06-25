@@ -13,8 +13,6 @@ Use this command to describe the complete configuration for an [Atmos component]
 an [Atmos stack](/core-concepts/stacks).
 :::
 
-<br/>
-
 <Screengrab title="atmos describe component --help" slug="atmos-describe-component--help" />
 
 ## Usage
@@ -24,8 +22,6 @@ Execute the `atmos describe component` command like this:
 ```shell
 atmos describe component <component> -s <stack>
 ```
-
-<br/>
 
 :::tip
 Run `atmos describe component --help` to see all the available options
@@ -102,7 +98,7 @@ The output contains the following sections:
 
 - `env` - a map of ENV variables defined for the Atmos component
 
-- `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
+- `inheritance` - component's [inheritance chain](/core-concepts/stacks/inheritance)
 
 - `metadata` - component's metadata config
 
@@ -129,7 +125,7 @@ The output contains the following sections:
 - `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
   (after the deep-merging and processing all the inheritance chains and all the base components)
 
-- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/components/overrides) for more details
+- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/stacks/overrides) for more details
 
 - `providers` - a map of provider configurations for the component
 
@@ -137,23 +133,23 @@ The output contains the following sections:
 
 The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
 
-- `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and 
-   in [OPA validation policies](/core-concepts/components/validation) to check whether an import is allowed in the stack or not
+- `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and
+   in [OPA validation policies](/core-concepts/validate/opa) to check whether an import is allowed in the stack or not
 
 - `deps_all` shows all component stack dependencies (imports and root-level stacks) where any configuration for the component is present.
-  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/components/validation) to check whether a user or a team 
+  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/validate/opa) to check whether a user or a team
   is allowed to import a particular config file for the component in the stack
 
 - `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined
   (after the deep-merging and processing all the inheritance chains and all the base components). This is useful in CI/CD systems (e.g. Spacelift)
-  to detect only the affected files that the component depends on. `deps` is usually a much smaller list than `deps_all` and can 
+  to detect only the affected files that the component depends on. `deps` is usually a much smaller list than `deps_all` and can
   differ from it in the following ways:
 
-  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/components/inheritance), and 
+  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/stacks/inheritance), and
     import those base component configurations
 
-  - The component can override all the default variables from the base components, and the final values are not dependent on the base component 
-    configs anymore. For example, `derived-component-3` import the base component `base-component-4`, inherits from it, and overrides all 
+  - The component can override all the default variables from the base components, and the final values are not dependent on the base component
+    configs anymore. For example, `derived-component-3` import the base component `base-component-4`, inherits from it, and overrides all
     the variables:
 
    ```yaml
@@ -173,8 +169,8 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
            # Override all the variables from the base component
    ```
 
-  - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the `derived-component-3` 
-    does not directly depend on `base-component-4` (all values are coming from the `derived-component-3`). This will help, for example, 
+  - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the `derived-component-3`
+    does not directly depend on `base-component-4` (all values are coming from the `derived-component-3`). This will help, for example,
     prevent unrelated Spacelift stack triggering
 
   - In the above case, the `deps_all` output will include both `derived-component-3` and `base-component-4`, but the `deps` output will not include
@@ -494,8 +490,6 @@ Each variable descriptor has the following schema:
   - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
     in the stack manifest. `import` means the stack manifest where the variable is defined was imported into the parent Atmos stack
 
-<br/>
-
 For example:
 
 <Terminal title="atmos describe component test/test-component-override-3 -s tenant1-ue2-dev">
@@ -603,16 +597,12 @@ sources:
 ```
 </Terminal>
 
-<br/>
-
 :::info
 
 The `stack_dependencies` inheritance chain shows the variable sources in the reverse order the sources were processed.
 The first item in the list was processed the last and its `variable_value` overrode all the previous values of the variable.
 
 :::
-
-<br/>
 
 For example, the component's `enabled` variable has the following inheritance chain:
 
@@ -636,8 +626,6 @@ sources:
           stack_file_section: vars
           variable_value: true
 ```
-
-<br/>
 
 Which we can interpret as follows (reading from the last to the first item in the `stack_dependencies` list):
 
@@ -669,8 +657,6 @@ Each variable descriptor has the following schema:
   - `variable_value` - the variable's value
   - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
     in the stack manifest. `import` means the stack manifest where the variable is defined was imported into the parent Atmos stack
-
-<br/>
 
 For example:
 
@@ -733,16 +719,12 @@ sources:
 ```
 </Terminal>
 
-<br/>
-
 :::info
 
 The `stack_dependencies` inheritance chain shows the ENV variable sources in the reverse order the sources were processed.
 The first item in the list was processed the last and its `variable_value` overrode all the previous values of the variable.
 
 :::
-
-<br/>
 
 For example, the component's `TEST_ENV_VAR1` ENV variable has the following inheritance chain:
 
@@ -770,8 +752,6 @@ sources:
           stack_file_section: components.terraform.env
           variable_value: val1
 ```
-
-<br/>
 
 Which we can interpret as follows (reading from the last to the first item in the `stack_dependencies` list):
 
@@ -805,8 +785,6 @@ Each setting descriptor has the following schema:
   - `variable_value` - the setting's value
   - `dependency_type` - how the setting was defined (`inline` or `import`). `inline` means the setting was defined in one of the sections
     in the stack manifest. `import` means the stack config file where the setting is defined was imported into the parent Atmos stack
-
-<br/>
 
 For example:
 
@@ -847,8 +825,6 @@ sources:
             workspace_enabled: true
 ```
 </Terminal>
-
-<br/>
 
 :::info
 

@@ -3,10 +3,12 @@ title: Atlantis Integration
 sidebar_position: 10
 sidebar_label: Atlantis
 ---
-
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 
+<Intro>
 Atmos natively supports [Atlantis](https://runatlantis.io) for Terraform Pull Request Automation.
+</Intro>
 
 ## How it Works
 
@@ -163,8 +165,6 @@ workflows:
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
 ```
 
-<br/>
-
 __NOTE:__ If Atlantis Integration is configured only in the `integrations.atlantis` section in `atmos.yaml`, the command-line
 flags `--config-template` and `--project-template` are required to specify a config template and a project template from the collection of
 templates defined in the `integrations.atlantis.config_templates` and `integrations.atlantis.project_templates` sections in `atmos.yaml`. You can
@@ -190,7 +190,7 @@ Configuring the Atlantis Integration in the `settings.atlantis` sections in the 
   example:
 
 <Terminal title="atmos describe component test/test-component-override -s tenant1-ue2-dev">
-  ```yaml 
+  ```yaml
     atmos_component: test/test-component-override
     atmos_stack: tenant1-ue2-dev
     component: test/test-component
@@ -246,7 +246,7 @@ Configuring the Atlantis Integration in the `settings.atlantis` sections in the 
   affected Atlantis projects in the `atlantis_project` field. For example:
 
 <Terminal title="atmos describe affected">
-  ```json 
+  ```json
   [
      {
         "component": "infra/vpc",
@@ -267,8 +267,6 @@ Configuring the Atlantis Integration in the `settings.atlantis` sections in the 
   ]
   ```
 </Terminal>
-
-<br/>
 
 #### Configure `settings.atlantis.workflow_templates` section in stack configs
 
@@ -309,8 +307,6 @@ workflows:
         - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
 ```
 
-<br/>
-
 :::note
 
 The `settings.atlantis.workflow_templates` section in stack configs has higher priority then the `integration.atlantis.workflow_templates`
@@ -319,8 +315,6 @@ into the generated `atlantis.yaml` file. On the other hand, if the `settings.atl
 Atmos will use the workflows from the `integration.atlantis.workflow_templates` section from `atmos.yaml`.
 
 :::
-
-<br/>
 
 #### Define config template and project template in `settings.atlantis` section in stack configs
 
@@ -333,7 +327,7 @@ The Atlantis config template and project template can be defined in the `setting
   integrations:
     atlantis:
       path: "atlantis.yaml"
-  
+
       # Config templates
       config_templates:
         config-1:
@@ -346,7 +340,7 @@ The Atlantis config template and project template can be defined in the `setting
             - dev/
             - staging/
             - prod/
-  
+
       # Project templates
       project_templates:
         project-1:
@@ -368,11 +362,11 @@ The Atlantis config template and project template can be defined in the `setting
   ```yaml title="stacks/orgs/cp/_defaults.yaml"
   settings:
     atlantis:
-      # Select a config template defined in `atmos.yaml` in 
+      # Select a config template defined in `atmos.yaml` in
       # the `integrations.atlantis.config_templates` section
       config_template_name: "config-1"
-  
-      # Select a project template defined in `atmos.yaml` in 
+
+      # Select a project template defined in `atmos.yaml` in
       # the `integrations.atlantis.project_templates` section
       project_template_name: "project-1"
   ```
@@ -382,8 +376,6 @@ The Atlantis config template and project template can be defined in the `setting
   defined at any level in the stack configs and they participate in deep-merging and inheritance (meaning they can be overridden per tenant,
   environment, stage and component).
 
-<br/>
-
 - Define `config_template` and `project_template` in the `settings.atlantis` section. These attributes tell Atmos to use the templates instead of
   searching for them in the `integration.atlantis` section in `atmos.yaml`. For example:
 
@@ -391,7 +383,7 @@ The Atlantis config template and project template can be defined in the `setting
   settings:
     atlantis:
 
-      # For this `tenant1-ue2-dev` stack, override the org-wide config template 
+      # For this `tenant1-ue2-dev` stack, override the org-wide config template
       # specified in `stacks/orgs/cp/_defaults.yaml`
       # in the `settings.atlantis.config_template_name` section
       config_template:
@@ -403,7 +395,7 @@ The Atlantis config template and project template can be defined in the `setting
         allowed_regexp_prefixes:
           - dev/
 
-      # For this `tenant1-ue2-dev` stack, override the org-wide project template 
+      # For this `tenant1-ue2-dev` stack, override the org-wide project template
       # specified in `stacks/orgs/cp/_defaults.yaml`
       # in the `settings.atlantis.project_template_name` section
       project_template:
@@ -422,8 +414,6 @@ The Atlantis config template and project template can be defined in the `setting
         apply_requirements:
           - "approved"
   ```
-
-<br/>
 
 :::note summary
 
@@ -467,7 +457,7 @@ Atlantis workflows can be defined in two different ways:
       # allow_custom_workflows defines whether this repo can define its own
       # workflows. If false (default), the repo can only use server-side defined
       # workflows.
-      allow_custom_workflows: true  
+      allow_custom_workflows: true
 
   # workflows lists server-side custom workflows
   workflows:
@@ -479,7 +469,7 @@ Atlantis workflows can be defined in two different ways:
       apply:
         steps:
           - run: echo applying
-          - apply  
+          - apply
   ```
 
 - In the [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html) using the `workflows` section and
@@ -505,16 +495,14 @@ Atlantis workflows can be defined in two different ways:
           - apply
   ```
 
-<br/>
-
 If you use the [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html) to define the Atlantis workflows, you don't need to
-define workflows in the [CLI Config Atlantis Integration](/cli/configuration#integrations) section in `atmos.yaml` or in
+define workflows in the [CLI Config Atlantis Integration](/cli/configuration/#integrations) section in `atmos.yaml` or in
 the `settings.atlantis.workflow_templates` section in the stack configurations. When you defined the workflows in the server config `workflows`
 section, you can reference a workflow to be used for each generated Atlantis project in the project templates.
 
 On the other hand, if you use [Repo Level workflows](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html),
 you need to provide at least one workflow template in the `integrations.atlantis.workflow_templates` section in
-the [Atlantis Integration](/cli/configuration#integrations) in `atmos.yaml`, or in the `settings.atlantis.workflow_templates` section in the stack
+the [Atlantis Integration](/cli/configuration/#integrations) in `atmos.yaml`, or in the `settings.atlantis.workflow_templates` section in the stack
 configurations.
 
 For example, after executing the following command:
@@ -543,8 +531,6 @@ workflows:
         - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
         - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
 ```
-
-<br/>
 
 ## Dynamic Repo Config Generation
 
@@ -764,8 +750,6 @@ jobs:
           webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
           verbose: false
 ```
-
-<br/>
 
 ## Next Steps
 

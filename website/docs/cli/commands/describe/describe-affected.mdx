@@ -13,8 +13,6 @@ import Screengrab from '@site/src/components/Screengrab'
 Use this command to show a list of the affected Atmos components and stacks given two Git commits.
 :::
 
-<br/>
-
 <Screengrab title="atmos describe affected --help" slug="atmos-describe-affected--help" />
 
 ## Description
@@ -74,22 +72,16 @@ The command performs the following:
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
 knows that they are affected.
-
-<br/>
 :::tip Use our GitHub Action
 Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run
 `describe affected` and produce a GitHub matrix.
 :::
-
-<br/>
 
 ## Usage
 
 ```shell
 atmos describe affected [options]
 ```
-
-<br/>
 
 :::tip
 Run `atmos describe affected --help` to see all the available options
@@ -361,7 +353,6 @@ where:
         }
       ]
     ```
-    <br/>
 
   - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack.
     This will be included only if all the following is true:
@@ -476,8 +467,6 @@ where:
       ]
     ```
 
-<br/>
-
 :::note
 
 Abstract Atmos components (where `metadata.type` is set to `abstract`) are not included in the output since they serve
@@ -563,8 +552,6 @@ as blueprints for other Atmos components and are not meant to be provisioned.
 ```
 </Terminal>
 
-<br/>
-
 ## Affected Components with Dependencies
 
 The output of the `atmos describe affected` command can include dependencies for the affected components.
@@ -606,20 +593,14 @@ For example, suppose that we have the following configuration for the Atmos comp
   ```
 </File>
 
-<br/>
-
 :::tip
 For more details on how to configure component dependencies, refer to [`atmos describe dependents`](/cli/commands/describe/dependents)
 :::
-
-<br/>
 
 In the above configuration, `component-3` depends on `component-2`, whereas `component-2` depends on `component-1`.
 
 If all the components are affected (modified) in the current working branch,
 the `atmos describe affected --include-dependents=true` command will produce the following result:
-
-<br/>
 
 <Terminal title="atmos describe affected --include-dependents=true">
  ```json
@@ -666,8 +647,6 @@ the `atmos describe affected --include-dependents=true` command will produce the
   ]
  ```
 </Terminal>
-
-<br/>
 
 The `component-1` component does not depend on any other component, and therefore it has the `included_in_dependents`
 attribute set to `false`. The `component-2` and `component-3` components depend on other components and are included in
