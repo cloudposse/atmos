@@ -9,13 +9,13 @@ spec:
   bases:
   - &library
     source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
-    version: "reorg"
+    version: "main"
     targets:
       - "components/terraform/{{ .Component }}/{{.Version}}"
     included_paths:
       - "**/*.tf"
       - "**/*.tfvars"
-      - "**/*.md"      
+      - "**/*.md"
     tags:
       - demo
 
@@ -25,7 +25,7 @@ spec:
 
   - &v1
     <<: *library
-    version: "reorg"
+    version: "main"
 
   sources:
   - <<: *v1
@@ -35,4 +35,7 @@ spec:
     component: "weather"
 
   - <<: *v1
+    component: "ipinfo"
+
+  - <<: *main
     component: "ipinfo"
