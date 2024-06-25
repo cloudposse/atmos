@@ -10,7 +10,7 @@ spec:
   sources:
     - component: "github/stargazers"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
-      version: "reorg"
+      version: "main"
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       included_paths:
@@ -23,7 +23,7 @@ spec:
 
     - component: "weather"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
-      version: "reorg"
+      version: "main"
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       tags:
@@ -31,7 +31,7 @@ spec:
 
     - component: "ipinfo"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
-      version: "reorg"
+      version: "main"
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       tags:
