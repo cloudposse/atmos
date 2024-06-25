@@ -98,8 +98,22 @@ jobs:
       id: hadolint
       with:
         dockerfile: Dockerfile
+        failure-threshold: warning
+        format: sarif
+        output-file: hadolint.sarif
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        # Path to SARIF file relative to the root of the repository
+        sarif_file: hadolint.sarif
+        # Optional category for the results (used to differentiate multiple results for one commit)
+        category: hadolint
+        wait-for-processing: true
 
     - name: "Job Summary"
+      if: always()
       run: |
         echo "## Docker Lint (${{ steps.hadolint.outcome }})" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
