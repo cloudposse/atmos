@@ -112,14 +112,6 @@ jobs:
         category: hadolint
         wait-for-processing: true
 
-    - name: "Job Summary"
-      if: always()
-      run: |
-        echo "## Docker Lint (${{ steps.hadolint.outcome }})" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "${HADOLINT_RESULTS}"  >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-
   # run localstack demo tests
   localstack:
     name: "[localstack] ${{ matrix.demo-folder }}"
