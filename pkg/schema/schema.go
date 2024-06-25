@@ -479,7 +479,8 @@ type Dependent struct {
 	StackSlug       string      `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
 	SpaceliftStack  string      `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject string      `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
-	Dependents      []Dependent `yaml:"dependents,omitempty" json:"dependents,omitempty" mapstructure:"dependents"`
+	Dependents      []Dependent `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
+	Settings        map[any]any `yaml:"settings" json:"settings" mapstructure:"settings"`
 }
 
 // Settings
