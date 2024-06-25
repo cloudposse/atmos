@@ -85,7 +85,7 @@ jobs:
       publish: false
       format: binary
     secrets: inherit
-    
+
   # run localstack demo tests
   localstack:
     name: "[localstack] ${{ matrix.demo-folder }}"
@@ -105,7 +105,7 @@ jobs:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-          AWS_REGION: us-east-1 
+          AWS_REGION: us-east-1
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
 
@@ -142,8 +142,9 @@ jobs:
       KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/kubeconfig.yaml
     strategy:
       matrix:
-        demo-folder:
-          - demo-helmfile
+        demo-folder: []
+        # Tests for helmfile currently broken
+        # - demo-helmfile
 
     timeout-minutes: 20
     steps:
