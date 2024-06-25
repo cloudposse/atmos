@@ -101,6 +101,9 @@ jobs:
         failure-threshold: warning
         format: sarif
         output-file: hadolint.sarif
+        # https://github.com/hadolint/hadolint?tab=readme-ov-file#rules
+        # DL3008 Pin versions in apt-get install
+        ignore: DL3008
 
     - name: Upload SARIF file
       uses: github/codeql-action/upload-sarif@v3
@@ -111,9 +114,6 @@ jobs:
         # Optional category for the results (used to differentiate multiple results for one commit)
         category: hadolint
         wait-for-processing: true
-        # https://github.com/hadolint/hadolint?tab=readme-ov-file#rules
-        # DL3008 Pin versions in apt-get install
-        ignore: DL3008
 
   # run localstack demo tests
   localstack:
