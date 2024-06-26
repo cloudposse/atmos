@@ -283,6 +283,16 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			if strings.Contains(src, "node_modules") {
 				return true, nil
 			}
+
+			// Check if the file is a socket and skip it
+			isSocket, err := u.IsSocket(src)
+			if err != nil {
+				return true, err
+			}
+			if isSocket {
+				return true, nil
+			}
+
 			return false, nil
 		},
 	}
