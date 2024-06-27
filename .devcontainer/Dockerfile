@@ -13,7 +13,7 @@ COPY --from=confetty /go/bin/confetty /usr/local/bin/confetty
 
 # Install Docker CLI and Docker Compose plugin
 RUN apt-get update && \
-    apt-get install -y ca-certificates curl gnupg lsb-release apt-utils direnv screen && \
+    apt-get install -y ca-certificates curl gnupg lsb-release apt-utils direnv screen zsh-autosuggestions && \
     mkdir -p /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     echo \

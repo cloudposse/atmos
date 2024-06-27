@@ -16,6 +16,14 @@ export CODESPACE_HTTPS_URL="http://${CODESPACE_HTTPS_HOSTNAME}"
 # Install atmos completion
 eval $(atmos completion zsh)
 
+# Enable zsh autosuggestions
+autoload -Uz compinit
+compinit
+
+export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+bindkey '\t' end-of-line
+
 # Setup some aliases
 alias tree='tree -CAF --gitignore -I ".git" -I "terraform.tfstate*"'
 alias bat='bat --style header,numbers --theme="GitHub"'
@@ -26,7 +34,7 @@ export DIRENV_LOG_FORMAT=""
 find /workspace/examples -name '.envrc' -execdir direnv allow \;
 
 # Enable Starship prompt
-eval "$(starship init zsh)" 
+eval "$(starship init zsh)"
 
 # Celebrate! 🎉
 if [ "${TERM}" != "screen.xterm-256color" ]; then
