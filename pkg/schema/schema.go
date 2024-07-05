@@ -334,6 +334,7 @@ type CommandAliases map[string]string
 type Integrations struct {
 	Atlantis Atlantis       `yaml:"atlantis,omitempty" json:"atlantis,omitempty" mapstructure:"atlantis"`
 	GitHub   map[string]any `yaml:"github,omitempty" json:"github,omitempty" mapstructure:"github"`
+	Pro      map[string]any `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
 }
 
 // Atlantis integration
