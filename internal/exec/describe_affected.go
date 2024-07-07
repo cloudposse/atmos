@@ -183,6 +183,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			"repo_owner": gitURL.GetOwnerName(),
 			"repo_host":  gitURL.GetHostName(),
 			"stacks":     affected,
+			"config":     cliConfig.Integrations.Pro,
 		}
 
 		bodyJson, err := u.ConvertToJSON(body)
