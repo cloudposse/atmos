@@ -9,3 +9,4 @@ components:
         name: "test2"
         # Examples of using Atmos template functions to get the outputs of another Atmos component
         test_label_id: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+        test_label_id_2: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
