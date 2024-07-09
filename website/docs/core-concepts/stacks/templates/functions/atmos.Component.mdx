@@ -70,7 +70,7 @@ Hardcoded stack name. Use it if you want to get an output from a component from 
 
 ### Reference the Current Stack Name
 
-Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component (for which the `atmos.Component` function is executed):
+Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component is in (for which the `atmos.Component` function is executed):
 
 ```yaml
   {{ (atmos.Component "<component>" .stack).<section>.<attribute> }}
