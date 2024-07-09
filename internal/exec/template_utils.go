@@ -22,7 +22,7 @@ import (
 
 // ProcessTmpl parses and executes Go templates
 func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	funcs := lo.Assign(FuncMap(context.TODO()), sprig.FuncMap())
+	funcs := lo.Assign(FuncMap(context.TODO(), &data.Data{}), sprig.FuncMap())
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -97,6 +97,8 @@ func ProcessTmplWithDatasources(
 	result := tmplValue
 
 	for i := 0; i < evaluations; i++ {
+		d := data.Data{}
+
 		// Gomplate functions and datasources
 		if cliConfig.Templates.Settings.Gomplate.Enabled {
 			// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
@@ -105,7 +107,7 @@ func ProcessTmplWithDatasources(
 			ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 			defer cancelFunc()
 
-			d := data.Data{}
+			d = data.Data{}
 			d.Ctx = ctx
 
 			for k, v := range templateSettings.Gomplate.Datasources {
@@ -129,7 +131,7 @@ func ProcessTmplWithDatasources(
 		}
 
 		// Atmos functions
-		funcs = lo.Assign(funcs, FuncMap(context.TODO()))
+		funcs = lo.Assign(funcs, FuncMap(context.TODO(), &d))
 
 		// Process and add environment variables
 		for k, v := range templateSettings.Env {
