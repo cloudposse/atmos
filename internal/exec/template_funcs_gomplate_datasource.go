@@ -11,7 +11,7 @@ var (
 )
 
 func gomplateDatasourceFunc(alias string, gomplateData *data.Data, args ...string) (any, error) {
-	// If the result for the component in the stack already exists in the cache, return it
+	// If the result for the alias already exists in the cache, return it
 	existingResult, found := gomplateDatasourceFuncSyncMap.Load(alias)
 	if found && existingResult != nil {
 		return existingResult, nil

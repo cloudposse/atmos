@@ -20,6 +20,8 @@ terraform:
       atlantis_project: "{{ .atlantis_project }}"
       region: "{{ .vars.region }}"
       # provisioned_by_ip: '{{ (datasource "ip").ip }}'
+      # provisioned_by_ip_2: '{{ (atmos.GomplateDatasource "ip").ip }}'
+      # provisioned_by_ip_3: '{{ (atmos.GomplateDatasource "ip").ip }}'
 
   backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud
 
