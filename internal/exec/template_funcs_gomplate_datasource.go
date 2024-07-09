@@ -17,7 +17,10 @@ func gomplateDatasourceFunc(alias string, gomplateData *data.Data, args ...strin
 		return existingResult, nil
 	}
 
-	var result any
+	result, err := gomplateData.Datasource(alias, args...)
+	if err != nil {
+		return nil, err
+	}
 
 	// Cache the result
 	gomplateDatasourceFuncSyncMap.Store(alias, result)
