@@ -17,7 +17,7 @@ Atmos supports all data sources supported by [Gomplate](https://docs.gomplate.ca
 For example, you can use data sources to fetch JSON metadata from API endpoints or read from various backends like S3 Buckets, AWS SSM Parameter Store, HashiCorp Vault, and many others.
 </Intro>
 
-## Datasources
+## Data sources
 
 Currently, Atmos supports all the [Gomplate Datasources](https://docs.gomplate.ca/datasources).
 More data sources will be added in the future (and this doc will be updated).
@@ -146,7 +146,7 @@ For example:
 settings:
   templates:
     settings:
-      # Environment variables passed to datasources when evaluating templates
+      # Environment variables passed to `datasources` when evaluating templates
       # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
       # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
@@ -177,12 +177,12 @@ templates:
     # Enable `Go` templates in Atmos stack manifests
     enabled: true
     gomplate:
-      # Enable Gomplate functions and datasources in `Go` templates in Atmos stack manifests
+      # Enable Gomplate functions and data sources in `Go` templates in Atmos stack manifests
       enabled: true
 ```
 </File>
 
-Then, define the following datasources in the global `settings` section in an Atmos stack manifest:
+Then, define the following data sources in the global `settings` section in an Atmos stack manifest:
 
 <File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
@@ -190,11 +190,11 @@ settings:
   templates:
     settings:
       gomplate:
-        # Timeout in seconds to execute the datasources
+        # Timeout in seconds to execute the data sources
         timeout: 5
         # https://docs.gomplate.ca/datasources
         datasources:
-          # 'http' datasource
+          # 'http' data source
           # https://docs.gomplate.ca/datasources/#using-file-datasources
           ip:
             url: "https://api.ipify.org?format=json"
@@ -203,22 +203,22 @@ settings:
             headers:
               accept:
                 - "application/json"
-          # 'file' datasources
+          # 'file' data sources
           # https://docs.gomplate.ca/datasources/#using-file-datasources
           config-1:
             url: "./config1.json"
           config-2:
             url: "file:///config2.json"
-          # `aws+smp` AWS Systems Manager Parameter Store datasource
+          # `aws+smp` AWS Systems Manager Parameter Store data source
           # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
           secret-1:
             url: "aws+smp:///path/to/secret"
           # `aws+sm` AWS Secrets Manager datasource
-          # https://docs.gomplate.ca/datasources/#using-awssm-datasource
+          # https://docs.gomplate.ca/datasources/#using-awssm-data source
           secret-2:
             url: "aws+sm:///path/to/secret"
           # `s3` datasource
-          # https://docs.gomplate.ca/datasources/#using-s3-datasources
+          # https://docs.gomplate.ca/datasources/#using-s3-data sources
           s3-config:
             url: "s3://mybucket/config/config.json"
 ```
@@ -295,14 +295,14 @@ import:
 settings:
   templates:
     settings:
-      # Environment variables passed to datasources when evaluating templates
+      # Environment variables passed to data sources when evaluating templates
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
       # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
       env:
         # AWS profile with permissions to access the S3 bucket
         AWS_PROFILE: "<AWS profile>"
       gomplate:
-        # Timeout in seconds to execute the datasources
+        # Timeout in seconds to execute the data sources
         timeout: 5
         # https://docs.gomplate.ca/datasources
         datasources:

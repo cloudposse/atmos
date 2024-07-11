@@ -98,7 +98,7 @@ settings:
       sprig: {}
       # https://docs.gomplate.ca
       gomplate:
-        timeout: 20  # 20 seconds timeout to execute the datasources
+        timeout: 20  # 20 seconds timeout to execute the data sources
         # https://docs.gomplate.ca/datasources
         datasources:
           ip:
