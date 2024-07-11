@@ -1,5 +1,5 @@
 ---
-title: Templatie Data Sources
+title: Template Data Sources
 sidebar_position: 7
 sidebar_label: Data Sources
 id: datasources
@@ -12,17 +12,36 @@ import Intro from '@site/src/components/Intro'
 <PillBox>Advanced</PillBox>
 
 <Intro>
-Data sources in Atmos refer to external locations from which Atmos can fetch configuration data. Atmos supports all data sources supported by [Gomplate](https://docs.gomplate.ca/datasources). For example, you can use data sources to fetch JSON metadata from API endpoints or read from various backends like S3 Buckets, AWS SSM Parameter Store, HashiCorp Vault, and many others.
+Data sources in Atmos refer to external locations from which Atmos can fetch configuration data.
+Atmos supports all data sources supported by [Gomplate](https://docs.gomplate.ca/datasources).
+For example, you can use data sources to fetch JSON metadata from API endpoints or read from various backends like S3 Buckets, AWS SSM Parameter Store, HashiCorp Vault, and many others.
 </Intro>
 
-## Datasources
+## Data sources
 
 Currently, Atmos supports all the [Gomplate Datasources](https://docs.gomplate.ca/datasources).
-More data sources will be added in the future (and this doc will be updated). All datasource configurations are defined in the `templates.settings.gomplate.datasources` section in `atmos.yaml` [CLI config file](/cli/configuration) or in the `settings.templates.settings` section of any [Atmos stack manifests](/core-concepts/stacks).
+More data sources will be added in the future (and this doc will be updated).
+All datasource configurations are defined in the `templates.settings.gomplate.datasources` section in `atmos.yaml` [CLI config file](/cli/configuration)
+or in the `settings.templates.settings.gomplate.datasources` section of any [Atmos stack manifests](/core-concepts/stacks).
 
-The `templates.settings.gomplate.datasources` section is a map of objects.
+The `gomplate.datasources` section is a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions.
 
-The keys of the map are the data source names (aliases) that you will use to refer to them. For example, if you define a data source called `foobar` which has a property called `tag`, you could refer to it like this in a stack manifest: `{{ (datasource "foobar").tag }}`
+The keys of the map are the data source names (aliases) that you will use to refer to them. For example, 
+if you define a data source called `foobar` which has a property called `tag`, you could refer to it like this in a 
+stack manifest: `{{ (datasource "foobar").tag }}`.
+
+For example:
+
+<File title="stack.yaml">
+```yaml
+terraform:
+  vars:
+    tags:
+      provisioned_by_ip: '{{ (datasource "ip").ip }}'
+      config1_tag: '{{ (datasource "config-1").tag }}'
+      config2_service_name: '{{ (datasource "config-2").service.name }}'
+```
+</File>
 
 The values in the map are data source definitions following this schema:
 
@@ -127,7 +146,7 @@ For example:
 settings:
   templates:
     settings:
-      # Environment variables passed to datasources when evaluating templates
+      # Environment variables passed to `datasources` when evaluating templates
       # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
       # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
@@ -137,7 +156,7 @@ settings:
 ```
 </File>
 
-This is useful when executing the `datasources` that need to authenticate to cloud APIs.
+This is useful when executing data sources that need to authenticate to cloud APIs.
 
 For more details, refer to:
 
@@ -147,19 +166,35 @@ For more details, refer to:
 ## Configuring Data Sources
 
 For example, let's define the following Gomplate `datasources` in the global `settings` section (this will apply to all
-components in all stacks in the infrastructure):
+components in all stacks in the infrastructure).
+
+First, enable `Go` templates and `gomplate` datasources in the `atmos.yaml` CLI config file:
 
 <File title="atmos.yaml">
+```yaml
+templates:
+  settings:
+    # Enable `Go` templates in Atmos stack manifests
+    enabled: true
+    gomplate:
+      # Enable Gomplate functions and data sources in `Go` templates in Atmos stack manifests
+      enabled: true
+```
+</File>
+
+Then, define the following data sources in the global `settings` section in an Atmos stack manifest:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
 settings:
   templates:
     settings:
       gomplate:
-        # Timeout in seconds to execute the datasources
+        # Timeout in seconds to execute the data sources
         timeout: 5
         # https://docs.gomplate.ca/datasources
         datasources:
-          # 'http' datasource
+          # 'http' data source
           # https://docs.gomplate.ca/datasources/#using-file-datasources
           ip:
             url: "https://api.ipify.org?format=json"
@@ -168,29 +203,30 @@ settings:
             headers:
               accept:
                 - "application/json"
-          # 'file' datasources
+          # 'file' data sources
           # https://docs.gomplate.ca/datasources/#using-file-datasources
           config-1:
             url: "./config1.json"
           config-2:
             url: "file:///config2.json"
-          # `aws+smp` AWS Systems Manager Parameter Store datasource
+          # `aws+smp` AWS Systems Manager Parameter Store data source
           # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
           secret-1:
             url: "aws+smp:///path/to/secret"
           # `aws+sm` AWS Secrets Manager datasource
-          # https://docs.gomplate.ca/datasources/#using-awssm-datasource
+          # https://docs.gomplate.ca/datasources/#using-awssm-data source
           secret-2:
             url: "aws+sm:///path/to/secret"
           # `s3` datasource
-          # https://docs.gomplate.ca/datasources/#using-s3-datasources
+          # https://docs.gomplate.ca/datasources/#using-s3-data sources
           s3-config:
             url: "s3://mybucket/config/config.json"
 ```
 </File>
 
-After the above `datasources` are defined, you can use them in Atmos stack manifests like this:
+After the above data sources are defined, you can use them in Atmos stack manifests like this:
 
+<File>
 ```yaml
 terraform:
  vars:
@@ -208,94 +244,7 @@ components:
       vars:
         enabled: '{{ (datasource "config-2").config.enabled }}'
 ```
-
-
-<File title="atmos.yaml">
-```yaml
-# https://pkg.go.dev/text/template
-templates:
-  settings:
-    # Enable `Go` templates in Atmos stack manifests
-    enabled: true
-    # https://docs.gomplate.ca
-    # https://docs.gomplate.ca/functions
-    gomplate:
-      # Enable Gomplate functions and datasources in `Go` templates in Atmos stack manifests
-      enabled: true
-      # Timeout in seconds to execute the datasources
-      timeout: 5
-      # https://docs.gomplate.ca/datasources
-      datasources:
-        # 'http' datasource
-        # https://docs.gomplate.ca/datasources/#using-file-datasources
-        ip:
-          url: "https://api.ipify.org?format=json"
-          # https://docs.gomplate.ca/datasources/#sending-http-headers
-          # https://docs.gomplate.ca/usage/#--datasource-header-h
-          headers:
-            accept:
-              - "application/json"
-        # 'file' datasources
-        # https://docs.gomplate.ca/datasources/#using-file-datasources
-        config-1:
-          url: "./config1.json"
-        config-2:
-          url: "file:///config2.json"
-        # `aws+smp` AWS Systems Manager Parameter Store datasource
-        # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
-        secret-1:
-          url: "aws+smp:///path/to/secret"
-        # `aws+sm` AWS Secrets Manager datasource
-        # https://docs.gomplate.ca/datasources/#using-awssm-datasource
-        secret-2:
-          url: "aws+sm:///path/to/secret"
-        # `s3` datasource
-        # https://docs.gomplate.ca/datasources/#using-s3-datasources
-        s3-config:
-          url: "s3://mybucket/config/config.json"
-```
 </File>
-
-
-<dt>`templates.settings.gomplate.datasources`</dt>
-<dd>
-A map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions.
-
-The keys of the map are the datasource names (aliases), which are used in `Go` templates in Atmos stack manifests.
-    For example:
-    <File title="stack.yaml">
-    ```yaml
-    terraform:
-      vars:
-        tags:
-          provisioned_by_ip: '{{ (datasource "ip").ip }}'
-          config1_tag: '{{ (datasource "config-1").tag }}'
-          config2_service_name: '{{ (datasource "config-2").service.name }}'
-    ```
-    </File>
-
-    The values of the map are the datasource definitions with the following schema:
-    <dl>
-        <dt>`url`</dt>
-        <dd> the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)</dd>
-
-        <dt>`headers`</dt>
-        <dd>
-        a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers). The keys of the map are the header names. The values of the map are lists of values for the header.
-
-        The following configuration will result in the
-        [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
-        being sent with the HTTP request to the datasource:
-
-            ```yaml
-            headers:
-              accept:
-                - "application/json"
-            ```
-        </dd>
-    </dl>
-</dd>
-
 
 ## Using templates in the URLs of `datasources`
 
@@ -305,10 +254,8 @@ Let's suppose that your company uses a centralized software catalog to consolida
 resources. The tags can include tags per account, per team, per service, billing tags, etc.
 
 :::note
-An example of such a centralized software catalog could be https://backstage.io
+An example of such a centralized software catalog could be [Backstage](https://backstage.io).
 :::
-
-<br/>
 
 Let's also suppose that you have a service to read the tags from the centralized catalog and write them into an S3
 bucket in one of your accounts. The bucket serves as a cache to not hit the external system's API with too many requests
@@ -348,14 +295,14 @@ import:
 settings:
   templates:
     settings:
-      # Environment variables passed to datasources when evaluating templates
+      # Environment variables passed to data sources when evaluating templates
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
       # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
       env:
         # AWS profile with permissions to access the S3 bucket
         AWS_PROFILE: "<AWS profile>"
       gomplate:
-        # Timeout in seconds to execute the datasources
+        # Timeout in seconds to execute the data sources
         timeout: 5
         # https://docs.gomplate.ca/datasources
         datasources:

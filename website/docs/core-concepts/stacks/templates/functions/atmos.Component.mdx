@@ -70,7 +70,7 @@ Hardcoded stack name. Use it if you want to get an output from a component from 
 
 ### Reference the Current Stack Name
 
-Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component (for which the `atmos.Component` function is executed):
+Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component is in (for which the `atmos.Component` function is executed):
 
 ```yaml
   {{ (atmos.Component "<component>" .stack).<section>.<attribute> }}
@@ -166,3 +166,33 @@ components:
           test1_name: '{{ (atmos.Component "test1" .stack).vars.name }}'
 ```
 </File>
+
+## Caching the result of `atmos.Component` function
+
+Atmos caches (in memory) the results of `atmos.Component` template function execution.
+If you call the function for the same component in a stack more than once, the first call will produce the result
+and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the 
+`atmos.Component` function for the same component in a stack in multiple places in Atmos stack manifests.
+It will speed up the function execution and stack processing.
+
+For example:
+
+<File>
+```yaml
+components:
+  terraform:
+    test2:
+      vars:
+        tags:
+          test: '{{ (atmos.Component "test" .stack).outputs.id }}'
+          test2: '{{ (atmos.Component "test" .stack).outputs.id }}'
+          test3: '{{ (atmos.Component "test" .stack).outputs.id }}'
+```
+</File>
+
+In the example, the `test2` Atmos component uses the outputs (remote state) of the `test` Atmos component from the same stack.
+The template function `{{ atmos.Component "test" .stack }}` is executed three times (once for each tag).
+
+After the first execution, Atmos caches the result in memory (all the component sections, including the `outputs`),
+and reuses it in the next two calls to the function. The caching makes the stack processing about three times faster in this
+particular example. In a production environment where many components are used, the speedup can be even more significant.

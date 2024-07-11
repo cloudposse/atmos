@@ -324,6 +324,21 @@ integrations:
           steps:
             - run: terraform apply $PLANFILE
 
+  # Atmos Pro integration
+  pro:
+    host: app.cloudposse.com
+    timeout: 3
+    events:
+      pull_request:
+        - on: [open, synchronize, reopen]
+          workflow: atmos-plan.yml
+          dispatch_only_top_level_stacks: true
+        - on: [merge]
+          workflow: atmos-apply.yaml
+      release:
+        - on: [publish]
+          workflow: atmos-apply.yaml
+
 # Validation schemas (for validating atmos stacks and components)
 schemas:
   # https://json-schema.org

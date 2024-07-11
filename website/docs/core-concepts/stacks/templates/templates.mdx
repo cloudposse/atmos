@@ -96,7 +96,7 @@ templates:
     # Optional template delimiters
     # The `{{ }}` delimiters are the default, no need to specify/redefine them
     delimiters: ["{{", "}}"]
-    # Environment variables passed to datasources when evaluating templates
+    # Environment variables passed to data sources when evaluating templates
     # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
     # https://docs.gomplate.ca/functions/aws/#configuring-aws
     # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
@@ -110,9 +110,9 @@ templates:
     # https://docs.gomplate.ca
     # https://docs.gomplate.ca/functions
     gomplate:
-      # Enable Gomplate functions and datasources in `Go` templates in Atmos stack manifests
+      # Enable Gomplate functions and data sources in `Go` templates in Atmos stack manifests
       enabled: true
-      # Timeout in seconds to execute the datasources
+      # Timeout in seconds to execute the data sources
       timeout: 5
       datasources: {}
 ```
@@ -122,7 +122,7 @@ templates:
 
 Go templates by themselves are pretty basic, supporting concepts like ranges and variable interpolations. But what really makes templating powerful is the library of functions provided by Atmos to the template engine.
 
-In `Go` templates, you can use the following functions and datasources:
+In `Go` templates, you can use the following functions and data sources:
 
  - [Go `text/template` functions](https://pkg.go.dev/text/template#hdr-Functions)
  - [Sprig Functions](https://masterminds.github.io/sprig/)
@@ -167,7 +167,7 @@ stack manifest:
 settings:
   templates:
     settings:
-      # Environment variables passed to datasources when evaluating templates
+      # Environment variables passed to data sources when evaluating templates
       # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
       # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
@@ -175,11 +175,11 @@ settings:
         AWS_PROFILE: "<AWS profile>"
         AWS_TIMEOUT: 2000
       gomplate:
-        # 7 seconds timeout to execute the datasources
+        # 7 seconds timeout to execute the data sources
         timeout: 7
         # https://docs.gomplate.ca/datasources
         datasources:
-          # 'file' datasources
+          # 'file' data sources
           # https://docs.gomplate.ca/datasources/#using-file-datasources
           config-1:
             url: "./my-config1.json"
@@ -699,7 +699,8 @@ The above example shows the supported functionality in Atmos templating.
 You can use it for some use-cases, but it does not mean that you **should** use it just for the sake of using, since
 it's not easy to read and understand what data we have after each evaluation step.
 
-The following use-case describes a practical approach to using evaluation steps in Atmos templates to work
-with `datasources`.
+The [Using Templates in the URLs of Datasources](/core-concepts/stacks/templates/datasources#using-templates-in-the-urls-of-datasources)
+document describes a practical approach to using evaluation steps in Atmos templates to work
+with data sources.
 
 :::

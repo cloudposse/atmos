@@ -10,11 +10,13 @@ package exec
 import (
 	"context"
 	"text/template"
+
+	"github.com/hairyhenderson/gomplate/v3/data"
 )
 
 // FuncMap creates and returns a map of template functions
-func FuncMap(ctx context.Context) template.FuncMap {
-	atmosFuncs := &AtmosFuncs{ctx}
+func FuncMap(ctx context.Context, gomplateData *data.Data) template.FuncMap {
+	atmosFuncs := &AtmosFuncs{ctx, gomplateData}
 
 	return map[string]any{
 		"atmos": func() any { return atmosFuncs },
@@ -22,9 +24,14 @@ func FuncMap(ctx context.Context) template.FuncMap {
 }
 
 type AtmosFuncs struct {
-	ctx context.Context
+	ctx          context.Context
+	gomplateData *data.Data
 }
 
 func (AtmosFuncs) Component(component string, stack string) (any, error) {
 	return componentFunc(component, stack)
+}
+
+func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
+	return gomplateDatasourceFunc(alias, f.gomplateData, args...)
 }
