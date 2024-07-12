@@ -7,10 +7,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v2"
 
+	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -203,4 +205,36 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 			steps[index].Name = fmt.Sprintf("step%d", index+1)
 		}
 	}
+}
+
+func ExecuteWorkflowUI(cliConfig schema.CliConfiguration) (string, string, string, error) {
+	_, _, allWorkflows, err := ExecuteDescribeWorkflows(cliConfig)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	// Start the UI
+	app, err := w.Execute(allWorkflows)
+	fmt.Println()
+	if err != nil {
+		return "", "", "", err
+	}
+
+	selectedWorkflowFile := app.GetSelectedWorkflowFile()
+	selectedWorkflow := app.GetSelectedWorkflow()
+	selectedWorkflowStep := app.GetSelectedWorkflowStep()
+
+	// If the user quit the UI, exit
+	if app.ExitStatusQuit() || selectedWorkflowFile == "" || selectedWorkflow == "" {
+		return "", "", "", nil
+	}
+
+	fmt.Println()
+	u.PrintMessageInColor(fmt.Sprintf(
+		"Executing command:\n"+os.Args[0]+" workflow %s --file %s --from-step \"%s\"\n", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep),
+		color.New(color.FgCyan),
+	)
+	fmt.Println()
+
+	return selectedWorkflowFile, selectedWorkflow, selectedWorkflowStep, nil
 }

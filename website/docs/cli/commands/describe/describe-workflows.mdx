@@ -12,8 +12,6 @@ import Screengrab from '@site/src/components/Screengrab'
 Use this command to show all configured Atmos workflows.
 :::
 
-<br/>
-
 <Screengrab title="atmos describe workflows --help" slug="atmos-describe-workflows--help" />
 
 ## Usage
@@ -23,8 +21,6 @@ Execute the `describe workflows` command like this:
 ```shell
 atmos describe workflows [options]
 ```
-
-<br/>
 
 :::tip
 Run `atmos describe workflows --help` to see all the available options
@@ -48,8 +44,6 @@ atmos describe workflows -f json
 |:-----------|:--------------------------------------------------------------------|:------|:---------|
 | `--format` | Specify the output format: `yaml` or `json` (`yaml` is default)     | `-f`  | no       |
 | `--output` | Specify the output type: `list`, `map` or `all` (`list` is default) | `-o`  | no       |
-
-<br/>
 
 When the `--output list` flag is passed (default), the output of the command is a list of objects. Each object has the
 following schema:
@@ -85,8 +79,6 @@ atmos describe workflows -o list
   workflow: plan-all-vpc-flow-logs
 ```
 
-<br/>
-
 When the `--output map` flag is passed, the output of the command is a map of workflow manifests to the lists of
 workflows defined in each manifest.
 For example:
@@ -110,8 +102,6 @@ networking.yaml:
   - plan-all-vpc
   - plan-all-vpc-flow-logs
 ```
-
-<br/>
 
 When the `--output all` flag is passed, the output of the command is a map of workflow manifests to the maps of all
 workflow definitions. For example:
@@ -184,8 +174,6 @@ validation.yaml:
         - command: validate component vpc-flow-logs-bucket -s plat-ue2-prod
         - command: validate component vpc-flow-logs-bucket -s plat-uw2-prod
 ```
-
-<br/>
 
 :::tip
 Use the [atmos workflow](/cli/commands/workflow) CLI command to execute an Atmos workflow

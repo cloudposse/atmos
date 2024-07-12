@@ -1,0 +1,12 @@
+import:
+- mixins/k3s
+- catalog/demo
+
+vars:
+  stage: dev
+
+components:
+  helmfile:
+    demo:
+      metadata:
+        type: real

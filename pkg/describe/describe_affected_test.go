@@ -25,10 +25,10 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 
 	// Git reference and commit SHA
 	// Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details
-	ref := "refs/heads/master"
+	ref := "refs/heads/main"
 	sha := ""
 
-	affected, err := e.ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, "", "", true, true)
+	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, "", "", true, true, true)
 	assert.Nil(t, err)
 
 	affectedYaml, err := yaml.Marshal(affected)
@@ -52,7 +52,7 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
 	repoPath := "../../"
 
-	affected, err := e.ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, true, true)
+	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, true, true, true)
 	assert.Nil(t, err)
 
 	affectedYaml, err := yaml.Marshal(affected)

@@ -17,7 +17,7 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 	var tmpl string
 
 	if cliConfig.Stacks.NameTemplate != "" {
-		tmpl, err = u.ProcessTmpl("terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl("terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
@@ -36,7 +36,7 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 
 	// Terraform workspace can be overridden per component using `metadata.terraform_workspace_pattern` or `metadata.terraform_workspace_template` or `metadata.terraform_workspace`
 	if terraformWorkspaceTemplate, terraformWorkspaceTemplateExist := componentMetadata["terraform_workspace_template"].(string); terraformWorkspaceTemplateExist {
-		tmpl, err = u.ProcessTmpl("terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl("terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
@@ -169,4 +169,14 @@ func BuildComponentPath(
 // GetStackNamePattern returns stack name pattern
 func GetStackNamePattern(cliConfig schema.CliConfiguration) string {
 	return cliConfig.Stacks.NamePattern
+}
+
+// IsComponentAbstract returns 'true' if the component is abstract
+func IsComponentAbstract(metadataSection map[any]any) bool {
+	if metadataType, ok := metadataSection["type"].(string); ok {
+		if metadataType == "abstract" {
+			return true
+		}
+	}
+	return false
 }

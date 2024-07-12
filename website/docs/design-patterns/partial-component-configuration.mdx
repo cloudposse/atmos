@@ -1,21 +1,23 @@
 ---
-title: Partial Component Configuration Atmos Design Pattern
+title: Partial Component Configuration
 sidebar_position: 11
 sidebar_label: Partial Component Configuration
 description: Partial Component Configuration Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
-# Partial Component Configuration
+<PillBox>Atmos Design Pattern</PillBox>
 
-The **Partial Component Configuration** Design Pattern describes the mechanism of splitting an Atmos component's configuration across many Atmos
-manifests to manage, modify and apply them separately and independently in one top-level stack without affecting the others.
+<Intro>
+The **Partial Component Configuration** Design Pattern describes the mechanism of splitting an Atmos component's configuration across many Atmos manifests to manage, modify and apply them separately and independently in one top-level stack without affecting the others.
+</Intro>
 
 The mechanism is similar to [Partial Classes in C#](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
 
-This is not the same as Atmos [Component Inheritance](/core-concepts/components/inheritance) where more than one Atmos components
-take part in the inheritance chain. The **Partial Component Configuration** pattern deals with just one Atmos component with its configuration split
-across a few configuration files.
+This is not the same as Atmos [Component Inheritance](/core-concepts/stacks/inheritance) where more than one Atmos components
+take part in the inheritance chain. The **Partial Component Configuration** pattern deals with just one Atmos component with its configuration split across a few configuration files.
 
 :::note
 
@@ -200,7 +202,7 @@ import:
   # Import the mixin for the required Kubernetes version to define the k8s version and addon versions for the EKS cluster in this stack.
   # This is an example of partial component configuration in Atmos where the config for the component is split across many Atmos stack manifests (stack config files).
   # It's similar to Partial Classes in C# (https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
-  # This is not the same as 'Atmos Component Inheritance' (https://atmos.tools/core-concepts/components/inheritance)
+  # This is not the same as 'Atmos Component Inheritance' (https://atmos.tools/core-concepts/stacks/inheritance)
   # where more than one Atmos component participates in the inheritance chain.
   - catalog/eks/clusters/mixins/k8s-1-27
 ```
@@ -234,4 +236,4 @@ clusters in the other accounts and regions will stay at the current Kubernetes v
 ## References
 
 - [Catalogs](/core-concepts/stacks/catalogs)
-- [Mixins](/core-concepts/stacks/mixins)
+- [Mixins](/core-concepts/stacks/inheritance/mixins)

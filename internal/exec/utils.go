@@ -13,7 +13,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -244,7 +243,7 @@ func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
 	error,
 ) {
 	// Process stack config file(s)
-	_, stacksMap, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
+	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		cliConfig,
 		cliConfig.StacksBaseAbsolutePath,
 		cliConfig.TerraformDirAbsolutePath,
@@ -350,7 +349,7 @@ func ProcessStacks(
 			}
 
 			if cliConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
@@ -426,7 +425,9 @@ func ProcessStacks(
 	// Add Atmos component and stack
 	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
+	configAndStacksInfo.ComponentSection["atmos_manifest"] = configAndStacksInfo.StackFile
 
 	// Add Atmos CLI config
 	atmosCliConfig := map[string]any{}
@@ -440,21 +441,6 @@ func ProcessStacks(
 	if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 		configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = configAndStacksInfo.ComponentFromArg
 	}
-
-	// Add component info, including Terraform config
-	componentInfo := map[string]any{}
-	componentInfo["component_type"] = configAndStacksInfo.ComponentType
-
-	if configAndStacksInfo.ComponentType == "terraform" {
-		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
-		componentInfo["component_path"] = componentPath
-		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
-		componentInfo["terraform_config"] = terraformConfiguration
-	} else if configAndStacksInfo.ComponentType == "helmfile" {
-		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
-	}
-
-	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
 	// `sources` (stack config files where the variables and other settings are defined)
 	sources, err := ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
@@ -494,7 +480,14 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 
-	componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+	componentSectionProcessed, err := ProcessTmplWithDatasources(
+		cliConfig,
+		settingsSectionStruct,
+		"all-atmos-sections",
+		componentSectionStr,
+		configAndStacksInfo.ComponentSection,
+		true,
+	)
 	if err != nil {
 		// If any error returned from the templates processing, log it and exit
 		u.LogErrorAndExit(err)
@@ -505,7 +498,7 @@ func ProcessStacks(
 		if !cliConfig.Templates.Settings.Enabled {
 			if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 				errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
-					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
 				err = errors.Join(err, errors.New(errorMessage))
 			}
 		}
@@ -569,11 +562,6 @@ func ProcessStacks(
 		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
 
-	// Process `command`
-	//if len(configAndStacksInfo.Command) == 0 {
-	//	configAndStacksInfo.Command = configAndStacksInfo.ComponentType
-	//}
-
 	// Process the ENV variables from the `env` section
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
@@ -615,6 +603,21 @@ func ProcessStacks(
 	} else {
 		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
 	}
+
+	// Add component info, including Terraform config
+	componentInfo := map[string]any{}
+	componentInfo["component_type"] = configAndStacksInfo.ComponentType
+
+	if configAndStacksInfo.ComponentType == "terraform" {
+		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
+		componentInfo["component_path"] = componentPath
+		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+		componentInfo["terraform_config"] = terraformConfiguration
+	} else if configAndStacksInfo.ComponentType == "helmfile" {
+		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
+	}
+
+	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
 	return configAndStacksInfo, nil
 }

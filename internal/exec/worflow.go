@@ -7,11 +7,9 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
-	tui "github.com/cloudposse/atmos/internal/tui/workflow"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -37,7 +35,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	// If the `workflow` argument is not passed, start the workflow UI
 	if len(args) != 1 {
-		workflowFile, workflow, fromStep, err = executeWorkflowUI(cliConfig)
+		workflowFile, workflow, fromStep, err = ExecuteWorkflowUI(cliConfig)
 		if err != nil {
 			return err
 		}
@@ -128,36 +126,4 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func executeWorkflowUI(cliConfig schema.CliConfiguration) (string, string, string, error) {
-	_, _, allWorkflows, err := ExecuteDescribeWorkflows(cliConfig)
-	if err != nil {
-		return "", "", "", err
-	}
-
-	// Start the UI
-	app, err := tui.Execute(allWorkflows)
-	fmt.Println()
-	if err != nil {
-		return "", "", "", err
-	}
-
-	selectedWorkflowFile := app.GetSelectedWorkflowFile()
-	selectedWorkflow := app.GetSelectedWorkflow()
-	selectedWorkflowStep := app.GetSelectedWorkflowStep()
-
-	// If the user quit the UI, exit
-	if app.ExitStatusQuit() || selectedWorkflowFile == "" || selectedWorkflow == "" {
-		return "", "", "", nil
-	}
-
-	fmt.Println()
-	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command:\n"+os.Args[0]+" workflow %s --file %s --from-step \"%s\"\n", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep),
-		color.New(color.FgCyan),
-	)
-	fmt.Println()
-
-	return selectedWorkflowFile, selectedWorkflow, selectedWorkflowStep, nil
 }

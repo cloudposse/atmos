@@ -219,7 +219,7 @@ func executeCustomCommand(
 		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
-			component, err := u.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
+			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
@@ -229,7 +229,7 @@ func executeCustomCommand(
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
-			stack, err := u.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
+			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
@@ -271,7 +271,7 @@ func executeCustomCommand(
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
+				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
@@ -293,7 +293,7 @@ func executeCustomCommand(
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := u.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
+		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
@@ -383,5 +383,5 @@ func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	u.PrintMessage("https://github.com/cloudposse/atmos/releases\n")
 
 	u.PrintMessageInColor("Install Atmos:\n", c2)
-	u.PrintMessage("https://atmos.tools/quick-start/install-atmos\n")
+	u.PrintMessage("https://atmos.tools/install\n")
 }

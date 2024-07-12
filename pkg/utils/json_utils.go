@@ -1,11 +1,12 @@
 package utils
 
 import (
-	"github.com/cloudposse/atmos/pkg/schema"
 	"os"
 	"strings"
 
 	jsoniter "github.com/json-iterator/go"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // PrintAsJSON prints the provided value as JSON document to the console

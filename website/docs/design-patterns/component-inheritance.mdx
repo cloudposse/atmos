@@ -1,22 +1,24 @@
 ---
-title: Component Inheritance Atmos Design Pattern
+title: Component Inheritance
 sidebar_position: 8
 sidebar_label: Component Inheritance
 description: Component Inheritance Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
-# Component Inheritance
-
-The **Component Inheritance** Design Pattern describes the mechanism of deriving Atmos components from one or more base components, allowing reusing
-the base components' configurations.
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+The **Component Inheritance** Design Pattern describes the mechanism of deriving Atmos components from one or more base components, allowing reusing the base components' configurations.
+</Intro>
 
 In Atmos, **Component Inheritance** is the mechanism of deriving a component from one or more base components, inheriting all the
 properties of the base component(s) and overriding only some fields specific to the derived component. The derived component acquires all the
 properties of the base component(s), allowing creating very DRY configurations that are built upon existing components.
 
 :::note
-Atmos supports many different types on component inheritance. Refer to [Component Inheritance](/core-concepts/components/inheritance) for
+Atmos supports many different types on component inheritance. Refer to [Component Inheritance](/core-concepts/stacks/inheritance) for
 more details.
 :::
 
@@ -35,7 +37,7 @@ The **Component Inheritance** pattern provides the following benefits:
 - Enables very DRY, consistent, and reusable configurations built upon existing components
 
 - Any Atmos component can serve as a building block for other Atmos components
-  
+
 
 ## Example
 
@@ -172,8 +174,6 @@ components:
         ipv4_primary_cidr_block: 10.9.0.0/18
 ```
 
-<br/>
-
 ## Related Patterns
 
 - [Abstract Component](/design-patterns/abstract-component)
@@ -186,5 +186,5 @@ components:
 
 ## References
 
-- [Component-Oriented Programming](/core-concepts/components/component-oriented-programming)
-- [Component Inheritance](/core-concepts/components/inheritance)
+- [Component-Oriented Programming](/core-concepts/stacks/inheritance)
+- [Component Inheritance](/core-concepts/stacks/inheritance)

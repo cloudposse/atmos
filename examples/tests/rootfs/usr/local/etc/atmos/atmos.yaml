@@ -572,6 +572,21 @@ integrations:
           steps:
             - run: terraform apply $PLANFILE
 
+  # Atmos Pro integration
+  pro:
+    host: app.cloudposse.com
+    timeout: 3
+    events:
+      pull_request:
+        - on: [open, synchronize, reopen]
+          workflow: atmos-plan.yml
+          dispatch_only_top_level_stacks: true
+        - on: [merge]
+          workflow: atmos-apply.yaml
+      release:
+        - on: [publish]
+          workflow: atmos-apply.yaml
+
 # Validation schemas (for validating atmos stacks and components)
 schemas:
   # https://json-schema.org
@@ -585,9 +600,9 @@ schemas:
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
   # JSON Schema to validate Atmos manifests
-  # https://atmos.tools/reference/schemas/
+  # https://atmos.tools/cli/schemas/
   # https://atmos.tools/cli/commands/validate/stacks/
-  # https://atmos.tools/quick-start/configure-validation/
+  # https://atmos.tools/quick-start/advanced/configure-validation/
   # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
   # https://json-schema.org/draft/2020-12/release-notes
   # https://www.schemastore.org/json
@@ -611,7 +626,7 @@ aliases:
   lc: list components
 
 # `Go` templates in Atmos manifests
-# https://atmos.tools/core-concepts/stacks/templating
+# https://atmos.tools/core-concepts/stacks/templates
 # https://pkg.go.dev/text/template
 templates:
   settings:

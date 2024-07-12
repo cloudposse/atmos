@@ -1,0 +1,35 @@
+.definition {
+    margin: 1em 0;
+    border: 1px solid #cccccc2b;
+    border-radius: 20px;
+    padding: 1em;
+    padding-left: 2em;
+    padding-right: 2em;
+    background: #ffffff0d;
+}
+
+.definition summary {
+    font-weight: bold;
+    cursor: pointer;
+    list-style-type: none;
+    margin-left: 15px; /* Space for the custom marker */
+    padding-left: 10px;
+    position: relative;
+}
+
+/* Custom marker */
+.definition summary::before {
+  content: '▶'; /* Custom marker character */
+  position: absolute;
+  left: -15px; /* Adjust the position of the marker */
+  font-size: 1.2em; /* Marker size */
+  color: rgb(71, 71, 72);
+}
+
+.definition div {
+    margin-top: 0.5em;
+}
+
+details[open].definition > summary::before {
+  content: '▼'; /* Change marker character when open */
+}

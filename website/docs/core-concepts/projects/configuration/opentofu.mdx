@@ -1,0 +1,121 @@
+---
+title: Configure OpenTofu
+sidebar_position: 2
+sidebar_label: Configure OpenTofu
+id: opentofu
+---
+import useBaseUrl from '@docusaurus/useBaseUrl';
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos natively supports [OpenTofu](https://opentofu.org), similar to the way it supports [Terraform](/core-concepts/projects/configuration/terraform). It's compatible with every version of `opentofu` and designed to work with multiple different versions of it concurrently, and can even work alongside with [HashiCorp Terraform](/core-concepts/projects/configuration/terraform).
+<img width="250" align="right" src={useBaseUrl('/img/opentofu-icon.svg')} alt="OpenTofu"/>
+</Intro>
+
+<KeyPoints>
+- How to configure Atmos to use OpenTofu for Terraform components
+- How to alias `terraform` to `tofu` in Atmos
+- How to configure OpenTofu for only specific components
+</KeyPoints>
+
+Please see the complete configuration options for [Terraform](/core-concepts/projects/configuration/terraform), as they are the same for OpenTofu. We'll focus
+only on what's different in this document, in order to utilize OpenTofu. Keep in mind that Atmos does not handle the downloading or installation
+of OpenTofu; it assumes that any required binaries for the commands are already installed on your system.
+
+Additionally, if using Spacelift together with Atmos, make sure you review the [Spacelift Integration](/integrations/spacelift) to make any necessary changes.
+
+## CLI Configuration
+
+All the default configuration settings to support OpenTofu are defined in the [Atmos CLI Configuration](/cli/configuration),
+but can also be overridden at any level of the [Stack](/core-concepts/stacks/#schema) configuration.
+
+To make OpenTofu the default command when running "terraform", modify [`atmos.yaml`](/cli/configuration) to configure the following global settings:
+
+```yaml
+components:
+  terraform:
+    # Use the `tofu` command when calling "terraform" in Atmos.
+    command: "/usr/bin/tofu"  # or just `tofu`
+
+    # Optionally, specify a different path for OpenTofu components
+    base_path: "components/tofu"
+```
+
+:::important Disambiguation
+Atmos consistently utilizes the `terraform` keyword across all configurations, rather than `tofu` or `opentofu`.
+The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the 
+HCL-based domain-specific language and its interpreter.
+:::
+
+
+Additionally, if you prefer to run `atmos tofu` instead of `atmos terraform`, you can configure an alias.
+Just add the following configuration somewhere in the `atmos.yaml` CLI config file:
+
+```yaml
+aliases:
+  tofu: terraform
+```
+
+:::important
+Creating aliases for `tofu` only changes the CLI invocation of `atmos terraform` and does not directly
+influence the actual command that atmos executes when running Terraform. Atmos strictly adheres to the
+specific `command` set in the Stack configurations.
+:::
+
+## Stack Configuration for Components
+
+Settings for Terraform or OpenTofu can also be specified in stack configurations, where they are compatible with inheritance.
+This feature allows projects to tailor behavior according to individual component needs.
+
+While defaults for everything are defined in the `atmos.yaml`, the same settings, can be overridden by Stack configurations at any level:
+
+- `terraform`
+- `components.terraform`
+- `components.terraform._component_`
+
+For instance, you can modify the command executed for a specific component by overriding the `command` parameter.
+This flexibility is particularly valuable for gradually transitioning to OpenTofu or managing components that are
+compatible only with HashiCorp Terraform.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      command: "/usr/local/bin/tofu-1.7"
+```
+
+## Example: Provision a Terraform Component with OpenTofu
+
+:::note
+In the following examples, we'll assume that `tofu` is an Atmos alias for the `terraform` command.
+
+```yaml
+aliases:
+  tofu: terraform
+```
+
+:::
+
+Once you've configured Atmos to utilize `tofu` — either by adjusting the default `terraform.command` in the `atmos.yaml`
+or by specifying the `command` for an individual component — provisioning any component follows the same procedure as
+you would typically use for Terraform.
+
+For example, to provision a Terraform component using OpenTofu, run the following commands:
+
+```console
+atmos tofu plan eks --stack=ue2-dev
+atmos tofu apply eks --stack=ue2-dev
+```
+
+where:
+
+- `eks` is the Terraform component to provision (from the `components/terraform` folder)
+- `--stack=ue2-dev` is the stack to provision the component into
+
+Short versions of all command-line arguments can be used:
+
+```console
+atmos tofu plan eks -s ue2-dev
+atmos tofu apply eks -s ue2-dev
+```

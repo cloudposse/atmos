@@ -1,0 +1,166 @@
+---
+title: Use Your Component in a Stack
+sidebar_position: 4
+sidebar_label: 4. Configure with Stacks
+---
+import File from '@site/src/components/File'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+import EmbedFile from '@site/src/components/EmbedFile'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Note from '@site/src/components/Note'
+
+<Intro>
+[Atmos Stacks](/core-concepts/stacks) are the configuration for your components. It's how you can combine multiple reusable, stateful
+components into your "Stack" that you depend on.
+</Intro>
+
+If you think of your "components" as applications, then Stacks are simply which components you depend on and the settings that you want
+to pass to them. If you make your components highly reusable, it usually means they will need to accept a lot of configuration.
+
+**This is what makes Atmos so powerful:** you can import and inherit configurations in a logical way to keep your configurations DRY and consistent.
+
+<KeyPoints>
+- How to specify the configuration for your Terraform "root modules" using Atmos Stacks
+- How to organize Atmos Stacks into a Service Catalog
+- How to use imports and inheritance for DRY configurations
+- How Atmos identifies components using context variables and naming patterns
+</KeyPoints>
+
+Stack configurations are merely all the settings for your components. They can be organized in any way you like, but we recommend a hierarchical layout. We share some [different ways to organize your stacks in the Catalog](/core-concepts/stacks/catalogs), but for this example, we will use a simple layout.
+
+## Create Catalog for Reusable Configurations
+
+Atmos supports the concept of a [Service Catalog](/core-concepts/stacks/catalogs), which is where you can define all
+of your default configurations.
+
+All the common default settings for each Atmos component should be in a separate file in the `stacks/catalog` directory.
+The file then gets imported into the parent Atmos stacks. This makes the stack configurations DRY by reusing the component's config that is common for all environments.
+
+Refer to [Stack Imports](/core-concepts/stacks/imports) for more details on Atmos imports.
+
+These Atmos component manifests will be imported into the top-level Atmos stacks. The default variables (in the `vars` sections)
+can be overridden in the derived Atmos components by using [Atmos Component Inheritance](/core-concepts/stacks/inheritance).
+
+## Atmos Top-level Stacks
+
+When executing the [CLI commands](/cheatsheets/commands), Atmos does not use the stack file names and their filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names (stack manifest names) can be anything, and they can be in any folder in any sub-folder in the `stacks` directory.
+
+For example, when executing the `atmos terraform apply station -s dev` command, the Atmos stack `dev` is specified by the `-s` flag. By looking at `name_pattern: "{stage}"` (see [Configure CLI](/quick-start/advanced/configure-cli)) and processing the tokens, Atmos knows that the `stage` is `dev`. This `name_pattern` also supports `{namespace}`, `{tenant}`, and `{environment}`.
+
+<dl>
+  <dt>`{namespace}`</dt>
+  <dd>Corresponds to `var.namespace` in the stack configuration.</dd>
+
+  <dt>`{tenant}`</dt>
+  <dd>Corresponds to `var.tenant` in the stack configuration.</dd>
+
+  <dt>`{environment}`</dt>
+  <dd>Corresponds to `var.environment` in the stack configuration.</dd>
+
+  <dt>`{stage}`</dt>
+  <dd>Corresponds to `var.stage` in the stack configuration.</dd>
+</dl>
+
+Atmos top-level stacks can be configured using a Basic Layout or a Hierarchical Layout.
+
+The Basic Layout can be used when you have a very simple configuration using just a few stages. A more Hierarchical Layout should be used when you have a very complex organization, for example, with many AWS Organizational Units (which Atmos refers to as tenants) and dozens of AWS accounts and regions.
+
+### Basic Layout
+
+A basic form of stack organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have so many environments and stages.
+
+For example, `$stage` might be `prod`, which would result in `stacks/deploy/prod.yaml`
+
+In our example, the filesystem layout for the stacks uses a Basic Layout with `dev`, `staging` and `prod` and
+would look like this:
+
+<File title="infra-live/" icon="fa-solid fa-folder">
+```console
+├── atmos.yaml
+├── components/
+│   └── terraform/
+│       └── weather/
+│           ├── README.md
+│           ├── main.tf
+│           ├── outputs.tf
+│           ├── variables.tf
+│           └── versions.tf
+│
+│   # Centralized stacks configuration
+└── stacks/
+    ├── catalog/
+    │   └── station.yaml
+    └── deploy/
+        ├── dev.yaml
+        ├── prod.yaml
+        └── staging.yaml
+```
+</File>
+
+## Create Stack Configurations for Deployment
+
+Since this is a simple Quick Start, we will just use a single Terraform component (`components/terraform/weather`); in a real-world scenario, you may have dozens of components that comprise your stack. Rest assured, the process is the same for all components.
+
+### Define the Baseline Configuration
+We’ll start by defining the baseline configuration of our Terraform root module to gather weather data. The name of our component’s configuration doesn’t need to match the name of the component folder. This allows us to deploy multiple instances of our component using different names.
+
+```yaml
+components:
+  terraform:
+    <name-of-component>:
+```
+
+To specify which component to use, set the `metadata.component` property to the path of the component's directory, relative to the `components.base_path` as defined in the `atmos.yaml`. In our case, the `components.base_path` is `components/terraform`, so we can simply specify `weather` as the path.
+
+
+```yaml
+components:
+  terraform:
+    station:
+      metadata:
+        component: weather
+```
+<Note title="Pro Tip">To support multiple versions of a component, simply place each component version in a subfolder, which is the typical convention for versioning in a monorepo. For example, `components/terraform/weather/v1`. The goal for maintainable infrastructure as code is to have as few versions as possible and to have all environments converge on the same version.</Note>
+
+So the complete baseline definition for our weather station configuration might look something like the following.
+
+<EmbedFile filePath="examples/quick-start-simple/stacks/catalog/station.yaml" />
+
+<Note>It's important to quote strings that start with zeros (e.g., `0001`) in YAML to prevent them from being interpreted as integers. This is how YAML processes it, and not something special about Atmos.</Note>
+
+### Define the Environment-specific Configurations
+
+Next, we’ll define the environment-specific configurations for our Terraform root module. We’ll create a separate file for each environment and stage. In our case, we have three environments: `dev`, `staging`, and `prod`.
+
+When Atmos processes this stack config, it will first import and deep-merge all the variables from the imported files, then overlay the inline configuration. While the order of keys in a YAML map doesn’t affect behavior, lists are strictly ordered. Therefore, the order of `imports` is important.
+
+#### Define the `dev` Environment Configuration
+
+In the `dev` stack configuration, Atmos first processes the `imports` in the order defined. Then, it applies the globals `vars` defined in the top-level section. Only include `vars` in the globals that are true for every single component in the stack. If that's not the case, define them on a per-component basis.
+
+For example, by setting `var.stage` to `dev` at a global level, we assume that every component in this stack will have a stage variable.
+
+Finally, in the component-specific configuration for the `station`, we set the fine-tuned parameters for this environment. Everything else gets inherited from its baseline configuration. There are no strict rules about where to place configurations. Organize them in a way that makes logical sense for your infrastructure’s data model.
+
+<EmbedFile filePath="examples/quick-start-simple/stacks/deploy/dev.yaml" />
+
+#### Define the `staging` Environment Configuration
+
+The staging stack configuration is almost identical to the dev stack. The only changes are the location and language settings. Everything else stays the same as the baseline configuration, ensuring that the staging and dev environments are very similar.
+
+<EmbedFile filePath="examples/quick-start-simple/stacks/deploy/staging.yaml" />
+
+#### Define the `prod` Environment Configuration
+
+And finally, we have the production (`prod`) stack. Much like the `staging` and `dev` stacks, it’s very similar to the baseline configuration but with some parameter changes. In this setup, all three stacks are separate, share the same component, and vary the station's parameters as needed.
+
+<EmbedFile filePath="examples/quick-start-simple/stacks/deploy/prod.yaml" />
+
+Now, we're finally ready to deploy our components. We'll show you how to do this in the next step.
+
+<ActionCard title="Want to go deeper on this topic?">
+    You can do so much more with stacks! We're just scratching the surface. If you want [learn about imports, inheritance, templating, etc](/core-concepts/stacks), check out the Core Concepts.
+    <PrimaryCTA to="/core-concepts/stacks">Learn More</PrimaryCTA>
+</ActionCard>

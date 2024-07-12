@@ -53,7 +53,7 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack)
+	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack, false)
 	if err != nil {
 		return err
 	}
@@ -71,6 +71,7 @@ func ExecuteDescribeDependents(
 	cliConfig schema.CliConfiguration,
 	component string,
 	stack string,
+	includeSettings bool,
 ) ([]schema.Dependent, error) {
 
 	dependents := []schema.Dependent{}
@@ -235,7 +236,6 @@ func ExecuteDescribeDependents(
 
 					// Add Spacelift stack and Atlantis project if they are configured for the dependent stack component
 					if stackComponentType == "terraform" {
-
 						// Spacelift stack
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:         stackComponentName,
@@ -260,6 +260,10 @@ func ExecuteDescribeDependents(
 							return nil, err
 						}
 						dependent.AtlantisProject = atlantisProjectName
+					}
+
+					if includeSettings {
+						dependent.Settings = stackComponentSettingsSection
 					}
 
 					dependents = append(dependents, dependent)

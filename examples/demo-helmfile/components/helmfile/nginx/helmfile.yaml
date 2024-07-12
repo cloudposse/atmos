@@ -1,0 +1,32 @@
+repositories:
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
+
+releases:
+  - name: nginx
+    namespace: default
+    chart: bitnami/nginx
+    force: true
+    hooks:
+      - events: ["presync"]
+        command: "kubectl"
+        args: ["apply", "-f", "manifests/"]
+      - events: ["postuninstall"]
+        command: "kubectl"
+        args: ["delete", "-f", "manifests/"]
+      - events: ["postsync"]
+        command: "bash"
+        showlogs: true
+        args: ["-c", 'echo -n "Success! We have taken over fbi.com ;)"']
+    transformers:
+      - apiVersion: builtin
+        kind: AnnotationsTransformer
+        metadata:
+          name: notImportantHere
+        annotations:
+          redeploy: '{{ now }}'
+        fieldSpecs:
+        - path: spec/template/metadata/annotations
+          create: true
+    values:
+      

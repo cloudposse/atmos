@@ -11,8 +11,6 @@ import DocCardList from '@theme/DocCardList';
 Use these subcommands to run `helmfile` commands.
 :::
 
-<br/>
-
 <Screengrab title="atmos helmfile --help" slug="atmos-helmfile--help" />
 
 # Usage
@@ -26,15 +24,11 @@ atmos helmfile <command> <component> -s <stack> [options]
 atmos helmfile <command> <component> --stack <stack> [options]
 ```
 
-<br/>
-
 :::info
 Atmos supports all `helmfile` commands and options described in [Helmfile CLI reference](https://github.com/helmfile/helmfile#cli-reference).
 
 In addition, the `component` argument and `stack` flag are required to generate variables for the component in the stack.
 :::
-
-<br/>
 
 **Additions and differences from native `helmfile`:**
 
@@ -48,8 +42,6 @@ In addition, the `component` argument and `stack` flag are required to generate 
 
 - double-dash `--` can be used to signify the end of the options for Atmos and the start of the additional native arguments and flags for
   the `helmfile` commands.
-
-<br/>
 
 :::tip
 Run `atmos helmfile --help` to see all the available options
@@ -90,8 +82,6 @@ atmos helmfile destroy echo-server --stack=tenant1-ue2-dev --redirect-stderr /de
 | `--stack`           | Atmos stack                                                                                                                                   | `-s`  | yes      |
 | `--dry-run`         | Dry run                                                                                                                                       |       | no       |
 | `--redirect-stderr` | File descriptor to redirect `stderr` to.<br/>Errors can be redirected to any file or any standard file descriptor<br/>(including `/dev/null`) |       | no       |
-
-<br/>
 
 :::note
 

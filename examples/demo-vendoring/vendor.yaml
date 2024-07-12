@@ -1,0 +1,38 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: demo-vendoring
+  description: Atmos vendoring manifest for Atmos demo component library
+spec:
+  # Import other vendor manifests, if necessary
+  imports: []
+
+  sources:
+    - component: "github/stargazers"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "components/terraform/{{ .Component }}/{{.Version}}"
+      included_paths:
+        - "**/*.tf"
+        - "**/*.tfvars"
+        - "**/*.md"
+      tags:
+        - demo
+        - github
+
+    - component: "weather"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "components/terraform/{{ .Component }}/{{.Version}}"
+      tags:
+        - demo
+
+    - component: "ipinfo"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "components/terraform/{{ .Component }}/{{.Version}}"
+      tags:
+        - demo

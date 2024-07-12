@@ -1,0 +1,103 @@
+# atmos.yaml CLI config
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - atmos atlantis build-all
+
+- name: "atlantis"
+  commands:
+  - name: "build-all"
+    description: "Build all configurations for Atlantis"
+    steps:
+    - echo "Building Atlantis config..."
+    - atmos atlantis generate repo-config --config-template config-1 --project-template project-1
+    - echo "Generating varfiles..."
+    - >-
+        atmos terraform generate varfiles \
+          --file-template={component-path}/varfiles/{namespace}-{environment}-{component}.tfvars.json
+    - echo "Generating varfiles..."
+    - >-
+        atmos terraform generate backends \
+          --format=backend-config \
+          --file-template={component-path}/backends/{namespace}-{environment}-{component}.backend
+
+
+# Integrations
+integrations:
+
+  # Atlantis integration
+  # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
+  atlantis:
+    # Path and name of the Atlantis config file `atlantis.yaml`
+    path: "atlantis.yaml"
+
+    # Config templates
+    # Select a template by using the `--config-template <config_template>` command-line argument in `atmos atlantis generate repo-config` command
+    config_templates:
+      config-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+
+    # Project templates
+    # Select a template by using the `--project-template <project_template>` command-line argument in `atmos atlantis generate repo-config` command
+    project_templates:
+      project-1:
+        # generate a project entry for each component in every stack
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        dir: "{component-path}"
+        terraform_version: v1.8
+        delete_source_branch_on_merge: true
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/$PROJECT_NAME.tfvars"
+          apply_requirements:
+            - "approved"
+
+    # Workflow templates
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
+    workflow_templates:
+      workflow-1:
+        plan:
+          steps:
+            - run: atmos terraform init -input=false
+            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
+            - run: atmos terraform workspace select $WORKSPACE
+            # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE

@@ -1,16 +1,18 @@
 ---
-title: Component Catalog Template Atmos Design Pattern
+title: Component Catalog Template
 sidebar_position: 7
 sidebar_label: Component Catalog Template
 description: Component Catalog Template Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import PillBox from '@site/src/components/PillBox'
 
-# Component Catalog Template
+<PillBox>Atmos Design Pattern</PillBox>
 
-The **Component Catalog Template** Design Pattern is used when you have an unbounded number of a component's instances provisioned in one environment
-(the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old
-instances must be kept unchanged and never destroyed.
+<Intro>
+The **Component Catalog Template** Design Pattern is used when you have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old instances must be kept unchanged and never destroyed.
+</Intro>
 
 This is achieved by using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and
 [Hierarchical Imports with Context](/core-concepts/stacks/imports#hierarchical-imports-with-context).

@@ -1,0 +1,37 @@
+.typewriter {
+  display: flex;
+  flex: 0 1 auto;
+}
+
+.typewriter > tt {
+    display: flex;
+    width: auto;
+    font-size: 1.15em;
+    line-height: 1.2em;
+    margin: 0.5em;
+    border-right: 6px solid rgba(2, 181, 9,1);
+    flex-basis: content;
+    white-space: nowrap;
+    overflow: hidden;
+    transform: translateY(-50%);
+}
+
+/* Animation */
+.animate .typing {
+  animation: typing 3s steps(18) 1s 1 normal both,
+             blinkTextCursor 500ms steps(44) 5 normal;
+}
+
+.hiddenCursor .typewriter  > tt {
+  border-right: none;
+}
+
+@keyframes typing {
+  from{max-width: 0; }
+  to{max-width: 100vw; padding-right: 0.3em;}
+}
+
+@keyframes blinkTextCursor{
+  from{border-right-color: rgba(2, 181, 9,.75);}
+  to{border-right-color: transparent;}
+}

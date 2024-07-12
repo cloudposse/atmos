@@ -1,0 +1,70 @@
+---
+id: components
+title:  Components Cheatsheet
+descriptions: Cheatsheet for managing components in Atmos
+sidebar_label: Using Components
+sidebar_position: 2
+---
+import Link from '@docusaurus/Link'
+import Card from '@site/src/components/Card'
+import CardGroup from '@site/src/components/CardGroup'
+
+<CardGroup title="Configuration" className="cheatsheet">
+  <Card title="Folder Structure">
+  ```
+  ├── atmos.yaml
+  ├── components
+  │   └── myapp
+  │       ├── main.tf
+  │       ├── outputs.tf
+  │       └── variables.tf
+  └── stacks
+      ├── catalog
+      │   └── myapp.yaml
+      └── deploy
+          ├── dev.yaml
+          ├── prod.yaml
+          └── staging.yaml
+  ```
+  </Card>
+</CardGroup>
+
+<CardGroup title="Commands" className="cheatsheet">
+    <Card title="List Components">
+    ```shell
+    atmos list components
+    ```
+    </Card>
+    <Card title="Validate Components">
+    ```shell
+    atmos validate component $component -s $stack
+    atmos validate component $component -s $stack --schema-type jsonschema --schema-path $component.json
+    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego 
+    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego  --module-paths catalog
+    atmos validate component $component -s $stack --timeout 15
+    ```
+    </Card>    
+</CardGroup>
+
+<CardGroup title="Terraform" className="cheatsheet">
+    <Card title="Plan Root Modules">
+    ```shell
+    atmos terraform plan $component --stack $stack
+    atmos terraform plan $component --stack $stack -out $planfile
+    ```
+    </Card> 
+    <Card title="Apply Root Modules">
+    ```shell
+    atmos terraform apply $component --stack $stack
+    atmos terraform apply $component --stack $stack -auto-approve
+    atmos terraform apply $component --stack $stack $planfile
+    ```
+    </Card>
+    <Card title="Deploy Root Modules">
+    ```shell
+    atmos terraform deploy
+    atmos terraform deploy $component --stack $stack -out $planfile
+    atmos terraform deploy $component --stack $stack -var "key=value"
+    ```
+    </Card>
+</CardGroup>

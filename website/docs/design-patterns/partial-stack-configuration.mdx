@@ -1,19 +1,20 @@
 ---
-title: Partial Stack Configuration Atmos Design Pattern
+title: Partial Stack Configuration
 sidebar_position: 12
 sidebar_label: Partial Stack Configuration
 description: Partial Stack Configuration Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
-# Partial Stack Configuration
+<PillBox>Atmos Design Pattern</PillBox>
 
-The **Partial Stack Configuration** Design Pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos
-stack manifests to manage and modify them separately and independently.
+<Intro>
+The **Partial Stack Configuration** Design Pattern describes the mechanism of splitting an Atmos top-level stack's configuration across many Atmos stack manifests to manage and modify them separately and independently.
+</Intro>
 
-Each partial top-level stack manifest imports or configures a set of related Atmos components. Each Atmos component belongs to just one of the partial
-top-level stack manifests. The pattern helps to group all components by category or function and to make each partial stack manifest smaller and
-easier to manage.
+Each partial top-level stack manifest imports or configures a set of related Atmos components. Each Atmos component belongs to just one of the partial top-level stack manifests. The pattern helps to group all components by category or function and to make each partial stack manifest smaller and easier to manage.
 
 ## Use-cases
 
@@ -54,8 +55,6 @@ In the `stacks/orgs/acme/plat/dev/us-east-2` folder, we split the top-level stac
 - `firewalls.yaml`
 - `networking.yaml`
 - `eks.yaml`
-
-<br/>
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -166,7 +165,7 @@ Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/load
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2/load-balancers.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -179,7 +178,7 @@ Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/data
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2/data.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -194,7 +193,7 @@ Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/dns.
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2/dns.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -207,7 +206,7 @@ Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/logs
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2/logs.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -221,7 +220,7 @@ Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/noti
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2/notifications.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -235,7 +234,7 @@ Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/fire
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2/firewalls.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -249,7 +248,7 @@ Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/netw
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2/networking.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -262,7 +261,7 @@ Add the following configuration to the `stacks/orgs/acme/plat/dev/us-east-2/eks.
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2/eks.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -299,4 +298,4 @@ the [Layered Stack Configuration](/design-patterns/layered-stack-configuration) 
 ## References
 
 - [Catalogs](/core-concepts/stacks/catalogs)
-- [Mixins](/core-concepts/stacks/mixins)
+- [Mixins](/core-concepts/stacks/inheritance/mixins)

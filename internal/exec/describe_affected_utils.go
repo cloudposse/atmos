@@ -38,7 +38,8 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	sshKeyPassword string,
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
-) ([]schema.Affected, error) {
+	includeSettings bool,
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
 		cliConfig.Logs.Level = u.LogLevelTrace
@@ -51,18 +52,18 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Get the Git config of the local repo
 	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
@@ -74,18 +75,18 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	}
 
 	if len(keys) == 0 {
-		return nil, localRepoIsNotGitRepoError
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
 	}
 
-	// Get the origin URL of the current remoteRepo
+	// Get the URL of the repo
 	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
 	if len(remoteUrls) == 0 {
-		return nil, localRepoIsNotGitRepoError
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
 	}
 
 	repoUrl := remoteUrls[0]
 	if repoUrl == "" {
-		return nil, localRepoIsNotGitRepoError
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
 	}
 
 	// Clone the remote repo
@@ -100,7 +101,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// Create a temp dir to clone the remote repo to
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, "", err
 	}
 
 	defer removeTempDir(cliConfig, tempDir)
@@ -131,12 +132,12 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	if sshKeyPath != "" {
 		sshKeyContent, err := os.ReadFile(sshKeyPath)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, "", err
 		}
 
 		sshPublicKey, err := ssh.NewPublicKeys("git", sshKeyContent, sshKeyPassword)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, "", err
 		}
 
 		// Use the SSH key to clone the repo
@@ -149,12 +150,12 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 	remoteRepo, err := git.PlainClone(tempDir, false, &cloneOptions)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, "", err
 	}
 
 	remoteRepoHead, err := remoteRepo.Head()
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, "", err
 	}
 
 	if ref != "" {
@@ -169,7 +170,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, "", err
 		}
 
 		checkoutOptions := git.CheckoutOptions{
@@ -181,18 +182,27 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 		err = w.Checkout(&checkoutOptions)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, "", err
 		}
 
 		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
+	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
+		cliConfig,
+		localRepoPath,
+		tempDir,
+		localRepo,
+		remoteRepo,
+		verbose,
+		includeSpaceliftAdminStacks,
+		includeSettings,
+	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, "", err
 	}
 
-	return affected, nil
+	return affected, localRepoHead, remoteRepoHead, repoUrl, nil
 }
 
 // ExecuteDescribeAffectedWithTargetRefCheckout checks out the target reference,
@@ -203,7 +213,8 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	sha string,
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
-) ([]schema.Affected, error) {
+	includeSettings bool,
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
 		cliConfig.Logs.Level = u.LogLevelTrace
@@ -216,26 +227,47 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the local repo
-	_, err = localRepo.Config()
+	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
 
+	// Get the remotes of the local repo
+	keys := []string{}
+	for k := range localRepoConfig.Remotes {
+		keys = append(keys, k)
+	}
+
+	if len(keys) == 0 {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
+	// Get the URL of the repo
+	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
+	if len(remoteUrls) == 0 {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
+	repoUrl := remoteUrls[0]
+	if repoUrl == "" {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
 	// Create a temp dir for the target ref
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, "", err
 	}
 
 	defer removeTempDir(cliConfig, tempDir)
@@ -251,12 +283,22 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			if strings.Contains(src, "node_modules") {
 				return true, nil
 			}
+
+			// Check if the file is a socket and skip it
+			isSocket, err := u.IsSocket(src)
+			if err != nil {
+				return true, err
+			}
+			if isSocket {
+				return true, nil
+			}
+
 			return false, nil
 		},
 	}
 
 	if err = cp.Copy(localRepoPath, tempDir, copyOptions); err != nil {
-		return nil, err
+		return nil, nil, nil, "", err
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
@@ -266,13 +308,13 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the target ref
 	_, err = remoteRepo.Config()
 	if err != nil {
-		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	if sha != "" {
@@ -280,7 +322,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, "", err
 		}
 
 		checkoutOptions := git.CheckoutOptions{
@@ -292,7 +334,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		err = w.Checkout(&checkoutOptions)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, "", err
 		}
 
 		u.LogTrace(cliConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
@@ -306,7 +348,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, "", err
 		}
 
 		checkoutOptions := git.CheckoutOptions{
@@ -324,18 +366,27 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 					"\nrefer to https://atmos.tools/cli/commands/describe/affected for more details", ref)
 				err = errors.New(errorMessage)
 			}
-			return nil, err
+			return nil, nil, nil, "", err
 		}
 
 		u.LogTrace(cliConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, tempDir, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
+	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
+		cliConfig,
+		localRepoPath,
+		tempDir,
+		localRepo,
+		remoteRepo,
+		verbose,
+		includeSpaceliftAdminStacks,
+		includeSettings,
+	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, "", err
 	}
 
-	return affected, nil
+	return affected, localRepoHead, remoteRepoHead, repoUrl, nil
 }
 
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
@@ -345,7 +396,8 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	targetRefPath string,
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
-) ([]schema.Affected, error) {
+	includeSettings bool,
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	localPath := "."
 
@@ -354,42 +406,72 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the local repo
-	_, err = localRepo.Config()
+	localRepoConfig, err := localRepo.Config()
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoWorktree, err := localRepo.Worktree()
 	if err != nil {
-		return nil, errors.Join(err, localRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
 
 	localRepoPath := localRepoWorktree.Filesystem.Root()
+
+	// Get the remotes of the local repo
+	keys := []string{}
+	for k := range localRepoConfig.Remotes {
+		keys = append(keys, k)
+	}
+
+	if len(keys) == 0 {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
+	// Get the URL of the repo
+	remoteUrls := localRepoConfig.Remotes[keys[0]].URLs
+	if len(remoteUrls) == 0 {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
+
+	repoUrl := remoteUrls[0]
+	if repoUrl == "" {
+		return nil, nil, nil, "", localRepoIsNotGitRepoError
+	}
 
 	remoteRepo, err := git.PlainOpenWithOptions(targetRefPath, &git.PlainOpenOptions{
 		DetectDotGit:          false,
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the remote target repo
 	_, err = remoteRepo.Config()
 	if err != nil {
-		return nil, errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
-	affected, err := executeDescribeAffected(cliConfig, localRepoPath, targetRefPath, localRepo, remoteRepo, verbose, includeSpaceliftAdminStacks)
+	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
+		cliConfig,
+		localRepoPath,
+		targetRefPath,
+		localRepo,
+		remoteRepo,
+		verbose,
+		includeSpaceliftAdminStacks,
+		includeSettings,
+	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, "", err
 	}
 
-	return affected, nil
+	return affected, localRepoHead, remoteRepoHead, repoUrl, nil
 }
 
 func executeDescribeAffected(
@@ -400,7 +482,8 @@ func executeDescribeAffected(
 	remoteRepo *git.Repository,
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
-) ([]schema.Affected, error) {
+	includeSettings bool,
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 
 	if verbose {
 		cliConfig.Logs.Level = u.LogLevelTrace
@@ -408,25 +491,25 @@ func executeDescribeAffected(
 
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	remoteRepoHead, err := remoteRepo.Head()
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Current working repo HEAD: %s", localRepoHead))
-	u.LogTrace(cliConfig, fmt.Sprintf("Remote repo HEAD: %s", remoteRepoHead))
+	u.LogTrace(cliConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
+	u.LogTrace(cliConfig, fmt.Sprintf("BASE: %s", remoteRepoHead))
 
 	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	localRepoFileSystemPathAbs, err := filepath.Abs(localRepoFileSystemPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	basePath := cliConfig.BasePath
@@ -434,11 +517,11 @@ func executeDescribeAffected(
 	// Handle `atmos` absolute base path.
 	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
 	// If the `atmos` base path is absolute, find the relative path between the local repo path and the `atmos` base path.
-	// This relative path (the difference) is then used below to join with the remote (cloned) repo path.
+	// This relative path (the difference) is then used below to join with the remote (cloned) target repo path.
 	if path.IsAbs(basePath) {
 		basePath, err = filepath.Rel(localRepoFileSystemPathAbs, basePath)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 	}
 
@@ -452,19 +535,19 @@ func executeDescribeAffected(
 		cliConfig.StackConfigFilesRelativePaths,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("\nGetting current working repo commit object..."))
 
 	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Got current working repo commit object"))
@@ -472,7 +555,7 @@ func executeDescribeAffected(
 
 	localTree, err := localCommit.Tree()
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Got current working repo commit tree"))
@@ -480,7 +563,7 @@ func executeDescribeAffected(
 
 	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Got remote repo commit object"))
@@ -488,7 +571,7 @@ func executeDescribeAffected(
 
 	remoteTree, err := remoteCommit.Tree()
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	u.LogTrace(cliConfig, fmt.Sprintf("Got remote repo commit tree"))
@@ -497,7 +580,7 @@ func executeDescribeAffected(
 	// Find a slice of Patch objects with all the changes between the current working and remote trees
 	patch, err := localTree.Patch(remoteTree)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	var changedFiles []string
@@ -515,12 +598,19 @@ func executeDescribeAffected(
 		u.LogTrace(cliConfig, fmt.Sprintf("The current working branch and remote target branch are the same"))
 	}
 
-	affected, err := findAffected(currentStacks, remoteStacks, cliConfig, changedFiles, includeSpaceliftAdminStacks)
+	affected, err := findAffected(
+		currentStacks,
+		remoteStacks,
+		cliConfig,
+		changedFiles,
+		includeSpaceliftAdminStacks,
+		includeSettings,
+	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	return affected, nil
+	return affected, localRepoHead, remoteRepoHead, nil
 }
 
 // findAffected returns a list of all affected components in all stacks
@@ -530,6 +620,7 @@ func findAffected(
 	cliConfig schema.CliConfiguration,
 	changedFiles []string,
 	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
 ) ([]schema.Affected, error) {
 
 	res := []schema.Affected{}
@@ -567,6 +658,7 @@ func findAffected(
 										affected,
 										includeSpaceliftAdminStacks,
 										currentStacks,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -599,6 +691,7 @@ func findAffected(
 										affected,
 										false,
 										nil,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -628,6 +721,7 @@ func findAffected(
 										affected,
 										includeSpaceliftAdminStacks,
 										currentStacks,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -653,6 +747,7 @@ func findAffected(
 										affected,
 										includeSpaceliftAdminStacks,
 										currentStacks,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -678,6 +773,7 @@ func findAffected(
 										affected,
 										includeSpaceliftAdminStacks,
 										currentStacks,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -686,8 +782,8 @@ func findAffected(
 								}
 							}
 							// Check `settings` section
-							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, "settings") {
+							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[any]any); ok {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, cfg.SettingsSectionName) {
 									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
@@ -703,6 +799,7 @@ func findAffected(
 										affected,
 										includeSpaceliftAdminStacks,
 										currentStacks,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -761,6 +858,7 @@ func findAffected(
 										affected,
 										includeSpaceliftAdminStacks,
 										currentStacks,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -800,6 +898,7 @@ func findAffected(
 										affected,
 										false,
 										nil,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -832,6 +931,7 @@ func findAffected(
 										affected,
 										false,
 										nil,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -857,6 +957,7 @@ func findAffected(
 										affected,
 										false,
 										nil,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -882,6 +983,7 @@ func findAffected(
 										affected,
 										false,
 										nil,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -890,8 +992,8 @@ func findAffected(
 								}
 							}
 							// Check `settings` section
-							if settingsSection, ok := componentSection["settings"].(map[any]any); ok {
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, "settings") {
+							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[any]any); ok {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, cfg.SettingsSectionName) {
 									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
@@ -907,6 +1009,7 @@ func findAffected(
 										affected,
 										false,
 										nil,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -965,6 +1068,7 @@ func findAffected(
 										affected,
 										includeSpaceliftAdminStacks,
 										currentStacks,
+										includeSettings,
 									)
 									if err != nil {
 										return nil, err
@@ -992,6 +1096,7 @@ func appendToAffected(
 	affected schema.Affected,
 	includeSpaceliftAdminStacks bool,
 	stacks map[string]any,
+	includeSettings bool,
 ) ([]schema.Affected, error) {
 
 	// If the affected component in the stack was already added to the result, don't add it again
@@ -1001,16 +1106,21 @@ func appendToAffected(
 		}
 	}
 
+	settingsSection := map[any]any{}
+
+	if i, ok2 := componentSection[cfg.SettingsSectionName]; ok2 {
+		settingsSection = i.(map[any]any)
+
+		if includeSettings {
+			affected.Settings = settingsSection
+		}
+	}
+
 	if affected.ComponentType == "terraform" {
 		varSection := map[any]any{}
-		settingsSection := map[any]any{}
 
-		if i, ok2 := componentSection["vars"]; ok2 {
+		if i, ok2 := componentSection[cfg.VarsSectionName]; ok2 {
 			varSection = i.(map[any]any)
-		}
-
-		if i, ok2 := componentSection["settings"]; ok2 {
-			settingsSection = i.(map[any]any)
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{
@@ -1039,7 +1149,16 @@ func appendToAffected(
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {
-			affectedList, err = addAffectedSpaceliftAdminStack(cliConfig, affectedList, settingsSection, stacks, stackName, componentName, configAndStacksInfo)
+			affectedList, err = addAffectedSpaceliftAdminStack(
+				cliConfig,
+				affectedList,
+				settingsSection,
+				stacks,
+				stackName,
+				componentName,
+				configAndStacksInfo,
+				includeSettings,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1241,6 +1360,7 @@ func addAffectedSpaceliftAdminStack(
 	currentStackName string,
 	currentComponentName string,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
+	includeSettings bool,
 ) ([]schema.Affected, error) {
 
 	// Convert the `settings` section to the `Settings` structure
@@ -1278,7 +1398,7 @@ func addAffectedSpaceliftAdminStack(
 	var adminStackContextPrefix string
 
 	if cliConfig.Stacks.NameTemplate != "" {
-		adminStackContextPrefix, err = u.ProcessTmpl("spacelift-admin-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		adminStackContextPrefix, err = ProcessTmpl("spacelift-admin-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return nil, err
 		}
@@ -1314,7 +1434,7 @@ func addAffectedSpaceliftAdminStack(
 							var contextPrefix string
 
 							if cliConfig.Stacks.NameTemplate != "" {
-								contextPrefix, err = u.ProcessTmpl("spacelift-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+								contextPrefix, err = ProcessTmpl("spacelift-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 								if err != nil {
 									return nil, err
 								}
@@ -1326,7 +1446,7 @@ func addAffectedSpaceliftAdminStack(
 							}
 
 							if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {
-								if componentSettingsSection, ok = componentSection["settings"].(map[any]any); !ok {
+								if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
 									return affectedList, nil
 								}
 
@@ -1364,6 +1484,7 @@ func addAffectedSpaceliftAdminStack(
 									affectedSpaceliftAdminStack,
 									false,
 									nil,
+									includeSettings,
 								)
 								if err != nil {
 									return nil, err
@@ -1377,4 +1498,99 @@ func addAffectedSpaceliftAdminStack(
 	}
 
 	return affectedList, nil
+}
+
+// addDependentsToAffected adds dependent components and stacks to each affected component
+func addDependentsToAffected(
+	cliConfig schema.CliConfiguration,
+	affected *[]schema.Affected,
+	includeSettings bool,
+) error {
+	for i := 0; i < len(*affected); i++ {
+		a := &(*affected)[i]
+
+		deps, err := ExecuteDescribeDependents(cliConfig, a.Component, a.Stack, includeSettings)
+		if err != nil {
+			return err
+		}
+
+		if len(deps) > 0 {
+			a.Dependents = deps
+			err = addDependentsToDependents(cliConfig, &deps, includeSettings)
+			if err != nil {
+				return err
+			}
+		} else {
+			a.Dependents = []schema.Dependent{}
+		}
+	}
+
+	processIncludedInDependencies(affected)
+	return nil
+}
+
+// addDependentsToDependents recursively adds dependent components and stacks to each dependent component
+func addDependentsToDependents(
+	cliConfig schema.CliConfiguration,
+	dependents *[]schema.Dependent,
+	includeSettings bool,
+) error {
+	for i := 0; i < len(*dependents); i++ {
+		d := &(*dependents)[i]
+
+		deps, err := ExecuteDescribeDependents(cliConfig, d.Component, d.Stack, includeSettings)
+		if err != nil {
+			return err
+		}
+
+		if len(deps) > 0 {
+			d.Dependents = deps
+			err = addDependentsToDependents(cliConfig, &deps, includeSettings)
+			if err != nil {
+				return err
+			}
+		} else {
+			d.Dependents = []schema.Dependent{}
+		}
+	}
+
+	return nil
+}
+
+func processIncludedInDependencies(affected *[]schema.Affected) bool {
+	for i := 0; i < len(*affected); i++ {
+		a := &(*affected)[i]
+		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
+	}
+	return false
+}
+
+func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stackSlug string, affectedIndex int) bool {
+	for i := 0; i < len(*affected); i++ {
+		if i == affectedIndex {
+			continue
+		}
+
+		a := &(*affected)[i]
+
+		if len(a.Dependents) > 0 {
+			return processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
+		}
+	}
+	return false
+}
+
+func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, stackSlug string) bool {
+	for i := 0; i < len(*dependents); i++ {
+		d := &(*dependents)[i]
+
+		if d.StackSlug == stackSlug {
+			return true
+		}
+
+		if len(d.Dependents) > 0 {
+			return processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
+		}
+	}
+	return false
 }

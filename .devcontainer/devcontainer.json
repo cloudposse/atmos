@@ -1,0 +1,80 @@
+{
+    "name": "Atmos Demo Lab",
+    "forwardPorts": [80, 443],
+    "portsAttributes": {
+        "80": {
+          "label": "Kubernetes Ingress"
+        },
+        "443": {
+          "label": "Kubernetes Ingress (TLS)"
+        }
+      },
+    "security.workspace.trust.emptyWindow": true,
+    "security.workspace.trust.untrustedFiles": "prompt",
+    "security.workspace.trust.domain": {
+        "*.github.com": true,
+        "*.app.github.dev": true,
+        "localhost": true
+    },
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "hostRequirements": {
+        "cpus": 8,
+        "memory": "16gb",
+        "storage": "32gb"
+     },
+    "runArgs": ["-v", "/var/run/docker.sock:/var/run/docker.sock"],
+    "postCreateCommand": "/workspace/.devcontainer/post-create.sh",
+    "service": "localstack",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-outside-of-docker": {},
+        /*"ghcr.io/devcontainers/features/go:1": {
+            "version": "1.22"
+        },*/
+    },
+    "workspaceFolder": "/workspace/examples",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "ms-azuretools.vscode-docker",
+          "bierner.github-markdown-preview",
+          "tomasdahlqvist.markdown-admonitions",
+          "HashiCorp.terraform",
+          "redhat.vscode-yaml",
+          "casualjim.gotemplate",
+          "EditorConfig.EditorConfig"
+        ],
+        "settings": {
+            "git.openRepositoryInParentFolders": "always",
+            "git.autofetch": true,
+            "git.showProgress": true,
+            "workbench.startupEditor": "readme",
+            "workbench.editor.autoLockGroups": {
+              "readme": "/welcome.md"
+            },
+            "workbench.editorAssociations": {
+                "*.md": "vscode.markdown.preview.editor"
+            },
+            "terminal.integrated.tabs.title": "Atmos (${process})",
+            "terminal.integrated.tabs.description": "${task}${separator}${local}${separator}${cwdFolder}",
+            "terminal.integrated.shell.linux": "/bin/zsh",
+            "terminal.integrated.allowWorkspaceConfiguration": true,
+            "terminal.integrated.commandsToSkipShell": [],
+            "yaml.schemaStore.enable": true,
+            "json.schemas": [
+            ],
+            "yaml.schemas": {
+                "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
+                    "**/stacks/**/*.yaml",
+                    "!**/stacks/workflows/**/*.yaml",
+                    "!**/stacks/schemas/**/*.yaml"
+                ]
+             }
+          }
+      }
+    }
+  }

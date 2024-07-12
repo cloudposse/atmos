@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -161,4 +162,14 @@ func GetAllYamlFilesInDir(dir string) ([]string, error) {
 	}
 
 	return res, nil
+}
+
+// IsSocket checks if a file is a socket
+func IsSocket(path string) (bool, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	isSocket := fileInfo.Mode().Type() == fs.ModeSocket
+	return isSocket, nil
 }

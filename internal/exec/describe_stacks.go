@@ -3,15 +3,14 @@ package exec
 import (
 	"errors"
 	"fmt"
-	c "github.com/cloudposse/atmos/pkg/convert"
-	"github.com/mitchellh/mapstructure"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -145,7 +144,7 @@ func ExecuteDescribeStacks(
 						}
 
 						// Find all derived components of the provided components and include them in the output
-						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
+						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
 						if err != nil {
 							return nil, err
 						}
@@ -211,7 +210,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -236,9 +235,12 @@ func ExecuteDescribeStacks(
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
+						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+						configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
@@ -251,6 +253,13 @@ func ExecuteDescribeStacks(
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
+							// Atmos component, stack, and stack manifest file
+							componentSection["atmos_component"] = componentName
+							componentSection["atmos_stack"] = stackName
+							componentSection["stack"] = stackName
+							componentSection["atmos_stack_file"] = stackFileName
+							componentSection["atmos_manifest"] = stackFileName
+
 							// Terraform workspace
 							workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 							if err != nil {
@@ -258,11 +267,6 @@ func ExecuteDescribeStacks(
 							}
 							componentSection["workspace"] = workspace
 							configAndStacksInfo.ComponentSection["workspace"] = workspace
-
-							// Atmos component, stack, and stack manifest file
-							componentSection["atmos_component"] = componentName
-							componentSection["atmos_stack"] = stackName
-							componentSection["atmos_stack_file"] = stackFileName
 
 							// Process `Go` templates
 							componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -276,7 +280,14 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := ProcessTmplWithDatasources(
+								cliConfig,
+								settingsSectionStruct,
+								"describe-stacks-all-sections",
+								componentSectionStr,
+								configAndStacksInfo.ComponentSection,
+								true,
+							)
 							if err != nil {
 								return nil, err
 							}
@@ -286,7 +297,7 @@ func ExecuteDescribeStacks(
 								if !cliConfig.Templates.Settings.Enabled {
 									if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 										errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
-											"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+											"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
 										err = errors.Join(err, errors.New(errorMessage))
 									}
 								}
@@ -319,7 +330,7 @@ func ExecuteDescribeStacks(
 						}
 
 						// Find all derived components of the provided components and include them in the output
-						derivedComponents, err := s.FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
+						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
 						if err != nil {
 							return nil, err
 						}
@@ -385,7 +396,7 @@ func ExecuteDescribeStacks(
 
 						// Stack name
 						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = u.ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							stackName, err = ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
@@ -412,7 +423,9 @@ func ExecuteDescribeStacks(
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+						configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
@@ -428,7 +441,9 @@ func ExecuteDescribeStacks(
 							// Atmos component, stack, and stack manifest file
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
+							componentSection["stack"] = stackName
 							componentSection["atmos_stack_file"] = stackFileName
+							componentSection["atmos_manifest"] = stackFileName
 
 							// Process `Go` templates
 							componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -442,7 +457,14 @@ func ExecuteDescribeStacks(
 								return nil, err
 							}
 
-							componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "describe-stacks-all-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
+							componentSectionProcessed, err := ProcessTmplWithDatasources(
+								cliConfig,
+								settingsSectionStruct,
+								"describe-stacks-all-sections",
+								componentSectionStr,
+								configAndStacksInfo.ComponentSection,
+								true,
+							)
 							if err != nil {
 								return nil, err
 							}
@@ -452,7 +474,7 @@ func ExecuteDescribeStacks(
 								if !cliConfig.Templates.Settings.Enabled {
 									if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 										errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
-											"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+											"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
 										err = errors.Join(err, errors.New(errorMessage))
 									}
 								}

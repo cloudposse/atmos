@@ -18,6 +18,8 @@ import:
   - catalog/terraform/derived-component-1
   - catalog/terraform/derived-component-2
   - catalog/terraform/derived-component-3
+  - catalog/terraform/derived-component-4
+  - catalog/terraform/derived-component-5
 
 components:
   terraform:

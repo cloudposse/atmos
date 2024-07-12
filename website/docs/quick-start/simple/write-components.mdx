@@ -1,0 +1,129 @@
+---
+title: Write Some Components
+sidebar_position: 3
+sidebar_label: 3. Write Some Components
+---
+import EmbedFile from '@site/src/components/EmbedFile'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Screengrab from '@site/src/components/Screengrab'
+import LatestRelease from '@site/src/components/LatestRelease'
+import Step from '@site/src/components/Step'
+import StepNumber from '@site/src/components/StepNumber'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import SecondaryCTA from '@site/src/components/SecondaryCTA'
+import Note from '@site/src/components/Note'
+
+<Intro>
+When you [design cloud architectures with Atmos](/quick-start/mindset), you will first break them apart into pieces called [components](/core-concepts/components). Then, you will implement [Terraform "root modules"](/core-concepts/components/terraform) for each of those components.
+</Intro>
+
+After we're done with this, we'll show you [how you connect your components using stacks](/quick-start/simple/configure-stacks), so that everything comes together.
+
+<KeyPoints>
+- Where to place your components
+- How to write a suitable Terraform root module to use as a component
+- How to make your components reusable and other considerations
+</KeyPoints>
+
+<Step>
+## <StepNumber/> Decide what your component should do
+
+Once we consider our infrastructure in terms of components, we need to determine the specific functions each component must perform.
+
+We recommend following the [Single Responsibility Principle (SRP)](https://en.wikipedia.org/wiki/Single-responsibility_principle). That is, design components to serve a single purpose, making them the smallest possible unit of infrastructure in a typical software development lifecycle (SDLC). Group pieces usually change together as one component and separate those that change independently (or seldom).
+
+We discuss some of the [best practices for components](/best-practices/components) in our documentation.
+
+In this case, since our goal is to retrieve the current weather, let's create a component that will do just that.
+
+</Step>
+
+<Step>
+## <StepNumber/> Create a Directory for Your Component
+
+The implementation for the component (e.g. HCL code) will be stored in a directory under the `components/` folder corresponding to the toolchain used (e.g. `terraform/`). For Terraform, place your component in the `components/terraform` directory. Inside this directory, create a folder to store your component’s Terraform code, which serves as the root module. Since our component is a simple Terraform root module, we will create a directory called `weather` to store the Terraform code for our weather component.
+
+```bash
+mkdir -p components/terraform/weather
+```
+
+</Step>
+
+
+<Step>
+## <StepNumber/> Write a Terraform Root Module
+
+In the following descriptions, you’ll see that everything is just plain Terraform (HCL) with nothing specific to Atmos. That’s intentional: we want to demonstrate that Atmos works seamlessly with plain Terraform. Atmos introduces conventions around how you use Terraform with its framework, which will become more evident in the subsequent lessons.
+
+To write our Terraform root module, we’ll follow Terraform's standard conventions:
+<dl>
+  <dt>`variables.tf`</dt>
+  <dd>Defines variables</dd>
+
+  <dt>`outputs.tf`</dt>
+  <dd>Defines outputs</dd>
+
+  <dt>`versions.tf`</dt>
+  <dd>Specifies required provider versions</dd>
+
+  <dt>`providers.tf`</dt>
+  <dd>Specifies providers</dd>
+
+  <dt>`main.tf`</dt>
+  <dd>Implements main functionality</dd>
+</dl>
+
+So, let’s start by defining our root module as usual.
+
+### Implement `variables.tf`
+
+To make the best use of Atmos, ensure your root modules are highly reusable by accepting parameters, allowing them to be deployed multiple times without conflicts. This also usually means provisioning resources with unique names.
+
+<EmbedFile filePath="examples/quick-start-simple/components/terraform/weather/variables.tf" />
+
+### Implement `main.tf`
+
+The `main.tf` file is where the main implementation of your component resides. This is where you define all the business logic for what you’re trying to achieve—the core functionality of your root module. If this file becomes too large or complex, you can break it into multiple files in a way that makes sense. However, sometimes that is also a red flag, indicating that the component is trying to do too much and should be broken down into smaller components.
+
+In this example, we define a local variable that creates a URL using the variable inputs we receive. We also set up a data source to perform an HTTP request to that endpoint and retrieve the current weather. Additionally, we write this output to a file to demonstrate a stateful resource.
+
+<EmbedFile filePath="examples/quick-start-simple/components/terraform/weather/main.tf" />
+
+<details>
+<summary>How do we recommend ensuring unique resource names?</summary>
+
+Cloud Posse's [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) module makes this easier by turning naming into a standardized, programmatically enforced convention. Setting the null label parameters ensures unique resource names and enforces consistency across your team and organization.
+
+<Note>In our example, we will keep it simple to focus on the basics, so we will not use this module.</Note>
+</details>
+
+For the purpose of this quickstart, we’ll assume you have minimal experience with Terraform. Some of this information might be obvious to more experienced users, but we’re including it here to ensure a smooth learning experience for everyone.
+
+### Implement `versions.tf`
+
+The `versions.tf` file is where provider pinning is typically defined. Provider pinning increases the stability of your components and ensures consistency between deployments in multiple environments.
+
+<EmbedFile filePath="examples/quick-start-simple/components/terraform/weather/versions.tf" />
+
+### Implement `outputs.tf`
+
+The `outputs.tf` file is where, by convention in Terraform, you place any outputs you want to expose from your root module. Outputs are essential for passing state between your root modules and can be used in conjunction with [remote state](/core-concepts/components/terraform/remote-state) or the [Atmos function to retrieve the state](/core-concepts/stacks/templates/functions) of any other component.
+In object-oriented parlance, think of your outputs as the “public” attributes of the module that are intended to be accessed by other modules. This convention helps maintain clarity and organization within your Terraform configurations.
+
+<EmbedFile filePath="examples/quick-start-simple/components/terraform/weather/outputs.tf" />
+<Note>Technically outputs can be placed in any file, but the standard convention in Terraform is to place them usually in `outputs.tf`.</Note>
+</Step>
+
+
+
+<ActionCard title="Ready to take the next step?">
+    Now that you have a Terraform "root module", you can use it as a component in your Atmos stacks, and deploy it any number of times, tweaking the configuration as needed.
+
+    We will show you [how to do that in the next step](/quick-start/simple/configure-stacks).
+    <div>
+      <PrimaryCTA to="/quick-start/simple/configure-stacks">Next Step</PrimaryCTA>
+      <SecondaryCTA to="/core-concepts/components/terraform">Deep Dive</SecondaryCTA>
+    </div>
+</ActionCard>
