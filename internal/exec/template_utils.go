@@ -21,8 +21,15 @@ import (
 )
 
 // ProcessTmpl parses and executes Go templates
-func ProcessTmpl(tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
-	funcs := lo.Assign(FuncMap(context.TODO(), &data.Data{}), sprig.FuncMap())
+func ProcessTmpl(
+	tmplName string,
+	tmplValue string,
+	tmplData any,
+	ignoreMissingTemplateValues bool,
+) (string, error) {
+	d := data.Data{}
+	ctx := context.TODO()
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
