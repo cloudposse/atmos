@@ -29,6 +29,8 @@ func ProcessTmpl(
 ) (string, error) {
 	d := data.Data{}
 	ctx := context.TODO()
+
+	// Add Gomplate, Sprig and Atmos template functions
 	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
