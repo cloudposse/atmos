@@ -33,7 +33,7 @@ require (
 	github.com/open-policy-agent/opa v0.66.0
 	github.com/otiai10/copy v1.14.0
 	github.com/pkg/errors v0.9.1
-	github.com/samber/lo v1.44.0
+	github.com/samber/lo v1.45.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
