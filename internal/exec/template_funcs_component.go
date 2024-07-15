@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
@@ -10,7 +11,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
+var (
+	componentFuncSyncMap = sync.Map{}
+)
+
 func componentFunc(component string, stack string) (any, error) {
+	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+
+	// If the result for the component in the stack already exists in the cache, return it
+	existingSections, found := componentFuncSyncMap.Load(stackSlug)
+	if found && existingSections != nil {
+		return existingSections, nil
+	}
+
 	sections, err := ExecuteDescribeComponent(component, stack)
 	if err != nil {
 		return nil, err
@@ -76,6 +89,9 @@ func componentFunc(component string, stack string) (any, error) {
 	}
 
 	sections = lo.Assign(sections, outputs)
+
+	// Cache the result
+	componentFuncSyncMap.Store(stackSlug, sections)
 
 	return sections, nil
 }
