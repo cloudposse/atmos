@@ -1,11 +1,11 @@
 package code_view
 
 import (
-	u "github.com/cloudposse/atmos/internal/tui/utils"
-
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	u "github.com/cloudposse/atmos/internal/tui/utils"
 )
 
 type Model struct {

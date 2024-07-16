@@ -26,14 +26,15 @@ var versionCmd = &cobra.Command{
 			u.LogErrorAndExit(err)
 		}
 
-		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", Version, runtime.GOOS, runtime.GOARCH))
+		currentRelease := strings.TrimPrefix(Version, "v")
+
+		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", currentRelease, runtime.GOOS, runtime.GOARCH))
 		fmt.Println()
 
 		// Check for the latest Atmos release on GitHub
 		latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 		if err == nil && latestReleaseTag != "" {
 			latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
-			currentRelease := strings.TrimPrefix(Version, "v")
 			if latestRelease != currentRelease {
 				printMessageToUpgradeToAtmosLatestRelease(latestRelease)
 			}
