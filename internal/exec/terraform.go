@@ -371,41 +371,46 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Run `terraform workspace` before executing other terraform commands
+	// only if the `TF_WORKSPACE` environment variable is not set by the caller
 	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		workspaceSelectRedirectStdErr := "/dev/stdout"
+		tfWorkspaceEnvVar := os.Getenv("TF_WORKSPACE")
 
-		// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
-		if info.RedirectStdErr != "" {
-			workspaceSelectRedirectStdErr = info.RedirectStdErr
-		}
+		if tfWorkspaceEnvVar == "" {
+			workspaceSelectRedirectStdErr := "/dev/stdout"
 
-		err = ExecuteShellCommand(
-			cliConfig,
-			info.Command,
-			[]string{"workspace", "select", info.TerraformWorkspace},
-			componentPath,
-			info.ComponentEnvList,
-			info.DryRun,
-			workspaceSelectRedirectStdErr,
-		)
-		if err != nil {
-			var osErr *osexec.ExitError
-			ok := errors.As(err, &osErr)
-			if !ok || osErr.ExitCode() != 1 {
-				// err is not a non-zero exit code or err is not exit code 1, which we are expecting
-				return err
+			// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
+			if info.RedirectStdErr != "" {
+				workspaceSelectRedirectStdErr = info.RedirectStdErr
 			}
+
 			err = ExecuteShellCommand(
 				cliConfig,
 				info.Command,
-				[]string{"workspace", "new", info.TerraformWorkspace},
+				[]string{"workspace", "select", info.TerraformWorkspace},
 				componentPath,
 				info.ComponentEnvList,
 				info.DryRun,
-				info.RedirectStdErr,
+				workspaceSelectRedirectStdErr,
 			)
 			if err != nil {
-				return err
+				var osErr *osexec.ExitError
+				ok := errors.As(err, &osErr)
+				if !ok || osErr.ExitCode() != 1 {
+					// err is not a non-zero exit code or err is not exit code 1, which we are expecting
+					return err
+				}
+				err = ExecuteShellCommand(
+					cliConfig,
+					info.Command,
+					[]string{"workspace", "new", info.TerraformWorkspace},
+					componentPath,
+					info.ComponentEnvList,
+					info.DryRun,
+					info.RedirectStdErr,
+				)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
