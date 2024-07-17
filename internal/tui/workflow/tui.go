@@ -1,10 +1,10 @@
 package workflow
 
 import (
-	"github.com/cloudposse/atmos/pkg/schema"
-
 	tea "github.com/charmbracelet/bubbletea"
 	mouseZone "github.com/lrstanley/bubblezone"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Execute starts the TUI app and returns the selected items from the views
