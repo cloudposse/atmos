@@ -60,31 +60,3 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 
 	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", string(affectedYaml)))
 }
-
-func TestDescribeAffectedWithTargetRepoCheckout(t *testing.T) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-	assert.Nil(t, err)
-
-	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../examples/tests",
-	// which will be wrong for the remote repo which is cloned into a temp dir.
-	// Set the correct base path for the cloned remote repo
-	cliConfig.BasePath = "./examples/infra-demo-atmos-pro"
-
-	// Git reference and commit SHA
-	// Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details
-	ref := "refs/heads/main"
-	sha := ""
-
-	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, true, false, false)
-	assert.Nil(t, err)
-
-	err = e.AddDependentsToAffected(cliConfig, &affected, false)
-	assert.Nil(t, err)
-
-	affectedYaml, err := yaml.Marshal(affected)
-	assert.Nil(t, err)
-
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", string(affectedYaml)))
-}

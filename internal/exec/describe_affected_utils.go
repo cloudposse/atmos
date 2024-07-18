@@ -1501,8 +1501,8 @@ func addAffectedSpaceliftAdminStack(
 	return affectedList, nil
 }
 
-// AddDependentsToAffected adds dependent components and stacks to each affected component
-func AddDependentsToAffected(
+// addDependentsToAffected adds dependent components and stacks to each affected component
+func addDependentsToAffected(
 	cliConfig schema.CliConfiguration,
 	affected *[]schema.Affected,
 	includeSettings bool,
