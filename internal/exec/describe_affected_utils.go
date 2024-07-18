@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
@@ -56,7 +57,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	}
 
 	// Get the Git config of the local repo
-	localRepoConfig, err := localRepo.Config()
+	localRepoConfig, err := getRepoConfig(localRepo)
 	if err != nil {
 		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
@@ -231,7 +232,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	}
 
 	// Check the Git config of the local repo
-	localRepoConfig, err := localRepo.Config()
+	localRepoConfig, err := getRepoConfig(localRepo)
 	if err != nil {
 		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
@@ -312,7 +313,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	}
 
 	// Check the Git config of the target ref
-	_, err = remoteRepo.Config()
+	_, err = getRepoConfig(remoteRepo)
 	if err != nil {
 		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
@@ -410,7 +411,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	}
 
 	// Check the Git config of the local repo
-	localRepoConfig, err := localRepo.Config()
+	localRepoConfig, err := getRepoConfig(localRepo)
 	if err != nil {
 		return nil, nil, nil, "", errors.Join(err, localRepoIsNotGitRepoError)
 	}
@@ -452,7 +453,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	}
 
 	// Check the Git config of the remote target repo
-	_, err = remoteRepo.Config()
+	_, err = getRepoConfig(remoteRepo)
 	if err != nil {
 		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
@@ -1559,7 +1560,7 @@ func addDependentsToDependents(
 
 func processIncludedInDependencies(affected *[]schema.Affected) bool {
 	for i := 0; i < len(*affected); i++ {
-		a := &(*affected)[i]
+		a := &((*affected)[i])
 		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
 	}
 	return false
@@ -1571,10 +1572,13 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 			continue
 		}
 
-		a := &(*affected)[i]
+		a := &((*affected)[i])
 
 		if len(a.Dependents) > 0 {
-			return processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
+			includedInDeps := processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
+			if includedInDeps {
+				return true
+			}
 		}
 	}
 	return false
@@ -1582,15 +1586,40 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 
 func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, stackSlug string) bool {
 	for i := 0; i < len(*dependents); i++ {
-		d := &(*dependents)[i]
+		d := &((*dependents)[i])
 
 		if d.StackSlug == stackSlug {
 			return true
 		}
 
 		if len(d.Dependents) > 0 {
-			return processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
+			includedInDeps := processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
+			if includedInDeps {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func getRepoConfig(repo *git.Repository) (*config.Config, error) {
+	repoConfig, err := repo.Config()
+	if err != nil {
+		return nil, err
+	}
+
+	core := repoConfig.Raw.Section("core")
+
+	// Remove the untrackedCache option if it exists
+	if coreOption := core.Option("untrackedCache"); coreOption != "" {
+		core.RemoveOption("untrackedCache")
+
+		// Save the updated configuration
+		err = repo.Storer.SetConfig(repoConfig)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return repoConfig, nil
 }
