@@ -143,7 +143,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	// Add dependent components and stacks for each affected component
 	if len(affected) > 0 && includeDependents {
-		err = addDependentsToAffected(cliConfig, &affected, includeSettings)
+		err = AddDependentsToAffected(cliConfig, &affected, includeSettings)
 		if err != nil {
 			return err
 		}

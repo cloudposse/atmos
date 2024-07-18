@@ -1501,8 +1501,8 @@ func addAffectedSpaceliftAdminStack(
 	return affectedList, nil
 }
 
-// addDependentsToAffected adds dependent components and stacks to each affected component
-func addDependentsToAffected(
+// AddDependentsToAffected adds dependent components and stacks to each affected component
+func AddDependentsToAffected(
 	cliConfig schema.CliConfiguration,
 	affected *[]schema.Affected,
 	includeSettings bool,
@@ -1560,7 +1560,7 @@ func addDependentsToDependents(
 
 func processIncludedInDependencies(affected *[]schema.Affected) bool {
 	for i := 0; i < len(*affected); i++ {
-		a := &(*affected)[i]
+		a := &((*affected)[i])
 		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
 	}
 	return false
@@ -1572,10 +1572,13 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 			continue
 		}
 
-		a := &(*affected)[i]
+		a := &((*affected)[i])
 
 		if len(a.Dependents) > 0 {
-			return processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
+			includedInDeps := processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
+			if includedInDeps {
+				return true
+			}
 		}
 	}
 	return false
@@ -1583,14 +1586,17 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 
 func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, stackSlug string) bool {
 	for i := 0; i < len(*dependents); i++ {
-		d := &(*dependents)[i]
+		d := &((*dependents)[i])
 
 		if d.StackSlug == stackSlug {
 			return true
 		}
 
 		if len(d.Dependents) > 0 {
-			return processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
+			includedInDeps := processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
+			if includedInDeps {
+				return true
+			}
 		}
 	}
 	return false
