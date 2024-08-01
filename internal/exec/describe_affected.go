@@ -209,7 +209,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		}
 
 		client := http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 30 * time.Second,
 		}
 
 		resp, err := client.Do(req)
