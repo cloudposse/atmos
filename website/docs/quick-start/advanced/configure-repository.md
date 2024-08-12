@@ -21,8 +21,8 @@ infrastructure. For example, depending on various requirements (including securi
 In this Quick Start guide, we will be using a monorepo to provision the following resources into multiple AWS accounts (`dev`, `staging`, `prod`)
 and regions (`us-east-2` and `us-west-2`):
 
-- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/master/examples/quick-start-advanced/components/terraform/vpc-flow-logs-bucket)
-- [vpc](https://github.com/cloudposse/atmos/tree/master/examples/quick-start-advanced/components/terraform/vpc)
+- [vpc-flow-logs-bucket](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/components/terraform/vpc-flow-logs-bucket)
+- [vpc](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/components/terraform/vpc)
 
 ## Common Directories and Files
 
@@ -154,6 +154,6 @@ layout:
 
 :::tip
 
-For a Quick Start example, refer to [Atmos Quick Start](https://github.com/cloudposse/atmos/tree/master/examples/quick-start-advanced)
+For a Quick Start example, refer to [Atmos Quick Start](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced)
 
 :::
