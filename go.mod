@@ -14,14 +14,14 @@ require (
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.17.0
 	github.com/go-git/go-git/v5 v5.12.0
-	github.com/google/go-containerregistry v0.20.1
+	github.com/google/go-containerregistry v0.20.2
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
 	github.com/hashicorp/go-getter v1.7.5
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.21.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20240701073647-9fc3669f7553
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20240801114854-6714b46f5fe4
 	github.com/hashicorp/terraform-exec v0.21.0
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
@@ -30,7 +30,7 @@ require (
 	github.com/lrstanley/bubblezone v0.0.0-20240723130623-7fd58a7b1f91
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/open-policy-agent/opa v0.67.0
+	github.com/open-policy-agent/opa v0.67.1
 	github.com/otiai10/copy v1.14.0
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.46.0
@@ -104,9 +104,8 @@ require (
 	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
-	github.com/docker/cli v24.0.0+incompatible // indirect
+	github.com/docker/cli v27.1.1+incompatible // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
-	github.com/docker/docker v26.1.1+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.8.1 // indirect
 	github.com/docker/libkv v0.2.2-0.20180912205406-458977154600 // indirect
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad // indirect
