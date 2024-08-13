@@ -24,7 +24,7 @@ func componentFunc(component string, stack string) (any, error) {
 		return existingSections, nil
 	}
 
-	sections, err := ExecuteDescribeComponent(component, stack)
+	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
 		return nil, err
 	}

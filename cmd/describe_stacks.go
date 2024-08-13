@@ -42,7 +42,7 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().String("sections", "", "Output only the specified component sections: atmos describe stacks --sections=vars,settings. Available component sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
 
-	describeStacksCmd.PersistentFlags().Bool("process-templates", false, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos describe stacks --process-templates=false")
+	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos describe stacks --process-templates=false")
 
 	describeCmd.AddCommand(describeStacksCmd)
 }
