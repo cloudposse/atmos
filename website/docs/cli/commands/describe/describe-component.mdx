@@ -41,6 +41,8 @@ atmos describe component infra/vpc -s tenant1-ue2-dev --file component.yaml
 atmos describe component echo-server -s tenant1-ue2-staging
 
 atmos describe component test/test-component-override -s tenant2-ue2-prod
+
+atmos describe component vpc -s tenant1-ue2-dev --process-templates=false
 ```
 
 ## Arguments
@@ -51,11 +53,12 @@ atmos describe component test/test-component-override -s tenant2-ue2-prod
 
 ## Flags
 
-| Flag       | Description                                         | Alias | Required |
-|:-----------|:----------------------------------------------------|:------|:---------|
-| `--stack`  | Atmos stack                                         | `-s`  | yes      |
-| `--format` | Output format: `yaml` or `json` (`yaml` is default) | `-f`  | no       |
-| `--file`   | If specified, write the result to the file          |       | no       |
+| Flag                  | Description                                                                                                                                                                                                                                                                    | Alias | Required |
+|:----------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--stack`             | Atmos stack                                                                                                                                                                                                                                                                    | `-s`  | yes      |
+| `--format`            | Output format: `yaml` or `json` (`yaml` is default)                                                                                                                                                                                                                            | `-f`  | no       |
+| `--file`              | If specified, write the result to the file                                                                                                                                                                                                                                     |       | no       |
+| `--process-templates` | Enable/disable processing of `Go` templates<br/>in Atmos stacks manifests<br/>when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default |       | no       |
 
 ## Output
 
