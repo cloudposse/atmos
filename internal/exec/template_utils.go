@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ProcessTmpl parses and executes Go templates
@@ -31,7 +32,7 @@ func ProcessTmpl(
 	ctx := context.TODO()
 
 	// Add Gomplate, Sprig and Atmos template functions
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(ctx, &d))
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(schema.CliConfiguration{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -70,8 +71,11 @@ func ProcessTmplWithDatasources(
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
 	if !cliConfig.Templates.Settings.Enabled {
+		u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabed in 'atmos.yaml'", tmplName))
 		return tmplValue, nil
 	}
+
+	u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processing template '%s'", tmplName))
 
 	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
 	var cliConfigTemplateSettingsMap map[any]any
@@ -106,6 +110,8 @@ func ProcessTmplWithDatasources(
 	result := tmplValue
 
 	for i := 0; i < evaluations; i++ {
+		u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources(): template '%s' - evaluation %d", tmplName, i+1))
+
 		d := data.Data{}
 
 		// Gomplate functions and datasources
@@ -140,7 +146,7 @@ func ProcessTmplWithDatasources(
 		}
 
 		// Atmos functions
-		funcs = lo.Assign(funcs, FuncMap(context.TODO(), &d))
+		funcs = lo.Assign(funcs, FuncMap(cliConfig, context.TODO(), &d))
 
 		// Process and add environment variables
 		for k, v := range templateSettings.Env {
@@ -223,6 +229,8 @@ func ProcessTmplWithDatasources(
 			}
 		}
 	}
+
+	u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processed template '%s'", tmplName))
 
 	return result, nil
 }

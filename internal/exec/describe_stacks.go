@@ -85,7 +85,20 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		sections = strings.Split(sectionsCsv, ",")
 	}
 
-	finalStacksMap, err := ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections, false)
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return err
+	}
+
+	finalStacksMap, err := ExecuteDescribeStacks(
+		cliConfig,
+		filterByStack,
+		components,
+		componentTypes,
+		sections,
+		false,
+		processTemplates,
+	)
 	if err != nil {
 		return err
 	}
@@ -106,6 +119,7 @@ func ExecuteDescribeStacks(
 	componentTypes []string,
 	sections []string,
 	ignoreMissingFiles bool,
+	processTemplates bool,
 ) (map[string]any, error) {
 
 	stacksMap, _, err := FindStacksMap(cliConfig, ignoreMissingFiles)
@@ -269,42 +283,44 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.ComponentSection["workspace"] = workspace
 
 							// Process `Go` templates
-							componentSectionStr, err := u.ConvertToYAML(componentSection)
-							if err != nil {
-								return nil, err
-							}
-
-							var settingsSectionStruct schema.Settings
-							err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
-							if err != nil {
-								return nil, err
-							}
-
-							componentSectionProcessed, err := ProcessTmplWithDatasources(
-								cliConfig,
-								settingsSectionStruct,
-								"describe-stacks-all-sections",
-								componentSectionStr,
-								configAndStacksInfo.ComponentSection,
-								true,
-							)
-							if err != nil {
-								return nil, err
-							}
-
-							componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
-							if err != nil {
-								if !cliConfig.Templates.Settings.Enabled {
-									if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
-										errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
-											"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
-										err = errors.Join(err, errors.New(errorMessage))
-									}
+							if processTemplates {
+								componentSectionStr, err := u.ConvertToYAML(componentSection)
+								if err != nil {
+									return nil, err
 								}
-								u.LogErrorAndExit(err)
-							}
 
-							componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+								var settingsSectionStruct schema.Settings
+								err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSectionProcessed, err := ProcessTmplWithDatasources(
+									cliConfig,
+									settingsSectionStruct,
+									"describe-stacks-all-sections",
+									componentSectionStr,
+									configAndStacksInfo.ComponentSection,
+									true,
+								)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+								if err != nil {
+									if !cliConfig.Templates.Settings.Enabled {
+										if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+											errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+												"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
+											err = errors.Join(err, errors.New(errorMessage))
+										}
+									}
+									u.LogErrorAndExit(err)
+								}
+
+								componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+							}
 
 							// Add sections
 							for sectionName, section := range componentSection {
@@ -446,42 +462,44 @@ func ExecuteDescribeStacks(
 							componentSection["atmos_manifest"] = stackFileName
 
 							// Process `Go` templates
-							componentSectionStr, err := u.ConvertToYAML(componentSection)
-							if err != nil {
-								return nil, err
-							}
-
-							var settingsSectionStruct schema.Settings
-							err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
-							if err != nil {
-								return nil, err
-							}
-
-							componentSectionProcessed, err := ProcessTmplWithDatasources(
-								cliConfig,
-								settingsSectionStruct,
-								"describe-stacks-all-sections",
-								componentSectionStr,
-								configAndStacksInfo.ComponentSection,
-								true,
-							)
-							if err != nil {
-								return nil, err
-							}
-
-							componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
-							if err != nil {
-								if !cliConfig.Templates.Settings.Enabled {
-									if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
-										errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
-											"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
-										err = errors.Join(err, errors.New(errorMessage))
-									}
+							if processTemplates {
+								componentSectionStr, err := u.ConvertToYAML(componentSection)
+								if err != nil {
+									return nil, err
 								}
-								u.LogErrorAndExit(err)
-							}
 
-							componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+								var settingsSectionStruct schema.Settings
+								err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSectionProcessed, err := ProcessTmplWithDatasources(
+									cliConfig,
+									settingsSectionStruct,
+									"describe-stacks-all-sections",
+									componentSectionStr,
+									configAndStacksInfo.ComponentSection,
+									true,
+								)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+								if err != nil {
+									if !cliConfig.Templates.Settings.Enabled {
+										if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+											errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+												"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
+											err = errors.Join(err, errors.New(errorMessage))
+										}
+									}
+									u.LogErrorAndExit(err)
+								}
+
+								componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+							}
 
 							// Add sections
 							for sectionName, section := range componentSection {

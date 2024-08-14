@@ -8,14 +8,17 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
 	componentFuncSyncMap = sync.Map{}
 )
 
-func componentFunc(component string, stack string) (any, error) {
+func componentFunc(cliConfig schema.CliConfiguration, component string, stack string) (any, error) {
+	u.LogTrace(cliConfig, fmt.Sprintf("Executing template function atmos.Component(%s, %s)", component, stack))
+
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it
@@ -24,7 +27,7 @@ func componentFunc(component string, stack string) (any, error) {
 		return existingSections, nil
 	}
 
-	sections, err := ExecuteDescribeComponent(component, stack)
+	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +83,8 @@ func componentFunc(component string, stack string) (any, error) {
 	}
 
 	outputMetaProcessed := lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
-		d, _ := utils.ConvertFromJSON(string(v.Value))
+		d, err2 := u.ConvertFromJSON(string(v.Value))
+		u.LogError(err2)
 		return k, d
 	})
 
@@ -92,6 +96,14 @@ func componentFunc(component string, stack string) (any, error) {
 
 	// Cache the result
 	componentFuncSyncMap.Store(stackSlug, sections)
+
+	if cliConfig.Logs.Level == u.LogLevelTrace {
+		u.LogTrace(cliConfig, fmt.Sprintf("Executed template function atmos.Component(%s, %s)\n'outputs' section:\n", component, stack))
+		err2 := u.PrintAsYAML(outputMetaProcessed)
+		if err2 != nil {
+			u.LogError(err2)
+		}
+	}
 
 	return sections, nil
 }

@@ -503,7 +503,7 @@ func executeDescribeAffected(
 	u.LogTrace(cliConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
 	u.LogTrace(cliConfig, fmt.Sprintf("BASE: %s", remoteRepoHead))
 
-	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
+	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, true)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -539,7 +539,7 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true)
+	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true, true)
 	if err != nil {
 		return nil, nil, nil, err
 	}

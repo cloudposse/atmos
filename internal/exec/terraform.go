@@ -61,7 +61,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	info, err = ProcessStacks(cliConfig, info, true)
+	info, err = ProcessStacks(cliConfig, info, true, true)
 	if err != nil {
 		return err
 	}
