@@ -1,0 +1,40 @@
+import:
+  # Import the prod defaults
+  - orgs/acme/prod/_defaults
+  # Import the defaults for the Atmos components from the catalog into the stack
+  - catalog/gcs-bucket/defaults
+
+# Common variables for all components in this GCP project
+vars:
+  tenant: gcs
+  project_id: "<prod-gcs-bucket-gcp-project-id>"
+
+components:
+  terraform:
+    # https://atmos.tools/design-patterns/multiple-component-instances
+
+    # Provision this Atmos component by executing the command: atmos terraform apply gcs-bucket/customer1 --stack prod-gcs
+    gcs-bucket/customer1:
+      # Point to the Terraform component in `components/terraform` folder
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: gcs-bucket
+        inherits:
+          # Inherit all the default values from the base component defined in `catalog/gcs-bucket/defaults`
+          - gcs-bucket/defaults
+      vars:
+        # Define or override (from the base component) the variables specific to this Atmos component
+        name: customer1
+
+    # Provision this Atmos component by executing the command: atmos terraform apply gcs-bucket/customer2 --stack prod-gcs
+    gcs-bucket/customer2:
+      # Point to the Terraform component in `components/terraform` folder
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: gcs-bucket
+        inherits:
+          # Inherit all the default values from the base component defined in `catalog/gcs-bucket/defaults`
+          - gcs-bucket/defaults
+      vars:
+        # Define or override (from the base component) the variables specific to this Atmos component
+        name: customer2

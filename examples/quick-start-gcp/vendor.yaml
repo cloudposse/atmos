@@ -1,0 +1,48 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config
+  description: Atmos vendoring manifest
+spec:
+  # `imports` or `sources` (or both) must be defined in a vendoring manifest
+  imports: []
+
+  sources:
+    # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
+    # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
+    # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
+    # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
+    - component: "vpc"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
+      version: "1.372.0"
+      targets:
+        - "components/terraform/vpc"
+      # Only include the files that match the 'included_paths' patterns.
+      # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
+      # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
+      # https://en.wikipedia.org/wiki/Glob_(programming)
+      # https://github.com/bmatcuk/doublestar#patterns
+      included_paths:
+        - "**/*.tf"
+      excluded_paths:
+        - "**/providers.tf"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags networking`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - networking
+    - component: "vpc-flow-logs-bucket"
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      version: "1.372.0"
+      targets:
+        - "components/terraform/vpc-flow-logs-bucket"
+      included_paths:
+        - "**/*.tf"
+      excluded_paths:
+        - "**/providers.tf"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags networking,storage`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - storage

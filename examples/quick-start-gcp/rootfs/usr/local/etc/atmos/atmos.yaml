@@ -1,0 +1,285 @@
+# CLI config is loaded from the following locations (from lowest to highest priority):
+# system dir ('/usr/local/etc/atmos' on Linux, '%LOCALAPPDATA%/atmos' on Windows)
+# home dir (~/.atmos)
+# current directory
+# ENV vars
+# Command-line arguments
+#
+# It supports POSIX-style Globs for file names/paths (double-star '**' is supported)
+# https://en.wikipedia.org/wiki/Glob_(programming)
+
+# Base path for components, stacks and workflows configurations.
+# Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
+# Supports both absolute and relative paths.
+# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
+# are independent settings (supporting both absolute and relative paths).
+# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
+# are considered paths relative to 'base_path'.
+base_path: ""
+
+components:
+  terraform:
+    # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
+    # If not defined, `terraform` is used
+    # Examples:
+    # command: terraform
+    # command: /usr/local/bin/terraform
+    # command: /usr/local/bin/terraform-1.8
+    # command: tofu
+    # command: /usr/local/bin/tofu-1.7.1
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_COMMAND' ENV var, or '--terraform-command' command-line argument
+    command: terraform
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "components/terraform"
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
+    apply_auto_approve: false
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
+    deploy_run_init: true
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
+    init_run_reconfigure: true
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
+    auto_generate_backend_file: true
+  helmfile:
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "components/helmfile"
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_USE_EKS' ENV var
+    # If not specified, defaults to 'true'
+    use_eks: true
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV var
+    kubeconfig_path: "/dev/shm"
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV var
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+
+stacks:
+  # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
+  # Supports both absolute and relative paths
+  base_path: "stacks"
+  # Can also be set using 'ATMOS_STACKS_INCLUDED_PATHS' ENV var (comma-separated values string)
+  included_paths:
+    - "orgs/**/*"
+  # Can also be set using 'ATMOS_STACKS_EXCLUDED_PATHS' ENV var (comma-separated values string)
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+workflows:
+  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
+  # Supports both absolute and relative paths
+  base_path: "stacks/workflows"
+
+logs:
+  # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
+  # File or standard file descriptor to write logs to
+  # Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`
+  file: "/dev/stderr"
+  # Supported log levels: Trace, Debug, Info, Warning, Off
+  # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
+  level: Info
+
+# Custom CLI commands
+commands:
+  - name: tf
+    description: Execute 'terraform' commands
+    # subcommands
+    commands:
+      - name: plan
+        description: This command plans terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        env:
+          - key: ENV_VAR_1
+            value: ENV_VAR_1_value
+          - key: ENV_VAR_2
+            # 'valueCommand' is an external command to execute to get the value for the ENV var
+            # Either 'value' or 'valueCommand' can be specified for the ENV var, but not both
+            valueCommand: echo ENV_VAR_2_value
+        # steps support Go templates
+        steps:
+          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+  - name: terraform
+    description: Execute 'terraform' commands
+    # subcommands
+    commands:
+      - name: provision
+        description: This command provisions terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        # ENV var values support Go templates
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_STACK
+            value: "{{ .Flags.stack }}"
+        steps:
+          - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
+          - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+  - name: show
+    description: Execute 'show' commands
+    # subcommands
+    commands:
+      - name: component
+        description: Execute 'show component' command
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        # ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_TENANT
+            value: "{{ .ComponentConfig.vars.tenant }}"
+          - key: ATMOS_STAGE
+            value: "{{ .ComponentConfig.vars.stage }}"
+          - key: ATMOS_ENVIRONMENT
+            value: "{{ .ComponentConfig.vars.environment }}"
+        # If a custom command defines 'component_config' section with 'component' and 'stack', 'atmos' generates the config for the component in the stack
+        # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
+        # exposing all the component sections (which are also shown by 'atmos describe component' command)
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        # Steps support using Go templates and can access all configuration settings (e.g. {{ .ComponentConfig.xxx.yyy.zzz }})
+        # Steps also have access to the ENV vars defined in the 'env' section of the 'command'
+        steps:
+          - 'echo Atmos component from argument: "{{ .Arguments.component }}"'
+          - 'echo ATMOS_COMPONENT: "$ATMOS_COMPONENT"'
+          - 'echo Atmos stack: "{{ .Flags.stack }}"'
+          - 'echo Terraform component: "{{ .ComponentConfig.component }}"'
+          - 'echo Backend S3 bucket: "{{ .ComponentConfig.backend.bucket }}"'
+          - 'echo Terraform workspace: "{{ .ComponentConfig.workspace }}"'
+          - 'echo Namespace: "{{ .ComponentConfig.vars.namespace }}"'
+          - 'echo Tenant: "{{ .ComponentConfig.vars.tenant }}"'
+          - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
+          - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
+          - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
+  - name: list
+    description: Execute 'atmos list' commands
+    # subcommands
+    commands:
+      - name: stacks
+        description: |
+          List all Atmos stacks.
+        steps:
+          - >
+            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
+      - name: components
+        description: |
+          List all Atmos components in all stacks or in a single stack.
+
+          Example usage:
+            atmos list components
+            atmos list components -s plat-ue2-dev
+            atmos list components --stack plat-uw2-prod
+            atmos list components -s plat-ue2-dev --type abstract
+            atmos list components -s plat-ue2-dev -t enabled
+            atmos list components -s plat-ue2-dev -t disabled
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: false
+          - name: type
+            shorthand: t
+            description: Component types - abstract, enabled, or disabled
+            required: false
+        steps:
+          - >
+            {{ if .Flags.stack }}
+              {{ if eq .Flags.type "enabled" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r .key
+              {{ else if eq .Flags.type "disabled" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r .key
+              {{ else if eq .Flags.type "abstract" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r .key
+              {{ else }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ end }}
+            {{ else }}
+              {{ if eq .Flags.type "enabled" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else if eq .Flags.type "disabled" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else if eq .Flags.type "abstract" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else }}
+                atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ end }}
+            {{ end }}
+
+
+# Validation schemas (for validating atmos stacks and components)
+schemas:
+  # https://json-schema.org
+  jsonschema:
+    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/jsonschema"
+  # https://www.openpolicyagent.org
+  opa:
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/opa"
+  # JSON Schema to validate Atmos manifests
+  # https://atmos.tools/cli/schemas/
+  # https://atmos.tools/cli/commands/validate/stacks/
+  # https://atmos.tools/quick-start/advanced/configure-validation/
+  # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+  # https://json-schema.org/draft/2020-12/release-notes
+  # https://www.schemastore.org/json
+  # https://github.com/SchemaStore/schemastore
+  atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
+    # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
+    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+
+# `Go` templates in Atmos manifests
+# https://atmos.tools/core-concepts/stacks/templates
+# https://pkg.go.dev/text/template
+templates:
+  settings:
+    enabled: true
+    # https://masterminds.github.io/sprig
+    sprig:
+      enabled: true
+    # https://docs.gomplate.ca
+    gomplate:
+      enabled: true
+      # https://docs.gomplate.ca/datasources
+      datasources: {}
+
+settings:
+  # `list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
+  # Can also be set using 'ATMOS_SETTINGS_LIST_MERGE_STRATEGY' environment variable, or '--settings-list-merge-strategy' command-line argument
+  # The following strategies are supported:
+  # `replace`: Most recent list imported wins (the default behavior).
+  # `append`:  The sequence of lists is appended in the same order as imports.
+  # `merge`:   The items in the destination list are deep-merged with the items in the source list.
+  #            The items in the source list take precedence.
+  #            The items are processed starting from the first up to the length of the source list (the remaining items are not processed).
+  #            If the source and destination lists have the same length, all items in the destination lists are
+  #            deep-merged with all items in the source list.
+  list_merge_strategy: replace

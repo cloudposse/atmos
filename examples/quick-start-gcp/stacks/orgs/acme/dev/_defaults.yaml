@@ -1,0 +1,7 @@
+import:
+  # Import the company-wide defaults
+  - orgs/acme/_defaults
+
+# Common variables for all components in the `dev` stage
+vars:
+  stage: dev

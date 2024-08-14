@@ -1,0 +1,31 @@
+components:
+  terraform:
+    cloud-function/defaults:
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: cloud-function
+        # Setting `metadata.type: abstract` makes the component `abstract` (similar to OOP abstract classes, which can't be instantiated),
+        # explicitly prohibiting the component from being deployed.
+        # `atmos terraform apply` and `atmos terraform deploy` will fail with an error that the component cannot be provisioned.
+        # If `metadata.type` attribute is not specified, it defaults to `real` (which means the component can be provisioned).
+        type: abstract
+      vars:
+        enabled: true
+        description: ""
+        function_location: "US"
+        entrypoint: "entrypoint.test"
+        runtime: "python3"
+        bucket_source_enabled: true
+        bucket_name: ""
+        bucket:
+          object_path: "/"
+          generation: null
+        repo_source_enabled: false
+        repo_source:
+          branch_name: "test"
+          repo_name: "test"
+        kms_encryption_enabled: false
+        gcs_bucket: {}
+        kms: {}
+        bucket_iam: []
+        tags: {}

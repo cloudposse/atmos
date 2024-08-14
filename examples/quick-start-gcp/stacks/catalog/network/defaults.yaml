@@ -1,0 +1,31 @@
+components:
+  terraform:
+    network/defaults:
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: network
+        # Setting `metadata.type: abstract` makes the component `abstract` (similar to OOP abstract classes, which can't be instantiated),
+        # explicitly prohibiting the component from being deployed.
+        # `atmos terraform apply` and `atmos terraform deploy` will fail with an error that the component cannot be provisioned.
+        # If `metadata.type` attribute is not specified, it defaults to `real` (which means the component can be provisioned).
+        type: abstract
+      vars:
+        enabled: true
+        auto_create_subnetworks: true
+        region_1: us-east1
+        region_2: us-west2
+        subnets:
+          - name: "subnet-1"
+            ip_cidr_range: "10.1.0.0/16"
+            secondary_ip_ranges:
+              - range_name: "pods-1"
+                ip_cidr_range: "172.16.1.0/24"
+              - range_name: "services-1"
+                ip_cidr_range: "192.168.1.0/24"
+          - name: "subnet-2"
+            ip_cidr_range: "10.2.0.0/16"
+            secondary_ip_ranges:
+              - range_name: "pods-2"
+                ip_cidr_range: "172.16.2.0/24"
+              - range_name: "services-2"
+                ip_cidr_range: "192.168.2.0/24"

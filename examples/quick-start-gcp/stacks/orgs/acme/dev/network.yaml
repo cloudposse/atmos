@@ -1,0 +1,26 @@
+import:
+  # Import the dev defaults
+  - orgs/acme/dev/_defaults
+  # Import the defaults for the Atmos components from the catalog into the stack
+  - catalog/network/defaults
+
+# Common variables
+vars:
+  tenant: net
+
+components:
+  terraform:
+
+    # Provision this Atmos component by executing the command: atmos terraform apply network --stack dev-net
+    network:
+      # Point to the Terraform component in `components/terraform` folder
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: network
+        inherits:
+          # Inherit all the default values from the base component defined in `catalog/network/defaults`
+          - network/defaults
+      # Override or define variables specific to this Atmos component in this stack
+      vars:
+        project_id_1: "<dev-net-gcp-project-id-1>"
+        project_id_2: "<dev-net-gcp-project-id-2>"

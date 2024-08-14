@@ -1,0 +1,44 @@
+import:
+  # Import the prod defaults
+  - orgs/acme/prod/_defaults
+  # Import the defaults for the Atmos components from the catalog into the stack
+  - catalog/cloud-function/defaults
+
+# Common variables for all components in this GCP project
+vars:
+  tenant: cf
+  project_id: "<prod-cloud-function-gcp-project-id>"
+
+components:
+  terraform:
+    # https://atmos.tools/design-patterns/multiple-component-instances
+
+    # Provision this Atmos component by executing the command: atmos terraform apply cloud-function/customer1 --stack prod-cf
+    cloud-function/customer1:
+      # Point to the Terraform component in `components/terraform` folder
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: cloud-function
+        inherits:
+          # Inherit all the default values from the base component defined in `catalog/cloud-function/defaults`
+          - cloud-function/defaults
+      vars:
+        # Define or override (from the base component) the variables specific to this Atmos component
+        name: customer1
+        description: "Prod cloud function for customer1"
+        bucket_name: "<prod-cloud-function-bucket-name>"
+
+    # Provision this Atmos component by executing the command: atmos terraform apply cloud-function/customer2 --stack prod-cf
+    cloud-function/customer2:
+      # Point to the Terraform component in `components/terraform` folder
+      metadata:
+        # Point to the Terraform component in `components/terraform` folder
+        component: cloud-function
+        inherits:
+          # Inherit all the default values from the base component defined in `catalog/cloud-function/defaults`
+          - cloud-function/defaults
+      vars:
+        # Define or override (from the base component) the variables specific to this Atmos component
+        name: customer2
+        description: "Prod cloud function for customer2"
+        bucket_name: "<prod-cloud-function-bucket-name>"
