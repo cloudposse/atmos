@@ -36,7 +36,6 @@ RUN case ${TARGETPLATFORM} in \
         "linux/arm64") OS=linux; ARCH=arm64 ;; \
         *) echo "Unsupported platform: ${TARGETPLATFORM}" && exit 1 ;; \
     esac && \
-    ATMOS_VERSION=${ATMOS_VERSION#v} && \
-    echo "Downloading Atmos v${ATMOS_VERSION} for ${OS}/${ARCH}" && \
-    curl -1sSLf "https://github.com/cloudposse/atmos/releases/download/v${ATMOS_VERSION}/atmos_${ATMOS_VERSION}_${OS}_${ARCH}" -o /usr/local/bin/atmos && \
+    echo "Downloading Atmos v${ATMOS_VERSION#v} for ${OS}/${ARCH}" && \
+    curl -1sSLf "https://github.com/cloudposse/atmos/releases/download/v${ATMOS_VERSION#v}/atmos_${ATMOS_VERSION#v}_${OS}_${ARCH}" -o /usr/local/bin/atmos && \
     chmod +x /usr/local/bin/atmos
