@@ -39,7 +39,7 @@ on:
     types: [opened, synchronize, reopened, closed, labeled, unlabeled]
 
 jobs:
-  context:
+  atmos-affected:
     runs-on: ubuntu-latest
     steps:
       - id: affected
@@ -50,15 +50,15 @@ jobs:
           nested-matrices-count: 1
 
     outputs:
-      affected: ${{ steps.affected.outputs.affected }}
       matrix: ${{ steps.affected.outputs.matrix }}
+      has-affected-stacks: ${{ steps.affected.outputs.has-affected-stacks }}
 
   # This job is an example how to use the affected stacks with the matrix strategy
   atmos-plan:
     needs: ["atmos-affected"]
     if: ${{ needs.atmos-affected.outputs.has-affected-stacks == 'true' }}
-    name: ${{ matrix.stack_slug }}
-    runs-on: ['self-hosted']
+    name: Plan ${{ matrix.stack_slug }}
+    runs-on: ubuntu-latest
     strategy:
       max-parallel: 10
       fail-fast: false # Don't fail fast to avoid locking TF State
