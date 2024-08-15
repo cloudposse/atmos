@@ -86,21 +86,22 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		y, err2 := u.ConvertToYAML(outputMeta)
 		if err2 != nil {
 			u.LogError(err2)
+		} else {
+			u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'atmos terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
 		}
-		u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'atmos terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
 	}
 
 	outputMetaProcessed := lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
 		s := string(v.Value)
-		u.LogTrace(cliConfig, fmt.Sprintf("Converting the variable %s from JSON to string representation\n", s))
+		u.LogTrace(cliConfig, fmt.Sprintf("Converting the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\n", k, s))
 
 		d, err2 := u.ConvertFromJSON(s)
 
 		if err2 != nil {
 			u.LogError(err2)
+		} else {
+			u.LogTrace(cliConfig, fmt.Sprintf("Converted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", k, s, d))
 		}
-
-		u.LogTrace(cliConfig, fmt.Sprintf("Converted the variable %s from JSON to string representation.\nResult: %s\n", s, d))
 
 		return k, d
 	})
@@ -119,9 +120,9 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		y, err2 := u.ConvertToYAML(outputMetaProcessed)
 		if err2 != nil {
 			u.LogError(err2)
+		} else {
+			u.LogTrace(cliConfig, y)
 		}
-		u.LogTrace(cliConfig, y)
-		u.LogTrace(cliConfig, "\n")
 	}
 
 	return sections, nil
