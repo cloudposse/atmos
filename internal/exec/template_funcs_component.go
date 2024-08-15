@@ -24,6 +24,21 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 	// If the result for the component in the stack already exists in the cache, return it
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
+
+		if cliConfig.Logs.Level == u.LogLevelTrace {
+			u.LogTrace(cliConfig, fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
+
+			if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
+				u.LogTrace(cliConfig, "'outputs' section:")
+				y, err2 := u.ConvertToYAML(outputsSection)
+				if err2 != nil {
+					u.LogError(err2)
+				} else {
+					u.LogTrace(cliConfig, y)
+				}
+			}
+		}
+
 		return existingSections, nil
 	}
 
