@@ -17,7 +17,7 @@ var (
 )
 
 func componentFunc(cliConfig schema.CliConfiguration, component string, stack string) (any, error) {
-	u.LogTrace(cliConfig, fmt.Sprintf("Executing template function atmos.Component(%s, %s)", component, stack))
+	u.LogTrace(cliConfig, fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
 
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
@@ -82,9 +82,26 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		return nil, err
 	}
 
+	if cliConfig.Logs.Level == u.LogLevelTrace {
+		y, err2 := u.ConvertToYAML(outputMeta)
+		if err2 != nil {
+			u.LogError(err2)
+		}
+		u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'atmos terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
+	}
+
 	outputMetaProcessed := lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
-		d, err2 := u.ConvertFromJSON(string(v.Value))
-		u.LogError(err2)
+		s := string(v.Value)
+		u.LogTrace(cliConfig, fmt.Sprintf("Converting the variable %s from JSON to string representation\n", s))
+
+		d, err2 := u.ConvertFromJSON(s)
+
+		if err2 != nil {
+			u.LogError(err2)
+		}
+
+		u.LogTrace(cliConfig, fmt.Sprintf("Converted the variable %s from JSON to string representation.\nResult: %s\n", s, d))
+
 		return k, d
 	})
 
@@ -98,11 +115,13 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 	componentFuncSyncMap.Store(stackSlug, sections)
 
 	if cliConfig.Logs.Level == u.LogLevelTrace {
-		u.LogTrace(cliConfig, fmt.Sprintf("Executed template function atmos.Component(%s, %s)\n'outputs' section:\n", component, stack))
-		err2 := u.PrintAsYAML(outputMetaProcessed)
+		u.LogTrace(cliConfig, fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
+		y, err2 := u.ConvertToYAML(outputMetaProcessed)
 		if err2 != nil {
 			u.LogError(err2)
 		}
+		u.LogTrace(cliConfig, y)
+		u.LogTrace(cliConfig, "\n")
 	}
 
 	return sections, nil
