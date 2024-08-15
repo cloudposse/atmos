@@ -181,7 +181,7 @@ commands:
           List all Atmos stacks.
         steps:
           - >
-            atmos describe stacks --sections none | grep -e "^\S" | sed s/://g
+            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
       - name: components
         description: |
           List all Atmos components in all stacks or in a single stack.

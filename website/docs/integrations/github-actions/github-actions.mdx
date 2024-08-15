@@ -145,14 +145,30 @@ Please follow documentation for each action to see the required inputs.
 
 Our GitHub Actions depend on specific versions of Atmos. 
 
-Please refer to the table below.
-
 :::
 
-| Github action                                                                                                                      | Atmos `< 1.63.0`                                                                              | Atmos `>= 1.63.0`                                                                             |
-|------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| [`github-action-atmos-affected-stacks`](https://github.com/cloudposse/github-action-atmos-affected-stacks)                         | [`v2`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v2)             | [`v1`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v1)             |
-| [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan)                           | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v1)              | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v2)              |
-| [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply)                         | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v1)             | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v2)             |
-| [`github-action-atmos-terraform-drift-remediation`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation) | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1) | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v2) |
-| [`github-action-atmos-terraform-drift-detection`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection)     | [`v0`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0)   | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v1)   |
+### Artifacts Upgrade
+
+With version `v2` of
+[cloudposse/github-action-atmos-terraform-drift-detection](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection)
+and version `v3` of
+[cloudposse/github-action-atmos-terraform-plan](https://github.com/cloudposse/github-action-atmos-terraform-plan), the
+artifact storage configuration was updated to use the same structure. Both will need to be updated to these versions or
+later to pass artifacts across the actions.
+
+Please see the release notes:
+
+1. https://github.com/cloudposse/github-action-atmos-terraform-plan/releases/tag/v3.0.0
+1. https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/releases/tag/v2.0.0
+
+### Atmos `< 1.63.0`
+
+If you are using Atmos `< 1.63.0`, please refer to the following table:
+
+| Github action                                                                                                                      | Atmos `< 1.63.0`                                                                              | Atmos `>= 1.63.0`                                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [`github-action-atmos-affected-stacks`](https://github.com/cloudposse/github-action-atmos-affected-stacks)                         | [`v2`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v2)             | [`v1`](https://github.com/cloudposse/github-action-atmos-affected-stacks/tree/v1) or greater             |
+| [`github-action-atmos-terraform-plan`](https://github.com/cloudposse/github-action-atmos-terraform-plan)                           | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v1)              | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-plan/tree/v2) or greater              |
+| [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply)                         | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v1)             | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-apply/tree/v2) or greater             |
+| [`github-action-atmos-terraform-drift-remediation`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation) | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v1) | [`v2`](https://github.com/cloudposse/github-action-atmos-terraform-drift-remediation/tree/v2) or greater |
+| [`github-action-atmos-terraform-drift-detection`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection)     | [`v0`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v0)   | [`v1`](https://github.com/cloudposse/github-action-atmos-terraform-drift-detection/tree/v1) or greater   |

@@ -36,9 +36,14 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
-	componentSection, err := ExecuteDescribeComponent(component, stack)
+	componentSection, err := ExecuteDescribeComponent(component, stack, processTemplates)
 	if err != nil {
 		return err
 	}
@@ -52,7 +57,11 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 }
 
 // ExecuteDescribeComponent describes component config
-func ExecuteDescribeComponent(component string, stack string) (map[string]any, error) {
+func ExecuteDescribeComponent(
+	component string,
+	stack string,
+	processTemplates bool,
+) (map[string]any, error) {
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -63,10 +72,10 @@ func ExecuteDescribeComponent(component string, stack string) (map[string]any, e
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
+	configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, processTemplates)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
+		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, processTemplates)
 		if err != nil {
 			return nil, err
 		}
