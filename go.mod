@@ -1,6 +1,6 @@
 module github.com/cloudposse/atmos
 
-go 1.21
+go 1.23
 
 require (
 	dario.cat/mergo v1.0.0
@@ -18,7 +18,7 @@ require (
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
-	github.com/hashicorp/go-getter v1.7.5
+	github.com/hashicorp/go-getter v1.7.6
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.21.0
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20240801114854-6714b46f5fe4
