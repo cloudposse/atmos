@@ -5,7 +5,7 @@ sidebar_label: Provision
 ---
 
 Having configured the Terraform components, the Atmos components catalog, all the mixins and defaults, and the Atmos top-level stacks, we can now
-provision the components into the stacks.
+provision the components in the stacks.
 
 The `vpc` Atmos components use the remote state from the `vpc-flow-logs-bucket` components, therefore the `vpc-flow-logs-bucket` components must
 be provisioned first.
@@ -69,7 +69,7 @@ Let's consider what Atmos does when executing the command `atmos terraform apply
   context variables specified in the command (`-s` flag) with the context variables defined in the stack configurations, finally finding the matching
   stack
 
-- Atmos finds the component `vpc` in the stack, processing all the inline configs and all the imports
+- Atmos finds the component `vpc` in the stack, processing all the inline configs and all the configs from the imports
 
 - Atmos deep-merges all the catalog imports for the `vpc` component and then deep-merges all the variables for the component defined in all
   sections (global `vars`, terraform `vars`, base components `vars`, component `vars`), producing the final variables for the `vpc` component in
