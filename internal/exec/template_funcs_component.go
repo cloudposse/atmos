@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"path"
 	"sync"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -24,7 +25,6 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 	// If the result for the component in the stack already exists in the cache, return it
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
-
 		if cliConfig.Logs.Level == u.LogLevelTrace {
 			u.LogTrace(cliConfig, fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
 
@@ -72,6 +72,57 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'component_info.component_path' section", component, stack)
 	}
 
+	// Auto-generate backend file
+	if cliConfig.Components.Terraform.AutoGenerateBackendFile {
+		backendFileName := path.Join(componentPath, "backend.tf.json")
+
+		u.LogTrace(cliConfig, "\nWriting the backend config to file:")
+		u.LogTrace(cliConfig, backendFileName)
+
+		backendTypeSection, ok := sections["backend_type"].(string)
+		if !ok {
+			return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend_type' section", component, stack)
+		}
+
+		backendSection, ok := sections["backend"].(map[any]any)
+		if !ok {
+			return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend' section", component, stack)
+		}
+
+		componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace)
+		if err != nil {
+			return nil, err
+		}
+
+		err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+		if err != nil {
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, "\nWrote the backend config to file:")
+		u.LogTrace(cliConfig, backendFileName)
+	}
+
+	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	providersSection, ok := sections["providers"].(map[any]any)
+
+	if ok && len(providersSection) > 0 {
+		providerOverrideFileName := path.Join(componentPath, "providers_override.tf.json")
+
+		u.LogTrace(cliConfig, "\nWriting the provider overrides to file:")
+		u.LogTrace(cliConfig, providerOverrideFileName)
+
+		var providerOverrides = generateComponentProviderOverrides(providersSection)
+		err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
+		if err != nil {
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, "\nWrote the provider overrides to file:")
+		u.LogTrace(cliConfig, providerOverrideFileName)
+	}
+
+	// Initialize Terraform/OpenTofu
 	tf, err := tfexec.NewTerraform(componentPath, executable)
 	if err != nil {
 		return nil, err
@@ -79,30 +130,42 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 
 	ctx := context.Background()
 
+	// 'terraform init'
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform init %s -s %s'", component, stack))
 	err = tf.Init(ctx, tfexec.Upgrade(false))
 	if err != nil {
 		return nil, err
 	}
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform init %s -s %s'", component, stack))
 
+	// Terraform workspace
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 	err = tf.WorkspaceNew(ctx, terraformWorkspace)
 	if err != nil {
+		u.LogTrace(cliConfig, fmt.Sprintf("\nWorkspace exists. Executing 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 		err = tf.WorkspaceSelect(ctx, terraformWorkspace)
 		if err != nil {
 			return nil, err
 		}
+		u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+	} else {
+		u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 	}
 
+	// Terraform output
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform output %s -s %s'", component, stack))
 	outputMeta, err := tf.Output(ctx)
 	if err != nil {
 		return nil, err
 	}
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform output %s -s %s'", component, stack))
 
 	if cliConfig.Logs.Level == u.LogLevelTrace {
 		y, err2 := u.ConvertToYAML(outputMeta)
 		if err2 != nil {
 			u.LogError(err2)
 		} else {
-			u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'atmos terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
+			u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
 		}
 	}
 
