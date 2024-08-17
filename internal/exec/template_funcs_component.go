@@ -8,23 +8,41 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
 	componentFuncSyncMap = sync.Map{}
 )
 
-func componentFunc(component string, stack string) (any, error) {
+func componentFunc(cliConfig schema.CliConfiguration, component string, stack string) (any, error) {
+	u.LogTrace(cliConfig, fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
+
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
+
+		if cliConfig.Logs.Level == u.LogLevelTrace {
+			u.LogTrace(cliConfig, fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
+
+			if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
+				u.LogTrace(cliConfig, "'outputs' section:")
+				y, err2 := u.ConvertToYAML(outputsSection)
+				if err2 != nil {
+					u.LogError(err2)
+				} else {
+					u.LogTrace(cliConfig, y)
+				}
+			}
+		}
+
 		return existingSections, nil
 	}
 
-	sections, err := ExecuteDescribeComponent(component, stack)
+	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
 		return nil, err
 	}
@@ -79,8 +97,27 @@ func componentFunc(component string, stack string) (any, error) {
 		return nil, err
 	}
 
+	if cliConfig.Logs.Level == u.LogLevelTrace {
+		y, err2 := u.ConvertToYAML(outputMeta)
+		if err2 != nil {
+			u.LogError(err2)
+		} else {
+			u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'atmos terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
+		}
+	}
+
 	outputMetaProcessed := lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
-		d, _ := utils.ConvertFromJSON(string(v.Value))
+		s := string(v.Value)
+		u.LogTrace(cliConfig, fmt.Sprintf("Converting the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\n", k, s))
+
+		d, err2 := u.ConvertFromJSON(s)
+
+		if err2 != nil {
+			u.LogError(err2)
+		} else {
+			u.LogTrace(cliConfig, fmt.Sprintf("Converted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", k, s, d))
+		}
+
 		return k, d
 	})
 
@@ -92,6 +129,16 @@ func componentFunc(component string, stack string) (any, error) {
 
 	// Cache the result
 	componentFuncSyncMap.Store(stackSlug, sections)
+
+	if cliConfig.Logs.Level == u.LogLevelTrace {
+		u.LogTrace(cliConfig, fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
+		y, err2 := u.ConvertToYAML(outputMetaProcessed)
+		if err2 != nil {
+			u.LogError(err2)
+		} else {
+			u.LogTrace(cliConfig, y)
+		}
+	}
 
 	return sections, nil
 }

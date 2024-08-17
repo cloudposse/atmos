@@ -30,10 +30,10 @@ func ProcessComponentInStack(
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true)
+	configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true, true)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true)
+		configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true, true)
 		if err != nil {
 			u.LogError(err)
 			return nil, err

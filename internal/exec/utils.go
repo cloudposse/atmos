@@ -266,6 +266,7 @@ func ProcessStacks(
 	cliConfig schema.CliConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
+	processTemplates bool,
 ) (schema.ConfigAndStacksInfo, error) {
 
 	// Check if stack was provided
@@ -468,80 +469,82 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
 	// Process `Go` templates in Atmos manifest sections
-	componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	var settingsSectionStruct schema.Settings
-
-	err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	componentSectionProcessed, err := ProcessTmplWithDatasources(
-		cliConfig,
-		settingsSectionStruct,
-		"all-atmos-sections",
-		componentSectionStr,
-		configAndStacksInfo.ComponentSection,
-		true,
-	)
-	if err != nil {
-		// If any error returned from the templates processing, log it and exit
-		u.LogErrorAndExit(err)
-	}
-
-	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
-	if err != nil {
-		if !cliConfig.Templates.Settings.Enabled {
-			if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
-				errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
-					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
-				err = errors.Join(err, errors.New(errorMessage))
-			}
+	if processTemplates {
+		componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
+		if err != nil {
+			return configAndStacksInfo, err
 		}
-		u.LogErrorAndExit(err)
-	}
 
-	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+		var settingsSectionStruct schema.Settings
 
-	// Process Atmos manifest sections
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentProvidersSection = i
-	}
+		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentVarsSection = i
-	}
+		componentSectionProcessed, err := ProcessTmplWithDatasources(
+			cliConfig,
+			settingsSectionStruct,
+			"all-atmos-sections",
+			componentSectionStr,
+			configAndStacksInfo.ComponentSection,
+			true,
+		)
+		if err != nil {
+			// If any error returned from the templates processing, log it and exit
+			u.LogErrorAndExit(err)
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentSettingsSection = i
-	}
+		componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+		if err != nil {
+			if !cliConfig.Templates.Settings.Enabled {
+				if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+					errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+						"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
+					err = errors.Join(err, errors.New(errorMessage))
+				}
+			}
+			u.LogErrorAndExit(err)
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentEnvSection = i
-	}
+		configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentOverridesSection = i
-	}
+		// Process Atmos manifest sections
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any); ok {
+			configAndStacksInfo.ComponentProvidersSection = i
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentMetadataSection = i
-	}
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[any]any); ok {
+			configAndStacksInfo.ComponentVarsSection = i
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentBackendSection = i
-	}
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[any]any); ok {
+			configAndStacksInfo.ComponentSettingsSection = i
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
-		configAndStacksInfo.ComponentBackendType = i
-	}
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[any]any); ok {
+			configAndStacksInfo.ComponentEnvSection = i
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
-		configAndStacksInfo.Component = i
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[any]any); ok {
+			configAndStacksInfo.ComponentOverridesSection = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[any]any); ok {
+			configAndStacksInfo.ComponentMetadataSection = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[any]any); ok {
+			configAndStacksInfo.ComponentBackendSection = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
+			configAndStacksInfo.ComponentBackendType = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
+			configAndStacksInfo.Component = i
+		}
 	}
 
 	// Spacelift stack
