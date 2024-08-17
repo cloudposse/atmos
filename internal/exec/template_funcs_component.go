@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"path"
 	"sync"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -71,6 +72,57 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'component_info.component_path' section", component, stack)
 	}
 
+	// Auto-generate backend file
+	if cliConfig.Components.Terraform.AutoGenerateBackendFile {
+		backendFileName := path.Join(componentPath, "backend.tf.json")
+
+		u.LogTrace(cliConfig, "\nWriting the backend config to file:")
+		u.LogTrace(cliConfig, backendFileName)
+
+		backendTypeSection, ok := sections["backend_type"].(string)
+		if !ok {
+			return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend_type' section", component, stack)
+		}
+
+		backendSection, ok := sections["backend"].(map[any]any)
+		if !ok {
+			return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend' section", component, stack)
+		}
+
+		componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace)
+		if err != nil {
+			return nil, err
+		}
+
+		err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+		if err != nil {
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, "\nWrote the backend config to file:")
+		u.LogTrace(cliConfig, backendFileName)
+	}
+
+	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	providersSection, ok := sections["providers"].(map[any]any)
+
+	if ok && len(providersSection) > 0 {
+		providerOverrideFileName := path.Join(componentPath, "providers_override.tf.json")
+
+		u.LogTrace(cliConfig, "\nWriting the provider overrides to file:")
+		u.LogTrace(cliConfig, providerOverrideFileName)
+
+		var providerOverrides = generateComponentProviderOverrides(providersSection)
+		err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
+		if err != nil {
+			return nil, err
+		}
+
+		u.LogTrace(cliConfig, "\nWrote the provider overrides to file:")
+		u.LogTrace(cliConfig, providerOverrideFileName)
+	}
+
+	// Initialize Terraform/OpenTofu
 	tf, err := tfexec.NewTerraform(componentPath, executable)
 	if err != nil {
 		return nil, err
@@ -78,11 +130,13 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 
 	ctx := context.Background()
 
+	// 'terraform init'
 	err = tf.Init(ctx, tfexec.Upgrade(false))
 	if err != nil {
 		return nil, err
 	}
 
+	// Terraform workspace
 	err = tf.WorkspaceNew(ctx, terraformWorkspace)
 	if err != nil {
 		err = tf.WorkspaceSelect(ctx, terraformWorkspace)
@@ -91,6 +145,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		}
 	}
 
+	// Terraform output
 	outputMeta, err := tf.Output(ctx)
 	if err != nil {
 		return nil, err
