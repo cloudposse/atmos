@@ -3,7 +3,7 @@ module github.com/cloudposse/atmos
 go 1.23
 
 require (
-	dario.cat/mergo v1.0.0
+	dario.cat/mergo v1.0.1
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/alecthomas/chroma v0.10.0
 	github.com/arsham/figurine v1.3.0
