@@ -24,7 +24,6 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 	// If the result for the component in the stack already exists in the cache, return it
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
-
 		if cliConfig.Logs.Level == u.LogLevelTrace {
 			u.LogTrace(cliConfig, fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
 
