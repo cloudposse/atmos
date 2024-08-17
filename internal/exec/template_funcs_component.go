@@ -131,32 +131,41 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 	ctx := context.Background()
 
 	// 'terraform init'
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform init %s -s %s'", component, stack))
 	err = tf.Init(ctx, tfexec.Upgrade(false))
 	if err != nil {
 		return nil, err
 	}
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform init %s -s %s'", component, stack))
 
 	// Terraform workspace
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 	err = tf.WorkspaceNew(ctx, terraformWorkspace)
 	if err != nil {
+		u.LogTrace(cliConfig, fmt.Sprintf("\nWorkspace exists. Executing 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 		err = tf.WorkspaceSelect(ctx, terraformWorkspace)
 		if err != nil {
 			return nil, err
 		}
+		u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+	} else {
+		u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 	}
 
 	// Terraform output
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform output %s -s %s'", component, stack))
 	outputMeta, err := tf.Output(ctx)
 	if err != nil {
 		return nil, err
 	}
+	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform output %s -s %s'", component, stack))
 
 	if cliConfig.Logs.Level == u.LogLevelTrace {
 		y, err2 := u.ConvertToYAML(outputMeta)
 		if err2 != nil {
 			u.LogError(err2)
 		} else {
-			u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'atmos terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
+			u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
 		}
 	}
 
