@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// proUnlockCmd executes 'vendor pull' CLI commands
+// proUnlockCmd executes 'pro unlock' CLI command
 var proUnlockCmd = &cobra.Command{
 	Use:                "unlock",
 	Short:              "Unlock a stack",

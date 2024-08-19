@@ -135,5 +135,3 @@ func log(cliConfig schema.CliConfiguration, logColor *color.Color, message strin
 		}
 	}
 }
-
-
