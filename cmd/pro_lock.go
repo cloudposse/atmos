@@ -24,8 +24,8 @@ var proLockCmd = &cobra.Command{
 }
 
 func init() {
-	proLockCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component: atmos vendor pull --component <component>")
-	proLockCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack: atmos vendor pull --stack <stack>")
+	proLockCmd.PersistentFlags().StringP("component", "c", "", "Specify the Atmos component to lock")
+	proLockCmd.PersistentFlags().StringP("stack", "s", "", "Specify the Atmos stack to lock")
 	proLockCmd.PersistentFlags().StringP("message", "m", "", "The lock message to display if someone else tries to lock the stack. Defaults to 'Locked by Atmos'")
 	proLockCmd.PersistentFlags().Int32P("ttl", "t", 0, "The amount of time in seconds to lock the stack for. Defaults to 30")
 
