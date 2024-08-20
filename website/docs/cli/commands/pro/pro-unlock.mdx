@@ -1,0 +1,46 @@
+---
+title: atmos pro unlock
+sidebar_label: unlock
+sidebar_class_name: command
+id: unlock
+description: Use this command to unlock a stack in Atmos Pro that has previously been locked by the lock command.
+---
+
+import Screengrab from "@site/src/components/Screengrab";
+
+:::note Purpose
+This command implements the locking feature of [Atmos Pro](https://app.cloudposse.com/docs). Use this command to unlock
+a stack in Atmos Pro that has previously been locked by the lock command.
+:::
+
+## Usage
+
+Execute the `pro unlock` command like this:
+
+```shell
+atmos pro unlock --component <component> --stack <stack>
+```
+
+## Description
+
+Atmos pro supports locking a stack in Atmos Pro so that it cannot be planned or applied by another process (pull
+request, CI/CD, etc.). Your CI/CD pipeline can use the `atmos pro lock` command to ensure it is the exclusive process
+interacting with a stack at the current time. Once your work is complete, you can unlock the stack by running the `atmos
+pro unlock` command.
+
+:::tip
+Run `atmos pro unlock --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos pro unlock --component vpc --stack plat-ue2-dev
+```
+
+## Flags
+
+| Flag          | Description                                                                                | Alias | Required |
+| :------------ | :----------------------------------------------------------------------------------------- | :---- | :------- |
+| `--component` | Atmos component to unlock                                                                    | `-c`  | yes      |
+| `--stack`     | Atmos stack to unlock                                                                        | `-s`  | yes      |

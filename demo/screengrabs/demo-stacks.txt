@@ -24,6 +24,8 @@ atmos describe dependents --help
 atmos describe stacks --help
 atmos describe workflows --help
 atmos docs --help
+atmos pro lock --help
+atmos pro unlock --help
 atmos terraform --help
 atmos terraform clean --help
 atmos terraform deploy --help
