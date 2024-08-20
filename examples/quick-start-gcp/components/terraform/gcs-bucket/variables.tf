@@ -5,7 +5,7 @@ variable "project_id" {
 
 variable "kms_encryption_enabled" {
   type        = bool
-  description = "weather to enable Kms encryption on GCS Bucket or not"
+  description = "Weather or not to enable Kms encryption on GCS Bucket"
   default     = false
 }
 

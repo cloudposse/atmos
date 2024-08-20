@@ -1,13 +1,13 @@
 output "bucket_name" {
-  value = local.enabled ? google_storage_bucket.bucket[0].name : null
+  value = one(google_storage_bucket.bucket[*].name)
 }
 
 output "bucket_self_link" {
-  value = local.enabled ? google_storage_bucket.bucket[0].self_link : null
+  value = one(google_storage_bucket.bucket[*].self_link)
 }
 
 output "bucket_url" {
-  value = local.enabled ? google_storage_bucket.bucket[0].url : null
+  value = one(google_storage_bucket.bucket[*].url)
 }
 
 output "kms_id" {

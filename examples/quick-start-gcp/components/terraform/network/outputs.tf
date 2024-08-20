@@ -1,10 +1,10 @@
 output "network_id_1" {
-  value       = google_compute_network.network_1.id
+  value       = one(google_compute_network.network_1[*].id)
   description = "Network ID 1"
 }
 
 output "network_id_2" {
-  value       = google_compute_network.network_2.id
+  value       = one(google_compute_network.network_2[*].id)
   description = "Network ID 2"
 }
 

@@ -1,5 +1,6 @@
 resource "google_storage_bucket" "bucket" {
-  count         = local.enabled && var.bucket_source_enabled && var.bucket_name == null ? 1 : 0
+  count = local.enabled && var.bucket_source_enabled && var.bucket_name == null ? 1 : 0
+
   project       = var.project_id
   name          = module.this.id
   location      = var.gcs_bucket.location

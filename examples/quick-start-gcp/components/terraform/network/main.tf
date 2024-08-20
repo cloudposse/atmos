@@ -1,4 +1,6 @@
 resource "google_compute_network" "network_1" {
+  count = local.enabled ? 1 : 0
+
   project                 = var.project_id_1
   name                    = "${module.this.id}-${var.region_1}"
   auto_create_subnetworks = var.auto_create_subnetworks
@@ -7,6 +9,8 @@ resource "google_compute_network" "network_1" {
 }
 
 resource "google_compute_network" "network_2" {
+  count = local.enabled ? 1 : 0
+
   project                 = var.project_id_2
   name                    = "${module.this.id}-${var.region_2}"
   auto_create_subnetworks = var.auto_create_subnetworks
@@ -15,13 +19,13 @@ resource "google_compute_network" "network_2" {
 }
 
 resource "google_compute_subnetwork" "subnets_1" {
-  for_each = { for key, val in var.subnets : key => val }
+  for_each = { for key, val in var.subnets : key => val if local.enabled }
 
   name          = "${module.this.id}-${var.region_1}-${each.value.name}"
   project       = var.project_id_1
   ip_cidr_range = each.value["ip_cidr_range"]
   region        = var.region_1
-  network       = google_compute_network.network_1.id
+  network       = one(google_compute_network.network_1[*].id)
 
   dynamic "secondary_ip_range" {
     for_each = each.value["secondary_ip_ranges"]
@@ -35,13 +39,13 @@ resource "google_compute_subnetwork" "subnets_1" {
 }
 
 resource "google_compute_subnetwork" "subnets_2" {
-  for_each = { for key, val in var.subnets : key => val }
+  for_each = { for key, val in var.subnets : key => val if local.enabled }
 
   name          = "${module.this.id}-${var.region_2}-${each.value.name}"
   project       = var.project_id_2
   ip_cidr_range = each.value["ip_cidr_range"]
   region        = var.region_2
-  network       = google_compute_network.network_2.id
+  network       = one(google_compute_network.network_2[*].id)
 
   dynamic "secondary_ip_range" {
     for_each = each.value["secondary_ip_ranges"]

@@ -1,6 +1,7 @@
 module "cloud_function" {
-  count             = local.enabled ? 1 : 0
-  source            = "GoogleCloudPlatform/cloud-functions/google"
+  count  = local.enabled ? 1 : 0
+  source = "GoogleCloudPlatform/cloud-functions/google"
+
   version           = "0.4.1"
   project_id        = var.project_id
   function_name     = module.this.id
