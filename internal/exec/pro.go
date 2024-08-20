@@ -197,7 +197,7 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	a.Logger.Info("Stack successfully unlocked.\n")
+	a.Logger.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
 
 	return nil
 }
