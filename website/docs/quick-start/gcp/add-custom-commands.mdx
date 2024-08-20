@@ -1,0 +1,102 @@
+---
+title: Add Custom Commands
+sidebar_position: 9
+sidebar_label: Add Custom Commands
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+
+Atmos can be easily extended to support any number of custom CLI commands.
+
+:::tip
+Refer to [Atmos Custom Commands](/core-concepts/custom-commands) for more information about Atmos Custom Commands
+:::
+
+Custom commands are defined in the `commands` section in `atmos.yaml` CLI configuration file.
+
+In this Quick Start guide, we'll define two custom commands to list the Atmos stacks in the infrastructure and the components in the stacks.
+
+<File title="atmos.yaml">
+```yaml
+# Custom CLI commands
+commands:
+  - name: list
+    description: Execute 'atmos list' commands
+    # subcommands
+    commands:
+      - name: stacks
+        description: |
+          List all Atmos stacks.
+        steps:
+          - >
+            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
+      - name: components
+        description: |
+          List all Atmos components in all stacks or in a single stack.
+
+          Example usage:
+            atmos list components
+            atmos list components -s plat-ue2-dev
+            atmos list components --stack plat-uw2-prod
+            atmos list components -s plat-ue2-dev --type abstract
+            atmos list components -s plat-ue2-dev -t enabled
+            atmos list components -s plat-ue2-dev -t disabled
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: false
+          - name: type
+            shorthand: t
+            description: Component types - abstract, enabled, or disabled
+            required: false
+        steps:
+          - >
+            {{ if .Flags.stack }}
+              {{ if eq .Flags.type "enabled" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r .key
+              {{ else if eq .Flags.type "disabled" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r .key
+              {{ else if eq .Flags.type "abstract" }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r .key
+              {{ else }}
+                atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ end }}
+            {{ else }}
+              {{ if eq .Flags.type "enabled" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else if eq .Flags.type "disabled" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else if eq .Flags.type "abstract" }}
+                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
+              {{ else }}
+                atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+              {{ end }}
+            {{ end }}
+```
+</File>
+
+Run the following Atmos command to list all stacks in the infrastructure:
+
+<Terminal title="atmos list stacks">
+```console
+plat-gbl-dev
+plat-gbl-prod
+plat-gbl-staging
+plat-ue2-dev
+plat-ue2-prod
+plat-ue2-staging
+plat-uw2-dev
+plat-uw2-prod
+plat-uw2-staging
+```
+</Terminal>
+
+Run the following Atmos command to list all components in the stack `plat-ue2-dev`:
+
+<Terminal title="atmos list components -s plat-ue2-dev">
+```console
+vpc
+vpc-flow-logs-bucket
+```
+</Terminal>

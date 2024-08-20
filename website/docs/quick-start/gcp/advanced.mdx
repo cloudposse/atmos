@@ -1,0 +1,56 @@
+---
+title: Advanced Tutorial
+sidebar_position: 4
+sidebar_label: Advanced Tutorial
+description: Take 30 minutes to learn the most important Atmos concepts.
+id: advanced
+---
+import PillBox from '@site/src/components/PillBox'
+
+<PillBox>Advanced</PillBox>
+
+# Advanced Tutorial
+
+Take 30 minutes to learn the most important Atmos concepts. We recommend starting with the [Simple Quick Start](/quick-start/simple) tutorial before diving into this advanced tutorial. This tutorial will take you through the process of configuring and provisioning infrastructure on AWS using Atmos. It requires administrative access to an AWS organization.
+
+:::tip
+
+This Quick Start guide describes the steps to configure and provision the infrastructure
+from this [Quick Start](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced) repository.
+
+You can clone it and configure to your own needs. The repository should be a good start to get yourself familiar with Atmos.
+
+:::
+
+In this advanced tutorial, we’ll delve into concepts like [inheritance](/core-concepts/stacks/inheritance)
+and [state management](/core-concepts/components/terraform/state-backend).
+Additionally, we’ll cover how to read the remote state from other components using native Terraform.
+This example focuses on AWS, and while Atmos isn’t AWS-specific, this tutorial will be.
+
+## Requirements
+
+We’ll assume you have administrative access to an AWS organization, as this tutorial will also provision
+AWS accounts and the IAM architecture. If you don’t have these prerequisites, our [Simple Quick Start](/quick-start/simple) tutorial
+might be a more practical starting point.
+
+## Overview
+
+The 10 steps to configure and provision the infrastructure are as follows:
+
+1. [Install Atmos](/install)
+2. [Configure Project Repository](/quick-start/advanced/configure-repository)
+3. [Configure Atmos CLI](/quick-start/advanced/configure-cli)
+4. [Vendor Component Dependencies](/quick-start/advanced/vendor-components)
+5. [Create Atmos Stacks](/quick-start/advanced/create-atmos-stacks)
+6. [Configure Validation](/quick-start/advanced/configure-validation)
+7. [Automate Common Workflows](/quick-start/advanced/create-workflows)
+8. [Add Custom Commands](/quick-start/advanced/add-custom-commands)
+9. [Configure Terraform Backend](/quick-start/advanced/configure-terraform-backend)
+10. [Deploy Everything](/quick-start/advanced/provision)
+
+We'll then conclude with some [final notes](/quick-start/advanced/final-notes) and [next steps](/quick-start/advanced/next-steps)
+
+
+import DocCardList from '@theme/DocCardList'
+
+<DocCardList/>
