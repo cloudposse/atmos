@@ -40,7 +40,7 @@ func ExecuteAtmosCmd() error {
 	}
 
 	// Get a map of stacks and components in the stacks
-	stacksMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, true)
+	stacksMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false)
 	if err != nil {
 		return err
 	}
