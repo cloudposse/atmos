@@ -1,0 +1,49 @@
+---
+title: atmos pro lock
+sidebar_label: lock
+sidebar_class_name: command
+id: lock
+description: Use this command to lock a stack in Atmos Pro so that it cannot be planned or applied by another process (pull request, CI/CD, etc.)
+---
+
+import Screengrab from "@site/src/components/Screengrab";
+
+:::note Purpose
+This command implements the locking feature of [Atmos Pro](https://app.cloudposse.com/docs). Use this command to lock
+a stack in Atmos Pro so that it cannot be planned or applied by another process (pull request, CI/CD, etc.)
+:::
+
+## Usage
+
+Execute the `pro lock` command like this:
+
+```shell
+atmos pro lock --component <component> --stack <stack> --ttl <ttl> --message <message>
+```
+
+## Description
+
+Atmos pro supports locking a stack in Atmos Pro so that it cannot be planned or applied by another process (pull
+request, CI/CD, etc.). Your CI/CD pipeline can use the `atmos pro lock` command to ensure it is the exclusive process
+interacting with a stack at the current time. Once your work is complete, you can unlock the stack by running the `atmos
+pro unlock` command.
+
+:::tip
+Run `atmos pro lock --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos pro lock --component vpc --stack plat-ue2-dev --ttl 300 --message "Locked by $GITHUB_RUN_ID"
+atmos pro lock --component vpc --stack plat-ue2-dev --ttl 300
+```
+
+## Flags
+
+| Flag          | Description                                                                                | Alias | Required |
+| :------------ | :----------------------------------------------------------------------------------------- | :---- | :------- |
+| `--component` | Atmos component to lock                                                                    | `-c`  | yes      |
+| `--stack`     | Atmos stack to lock                                                                        | `-s`  | yes      |
+| `--ttl`       | The time to live (TTL) for the lock, in seconds. Defaults to 30                            | `-t`  | no       |
+| `--message`   | A message to display to other users who try to lock the stack. Defaults to "Locked by Atmos" | `-m`  | no       |
