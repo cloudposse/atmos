@@ -177,7 +177,7 @@ stack config file names (stack manifest names) can be anything, and they can be 
 
 For example, when executing the `atmos terraform apply vpc -s plat-ue2-dev`
 command, the Atmos stack `plat-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"`
-(see [Configure CLI](/quick-start/advanced/configure-cli)) and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second
+(see [Configure CLI](/quick-start/gcp/configure-cli)) and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second
 part is `environment`, and the third part is `stage`. Then Atmos searches for the top-level stack manifest (in the `stacks` directory)
 where `tenant: plat`, `environment: ue2` and `stage: dev` are defined (inline or via imports).
 
