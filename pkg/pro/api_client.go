@@ -64,7 +64,7 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 	return req, nil
 }
 
-// uploadAffectedStacks uploads information about affected stacks
+// UploadAffectedStacks uploads information about affected stacks
 func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
