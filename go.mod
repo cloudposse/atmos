@@ -8,9 +8,9 @@ require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/arsham/figurine v1.3.0
 	github.com/bmatcuk/doublestar/v4 v4.6.1
-	github.com/charmbracelet/bubbles v0.18.0
+	github.com/charmbracelet/bubbles v0.19.0
 	github.com/charmbracelet/bubbletea v0.27.0
-	github.com/charmbracelet/lipgloss v0.12.1
+	github.com/charmbracelet/lipgloss v0.13.0
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.17.0
 	github.com/go-git/go-git/v5 v5.12.0
@@ -27,7 +27,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
-	github.com/lrstanley/bubblezone v0.0.0-20240817020358-d328142f33b6
+	github.com/lrstanley/bubblezone v0.0.0-20240820044643-3964e2111228
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/open-policy-agent/opa v0.67.1
@@ -169,7 +169,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.15 // indirect
+	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
@@ -179,7 +179,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
@@ -198,7 +197,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
-	github.com/sahilm/fuzzy v0.1.1-0.20230530133925-c48e322e2a8f // indirect
+	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
