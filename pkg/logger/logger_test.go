@@ -7,9 +7,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func captureOutput(f func()) string {

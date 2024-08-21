@@ -33,7 +33,7 @@ func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiTo
 	}
 }
 
-// NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables	
+// NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables
 func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, error) {
 	baseURL := os.Getenv(cfg.AtmosProBaseUrlEnvVarName)
 	if baseURL == "" {

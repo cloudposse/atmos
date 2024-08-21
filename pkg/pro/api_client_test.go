@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/cloudposse/atmos/pkg/logger"
 )
 
 // MockRoundTripper is an implementation of http.RoundTripper for testing purposes.
