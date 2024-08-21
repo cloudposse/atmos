@@ -348,15 +348,22 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 		u.LogErrorAndExit(err)
 	}
 
-	fmt.Print("Atmos CLI config ")
-	u.PrintMessageInColor("stacks.base_path ", c1)
-	fmt.Print("points to the ")
-	u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
-	fmt.Println(" directory.")
+	if cliConfig.Default {
+		// If Atmos did not find an `atmos.yaml` config file and is using the default config
+		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Println(" CLI config file was not found.")
+		fmt.Print("\nThe default Atmos stacks directory is set to ")
+		u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		fmt.Println(",\nbut the directory does not exist in the current path.")
+	} else {
+		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
+		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
+		u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		fmt.Println(",\nbut the directory does not exist.")
+	}
 
-	u.PrintMessage("The directory does not exist or has no Atmos stack configurations.\n")
-
-	u.PrintMessage("To configure and start using Atmos, refer to the following documents:\n")
+	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
 
 	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
 	u.PrintMessage("https://atmos.tools/cli/configuration\n")

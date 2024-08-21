@@ -25,6 +25,7 @@ var (
 		"https://raw.githubusercontent.com/cloudposse/atmos/main/examples/quick-start-advanced/atmos.yaml")
 
 	defaultCliConfig = schema.CliConfiguration{
+		Default:  true,
 		BasePath: ".",
 		Stacks: schema.Stacks{
 			BasePath:    "stacks",
