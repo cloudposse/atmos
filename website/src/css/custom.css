@@ -99,7 +99,6 @@ body {
     font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     font-size: 17px;
     line-height: 30px;
-
 }
 
 .language-console pre > code, .language-text pre > code {
@@ -232,6 +231,8 @@ article h1 {
     --aa-input-border-color-rgb: var(--ifm-toc-border-color);
     --aa-input-border-color-alpha: var(--ifm-toc-border-color);
     --aa-primary-color-rgb: var(--ifm-toc-border-color) !important;
+    --announcement-bar-background: #3578e5;
+    --announcement-bar-text-color: #fff;
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
