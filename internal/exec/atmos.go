@@ -40,7 +40,8 @@ func ExecuteAtmosCmd() error {
 	}
 
 	// Get a map of stacks and components in the stacks
-	stacksMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, true)
+	// Don't process `Go` templates in Atmos stack manifests since we just need to display the stack and component names in the TUI
+	stacksMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false)
 	if err != nil {
 		return err
 	}

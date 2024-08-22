@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/fatih/color"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 type LogLevel string
