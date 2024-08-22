@@ -142,9 +142,9 @@ func (c *columnView) getStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Padding(0).Margin(2).Height(c.height).Width(c.width)
 
 	if c.Focused() {
-		s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))
+		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))
 	} else {
-		s.Border(lipgloss.HiddenBorder())
+		s = s.Border(lipgloss.HiddenBorder())
 	}
 
 	return s
