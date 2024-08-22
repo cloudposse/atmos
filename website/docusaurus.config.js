@@ -82,7 +82,7 @@ const config = {
             {
               DSN: 'b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
             },
-          ],
+        ],
         [
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
         ]
@@ -197,6 +197,14 @@ const config = {
                         dark: 'rgb(50, 50, 50)'
                     }
                 }
+            },
+            announcementBar: {
+                id: 'refarch-announcement',
+                content:
+                  'Try Cloud Posse\'s <a href="https://docs.cloudposse.com">Reference Architecture for AWS, Datadog & GitHub Actions</a> using Atmos',
+                backgroundColor: 'var(--announcement-bar-background)',
+                textColor: 'var(--announcement-bar-text-color)',
+                isCloseable: true,
             },
             colorMode: {
                 // "light" | "dark"
