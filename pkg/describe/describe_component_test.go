@@ -22,11 +22,11 @@ func TestDescribeComponent(t *testing.T) {
 func TestDescribeTemplatedComponent(t *testing.T) {
 	componentSection, err := e.ExecuteDescribeComponent("eks-blue/cluster", "tenant1-uw2-test-1", true)
 	assert.Nil(t, err)
-	assert.Equal(t, "eks-blue", componentSection["vars"].(map[any]any)["name"])
+	assert.Equal(t, "eks-blue", componentSection["vars"].(map[string]any)["name"])
 
 	componentSection, err = e.ExecuteDescribeComponent("eks-green/cluster", "tenant1-uw2-test-1", true)
 	assert.Nil(t, err)
-	assert.Equal(t, "eks-green", componentSection["vars"].(map[any]any)["name"])
+	assert.Equal(t, "eks-green", componentSection["vars"].(map[string]any)["name"])
 }
 
 func TestDescribeComponent2(t *testing.T) {

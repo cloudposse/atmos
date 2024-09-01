@@ -104,7 +104,7 @@ func TransformStackConfigToSpaceliftStacks(
 	}
 
 	for stackName, stackConfig := range stacks {
-		config := stackConfig.(map[any]any)
+		config := stackConfig.(map[string]any)
 		var imports []string
 
 		if processImports {
@@ -124,14 +124,14 @@ func TransformStackConfigToSpaceliftStacks(
 
 					componentSettings := map[any]any{}
 					if i, ok2 := componentMap["settings"]; ok2 {
-						componentSettings = i.(map[any]any)
+						componentSettings = i.(map[string]any)
 					}
 
 					spaceliftSettings := map[any]any{}
 					spaceliftWorkspaceEnabled := false
 
 					if i, ok2 := componentSettings["spacelift"]; ok2 {
-						spaceliftSettings = i.(map[any]any)
+						spaceliftSettings = i.(map[string]any)
 
 						if i3, ok3 := spaceliftSettings["workspace_enabled"]; ok3 {
 							spaceliftWorkspaceEnabled = i3.(bool)
@@ -153,12 +153,12 @@ func TransformStackConfigToSpaceliftStacks(
 
 					componentVars := map[any]any{}
 					if i, ok2 := componentMap["vars"]; ok2 {
-						componentVars = i.(map[any]any)
+						componentVars = i.(map[string]any)
 					}
 
 					componentEnv := map[any]any{}
 					if i, ok2 := componentMap["env"]; ok2 {
-						componentEnv = i.(map[any]any)
+						componentEnv = i.(map[string]any)
 					}
 
 					componentStacks := []string{}
@@ -214,7 +214,7 @@ func TransformStackConfigToSpaceliftStacks(
 
 					componentBackend := map[any]any{}
 					if i, ok2 := componentMap["backend"]; ok2 {
-						componentBackend = i.(map[any]any)
+						componentBackend = i.(map[string]any)
 					}
 					spaceliftConfig["backend"] = componentBackend
 

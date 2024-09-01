@@ -133,7 +133,7 @@ func TestMergeListMerge(t *testing.T) {
 		t.Errorf("invalid merge result: %v", result)
 	}
 
-	merged := mergedList[0].(map[any]any)
+	merged := mergedList[0].(map[string]any)
 
 	assert.Equal(t, "1b", merged["1"])
 	assert.Equal(t, "2", merged["2"])
