@@ -21,7 +21,7 @@ After you've written your components and configured your stacks, now we're ready
 
 ## Provision Atmos Components into all Stacks
 
-Provision the `vpc-flow-logs-bucket` Atmos component into the stacks:
+Provision the `myapp` Atmos component into the stacks:
 
 ```shell
 atmos terraform apply myapp -s dev
@@ -42,12 +42,11 @@ atmos workflow apply-all-components -f networking
 
 Looking at the commands above, you might have a question "How does Atmos find the component in the stack and all the variables?"
 
-Let's consider what Atmos does when executing the command `atmos terraform apply vpc -s plat-ue2-prod`:
+Let's consider what Atmos does when executing the command `atmos terraform apply myapp -s prod`:
 
 - Atmos uses the `stacks.name_pattern` defined in the [CLI config](/quick-start/advanced/configure-cli). In this example, we have defined a simple name based on `stacks.name_pattern: "{stage}"`. This means that the stack name is just the `stage` part of the stack name.
 
-- Atmos searches for the stack configuration file (in the `stacks` folder and all sub-folders) where `tenant: plat`, `environment: ue2`
-  and `stage: prod` are defined (inline or via imports). During the search, Atmos processes all parent (top-level) config files and compares the context variables specified in the command (`-s` flag) with the context variables defined in the stack configurations, finally finding the matching stack
+- Atmos searches for the stack configuration file (in the `stacks` folder and all sub-folders) where `stage: prod` is defined (inline or via imports). During the search, Atmos processes all parent (top-level) config files and compares the context variables specified in the command (`-s` flag) with the context variables defined in the stack configurations, finally finding the matching stack
 
 - Atmos finds the component `myapp` in the stack, processing all the inline configs and all the imports
 

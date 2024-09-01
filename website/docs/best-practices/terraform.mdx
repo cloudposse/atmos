@@ -30,8 +30,9 @@ Furthermore, since components define a state backend and providers, it's not adv
 
 ## Use Terraform Overrides to Extend ("Monkey Patch") Vendored Components
 
-When you need to extend a component, we recommend using [Terraform Overrides](https://www.terraform.io/docs/language/modules/develop/override.html) with [Vendoring](https://www.terraform.io/docs/language/modules/develop/override.html#vendoring) to extend the component.
-It's essentially a Terraform-native way of [Monkey Patching](https://en.wikipedia.org/wiki/Monkey_patch). This way, you can maintain the original component as a dependency and only override the parts you need to change.
+When you need to extend a component, we recommend using [Terraform Overrides](https://developer.hashicorp.com/terraform/language/files/override).
+It's essentially a Terraform-native way of [Monkey Patching](https://en.wikipedia.org/wiki/Monkey_patch).
+This way, you can maintain the original component as a dependency and only override the parts you need to change.
 
 :::warning Pitfall!
 Use this technique cautiously because your overrides may break if the upstream interfaces change. There’s no contract that an upstream component will remain the same.

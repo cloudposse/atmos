@@ -1,7 +1,7 @@
 package convert
 
 import (
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // YAMLToMapOfInterfaces takes a YAML string as input and returns a map[any]any
