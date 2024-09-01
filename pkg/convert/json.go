@@ -12,23 +12,3 @@ func JSONToMapOfInterfaces(input string) (map[string]any, error) {
 	}
 	return data, nil
 }
-
-// JSONSliceOfInterfaceToSliceOfMaps takes a slice of JSON strings as input and returns a slice of map[any]any
-func JSONSliceOfInterfaceToSliceOfMaps(input []any) ([]map[any]any, error) {
-	outputMap := make([]map[any]any, 0)
-	for _, current := range input {
-		data, err := JSONToMapOfInterfaces(current.(string))
-		if err != nil {
-			return nil, err
-		}
-
-		map2 := map[any]any{}
-
-		for k, v := range data {
-			map2[k] = v
-		}
-
-		outputMap = append(outputMap, map2)
-	}
-	return outputMap, nil
-}

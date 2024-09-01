@@ -467,7 +467,7 @@ type StackImport struct {
 
 // Dependencies
 
-type DependsOn map[any]Context
+type DependsOn map[string]Context
 
 type Dependent struct {
 	Component       string         `yaml:"component" json:"component" mapstructure:"component"`
@@ -487,7 +487,7 @@ type Dependent struct {
 
 // Settings
 
-type SettingsSpacelift map[any]any
+type SettingsSpacelift map[string]any
 
 type Settings struct {
 	DependsOn DependsOn         `yaml:"depends_on,omitempty" json:"depends_on,omitempty" mapstructure:"depends_on"`

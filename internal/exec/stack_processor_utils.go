@@ -429,7 +429,7 @@ func ProcessYAMLConfigFile(
 
 		// Process the imports in the current manifest
 		for _, importFile := range importMatches {
-			yamlConfig, _, yamlConfigRaw, err := ProcessYAMLConfigFile(
+			yamlConfig, _, yamlConfigRaw, err2 := ProcessYAMLConfigFile(
 				cliConfig,
 				basePath,
 				importFile,
@@ -443,8 +443,8 @@ func ProcessYAMLConfigFile(
 				finalHelmfileOverrides,
 				"",
 			)
-			if err != nil {
-				return nil, nil, nil, err
+			if err2 != nil {
+				return nil, nil, nil, err2
 			}
 
 			stackConfigs = append(stackConfigs, yamlConfig)
@@ -465,7 +465,8 @@ func ProcessYAMLConfigFile(
 	// Deep-merge the stack manifest and all the imports
 	stackConfigsDeepMerged, err := m.Merge(cliConfig, stackConfigs)
 	if err != nil {
-		return nil, nil, nil, err
+		err2 := fmt.Errorf("ProcessYAMLConfigFile: Merge: Deep-merge the stack manifest and all the imports: Error: %v", err)
+		return nil, nil, nil, err2
 	}
 
 	return stackConfigsDeepMerged, importsConfig, stackConfigMap, nil

@@ -15,12 +15,3 @@ func SliceOfInterfacesToSliceOfStrings(input []any) ([]string, error) {
 
 	return output, nil
 }
-
-// SliceOfMapsOfStringsToSliceOfMapsOfInterfaces takes a slice of map[string]any and returns a slice of map[any]any
-func SliceOfMapsOfStringsToSliceOfMapsOfInterfaces(input []map[string]any) []map[any]any {
-	output := make([]map[any]any, 0)
-	for k, v := range input {
-		output = append(output, map[any]any{k: v})
-	}
-	return output
-}

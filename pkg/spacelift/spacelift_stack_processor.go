@@ -122,12 +122,12 @@ func TransformStackConfigToSpaceliftStacks(
 				for component, v := range terraformComponentsMap {
 					componentMap := v.(map[string]any)
 
-					componentSettings := map[any]any{}
+					componentSettings := map[string]any{}
 					if i, ok2 := componentMap["settings"]; ok2 {
 						componentSettings = i.(map[string]any)
 					}
 
-					spaceliftSettings := map[any]any{}
+					spaceliftSettings := map[string]any{}
 					spaceliftWorkspaceEnabled := false
 
 					if i, ok2 := componentSettings["spacelift"]; ok2 {
@@ -151,12 +151,12 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig := map[string]any{}
 					spaceliftConfig["enabled"] = spaceliftWorkspaceEnabled
 
-					componentVars := map[any]any{}
+					componentVars := map[string]any{}
 					if i, ok2 := componentMap["vars"]; ok2 {
 						componentVars = i.(map[string]any)
 					}
 
-					componentEnv := map[any]any{}
+					componentEnv := map[string]any{}
 					if i, ok2 := componentMap["env"]; ok2 {
 						componentEnv = i.(map[string]any)
 					}
@@ -212,7 +212,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 					spaceliftConfig["backend_type"] = backendTypeName
 
-					componentBackend := map[any]any{}
+					componentBackend := map[string]any{}
 					if i, ok2 := componentMap["backend"]; ok2 {
 						componentBackend = i.(map[string]any)
 					}

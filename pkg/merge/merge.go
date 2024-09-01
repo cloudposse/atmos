@@ -18,7 +18,11 @@ const (
 
 // MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
 // and returns a single map with the merged contents
-func MergeWithOptions(inputs []map[string]any, appendSlice, sliceDeepCopy bool) (map[string]any, error) {
+func MergeWithOptions(
+	inputs []map[string]any,
+	appendSlice bool,
+	sliceDeepCopy bool,
+) (map[string]any, error) {
 	merged := map[string]any{}
 
 	for index := range inputs {
@@ -40,7 +44,7 @@ func MergeWithOptions(inputs []map[string]any, appendSlice, sliceDeepCopy bool) 
 			return nil, err
 		}
 
-		var dataCurrent map[any]any
+		var dataCurrent map[string]any
 		if err = yaml.Unmarshal(yamlCurrent, &dataCurrent); err != nil {
 			c := color.New(color.FgRed)
 			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
