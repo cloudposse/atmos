@@ -467,7 +467,7 @@ type StackImport struct {
 
 // Dependencies
 
-type DependsOn map[string]Context
+type DependsOn map[any]Context
 
 type Dependent struct {
 	Component       string         `yaml:"component" json:"component" mapstructure:"component"`
