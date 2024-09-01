@@ -242,7 +242,7 @@ func processComponentSectionValueInStack(
 		return result
 	}
 
-	rawStackMap, ok := rawStack.(map[any]any)
+	rawStackMap, ok := rawStack.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -252,7 +252,7 @@ func processComponentSectionValueInStack(
 		return result
 	}
 
-	rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any)
+	rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -262,7 +262,7 @@ func processComponentSectionValueInStack(
 		return result
 	}
 
-	rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+	rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -272,7 +272,7 @@ func processComponentSectionValueInStack(
 		return result
 	}
 
-	rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any)
+	rawStackComponentSectionMap, ok := rawStackComponentSection.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -282,13 +282,13 @@ func processComponentSectionValueInStack(
 		return result
 	}
 
-	rawStackVarsMap, ok := rawStackVars.(map[any]any)
+	rawStackVarsMap, ok := rawStackVars.(map[string]any)
 	if !ok {
 		return result
 	}
 
 	if subsection != "" {
-		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[string]any)
 		if !ok {
 			return result
 		}
@@ -338,7 +338,7 @@ func processComponentTypeSectionValueInStack(
 		return result
 	}
 
-	rawStackMap, ok := rawStack.(map[any]any)
+	rawStackMap, ok := rawStack.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -348,7 +348,7 @@ func processComponentTypeSectionValueInStack(
 		return result
 	}
 
-	rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+	rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -358,13 +358,13 @@ func processComponentTypeSectionValueInStack(
 		return result
 	}
 
-	rawStackVarsMap, ok := rawStackVars.(map[any]any)
+	rawStackVarsMap, ok := rawStackVars.(map[string]any)
 	if !ok {
 		return result
 	}
 
 	if subsection != "" {
-		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[string]any)
 		if !ok {
 			return result
 		}
@@ -413,7 +413,7 @@ func processGlobalSectionValueInStack(
 		return result
 	}
 
-	rawStackMap, ok := rawStack.(map[any]any)
+	rawStackMap, ok := rawStack.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -423,13 +423,13 @@ func processGlobalSectionValueInStack(
 		return result
 	}
 
-	rawStackVarsMap, ok := rawStackVars.(map[any]any)
+	rawStackVarsMap, ok := rawStackVars.(map[string]any)
 	if !ok {
 		return result
 	}
 
 	if subsection != "" {
-		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+		rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[string]any)
 		if !ok {
 			return result
 		}
@@ -479,7 +479,7 @@ func processComponentSectionValueInStackImports(
 		return result
 	}
 
-	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
+	rawStackImportsMap, ok := rawStackImports.(map[string]map[string]any)
 	if !ok {
 		return result
 	}
@@ -502,7 +502,7 @@ func processComponentSectionValueInStackImports(
 			continue
 		}
 
-		rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[any]any)
+		rawStackComponentsSectionMap, ok := rawStackComponentsSection.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -512,7 +512,7 @@ func processComponentSectionValueInStackImports(
 			continue
 		}
 
-		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -522,7 +522,7 @@ func processComponentSectionValueInStackImports(
 			continue
 		}
 
-		rawStackComponentSectionMap, ok := rawStackComponentSection.(map[any]any)
+		rawStackComponentSectionMap, ok := rawStackComponentSection.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -532,13 +532,13 @@ func processComponentSectionValueInStackImports(
 			continue
 		}
 
-		rawStackVarsMap, ok := rawStackVars.(map[any]any)
+		rawStackVarsMap, ok := rawStackVars.(map[string]any)
 		if !ok {
 			continue
 		}
 
 		if subsection != "" {
-			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[string]any)
 			if !ok {
 				return result
 			}
@@ -589,7 +589,7 @@ func processComponentTypeSectionValueInStackImports(
 		return result
 	}
 
-	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
+	rawStackImportsMap, ok := rawStackImports.(map[string]map[string]any)
 	if !ok {
 		return result
 	}
@@ -612,7 +612,7 @@ func processComponentTypeSectionValueInStackImports(
 			continue
 		}
 
-		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[any]any)
+		rawStackComponentTypeSectionMap, ok := rawStackComponentTypeSection.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -622,13 +622,13 @@ func processComponentTypeSectionValueInStackImports(
 			continue
 		}
 
-		rawStackVarsMap, ok := rawStackVars.(map[any]any)
+		rawStackVarsMap, ok := rawStackVars.(map[string]any)
 		if !ok {
 			continue
 		}
 
 		if subsection != "" {
-			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[string]any)
 			if !ok {
 				return result
 			}
@@ -678,7 +678,7 @@ func processGlobalSectionValueInStackImports(
 		return result
 	}
 
-	rawStackImportsMap, ok := rawStackImports.(map[string]map[any]any)
+	rawStackImportsMap, ok := rawStackImports.(map[string]map[string]any)
 	if !ok {
 		return result
 	}
@@ -701,13 +701,13 @@ func processGlobalSectionValueInStackImports(
 			continue
 		}
 
-		rawStackVarsMap, ok := rawStackVars.(map[any]any)
+		rawStackVarsMap, ok := rawStackVars.(map[string]any)
 		if !ok {
 			continue
 		}
 
 		if subsection != "" {
-			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[any]any)
+			rawStackVarsMapSubsection, ok := rawStackVarsMap[subsection].(map[string]any)
 			if !ok {
 				return result
 			}
