@@ -84,19 +84,19 @@ func ExecuteTerraformGenerateBackends(
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
-	var metadataSection map[any]any
-	var varsSection map[any]any
-	var settingsSection map[any]any
-	var envSection map[any]any
-	var providersSection map[any]any
-	var overridesSection map[any]any
-	var backendSection map[any]any
+	var metadataSection map[string]any
+	var varsSection map[string]any
+	var settingsSection map[string]any
+	var envSection map[string]any
+	var providersSection map[string]any
+	var overridesSection map[string]any
+	var backendSection map[string]any
 	var backendTypeSection string
 	processedTerraformComponents := map[string]any{}
 	fileTemplateProvided := fileTemplate != ""
 
 	for stackFileName, stackSection := range stacksMap {
-		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
+		if componentsSection, ok = stackSection.(map[string]any)["components"].(map[string]any); !ok {
 			continue
 		}
 
@@ -114,7 +114,7 @@ func ExecuteTerraformGenerateBackends(
 				u.SliceContainsString(components, componentName) {
 
 				// Component metadata
-				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); ok {
+				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[string]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
 						// Don't include abstract components
 						if componentType == "abstract" {
@@ -124,7 +124,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				// Component backend
-				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
+				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
 					continue
 				}
 
@@ -133,24 +133,24 @@ func ExecuteTerraformGenerateBackends(
 					continue
 				}
 
-				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
-					varsSection = map[any]any{}
+				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
+					varsSection = map[string]any{}
 				}
 
-				if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
-					settingsSection = map[any]any{}
+				if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
+					settingsSection = map[string]any{}
 				}
 
-				if envSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
-					envSection = map[any]any{}
+				if envSection, ok = componentSection[cfg.EnvSectionName].(map[string]any); !ok {
+					envSection = map[string]any{}
 				}
 
-				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
-					providersSection = map[any]any{}
+				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
+					providersSection = map[string]any{}
 				}
 
-				if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
-					overridesSection = map[any]any{}
+				if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
+					overridesSection = map[string]any{}
 				}
 
 				// Find terraform component.
@@ -243,7 +243,7 @@ func ExecuteTerraformGenerateBackends(
 					return err
 				}
 
-				componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
+				componentSectionConverted, err := c.YAMLToMapOfStrings(componentSectionProcessed)
 				if err != nil {
 					if !cliConfig.Templates.Settings.Enabled {
 						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
@@ -255,9 +255,9 @@ func ExecuteTerraformGenerateBackends(
 					u.LogErrorAndExit(err)
 				}
 
-				componentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+				componentSection = componentSectionConverted
 
-				if i, ok := componentSection[cfg.BackendSectionName].(map[any]any); ok {
+				if i, ok := componentSection[cfg.BackendSectionName].(map[string]any); ok {
 					backendSection = i
 				}
 

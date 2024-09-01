@@ -78,8 +78,8 @@ func ProcessTmplWithDatasources(
 	u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processing template '%s'", tmplName))
 
 	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
-	var cliConfigTemplateSettingsMap map[any]any
-	var stackManifestTemplateSettingsMap map[any]any
+	var cliConfigTemplateSettingsMap map[string]any
+	var stackManifestTemplateSettingsMap map[string]any
 	var templateSettings schema.TemplatesSettings
 
 	err := mapstructure.Decode(cliConfig.Templates.Settings, &cliConfigTemplateSettingsMap)
@@ -92,7 +92,7 @@ func ProcessTmplWithDatasources(
 		return "", err
 	}
 
-	templateSettingsMerged, err := merge.Merge(cliConfig, []map[any]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
+	templateSettingsMerged, err := merge.Merge(cliConfig, []map[string]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
 	if err != nil {
 		return "", err
 	}
@@ -213,14 +213,14 @@ func ProcessTmplWithDatasources(
 		}
 
 		result = res.String()
-		resultMap, err := convert.YAMLToMapOfInterfaces(result)
+		resultMap, err := convert.YAMLToMapOfStrings(result)
 		if err != nil {
 			return "", err
 		}
 
-		if resultMapSettings, ok := resultMap["settings"].(map[any]any); ok {
-			if resultMapSettingsTemplates, ok := resultMapSettings["templates"].(map[any]any); ok {
-				if resultMapSettingsTemplatesSettings, ok := resultMapSettingsTemplates["settings"].(map[any]any); ok {
+		if resultMapSettings, ok := resultMap["settings"].(map[string]any); ok {
+			if resultMapSettingsTemplates, ok := resultMapSettings["templates"].(map[string]any); ok {
+				if resultMapSettingsTemplatesSettings, ok := resultMapSettingsTemplates["settings"].(map[string]any); ok {
 					err = mapstructure.Decode(resultMapSettingsTemplatesSettings, &templateSettings)
 					if err != nil {
 						return "", err

@@ -9,7 +9,7 @@ import (
 )
 
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
-func BuildSpaceliftStackName(spaceliftSettings map[any]any, context schema.Context, contextPrefix string) (string, string, error) {
+func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Context, contextPrefix string) (string, string, error) {
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
 		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
@@ -25,7 +25,7 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 	var allStackNames []string
 
 	for stackName, stackConfig := range stacks {
-		config := stackConfig.(map[any]any)
+		config := stackConfig.(map[string]any)
 
 		if i, ok := config["components"]; ok {
 			componentsSection := i.(map[string]any)
@@ -35,20 +35,20 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 
 				for component, v := range terraformComponentsMap {
 					componentMap := v.(map[string]any)
-					componentVars := map[any]any{}
-					spaceliftSettings := map[any]any{}
+					componentVars := map[string]any{}
+					spaceliftSettings := map[string]any{}
 
 					if i, ok2 := componentMap["vars"]; ok2 {
-						componentVars = i.(map[any]any)
+						componentVars = i.(map[string]any)
 					}
 
-					componentSettings := map[any]any{}
+					componentSettings := map[string]any{}
 					if i, ok2 := componentMap["settings"]; ok2 {
-						componentSettings = i.(map[any]any)
+						componentSettings = i.(map[string]any)
 					}
 
 					if i, ok2 := componentSettings["spacelift"]; ok2 {
-						spaceliftSettings = i.(map[any]any)
+						spaceliftSettings = i.(map[string]any)
 					}
 
 					context := cfg.GetContextFromVars(componentVars)
@@ -88,12 +88,12 @@ func BuildSpaceliftStackNameFromComponentConfig(
 ) (string, error) {
 
 	var spaceliftStackName string
-	var spaceliftSettingsSection map[any]any
+	var spaceliftSettingsSection map[string]any
 	var contextPrefix string
 	var err error
 
 	if i, ok2 := configAndStacksInfo.ComponentSettingsSection["spacelift"]; ok2 {
-		spaceliftSettingsSection = i.(map[any]any)
+		spaceliftSettingsSection = i.(map[string]any)
 	}
 
 	// Spacelift stack

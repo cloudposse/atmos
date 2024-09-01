@@ -161,13 +161,13 @@ type ConfigAndStacksInfo struct {
 	SubCommand                    string
 	SubCommand2                   string
 	ComponentSection              map[string]any
-	ComponentVarsSection          map[any]any
-	ComponentSettingsSection      map[any]any
-	ComponentOverridesSection     map[any]any
-	ComponentProvidersSection     map[any]any
-	ComponentEnvSection           map[any]any
+	ComponentVarsSection          map[string]any
+	ComponentSettingsSection      map[string]any
+	ComponentOverridesSection     map[string]any
+	ComponentProvidersSection     map[string]any
+	ComponentEnvSection           map[string]any
 	ComponentEnvList              []string
-	ComponentBackendSection       map[any]any
+	ComponentBackendSection       map[string]any
 	ComponentBackendType          string
 	AdditionalArgsAndFlags        []string
 	GlobalOptions                 []string
@@ -192,7 +192,7 @@ type ConfigAndStacksInfo struct {
 	ComponentImportsSection       []string
 	NeedHelp                      bool
 	ComponentIsAbstract           bool
-	ComponentMetadataSection      map[any]any
+	ComponentMetadataSection      map[string]any
 	TerraformWorkspace            string
 	JsonSchemaDir                 string
 	OpaDir                        string
@@ -422,36 +422,36 @@ type Validation map[string]ValidationItem
 // Affected Atmos components and stacks given two Git commits
 
 type Affected struct {
-	Component            string      `yaml:"component" json:"component" mapstructure:"component"`
-	ComponentType        string      `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
-	ComponentPath        string      `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
-	Namespace            string      `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
-	Tenant               string      `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
-	Environment          string      `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
-	Stage                string      `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
-	Stack                string      `yaml:"stack" json:"stack" mapstructure:"stack"`
-	StackSlug            string      `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
-	SpaceliftStack       string      `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
-	AtlantisProject      string      `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
-	Affected             string      `yaml:"affected" json:"affected" mapstructure:"affected"`
-	File                 string      `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
-	Folder               string      `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
-	Dependents           []Dependent `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
-	IncludedInDependents bool        `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
-	Settings             map[any]any `yaml:"settings" json:"settings" mapstructure:"settings"`
+	Component            string         `yaml:"component" json:"component" mapstructure:"component"`
+	ComponentType        string         `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
+	ComponentPath        string         `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Namespace            string         `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
+	Tenant               string         `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
+	Environment          string         `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Stage                string         `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
+	Stack                string         `yaml:"stack" json:"stack" mapstructure:"stack"`
+	StackSlug            string         `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
+	SpaceliftStack       string         `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
+	AtlantisProject      string         `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
+	Affected             string         `yaml:"affected" json:"affected" mapstructure:"affected"`
+	File                 string         `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	Folder               string         `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
+	Dependents           []Dependent    `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
+	IncludedInDependents bool           `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
+	Settings             map[string]any `yaml:"settings" json:"settings" mapstructure:"settings"`
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars                      map[any]any
-	BaseComponentSettings                  map[any]any
-	BaseComponentEnv                       map[any]any
-	BaseComponentProviders                 map[any]any
+	BaseComponentVars                      map[string]any
+	BaseComponentSettings                  map[string]any
+	BaseComponentEnv                       map[string]any
+	BaseComponentProviders                 map[string]any
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string
-	BaseComponentBackendSection            map[any]any
+	BaseComponentBackendSection            map[string]any
 	BaseComponentRemoteStateBackendType    string
-	BaseComponentRemoteStateBackendSection map[any]any
+	BaseComponentRemoteStateBackendSection map[string]any
 	ComponentInheritanceChain              []string
 }
 
@@ -470,19 +470,19 @@ type StackImport struct {
 type DependsOn map[any]Context
 
 type Dependent struct {
-	Component       string      `yaml:"component" json:"component" mapstructure:"component"`
-	ComponentType   string      `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
-	ComponentPath   string      `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
-	Namespace       string      `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
-	Tenant          string      `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
-	Environment     string      `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
-	Stage           string      `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
-	Stack           string      `yaml:"stack" json:"stack" mapstructure:"stack"`
-	StackSlug       string      `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
-	SpaceliftStack  string      `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
-	AtlantisProject string      `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
-	Dependents      []Dependent `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
-	Settings        map[any]any `yaml:"settings" json:"settings" mapstructure:"settings"`
+	Component       string         `yaml:"component" json:"component" mapstructure:"component"`
+	ComponentType   string         `yaml:"component_type" json:"component_type" mapstructure:"component_type"`
+	ComponentPath   string         `yaml:"component_path" json:"component_path" mapstructure:"component_path"`
+	Namespace       string         `yaml:"namespace,omitempty" json:"namespace,omitempty" mapstructure:"namespace"`
+	Tenant          string         `yaml:"tenant,omitempty" json:"tenant,omitempty" mapstructure:"tenant"`
+	Environment     string         `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Stage           string         `yaml:"stage,omitempty" json:"stage,omitempty" mapstructure:"stage"`
+	Stack           string         `yaml:"stack" json:"stack" mapstructure:"stack"`
+	StackSlug       string         `yaml:"stack_slug" json:"stack_slug" mapstructure:"stack_slug"`
+	SpaceliftStack  string         `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
+	AtlantisProject string         `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
+	Dependents      []Dependent    `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
+	Settings        map[string]any `yaml:"settings" json:"settings" mapstructure:"settings"`
 }
 
 // Settings

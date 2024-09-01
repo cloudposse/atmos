@@ -58,10 +58,10 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
-) (map[any]any, string, bool) {
+) (map[string]any, string, bool) {
 	baseComponentName := ""
 	componentIsAbstract := false
-	var componentMetadata map[any]any
+	var componentMetadata map[string]any
 
 	// Find base component in the `component` attribute
 	if base, ok := componentSection[cfg.ComponentSectionName].(string); ok {
@@ -69,7 +69,7 @@ func ProcessComponentMetadata(
 	}
 
 	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
-		componentMetadata = componentMetadataSection.(map[any]any)
+		componentMetadata = componentMetadataSection.(map[string]any)
 		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
 			if componentMetadataType == "abstract" {
 				componentIsAbstract = true
@@ -172,7 +172,7 @@ func GetStackNamePattern(cliConfig schema.CliConfiguration) string {
 }
 
 // IsComponentAbstract returns 'true' if the component is abstract
-func IsComponentAbstract(metadataSection map[any]any) bool {
+func IsComponentAbstract(metadataSection map[string]any) bool {
 	if metadataType, ok := metadataSection["type"].(string); ok {
 		if metadataType == "abstract" {
 			return true
