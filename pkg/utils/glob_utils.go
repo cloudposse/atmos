@@ -2,11 +2,12 @@ package utils
 
 import (
 	"fmt"
-	"github.com/bmatcuk/doublestar/v4"
 	"os"
 	"path"
 	"strings"
 	"sync"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 var (
