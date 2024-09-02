@@ -1,4 +1,4 @@
-package convert
+package utils
 
 import "github.com/pkg/errors"
 
