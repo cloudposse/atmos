@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestSpaceliftStackProcessor(t *testing.T) {
@@ -97,9 +98,9 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	assert.Equal(t, "depends-on:tenant1-ue2-dev-test-test-component", tenant1Ue2ProdTopLevelComponent1Labels[35])
 	assert.Equal(t, "depends-on:tenant1-ue2-prod-test-test-component-override", tenant1Ue2ProdTopLevelComponent1Labels[36])
 
-	yamlSpaceliftStacks, err := yaml.Marshal(spaceliftStacks)
+	yamlSpaceliftStacks, err := u.ConvertToYAML(spaceliftStacks)
 	assert.Nil(t, err)
-	t.Log(string(yamlSpaceliftStacks))
+	t.Log(yamlSpaceliftStacks)
 }
 
 func TestLegacySpaceliftStackProcessor(t *testing.T) {
@@ -178,7 +179,7 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/dev/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[35])
 	assert.Equal(t, "folder:component/test/test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentLabels[36])
 
-	yamlSpaceliftStacks, err := yaml.Marshal(spaceliftStacks)
+	yamlSpaceliftStacks, err := u.ConvertToYAML(spaceliftStacks)
 	assert.Nil(t, err)
-	t.Log(string(yamlSpaceliftStacks))
+	t.Log(yamlSpaceliftStacks)
 }

@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
@@ -31,10 +31,10 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, "", "", true, true, true)
 	assert.Nil(t, err)
 
-	affectedYaml, err := yaml.Marshal(affected)
+	affectedYaml, err := u.ConvertToYAML(affected)
 	assert.Nil(t, err)
 
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", string(affectedYaml)))
+	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
 }
 
 func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
@@ -55,8 +55,8 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, true, true, true)
 	assert.Nil(t, err)
 
-	affectedYaml, err := yaml.Marshal(affected)
+	affectedYaml, err := u.ConvertToYAML(affected)
 	assert.Nil(t, err)
 
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", string(affectedYaml)))
+	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
 }
