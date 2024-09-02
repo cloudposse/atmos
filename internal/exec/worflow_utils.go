@@ -10,7 +10,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	"gopkg.in/yaml.v2"
 
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -123,14 +122,25 @@ func ExecuteDescribeWorkflows(
 	allResult := make(map[string]schema.WorkflowManifest)
 
 	if cliConfig.Workflows.BasePath == "" {
-		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in `atmos.yaml`")
+		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
 	}
 
-	workflowsDir := path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath)
+	// If `workflows.base_path` is a relative path, join it with `stacks.base_path`
+	var workflowsDir string
+	if u.IsPathAbsolute(cliConfig.Workflows.BasePath) {
+		workflowsDir = cliConfig.Workflows.BasePath
+	} else {
+		workflowsDir = path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath)
+	}
+
+	isDirectory, err := u.IsDirectory(workflowsDir)
+	if err != nil || !isDirectory {
+		return nil, nil, nil, fmt.Errorf("the workflow directory '%s' does not exist. Review 'workflows.base_path' in 'atmos.yaml'", workflowsDir)
+	}
 
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in `atmos.yaml`: %v",
+		return nil, nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %v",
 			cliConfig.Workflows.BasePath, err)
 	}
 
@@ -147,10 +157,8 @@ func ExecuteDescribeWorkflows(
 			return nil, nil, nil, err
 		}
 
-		var workflowManifest schema.WorkflowManifest
-		var workflowConfig schema.WorkflowConfig
-
-		if err = yaml.Unmarshal(fileContent, &workflowManifest); err != nil {
+		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
+		if err != nil {
 			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
 		}
 
@@ -158,7 +166,7 @@ func ExecuteDescribeWorkflows(
 			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
 		}
 
-		workflowConfig = workflowManifest.Workflows
+		workflowConfig := workflowManifest.Workflows
 		allWorkflowsInFile := lo.Keys(workflowConfig)
 		sort.Strings(allWorkflowsInFile)
 

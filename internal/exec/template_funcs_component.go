@@ -84,7 +84,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 			return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend_type' section", component, stack)
 		}
 
-		backendSection, ok := sections["backend"].(map[any]any)
+		backendSection, ok := sections["backend"].(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend' section", component, stack)
 		}
@@ -104,7 +104,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 	}
 
 	// Generate `providers_override.tf.json` file if the `providers` section is configured
-	providersSection, ok := sections["providers"].(map[any]any)
+	providersSection, ok := sections["providers"].(map[string]any)
 
 	if ok && len(providersSection) > 0 {
 		providerOverrideFileName := path.Join(componentPath, "providers_override.tf.json")

@@ -14,7 +14,6 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -151,7 +150,8 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
-	if err = yaml.Unmarshal(vendorConfigFileContent, &vendorConfig); err != nil {
+	vendorConfig, err = u.UnmarshalYAML[schema.AtmosVendorConfig](string(vendorConfigFileContent))
+	if err != nil {
 		return vendorConfig, vendorConfigFileExists, "", err
 	}
 

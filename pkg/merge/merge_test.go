@@ -4,19 +4,19 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestMergeBasic(t *testing.T) {
 	cliConfig := schema.CliConfiguration{}
 
-	map1 := map[any]any{"foo": "bar"}
-	map2 := map[any]any{"baz": "bat"}
+	map1 := map[string]any{"foo": "bar"}
+	map2 := map[string]any{"baz": "bat"}
 
-	inputs := []map[any]any{map1, map2}
-	expected := map[any]any{"foo": "bar", "baz": "bat"}
+	inputs := []map[string]any{map1, map2}
+	expected := map[string]any{"foo": "bar", "baz": "bat"}
 
 	result, err := Merge(cliConfig, inputs)
 	assert.Nil(t, err)
@@ -26,12 +26,12 @@ func TestMergeBasic(t *testing.T) {
 func TestMergeBasicOverride(t *testing.T) {
 	cliConfig := schema.CliConfiguration{}
 
-	map1 := map[any]any{"foo": "bar"}
-	map2 := map[any]any{"baz": "bat"}
-	map3 := map[any]any{"foo": "ood"}
+	map1 := map[string]any{"foo": "bar"}
+	map2 := map[string]any{"baz": "bat"}
+	map3 := map[string]any{"foo": "ood"}
 
-	inputs := []map[any]any{map1, map2, map3}
-	expected := map[any]any{"foo": "ood", "baz": "bat"}
+	inputs := []map[string]any{map1, map2, map3}
+	expected := map[string]any{"foo": "ood", "baz": "bat"}
 
 	result, err := Merge(cliConfig, inputs)
 	assert.Nil(t, err)
@@ -45,24 +45,24 @@ func TestMergeListReplace(t *testing.T) {
 		},
 	}
 
-	map1 := map[any]any{
+	map1 := map[string]any{
 		"list": []string{"1", "2", "3"},
 	}
 
-	map2 := map[any]any{
+	map2 := map[string]any{
 		"list": []string{"4", "5", "6"},
 	}
 
-	inputs := []map[any]any{map1, map2}
-	expected := map[any]any{"list": []any{"4", "5", "6"}}
+	inputs := []map[string]any{map1, map2}
+	expected := map[string]any{"list": []any{"4", "5", "6"}}
 
 	result, err := Merge(cliConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 
-	yamlConfig, err := yaml.Marshal(result)
+	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(string(yamlConfig))
+	t.Log(yamlConfig)
 }
 
 func TestMergeListAppend(t *testing.T) {
@@ -72,24 +72,24 @@ func TestMergeListAppend(t *testing.T) {
 		},
 	}
 
-	map1 := map[any]any{
+	map1 := map[string]any{
 		"list": []string{"1", "2", "3"},
 	}
 
-	map2 := map[any]any{
+	map2 := map[string]any{
 		"list": []string{"4", "5", "6"},
 	}
 
-	inputs := []map[any]any{map1, map2}
-	expected := map[any]any{"list": []any{"1", "2", "3", "4", "5", "6"}}
+	inputs := []map[string]any{map1, map2}
+	expected := map[string]any{"list": []any{"1", "2", "3", "4", "5", "6"}}
 
 	result, err := Merge(cliConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 
-	yamlConfig, err := yaml.Marshal(result)
+	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(string(yamlConfig))
+	t.Log(yamlConfig)
 }
 
 func TestMergeListMerge(t *testing.T) {
@@ -99,7 +99,7 @@ func TestMergeListMerge(t *testing.T) {
 		},
 	}
 
-	map1 := map[any]any{
+	map1 := map[string]any{
 		"list": []map[string]string{
 			{
 				"1": "1",
@@ -110,7 +110,7 @@ func TestMergeListMerge(t *testing.T) {
 		},
 	}
 
-	map2 := map[any]any{
+	map2 := map[string]any{
 		"list": []map[string]string{
 			{
 				"1": "1b",
@@ -121,7 +121,7 @@ func TestMergeListMerge(t *testing.T) {
 		},
 	}
 
-	inputs := []map[any]any{map1, map2}
+	inputs := []map[string]any{map1, map2}
 
 	result, err := Merge(cliConfig, inputs)
 	assert.Nil(t, err)
@@ -133,7 +133,7 @@ func TestMergeListMerge(t *testing.T) {
 		t.Errorf("invalid merge result: %v", result)
 	}
 
-	merged := mergedList[0].(map[any]any)
+	merged := mergedList[0].(map[string]any)
 
 	assert.Equal(t, "1b", merged["1"])
 	assert.Equal(t, "2", merged["2"])
@@ -141,7 +141,7 @@ func TestMergeListMerge(t *testing.T) {
 	assert.Equal(t, "4", merged["4"])
 	assert.Equal(t, "5", merged["5"])
 
-	yamlConfig, err := yaml.Marshal(result)
+	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(string(yamlConfig))
+	t.Log(yamlConfig)
 }

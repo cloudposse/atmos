@@ -13,7 +13,6 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -302,7 +301,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 
 		if len(stackConfigFilesAbsolutePaths) < 1 {
-			j, err := yaml.Marshal(includeStackAbsPaths)
+			j, err := u.ConvertToYAML(includeStackAbsPaths)
 			if err != nil {
 				return cliConfig, err
 			}

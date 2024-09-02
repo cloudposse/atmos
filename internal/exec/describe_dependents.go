@@ -89,8 +89,8 @@ func ExecuteDescribeDependents(
 	}
 
 	// Get the provided component `vars`
-	var providedComponentVarsSection map[any]any
-	if providedComponentVarsSection, ok = providedComponentSection["vars"].(map[any]any); !ok {
+	var providedComponentVarsSection map[string]any
+	if providedComponentVarsSection, ok = providedComponentSection["vars"].(map[string]any); !ok {
 		return dependents, nil
 	}
 
@@ -132,7 +132,7 @@ func ExecuteDescribeDependents(
 				}
 
 				// Skip abstract components
-				if metadataSection, ok := stackComponentMap["metadata"].(map[any]any); ok {
+				if metadataSection, ok := stackComponentMap["metadata"].(map[string]any); ok {
 					if metadataType, ok := metadataSection["type"].(string); ok {
 						if metadataType == "abstract" {
 							continue
@@ -141,8 +141,8 @@ func ExecuteDescribeDependents(
 				}
 
 				// Get the stack component `vars`
-				var stackComponentVarsSection map[any]any
-				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[any]any); !ok {
+				var stackComponentVarsSection map[string]any
+				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[string]any); !ok {
 					return dependents, nil
 				}
 
@@ -154,8 +154,8 @@ func ExecuteDescribeDependents(
 				}
 
 				// Get the stack component `settings`
-				var stackComponentSettingsSection map[any]any
-				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[any]any); !ok {
+				var stackComponentSettingsSection map[string]any
+				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[string]any); !ok {
 					continue
 				}
 

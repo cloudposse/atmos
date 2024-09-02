@@ -431,7 +431,7 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 }
 
 // GetContextFromVars creates a context object from the provided variables
-func GetContextFromVars(vars map[any]any) schema.Context {
+func GetContextFromVars(vars map[string]any) schema.Context {
 	var context schema.Context
 
 	if namespace, ok := vars["namespace"].(string); ok {

@@ -10,9 +10,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	mouseZone "github.com/lrstanley/bubblezone"
 	"github.com/samber/lo"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type App struct {
@@ -212,7 +212,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 				}
 			})
 			selectedWorkflowName := workflowsMapKeys[0]
-			selectedWorkflowContent, _ = convertToYAML(workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
+			selectedWorkflowContent, _ = u.ConvertToYAML(workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 
 			selectedWorkflowDefinition := workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName]
 			stepItems = lo.Map(selectedWorkflowDefinition.Steps, func(s schema.WorkflowStep, _ int) list.Item {
@@ -283,7 +283,7 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 			app.columnViews[1].list.SetItems(workflowItems)
 
 			selectedWorkflowName := workflowsMapKeys[0]
-			selectedWorkflowContent, _ := convertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
+			selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 			app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
 
 			selectedWorkflowDefinition := app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName]
@@ -310,7 +310,7 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 		}
 
 		selectedWorkflowName := selectedWorkflow.(listItem).item
-		selectedWorkflowContent, _ := convertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
+		selectedWorkflowContent, _ := u.ConvertToYAML(app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName])
 		app.columnViews[2].SetContent(selectedWorkflowContent, "yaml")
 
 		selectedWorkflowDefinition := app.workflows[selectedWorkflowFileName].Workflows[selectedWorkflowName]
@@ -360,12 +360,4 @@ func (app *App) execute() {
 	} else {
 		app.selectedWorkflowStep = ""
 	}
-}
-
-func convertToYAML(data any) (string, error) {
-	y, err := yaml.Marshal(data)
-	if err != nil {
-		return "", err
-	}
-	return string(y), nil
 }

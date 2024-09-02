@@ -14,14 +14,12 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hashicorp/go-getter"
-	cp "github.com/otiai10/copy"
-	"gopkg.in/yaml.v2"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/hairyhenderson/gomplate/v3"
+	"github.com/hashicorp/go-getter"
+	cp "github.com/otiai10/copy"
 )
 
 // ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`
@@ -65,7 +63,8 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", err
 	}
 
-	if err = yaml.Unmarshal(componentConfigFileContent, &componentConfig); err != nil {
+	componentConfig, err = u.UnmarshalYAML[schema.VendorComponentConfig](string(componentConfigFileContent))
+	if err != nil {
 		return componentConfig, "", err
 	}
 
