@@ -5,9 +5,9 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/fatih/color"
-	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -37,15 +37,15 @@ func MergeWithOptions(
 		// not only the destination of the current loop iteration),
 		// we don't give it our maps directly; we convert them to YAML strings and then back to `Go` maps,
 		// so `mergo` does not have access to the original pointers
-		yamlCurrent, err := yaml.Marshal(current)
+		yamlCurrent, err := u.ConvertToYAML(current)
 		if err != nil {
 			c := color.New(color.FgRed)
 			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
 		}
 
-		var dataCurrent map[string]any
-		if err = yaml.Unmarshal(yamlCurrent, &dataCurrent); err != nil {
+		dataCurrent, err := u.YAMLToMapOfStrings(yamlCurrent)
+		if err != nil {
 			c := color.New(color.FgRed)
 			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
