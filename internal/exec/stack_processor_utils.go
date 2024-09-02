@@ -17,7 +17,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	c "github.com/cloudposse/atmos/pkg/convert"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -218,7 +217,7 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	stackConfigMap, err := c.YAMLToMapOfStrings(stackManifestTemplatesProcessed)
+	stackConfigMap, err := u.YAMLToMapOfStrings(stackManifestTemplatesProcessed)
 	if err != nil {
 		if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)

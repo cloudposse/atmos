@@ -15,7 +15,6 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 
-	"github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -213,7 +212,7 @@ func ProcessTmplWithDatasources(
 		}
 
 		result = res.String()
-		resultMap, err := convert.YAMLToMapOfStrings(result)
+		resultMap, err := u.YAMLToMapOfStrings(result)
 		if err != nil {
 			return "", err
 		}

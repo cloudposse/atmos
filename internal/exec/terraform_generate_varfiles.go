@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -259,7 +258,7 @@ func ExecuteTerraformGenerateVarfiles(
 					return err
 				}
 
-				componentSectionConverted, err := c.YAMLToMapOfStrings(componentSectionProcessed)
+				componentSectionConverted, err := u.YAMLToMapOfStrings(componentSectionProcessed)
 				if err != nil {
 					if !cliConfig.Templates.Settings.Enabled {
 						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {

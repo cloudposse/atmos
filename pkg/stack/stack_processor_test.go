@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 
-	c "github.com/cloudposse/atmos/pkg/convert"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -61,7 +60,7 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "orgs/cp/tenant1/staging/us-east-2", mapResultKeys[2])
 	assert.Equal(t, "orgs/cp/tenant1/test1/us-east-2", mapResultKeys[3])
 
-	mapConfig1, err := c.YAMLToMapOfStrings(listResult[0])
+	mapConfig1, err := u.YAMLToMapOfStrings(listResult[0])
 	assert.Nil(t, err)
 
 	imports := mapConfig1["imports"].([]any)
