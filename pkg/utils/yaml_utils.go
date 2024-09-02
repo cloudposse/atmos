@@ -60,3 +60,14 @@ func YAMLToMapOfStrings(input string) (schema.AtmosSectionMapType, error) {
 	}
 	return data, nil
 }
+
+// UnmarshalYAML takes a YAML string as input and unmarshals it into a Go type
+func UnmarshalYAML[T any](input string) (T, error) {
+	var data T
+	b := []byte(input)
+
+	if err := yaml.Unmarshal(b, &data); err != nil {
+		return data, err
+	}
+	return data, nil
+}
