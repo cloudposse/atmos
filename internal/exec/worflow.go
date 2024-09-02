@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -104,7 +103,8 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	var workflowConfig schema.WorkflowConfig
 	var workflowDefinition schema.WorkflowDefinition
 
-	if err = yaml.Unmarshal(fileContent, &workflowManifest); err != nil {
+	workflowManifest, err = u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
+	if err != nil {
 		return err
 	}
 

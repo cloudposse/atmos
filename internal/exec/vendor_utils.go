@@ -10,13 +10,14 @@ import (
 	"strings"
 	"time"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands
