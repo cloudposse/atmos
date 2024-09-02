@@ -10,15 +10,13 @@ import (
 	"strings"
 	"time"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
-
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands
@@ -151,7 +149,8 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
-	if err = yaml.Unmarshal(vendorConfigFileContent, &vendorConfig); err != nil {
+	vendorConfig, err = u.UnmarshalYAML[schema.AtmosVendorConfig](string(vendorConfigFileContent))
+	if err != nil {
 		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
