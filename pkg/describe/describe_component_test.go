@@ -1,10 +1,12 @@
 package describe
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestDescribeComponent(t *testing.T) {
@@ -14,9 +16,9 @@ func TestDescribeComponent(t *testing.T) {
 	componentSection, err := e.ExecuteDescribeComponent(component, stack, true)
 	assert.Nil(t, err)
 
-	componentSectionYaml, err := yaml.Marshal(componentSection)
+	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(string(componentSectionYaml))
+	t.Log(componentSectionYaml)
 }
 
 func TestDescribeTemplatedComponent(t *testing.T) {
@@ -36,9 +38,9 @@ func TestDescribeComponent2(t *testing.T) {
 	componentSection, err := e.ExecuteDescribeComponent(component, stack, true)
 	assert.Nil(t, err)
 
-	componentSectionYaml, err := yaml.Marshal(componentSection)
+	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(string(componentSectionYaml))
+	t.Log(componentSectionYaml)
 }
 
 func TestDescribeComponent3(t *testing.T) {
@@ -48,9 +50,9 @@ func TestDescribeComponent3(t *testing.T) {
 	componentSection, err := e.ExecuteDescribeComponent(component, stack, true)
 	assert.Nil(t, err)
 
-	componentSectionYaml, err := yaml.Marshal(componentSection)
+	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(string(componentSectionYaml))
+	t.Log(componentSectionYaml)
 }
 
 func TestDescribeComponent5(t *testing.T) {
@@ -60,9 +62,9 @@ func TestDescribeComponent5(t *testing.T) {
 	componentSection, err := e.ExecuteDescribeComponent(component, stack, true)
 	assert.Nil(t, err)
 
-	componentSectionYaml, err := yaml.Marshal(componentSection)
+	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(string(componentSectionYaml))
+	t.Log(componentSectionYaml)
 }
 
 func TestDescribeComponent6(t *testing.T) {
@@ -72,7 +74,7 @@ func TestDescribeComponent6(t *testing.T) {
 	componentSection, err := e.ExecuteDescribeComponent(component, stack, true)
 	assert.Nil(t, err)
 
-	componentSectionYaml, err := yaml.Marshal(componentSection)
+	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(string(componentSectionYaml))
+	t.Log(componentSectionYaml)
 }
