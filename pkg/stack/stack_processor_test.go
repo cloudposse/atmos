@@ -1,12 +1,11 @@
 package stack
 
 import (
-	"github.com/cloudposse/atmos/pkg/schema"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -190,7 +189,7 @@ func TestStackProcessor(t *testing.T) {
 	testTestComponentOverrideComponent3TerraformWorkspace := testTestComponentOverrideComponent3Metadata["terraform_workspace"]
 	assert.Equal(t, "test-component-override-3-workspace", testTestComponentOverrideComponent3TerraformWorkspace)
 
-	yamlConfig, err := yaml.Marshal(mapConfig1)
+	yamlConfig, err := u.ConvertToYAML(mapConfig1)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
 }
