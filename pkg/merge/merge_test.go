@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestMergeBasic(t *testing.T) {
@@ -60,9 +60,9 @@ func TestMergeListReplace(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 
-	yamlConfig, err := yaml.Marshal(result)
+	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(string(yamlConfig))
+	t.Log(yamlConfig)
 }
 
 func TestMergeListAppend(t *testing.T) {
@@ -87,9 +87,9 @@ func TestMergeListAppend(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 
-	yamlConfig, err := yaml.Marshal(result)
+	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(string(yamlConfig))
+	t.Log(yamlConfig)
 }
 
 func TestMergeListMerge(t *testing.T) {
@@ -141,7 +141,7 @@ func TestMergeListMerge(t *testing.T) {
 	assert.Equal(t, "4", merged["4"])
 	assert.Equal(t, "5", merged["5"])
 
-	yamlConfig, err := yaml.Marshal(result)
+	yamlConfig, err := u.ConvertToYAML(result)
 	assert.Nil(t, err)
-	t.Log(string(yamlConfig))
+	t.Log(yamlConfig)
 }

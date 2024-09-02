@@ -41,7 +41,7 @@ func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// ConvertToYAML converts the provided value to a YAML string
+// ConvertToYAML converts the provided data to a YAML string
 func ConvertToYAML(data any) (string, error) {
 	y, err := yaml.Marshal(data)
 	if err != nil {
