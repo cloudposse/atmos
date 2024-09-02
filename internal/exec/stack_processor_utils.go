@@ -216,7 +216,7 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	stackConfigMap, err := u.YAMLToMapOfStrings(stackManifestTemplatesProcessed)
+	stackConfigMap, err := u.UnmarshalYAML[schema.AtmosSectionMapType](stackManifestTemplatesProcessed)
 	if err != nil {
 		if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)

@@ -212,7 +212,7 @@ func ProcessTmplWithDatasources(
 		}
 
 		result = res.String()
-		resultMap, err := u.YAMLToMapOfStrings(result)
+		resultMap, err := u.UnmarshalYAML[schema.AtmosSectionMapType](result)
 		if err != nil {
 			return "", err
 		}

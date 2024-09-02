@@ -44,7 +44,7 @@ func MergeWithOptions(
 			return nil, err
 		}
 
-		dataCurrent, err := u.YAMLToMapOfStrings(yamlCurrent)
+		dataCurrent, err := u.UnmarshalYAML[any](yamlCurrent)
 		if err != nil {
 			c := color.New(color.FgRed)
 			_, _ = c.Fprintln(color.Error, err.Error()+"\n")

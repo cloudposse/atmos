@@ -258,7 +258,7 @@ func ExecuteTerraformGenerateVarfiles(
 					return err
 				}
 
-				componentSectionConverted, err := u.YAMLToMapOfStrings(componentSectionProcessed)
+				componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 				if err != nil {
 					if !cliConfig.Templates.Settings.Enabled {
 						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {

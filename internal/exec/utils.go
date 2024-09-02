@@ -494,7 +494,7 @@ func ProcessStacks(
 			u.LogErrorAndExit(err)
 		}
 
-		componentSectionConverted, err := u.YAMLToMapOfStrings(componentSectionProcessed)
+		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 		if err != nil {
 			if !cliConfig.Templates.Settings.Enabled {
 				if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
@@ -1028,7 +1028,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 
 			backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
 
-			backendConfigFinal, err = u.YAMLToMapOfStrings(backendConfigStrReplaced)
+			backendConfigFinal, err = u.UnmarshalYAML[schema.AtmosSectionMapType](backendConfigStrReplaced)
 			if err != nil {
 				return nil, err
 			}
