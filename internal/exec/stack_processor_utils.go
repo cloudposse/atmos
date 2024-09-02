@@ -14,7 +14,6 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
-	"gopkg.in/yaml.v3"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -121,7 +120,7 @@ func ProcessYAMLConfigFiles(
 
 			finalConfig["imports"] = uniqueImports
 
-			yamlConfig, err := yaml.Marshal(finalConfig)
+			yamlConfig, err := u.ConvertToYAML(finalConfig)
 			if err != nil {
 				errorResult = err
 				return
@@ -130,7 +129,7 @@ func ProcessYAMLConfigFiles(
 			processYAMLConfigFilesLock.Lock()
 			defer processYAMLConfigFilesLock.Unlock()
 
-			listResult[i] = string(yamlConfig)
+			listResult[i] = yamlConfig
 			mapResult[stackFileName] = finalConfig
 			rawStackConfigs[stackFileName] = map[string]any{}
 			rawStackConfigs[stackFileName]["stack"] = stackConfig
