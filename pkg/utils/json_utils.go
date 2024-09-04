@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"strings"
@@ -16,7 +17,14 @@ func PrintAsJSON(data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(j)
+
+	var prettyJSON bytes.Buffer
+	err = json.Indent(&prettyJSON, []byte(j), "", "  ")
+	if err != nil {
+		return err
+	}
+
+	PrintMessage(prettyJSON.String())
 	return nil
 }
 

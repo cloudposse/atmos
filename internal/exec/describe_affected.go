@@ -196,7 +196,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	a.Logger.Trace(fmt.Sprintf("\nAffected components and stacks: \n"))
+	a.Logger.Trace("\nAffected components and stacks: \n")
 
 	err = printOrWriteToFile(a.Format, a.OutputFile, affected)
 	if err != nil {
