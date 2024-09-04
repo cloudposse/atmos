@@ -139,7 +139,7 @@ func (l *Logger) Info(message string) {
 	}
 }
 
-func (l *Logger) Warning(cliConfig schema.CliConfiguration, message string) {
+func (l *Logger) Warning(message string) {
 	if l.LogLevel == LogLevelTrace ||
 		l.LogLevel == LogLevelDebug ||
 		l.LogLevel == LogLevelInfo ||
