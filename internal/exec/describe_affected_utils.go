@@ -319,7 +319,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	return affected, localRepoHead, remoteRepoHead, localRepoInfo.LocalRepoPath, nil
+	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
 }
 
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
