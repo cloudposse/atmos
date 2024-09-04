@@ -58,13 +58,7 @@ func LogError(err error) {
 		}
 
 		// Print stack trace
-		stackTrace := debug.Stack()
-		_, stackErr := c.Fprintln(color.Error, "Stack trace:\n"+string(stackTrace))
-		if stackErr != nil {
-			color.Red("Error printing stack trace:")
-			color.Red("%s\n", stackErr)
-		}
-
+		debug.PrintStack()
 	}
 }
 

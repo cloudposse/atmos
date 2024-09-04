@@ -11,6 +11,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API
@@ -69,12 +70,12 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
-	data, err := json.Marshal(dto)
+	data, err := utils.ConvertToJSON(dto)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
+	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
 	if err != nil {
 		return fmt.Errorf("failed to create authenticated request: %w", err)
 	}
@@ -118,7 +119,7 @@ func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, 
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf("Error reading response body: %s", err)
+		return LockStackResponse{}, fmt.Errorf("error reading response body: %s", err)
 	}
 
 	// Create an instance of the struct
@@ -127,7 +128,7 @@ func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, 
 	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf("Error unmarshaling JSON: %s", err)
+		return LockStackResponse{}, fmt.Errorf("error unmarshaling JSON: %s", err)
 	}
 
 	if !responseData.Success {
@@ -136,7 +137,7 @@ func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, 
 			context += fmt.Sprintf("  %s: %v\n", key, value)
 		}
 
-		return LockStackResponse{}, fmt.Errorf("An error occurred while attempting to lock stack.\n\nError: %s\nContext:\n%s", responseData.ErrorMessage, context)
+		return LockStackResponse{}, fmt.Errorf("an error occurred while attempting to lock stack.\n\nError: %s\nContext:\n%s", responseData.ErrorMessage, context)
 	}
 
 	return responseData, nil
@@ -165,7 +166,7 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf("Error reading response body: %s", err)
+		return UnlockStackResponse{}, fmt.Errorf("error reading response body: %s", err)
 	}
 
 	// Create an instance of the struct
@@ -175,7 +176,7 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 	err = json.Unmarshal(body, &responseData)
 
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf("Error unmarshaling JSON: %s", err)
+		return UnlockStackResponse{}, fmt.Errorf("error unmarshaling JSON: %s", err)
 	}
 
 	if !responseData.Success {
@@ -184,7 +185,7 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 			context += fmt.Sprintf("  %s: %v\n", key, value)
 		}
 
-		return UnlockStackResponse{}, fmt.Errorf("An error occurred while attempting to lock stack.\n\nError: %s\nContext:\n%s", responseData.ErrorMessage, context)
+		return UnlockStackResponse{}, fmt.Errorf("an error occurred while attempting to unlock stack.\n\nError: %s\nContext:\n%s", responseData.ErrorMessage, context)
 	}
 
 	return responseData, nil
