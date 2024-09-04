@@ -533,7 +533,7 @@ func findAffected(
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+							if metadataSection, ok := componentSection["metadata"].(map[string]any); ok {
 								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
@@ -629,7 +629,7 @@ func findAffected(
 								}
 							}
 							// Check `vars` section
-							if varSection, ok := componentSection["vars"].(map[any]any); ok {
+							if varSection, ok := componentSection["vars"].(map[string]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
 									affected := schema.Affected{
 										ComponentType: "terraform",
@@ -655,7 +655,7 @@ func findAffected(
 								}
 							}
 							// Check `env` section
-							if envSection, ok := componentSection["env"].(map[any]any); ok {
+							if envSection, ok := componentSection["env"].(map[string]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, envSection, "env") {
 									affected := schema.Affected{
 										ComponentType: "terraform",
@@ -681,7 +681,7 @@ func findAffected(
 								}
 							}
 							// Check `settings` section
-							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[any]any); ok {
+							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, cfg.SettingsSectionName) {
 									affected := schema.Affected{
 										ComponentType: "terraform",
@@ -773,7 +773,7 @@ func findAffected(
 				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-							if metadataSection, ok := componentSection["metadata"].(map[any]any); ok {
+							if metadataSection, ok := componentSection["metadata"].(map[string]any); ok {
 								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
@@ -839,7 +839,7 @@ func findAffected(
 								}
 							}
 							// Check `vars` section
-							if varSection, ok := componentSection["vars"].(map[any]any); ok {
+							if varSection, ok := componentSection["vars"].(map[string]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
 									affected := schema.Affected{
 										ComponentType: "helmfile",
@@ -865,7 +865,7 @@ func findAffected(
 								}
 							}
 							// Check `env` section
-							if envSection, ok := componentSection["env"].(map[any]any); ok {
+							if envSection, ok := componentSection["env"].(map[string]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, envSection, "env") {
 									affected := schema.Affected{
 										ComponentType: "helmfile",
@@ -891,7 +891,7 @@ func findAffected(
 								}
 							}
 							// Check `settings` section
-							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[any]any); ok {
+							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, cfg.SettingsSectionName) {
 									affected := schema.Affected{
 										ComponentType: "helmfile",
@@ -1005,10 +1005,10 @@ func appendToAffected(
 		}
 	}
 
-	settingsSection := map[any]any{}
+	settingsSection := map[string]any{}
 
 	if i, ok2 := componentSection[cfg.SettingsSectionName]; ok2 {
-		settingsSection = i.(map[any]any)
+		settingsSection = i.(map[string]any)
 
 		if includeSettings {
 			affected.Settings = settingsSection
@@ -1016,10 +1016,10 @@ func appendToAffected(
 	}
 
 	if affected.ComponentType == "terraform" {
-		varSection := map[any]any{}
+		varSection := map[string]any{}
 
 		if i, ok2 := componentSection[cfg.VarsSectionName]; ok2 {
-			varSection = i.(map[any]any)
+			varSection = i.(map[string]any)
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{
@@ -1077,7 +1077,7 @@ func isEqual(
 	localStackName string,
 	componentType string,
 	localComponentName string,
-	localSection map[any]any,
+	localSection map[string]any,
 	sectionName string,
 ) bool {
 
@@ -1085,7 +1085,7 @@ func isEqual(
 		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
 			if remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any); ok {
 				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
-					if remoteSection, ok := remoteComponentSection[sectionName].(map[any]any); ok {
+					if remoteSection, ok := remoteComponentSection[sectionName].(map[string]any); ok {
 						if reflect.DeepEqual(localSection, remoteSection) {
 							return true
 						}
@@ -1254,7 +1254,7 @@ func areTerraformComponentModulesChanged(
 func addAffectedSpaceliftAdminStack(
 	cliConfig schema.CliConfiguration,
 	affectedList []schema.Affected,
-	settingsSection map[any]any,
+	settingsSection map[string]any,
 	stacks map[string]any,
 	currentStackName string,
 	currentComponentName string,
@@ -1308,9 +1308,9 @@ func addAffectedSpaceliftAdminStack(
 		}
 	}
 
-	var componentVarsSection map[any]any
-	var componentSettingsSection map[any]any
-	var componentSettingsSpaceliftSection map[any]any
+	var componentVarsSection map[string]any
+	var componentSettingsSection map[string]any
+	var componentSettingsSpaceliftSection map[string]any
 
 	// Find the Spacelift admin stack that manages the current stack
 	for stackName, stackSection := range stacks {
@@ -1320,7 +1320,7 @@ func addAffectedSpaceliftAdminStack(
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
 
-							if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
+							if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {
 								return affectedList, nil
 							}
 
@@ -1345,11 +1345,11 @@ func addAffectedSpaceliftAdminStack(
 							}
 
 							if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {
-								if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
+								if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
 									return affectedList, nil
 								}
 
-								if componentSettingsSpaceliftSection, ok = componentSettingsSection["spacelift"].(map[any]any); !ok {
+								if componentSettingsSpaceliftSection, ok = componentSettingsSection["spacelift"].(map[string]any); !ok {
 									return affectedList, nil
 								}
 

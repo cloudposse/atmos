@@ -117,14 +117,14 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
 			filePath,
-			map[string]map[any]any{},
+			map[string]map[string]any{},
 			nil,
 			false,
 			false,
 			false,
 			false,
-			map[any]any{},
-			map[any]any{},
+			map[string]any{},
+			map[string]any{},
 			atmosManifestJsonSchemaFilePath,
 		)
 		if err != nil {
@@ -163,26 +163,26 @@ func createComponentStackMap(
 	stacksMap map[string]any,
 	componentType string,
 ) (map[string]map[string][]string, error) {
-	var varsSection map[any]any
-	var metadataSection map[any]any
-	var settingsSection map[any]any
-	var envSection map[any]any
-	var providersSection map[any]any
-	var overridesSection map[any]any
-	var backendSection map[any]any
+	var varsSection map[string]any
+	var metadataSection map[string]any
+	var settingsSection map[string]any
+	var envSection map[string]any
+	var providersSection map[string]any
+	var overridesSection map[string]any
+	var backendSection map[string]any
 	var backendTypeSection string
 	var stackName string
 	var err error
 	terraformComponentStackMap := make(map[string]map[string][]string)
 
 	for stackManifest, stackSection := range stacksMap {
-		if componentsSection, ok := stackSection.(map[any]any)[cfg.ComponentsSectionName].(map[string]any); ok {
+		if componentsSection, ok := stackSection.(map[string]any)[cfg.ComponentsSectionName].(map[string]any); ok {
 			if terraformSection, ok := componentsSection[componentType].(map[string]any); ok {
 				for componentName, compSection := range terraformSection {
 					componentSection, ok := compSection.(map[string]any)
 
-					if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[any]any); !ok {
-						metadataSection = map[any]any{}
+					if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[string]any); !ok {
+						metadataSection = map[string]any{}
 					}
 
 					// Don't check abstract components (they are never provisioned)
@@ -190,28 +190,28 @@ func createComponentStackMap(
 						continue
 					}
 
-					if varsSection, ok = componentSection[cfg.VarsSectionName].(map[any]any); !ok {
-						varsSection = map[any]any{}
+					if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
+						varsSection = map[string]any{}
 					}
 
-					if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
-						settingsSection = map[any]any{}
+					if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
+						settingsSection = map[string]any{}
 					}
 
-					if envSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
-						envSection = map[any]any{}
+					if envSection, ok = componentSection[cfg.EnvSectionName].(map[string]any); !ok {
+						envSection = map[string]any{}
 					}
 
-					if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
-						providersSection = map[any]any{}
+					if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
+						providersSection = map[string]any{}
 					}
 
-					if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
-						overridesSection = map[any]any{}
+					if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
+						overridesSection = map[string]any{}
 					}
 
-					if backendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
-						backendSection = map[any]any{}
+					if backendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
+						backendSection = map[string]any{}
 					}
 
 					if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {

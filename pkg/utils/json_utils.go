@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 
@@ -44,14 +45,14 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 
 // ConvertToJSON converts the provided value to a JSON-encoded string
 func ConvertToJSON(data any) (string, error) {
-	var json = jsoniter.Config{
+	var jc = jsoniter.Config{
 		EscapeHTML:                    true,
 		ObjectFieldMustBeSimpleString: false,
 		SortMapKeys:                   true,
 		ValidateJsonRawMessage:        true,
 	}
 
-	j, err := json.Froze().MarshalIndent(data, "", strings.Repeat(" ", 3))
+	j, err := jc.Froze().MarshalIndent(data, "", strings.Repeat(" ", 3))
 	if err != nil {
 		return "", err
 	}
@@ -60,7 +61,7 @@ func ConvertToJSON(data any) (string, error) {
 
 // ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents
 func ConvertToJSONFast(data any) (string, error) {
-	var json = jsoniter.Config{
+	var jc = jsoniter.Config{
 		EscapeHTML:                    false,
 		MarshalFloatWith6Digits:       true,
 		ObjectFieldMustBeSimpleString: true,
@@ -68,7 +69,7 @@ func ConvertToJSONFast(data any) (string, error) {
 		ValidateJsonRawMessage:        true,
 	}
 
-	j, err := json.Froze().MarshalToString(data)
+	j, err := jc.Froze().MarshalToString(data)
 	if err != nil {
 		return "", err
 	}
@@ -77,7 +78,7 @@ func ConvertToJSONFast(data any) (string, error) {
 
 // ConvertFromJSON converts the provided JSON-encoded string to Go data types
 func ConvertFromJSON(jsonString string) (any, error) {
-	var json = jsoniter.Config{
+	var jc = jsoniter.Config{
 		EscapeHTML:                    false,
 		MarshalFloatWith6Digits:       true,
 		ObjectFieldMustBeSimpleString: true,
@@ -86,9 +87,20 @@ func ConvertFromJSON(jsonString string) (any, error) {
 	}
 
 	var data any
-	err := json.Froze().Unmarshal([]byte(jsonString), &data)
+	err := jc.Froze().Unmarshal([]byte(jsonString), &data)
 	if err != nil {
 		return "", err
+	}
+	return data, nil
+}
+
+// JSONToMapOfInterfaces takes a JSON string as input and returns a map[string]any
+func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
+	var data schema.AtmosSectionMapType
+	byt := []byte(input)
+
+	if err := json.Unmarshal(byt, &data); err != nil {
+		return nil, err
 	}
 	return data, nil
 }

@@ -3,7 +3,7 @@ package utils
 import (
 	"os"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -41,11 +41,22 @@ func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// ConvertToYAML converts the provided value to a YAML string
+// ConvertToYAML converts the provided data to a YAML string
 func ConvertToYAML(data any) (string, error) {
 	y, err := yaml.Marshal(data)
 	if err != nil {
 		return "", err
 	}
 	return string(y), nil
+}
+
+// UnmarshalYAML takes a YAML string as input and unmarshals it into a Go type
+func UnmarshalYAML[T any](input string) (T, error) {
+	var data T
+	b := []byte(input)
+
+	if err := yaml.Unmarshal(b, &data); err != nil {
+		return data, err
+	}
+	return data, nil
 }

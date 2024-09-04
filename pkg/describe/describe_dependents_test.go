@@ -4,11 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v2"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestDescribeDependents(t *testing.T) {
@@ -24,9 +24,9 @@ func TestDescribeDependents(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(dependents))
 
-	dependentsYaml, err := yaml.Marshal(dependents)
+	dependentsYaml, err := u.ConvertToYAML(dependents)
 	assert.Nil(t, err)
-	t.Log(string(dependentsYaml))
+	t.Log(dependentsYaml)
 }
 
 func TestDescribeDependents2(t *testing.T) {
@@ -42,7 +42,7 @@ func TestDescribeDependents2(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 4, len(dependents))
 
-	dependentsYaml, err := yaml.Marshal(dependents)
+	dependentsYaml, err := u.ConvertToYAML(dependents)
 	assert.Nil(t, err)
-	t.Log(string(dependentsYaml))
+	t.Log(dependentsYaml)
 }

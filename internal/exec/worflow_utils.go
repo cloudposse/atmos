@@ -10,7 +10,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	"gopkg.in/yaml.v2"
 
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -158,10 +157,8 @@ func ExecuteDescribeWorkflows(
 			return nil, nil, nil, err
 		}
 
-		var workflowManifest schema.WorkflowManifest
-		var workflowConfig schema.WorkflowConfig
-
-		if err = yaml.Unmarshal(fileContent, &workflowManifest); err != nil {
+		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
+		if err != nil {
 			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
 		}
 
@@ -169,7 +166,7 @@ func ExecuteDescribeWorkflows(
 			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
 		}
 
-		workflowConfig = workflowManifest.Workflows
+		workflowConfig := workflowManifest.Workflows
 		allWorkflowsInFile := lo.Keys(workflowConfig)
 		sort.Strings(allWorkflowsInFile)
 

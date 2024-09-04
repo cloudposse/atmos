@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -215,8 +214,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
-	var varsSection map[any]any
-	var settingsSection map[any]any
+	var varsSection map[string]any
+	var settingsSection map[string]any
 
 	if projectTemplateNameArg != "" {
 		if projectTemplate, ok = cliConfig.Integrations.Atlantis.ProjectTemplates[projectTemplateNameArg]; !ok {
@@ -231,7 +230,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 	for _, stackConfigFileName := range stacksMapSortedKeys {
 		stackSection := stacksMap[stackConfigFileName]
 
-		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
+		if componentsSection, ok = stackSection.(map[string]any)["components"].(map[string]any); !ok {
 			continue
 		}
 
@@ -254,13 +253,13 @@ func ExecuteAtlantisGenerateRepoConfig(
 				u.SliceContainsString(components, componentName) {
 
 				// Component vars
-				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
+				if varsSection, ok = componentSection["vars"].(map[string]any); !ok {
 					continue
 				}
 
 				// Component metadata
-				metadataSection := map[any]any{}
-				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+				metadataSection := map[string]any{}
+				if metadataSection, ok = componentSection["metadata"].(map[string]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
 						// Don't include abstract components
 						if componentType == "abstract" {
@@ -271,10 +270,10 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				// If the project template is not passes on the command line, find and process it in the component project template in the 'settings.atlantis' section
 				if projectTemplateNameArg == "" {
-					if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
-						if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[any]any); ok {
+					if settingsSection, ok = componentSection["settings"].(map[string]any); ok {
+						if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[string]any); ok {
 							// 'settings.atlantis.project_template' has higher priority than 'settings.atlantis.project_template_name'
-							if settingsAtlantisProjectTemplate, ok := settingsAtlantisSection["project_template"].(map[any]any); ok {
+							if settingsAtlantisProjectTemplate, ok := settingsAtlantisSection["project_template"].(map[string]any); ok {
 								err = mapstructure.Decode(settingsAtlantisProjectTemplate, &projectTemplate)
 								if err != nil {
 									return err
@@ -399,10 +398,10 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 	// If the config template is not passes on the command line, find and process it in the component project template in the 'settings.atlantis' section
 	if configTemplateNameArg == "" {
-		if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
-			if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[any]any); ok {
+		if settingsSection, ok = componentSection["settings"].(map[string]any); ok {
+			if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[string]any); ok {
 				// 'settings.atlantis.config_template' has higher priority than 'settings.atlantis.config_template_name'
-				if settingsAtlantisConfigTemplate, ok := settingsAtlantisSection["config_template"].(map[any]any); ok {
+				if settingsAtlantisConfigTemplate, ok := settingsAtlantisSection["config_template"].(map[string]any); ok {
 					err = mapstructure.Decode(settingsAtlantisConfigTemplate, &configTemplate)
 					if err != nil {
 						return err
@@ -444,10 +443,10 @@ func ExecuteAtlantisGenerateRepoConfig(
 	atlantisYaml.Projects = atlantisProjects
 
 	// Workflows
-	if settingsSection, ok = componentSection["settings"].(map[any]any); ok {
-		if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[any]any); ok {
-			if settingsAtlantisWorkflowTemplates, ok := settingsAtlantisSection["workflow_templates"].(map[any]any); ok {
-				atlantisYaml.Workflows = c.MapsOfInterfacesToMapsOfStrings(settingsAtlantisWorkflowTemplates)
+	if settingsSection, ok = componentSection["settings"].(map[string]any); ok {
+		if settingsAtlantisSection, ok := settingsSection["atlantis"].(map[string]any); ok {
+			if settingsAtlantisWorkflowTemplates, ok := settingsAtlantisSection["workflow_templates"].(map[string]any); ok {
+				atlantisYaml.Workflows = settingsAtlantisWorkflowTemplates
 			}
 		}
 	}

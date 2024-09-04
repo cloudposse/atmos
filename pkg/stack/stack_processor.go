@@ -38,19 +38,19 @@ func ProcessYAMLConfigFile(
 	cliConfig schema.CliConfiguration,
 	basePath string,
 	filePath string,
-	importsConfig map[string]map[any]any,
+	importsConfig map[string]map[string]any,
 	context map[string]any,
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
 	skipIfMissing bool,
-	parentTerraformOverrides map[any]any,
-	parentHelmfileOverrides map[any]any,
+	parentTerraformOverrides map[string]any,
+	parentHelmfileOverrides map[string]any,
 	atmosManifestJsonSchemaFilePath string,
 ) (
-	map[any]any,
-	map[string]map[any]any,
-	map[any]any,
+	map[string]any,
+	map[string]map[string]any,
+	map[string]any,
 	error,
 ) {
 	return exec.ProcessYAMLConfigFile(
@@ -77,14 +77,14 @@ func ProcessStackConfig(
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
 	stack string,
-	config map[any]any,
+	config map[string]any,
 	processStackDeps bool,
 	processComponentDeps bool,
 	componentTypeFilter string,
 	componentStackMap map[string]map[string][]string,
-	importsConfig map[string]map[any]any,
+	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
-) (map[any]any, error) {
+) (map[string]any, error) {
 	return exec.ProcessStackConfig(
 		cliConfig,
 		stacksBasePath,

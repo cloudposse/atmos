@@ -5,9 +5,9 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/fatih/color"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -18,8 +18,12 @@ const (
 
 // MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
 // and returns a single map with the merged contents
-func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (map[any]any, error) {
-	merged := map[any]any{}
+func MergeWithOptions(
+	inputs []map[string]any,
+	appendSlice bool,
+	sliceDeepCopy bool,
+) (map[string]any, error) {
+	merged := map[string]any{}
 
 	for index := range inputs {
 		current := inputs[index]
@@ -33,15 +37,15 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 		// not only the destination of the current loop iteration),
 		// we don't give it our maps directly; we convert them to YAML strings and then back to `Go` maps,
 		// so `mergo` does not have access to the original pointers
-		yamlCurrent, err := yaml.Marshal(current)
+		yamlCurrent, err := u.ConvertToYAML(current)
 		if err != nil {
 			c := color.New(color.FgRed)
 			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
 		}
 
-		var dataCurrent map[any]any
-		if err = yaml.Unmarshal(yamlCurrent, &dataCurrent); err != nil {
+		dataCurrent, err := u.UnmarshalYAML[any](yamlCurrent)
+		if err != nil {
 			c := color.New(color.FgRed)
 			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
@@ -74,8 +78,8 @@ func MergeWithOptions(inputs []map[any]any, appendSlice, sliceDeepCopy bool) (ma
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
 func Merge(
 	cliConfig schema.CliConfiguration,
-	inputs []map[any]any,
-) (map[any]any, error) {
+	inputs []map[string]any,
+) (map[string]any, error) {
 	if cliConfig.Settings.ListMergeStrategy == "" {
 		cliConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
 	}
