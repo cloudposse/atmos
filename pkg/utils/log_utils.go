@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime/debug"
 
 	"github.com/fatih/color"
 
@@ -48,13 +49,22 @@ func LogErrorAndExit(err error) {
 func LogError(err error) {
 	if err != nil {
 		c := color.New(color.FgRed)
-		_, err2 := c.Fprintln(color.Error, err.Error()+"\n")
-		if err2 != nil {
+		_, printErr := c.Fprintln(color.Error, err.Error()+"\n")
+		if printErr != nil {
 			color.Red("Error logging the error:")
-			color.Red("%s\n", err2)
+			color.Red("%s\n", printErr)
 			color.Red("Original error:")
 			color.Red("%s\n", err)
 		}
+
+		// Print stack trace
+		stackTrace := debug.Stack()
+		_, stackErr := c.Fprintln(color.Error, "Stack trace:\n"+string(stackTrace))
+		if stackErr != nil {
+			color.Red("Error printing stack trace:")
+			color.Red("%s\n", stackErr)
+		}
+
 	}
 }
 

@@ -130,7 +130,7 @@ func TestLogger_Warning(t *testing.T) {
 	logger, _ := NewLogger(LogLevelWarning, "/dev/stdout")
 
 	output := captureOutput(func() {
-		logger.Warning(schema.CliConfiguration{}, "Warning message")
+		logger.Warning("Warning message")
 	})
 
 	assert.Contains(t, output, "Warning message")
