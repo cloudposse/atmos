@@ -4,8 +4,8 @@ sidebar_position: 50
 sidebar_label: Terraform Apply
 description: Run a `terraform apply` to provision changes
 ---
-import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import RemoteFile from '@site/src/components/RemoteFile'
 
 <Intro>
 Simplify provisioning Terraform entirely from within GitHub Action workflows. This action makes it very easy to apply that changes from a `terraform plan` from directly within the GitHub UI. Use this action in your workflows to apply changes to your infrastructure.
@@ -41,37 +41,7 @@ We recommend combining this action with the [`affected-stacks`](/integrations/gi
 
 :::
 
-<File title=".github/workflows/atmos-terraform-apply.yaml">
-```yaml
-name: "atmos-terraform-apply"
-
-on:
-  workflow_dispatch:
-  pull_request:
-    types:
-      - closed
-    branches:
-      - main
-
-# These permissions are required for GitHub to assume roles in AWS
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  apply:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Terraform Apply
-        uses: cloudposse/github-action-atmos-terraform-apply@v2
-        with:
-          component: "foobar"
-          stack: "plat-ue2-sandbox"
-          sha: ${{ github.sha }}          
-          atmos-config-path: ./rootfs/usr/local/etc/atmos/
-          atmos-version: 1.63.0
-```
-</File>
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-apply.yaml"/>
 
 ## Requirements
 
