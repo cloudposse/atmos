@@ -5,6 +5,7 @@ sidebar_label: Terraform Plan
 description: Run a `terraform plan` to understand the impact of changes
 ---
 import Intro from '@site/src/components/Intro'
+import RemoteFile from '@site/src/components/RemoteFile'
 
 <Intro>
 Simplify provisioning Terraform entirely from within GitHub Action workflows. This action makes it very easy to understand exactly what will happen from from the changes in a Pull Request (or any commit) by running a `terraform plan` and surfacing the output as a neatly formatted Job Summary viewable directly within the GitHub UI.
@@ -52,32 +53,17 @@ We recommend combining this action with the [`affected-stacks`](/integrations/gi
 :::
 
 
-```yaml
-  # .github/workflows/atmos-terraform-plan.yaml
-  name: "atmos-terraform-plan"
-  on:
-    pull_request:
-      types:
-        - opened
-        - synchronize
-        - reopened
-      branches:
-        - main
-  # These permissions are required for GitHub to assume roles in AWS
-  permissions:
-    id-token: write
-    contents: read
-  jobs:
-    plan:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Plan Atmos Component
-          uses: cloudposse/github-action-atmos-terraform-plan@v1
-          with:
-            component: "foobar"
-            stack: "plat-ue2-sandbox"
-            atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml
-```
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-plan.yaml"/>
+
+:::info Why Do We have Two Workflows?
+
+GitHub Actions support 256 matrix jobs in a single workflow at most! When planning all stacks in an Atmos environment, we frequently plan more than 256 component in the stacks at a time. In order to work around this limitation by GitHub, we can add an additional layer of abstraction using reusable workflows.
+
+[256 Matrix Limitation](/integrations/github-actions/atmos-terraform-drift-detection#256-matrix-limitation)
+
+:::
+
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-plan-matrix.yaml"/>
 
 with the following configuration as an example:
 

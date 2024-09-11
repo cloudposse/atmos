@@ -43,6 +43,16 @@ We recommend combining this action with the [`affected-stacks`](/integrations/gi
 
 <RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-apply.yaml"/>
 
+:::info Why Do We have Two Workflows?
+
+GitHub Actions support 256 matrix jobs in a single workflow at most! When planning all stacks in an Atmos environment, we frequently plan more than 256 component in the stacks at a time. In order to work around this limitation by GitHub, we can add an additional layer of abstraction using reusable workflows.
+
+[256 Matrix Limitation](/integrations/github-actions/atmos-terraform-drift-detection#256-matrix-limitation)
+
+:::
+
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-apply-matrix.yaml"/>
+
 ## Requirements
 
 This action has the requirements as [Github Actions](/integrations/github-actions/). Use the same S3 Bucket, DynamoDB table, IAM Roles and config described there.
