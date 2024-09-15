@@ -5,6 +5,7 @@ sidebar_label: Component Updater
 description: Easily update your vendored components with Pull Requests
 ---
 import File from '@site/src/components/File'
+import RemoteFile from '@site/src/components/RemoteFile'
 import Intro from '@site/src/components/Intro'
 import Admonition from '@theme/Admonition';
 
@@ -32,54 +33,7 @@ Discover more details and a comprehensive list of `inputs` and `outputs` in the 
 
 ### Workflow example
 
-<File title=".github/workflows/atmos-component-updater.yaml">
-```yaml
-name: "Atmos Component Updater"
-
-on:
-  workflow_dispatch: {}
-
-  schedule:
-    - cron:  '0 8 * * *'  # Every day at 8am UTC
-
-jobs:
-  update:
-    environment: atmos
-    runs-on:
-      - "self-hosted"
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Generate a token
-        id: github-app
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.ATMOS_APP_ID }}
-          private-key: ${{ secrets.ATMOS_PRIVATE_KEY }}
-
-      - name: Update Atmos Components
-        uses: cloudposse/github-action-atmos-component-updater@v2
-        env:
-          # https://atmos.tools/cli/configuration/#environment-variables
-          ATMOS_CLI_CONFIG_PATH: ${{ github.workspace }}/rootfs/usr/local/etc/atmos/
-        with:
-          github-access-token: ${{ steps.github-app.outputs.token }}
-          log-level: INFO
-          vendoring-enabled: true
-          max-number-of-prs: 10
-
-      - name: Delete abandoned update branches
-        uses: phpdocker-io/github-actions-delete-abandoned-branches@v2
-        with:
-          github_token: ${{ steps.github-app.outputs.token }}
-          last_commit_age_days: 0
-          allowed_prefixes: "component-update/"
-          dry_run: no
-```
-</File>
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-components-updater.yml" />
 
 ### Requirements
 

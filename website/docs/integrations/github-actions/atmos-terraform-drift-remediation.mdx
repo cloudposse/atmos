@@ -4,8 +4,8 @@ sidebar_position: 60
 sidebar_label: Terraform Drift Remediation
 description: Remediate Terraform drift using IssueOps
 ---
-import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import RemoteFile from '@site/src/components/RemoteFile'
 
 <Intro>
 The  "Atmos Terraform Drift Remediation" GitHub Action provides a way for easily remediating Terraform drift and works with GitHub Issues using IssueOps.
@@ -47,50 +47,7 @@ integrations:
 
 In this example drift will be remediated when user sets label `apply` to an issue.
 
-```yaml
-name: 👽 Atmos Terraform Drift Remediation
-run-name: 👽 Atmos Terraform Drift Remediation
-
-on:
-  issues:
-    types:
-      - labeled
-      - closed
-
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  remediate-drift:
-    runs-on: ubuntu-latest
-    name: Remediate Drift
-    if: |
-      github.event.action == 'labeled' &&
-      contains(join(github.event.issue.labels.*.name, ','), 'apply')
-    steps:
-      - name: Remediate Drift
-        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v1
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          action: remediate
-          atmos-config-path: ./rootfs/usr/local/etc/atmos/
-
-  discard-drift:
-    runs-on: ubuntu-latest
-    name: Discard Drift
-    if: |
-      github.event.action == 'closed' &&
-      !contains(join(github.event.issue.labels.*.name, ','), 'remediated')
-    steps:
-      - name: Discard Drift
-        uses: cloudposse/github-action-atmos-terraform-drift-remediation@v1
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          action: discard
-          atmos-gitops-config-path: ./.github/config/atmos-gitops.yaml    
-```
-
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-drift-remediation.yaml" />
 
 ## Requirements
 
