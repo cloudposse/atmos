@@ -137,6 +137,64 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     when running `atmos version`.
   </TabItem>
 
+  <TabItem value="asdf" label="asdf">
+    #### Install with asdf
+
+    Install plugin dependencies as listed in [asdf-atmos repository](https://github.com/cloudposse/asdf-atmos#dependencies):
+
+    ```shell
+    apt-get update && apt-get install -y bash curl tar
+    ```
+
+    Install the plugin:
+
+    ```shell
+    asdf plugin add atmos https://github.com/cloudposse/asdf-atmos.git
+    ```
+
+    Install a specified version:
+
+    ```shell
+    asdf install atmos <LatestRelease />
+    ```
+    Alternatively, create a `.tool-versions` file in your project to specify a consistent version for the users:
+    <File title=".tool-versions">
+      <pre>
+        <code>
+          atmos <LatestRelease />
+        </code>
+      </pre>
+    </File>
+
+    Then, run `asdf install` in the same directory.
+
+    __NOTE:__ Don't have `asdf`? Install it first from [here](https://asdf-vm.com/guide/getting-started.html)
+  </TabItem>
+
+  <TabItem value="mise" label="Mise">
+    #### Install with Mise
+
+    Install a specified version:
+
+    ```shell
+    mise use atmos@<LatestRelease />
+    ```
+
+    Alternatively, create a `.mise.toml` file in your repository to specify a consistent version for the users:
+    <File title=".mise.toml">
+      <pre>
+        <code>
+          [tools]
+          atmos = '<LatestRelease />'
+        </code>
+      </pre>
+    </File>
+
+    Then, run `mise install` in the same directory.
+
+    __NOTE:__ Don't have `mise`? Install it first from [here](https://mise.jdx.dev/getting-started.html)
+  </TabItem>
+
   <TabItem value="source" label="From Source">
     #### Build from Source
 
