@@ -3,7 +3,7 @@ TAPES := $(wildcard atmos-*.tape)
 ALL_TAPES :=$(shell (while read -r line; do echo $${line}.tape | tr ' ' '-' | sed 's/---/--/g'; done)<commands.txt)
 SCREENSHOTS := $(TAPES:.tape=.png)
 INSTALL_PATH := ../../website/static/img/screenshots
-# We need to store the artifacts somehwere consistently
+# We need to store the artifacts somewhere consistently
 # We need to run the demo from the root of the project
 # Source is relative to CWD
 

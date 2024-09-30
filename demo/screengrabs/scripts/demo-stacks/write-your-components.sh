@@ -26,7 +26,7 @@ prompt
 run cat components/terraform/myapp/outputs.tf
 
 newline 2
-comment "It's a best practice to pin verions, so let's do that."
+comment "It's a best practice to pin versions, so let's do that."
 prompt
 run cat components/terraform/myapp/versions.tf
 

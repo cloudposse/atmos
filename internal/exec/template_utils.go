@@ -70,7 +70,7 @@ func ProcessTmplWithDatasources(
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
 	if !cliConfig.Templates.Settings.Enabled {
-		u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabed in 'atmos.yaml'", tmplName))
+		u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabled in 'atmos.yaml'", tmplName))
 		return tmplValue, nil
 	}
 

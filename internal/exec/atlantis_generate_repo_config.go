@@ -131,7 +131,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 	)
 }
 
-// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected compoenents and stacks
+// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks
 func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	cliConfig schema.CliConfiguration,
 	outputPath string,
