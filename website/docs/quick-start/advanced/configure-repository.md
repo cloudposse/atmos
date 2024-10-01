@@ -9,7 +9,7 @@ and stacks.
 
 :::info
 
-A "monorepo" is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure composed of individual components with indepentent lifecycles. Monorepos usually improve collaboration, CI/CD build speed, and overall productivity. A monorepo should not be confused with a [monolith](https://en.wikipedia.org/wiki/Monolithic_application), which is a single, often large, codebase for an application.
+A "monorepo" is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure composed of individual components with independent lifecycles. Monorepos usually improve collaboration, CI/CD build speed, and overall productivity. A monorepo should not be confused with a [monolith](https://en.wikipedia.org/wiki/Monolithic_application), which is a single, often large, codebase for an application.
 
 Polyrepo architectures consists of several version-controlled repositories for code, configurations and scripts for different parts of the
 infrastructure. For example, depending on various requirements (including security, lifecycle management, access control, audit, etc.), separate repositories can be used to manage infrastructure per account (e.g. `dev`, `staging`, `prod`), per service, or per team.

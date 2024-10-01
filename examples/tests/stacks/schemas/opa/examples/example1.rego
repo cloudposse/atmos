@@ -17,19 +17,19 @@ object_has_key(o, k) {
     type_name(item) == "string"
 }
 
-# Check the app hostname usign Regex
+# Check the app hostname using Regex
 errors[message] {
     not re_match("^([a-z0-9]+([\\-a-z0-9]*[a-z0-9]+)?\\.){1,}([a-z0-9]+([\\-a-z0-9]*[a-z0-9]+)?){1,63}(\\.[a-z0-9]{2,7})+$", input.vars.app_config.hostname)
     message = "'app_config.hostname' must contain at least a subdomain and a top level domain. Example: subDomain1.topLevelDomain.com"
 }
 
-# Check the email address usign Regex
+# Check the email address using Regex
 errors[message] {
     not re_match("^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$", input.vars.app_config.contact.email)
     message = "'app_config.contact.email' must be a valid email address"
 }
 
-# Check the phone number usign Regex
+# Check the phone number using Regex
 errors[message] {
     not re_match("^[\\+]?[(]?[0-9]{3}[)]?[-\\s\\.]?[0-9]{3}[-\\s\\.]?[0-9]{4,6}", input.vars.app_config.contact.phone)
     message = "'app_config.contact.phone' must be a valid phone number"
@@ -61,13 +61,13 @@ errors[message] {
     message = "'notes2.message' should not be empty"
 }
 
-# Check that the `app_config.hostname` variable is defined only once for the stack accross all stack config files
+# Check that the `app_config.hostname` variable is defined only once for the stack across all stack config files
 # Refer to https://atmos.tools/cli/commands/describe/component#sources-of-component-variables for details on how 'atmos' detects sources for all variables
 # https://www.openpolicyagent.org/docs/latest/policy-language/#universal-quantification-for-all
 errors[message] {
     hostnames := {app_config | some app_config in input.sources.vars.app_config; app_config.hostname}
     count(hostnames) > 0
-    message = "'app_config.hostname' variable must be defined only once for the stack accross all stack config files"
+    message = "'app_config.hostname' variable must be defined only once for the stack across all stack config files"
 }
 
 # This policy checks that the 'bar' variable is not defined in any of the '_defaults.yaml' Atmos stack config files
@@ -84,7 +84,7 @@ errors[message] {
     message = "The 'bar' variable must not be defined in any of '_defaults.yaml' stack config files"
 }
 
-# This policy checks that if the 'foo' variable is defined in the 'stack1.yaml' stack config file, it cannot be overriden in 'stack2.yaml'
+# This policy checks that if the 'foo' variable is defined in the 'stack1.yaml' stack config file, it cannot be overridden in 'stack2.yaml'
 # Refer to https://atmos.tools/cli/commands/describe/component#sources-of-component-variables for details on how 'atmos' detects sources for all variables
 # https://www.openpolicyagent.org/docs/latest/policy-language/#universal-quantification-for-all
 errors[message] {
@@ -98,7 +98,7 @@ errors[message] {
     # Check the count of the stack dependencies of the 'foo' variable where 'stack_file' ends with 'stack2'
     count(stack2_dependencies) > 0
     # Generate the error message
-    message = "If the 'foo' variable is defined in 'stack1.yaml', it cannot be overriden in 'stack2.yaml'"
+    message = "If the 'foo' variable is defined in 'stack1.yaml', it cannot be overridden in 'stack2.yaml'"
 }
 
 # This policy shows an example on how to check the imported files in the stacks

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# This file defines the DSL for the deom
+# This file defines the DSL for the demo
 #
 
 relative_path=$(dirname `realpath "$0"`)

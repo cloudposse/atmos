@@ -1058,7 +1058,7 @@ func generateComponentProviderOverrides(providerOverrides map[string]any) map[st
 	}
 }
 
-// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defind in
+// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defined in
 func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
 	var deps []string
 	var depsAll []string

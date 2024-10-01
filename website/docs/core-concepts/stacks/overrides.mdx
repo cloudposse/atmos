@@ -113,13 +113,13 @@ import:
   - teams/testing
 ```
 
-Suppose that we want to change some variables in the `vars` and `env` sections and some config in the `settings` section for all the components that the `testing` Team manges, but we don't want to affect any components that the `devops` Team manages.
+Suppose that we want to change some variables in the `vars` and `env` sections and some config in the `settings` section for all the components that the `testing` Team manages, but we don't want to affect any components that the `devops` Team manages.
 
 If we added a global or Terraform level `vars`, `env` or `settings` sections to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml` or to the Team manifest `stacks/teams/testing.yaml`, then all the components in the `tenant1/dev/us-west-2` top-level stack would be modified, including those managed by the `devops` Team.
 
 To solve this, we could individually modify the `vars`, `env` and `settings` sections in all the components managed by the `testing` Team, but the entire configuration would not be DRY and reusable. That's where the __overrides__ pattern comes into play. To make the configuration DRY and configured only in one place, use the `overrides` section.
 
-For example, we want to override some values in the `env`, `vars` and `setings` sections for all the components managed by the `testing` Team:
+For example, we want to override some values in the `env`, `vars` and `settings` sections for all the components managed by the `testing` Team:
 
 ```yaml title="stacks/teams/testing.yaml"
 import:
