@@ -167,7 +167,7 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
     color: #ff8a8a
 }
 
-/* disable left border on adminitions in dark mode */
+/* disable left border on admonitions in dark mode */
 .theme-admonition {
     border-left: none;
     padding: 2em;

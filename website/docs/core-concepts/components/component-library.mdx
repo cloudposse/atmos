@@ -35,7 +35,7 @@ By convention, we recommend placing components in a folder organized by the tool
 In the following example, our toolchain consists of `docker`, `helmfile` and `terraform`, so a folder is created for each one, with the code
 for that component inside of it.
 
-If using `terraform` with multiple clouds, use the [multi-cloud filesytem layout](#multi-cloud-filesystem-layout).
+If using `terraform` with multiple clouds, use the [multi-cloud filesystem layout](#multi-cloud-filesystem-layout).
 
 ```console
 └── components/
@@ -94,4 +94,4 @@ For terraform, we recommend placing the terraform "root" modules in the `compone
 
 Make your Terraform components small, so they are easily reusable, but not so small that they only do to provide a single resource, which results in large, complicated configurations. A good rule of thumb is they should do one thing well. For example, provision a VPC along with all the subnets, NAT gateways, Internet gateways, NACLs, etc. 
 
-Use multiple component to break infrastructure apart into smaller pieces based on how their lifecycles are connected. For example, a single component seldom provides a VPC and a Kubernetes cluster. That's because we should be able to destroy the Kubernetes cluster without destroying the VPC and all the other resources provisioned inside of the VPC (e.g. databases). The VPC, Kubernetes cluster and Databases all have different lifecycles. Similarly, we should be able to deploy a database and destroy it without also destorying all associated backups. Therefore the backups of a database should be a separate component from the database itself. 
+Use multiple component to break infrastructure apart into smaller pieces based on how their lifecycles are connected. For example, a single component seldom provides a VPC and a Kubernetes cluster. That's because we should be able to destroy the Kubernetes cluster without destroying the VPC and all the other resources provisioned inside of the VPC (e.g. databases). The VPC, Kubernetes cluster and Databases all have different lifecycles. Similarly, we should be able to deploy a database and destroy it without also destroying all associated backups. Therefore the backups of a database should be a separate component from the database itself. 
