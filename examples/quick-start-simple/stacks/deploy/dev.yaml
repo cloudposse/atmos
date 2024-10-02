@@ -6,7 +6,7 @@ import:
 
 components:
   terraform:
-    myapp:
+    station:
       vars:
         location: Stockholm
         lang: se
