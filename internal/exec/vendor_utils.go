@@ -282,14 +282,15 @@ func ExecuteAtmosVendorInternal(
 			)
 		}
 
+		tmplData := struct {
+			Component string
+			Version   string
+		}{s.Component, s.Version}
+
 		// Parse 'source' template
-		if s.Version != "" {
-			uri, err = ProcessTmpl(fmt.Sprintf("source-%d-%s", indexSource, s.Version), s.Source, s, false)
-			if err != nil {
-				return err
-			}
-		} else {
-			uri = s.Source
+		uri, err = ProcessTmpl(fmt.Sprintf("source-%d", indexSource), s.Source, tmplData, false)
+		if err != nil {
+			return err
 		}
 
 		useOciScheme := false
@@ -317,13 +318,9 @@ func ExecuteAtmosVendorInternal(
 		for indexTarget, tgt := range s.Targets {
 			var target string
 			// Parse 'target' template
-			if s.Version != "" {
-				target, err = ProcessTmpl(fmt.Sprintf("target-%d-%d-%s", indexSource, indexTarget, s.Version), tgt, s, false)
-				if err != nil {
-					return err
-				}
-			} else {
-				target = tgt
+			target, err = ProcessTmpl(fmt.Sprintf("target-%d-%d", indexSource, indexTarget), tgt, tmplData, false)
+			if err != nil {
+				return err
 			}
 
 			targetPath := path.Join(vendorConfigFilePath, target)
