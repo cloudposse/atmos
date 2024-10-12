@@ -24,6 +24,7 @@ type IError struct {
 }
 
 func (e *IError) Error() string {
+	// Print debug info if PrintDebugPart is true
 	if PrintDebugPart {
 		return fmt.Sprintf("%s\n%s", e.Message, e.DebugInfo)
 	}
