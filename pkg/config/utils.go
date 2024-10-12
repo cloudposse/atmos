@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -42,9 +41,9 @@ func FindAllStackConfigsInPathsForStack(
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
 				y, _ := u.ConvertToYAML(cliConfig)
-				return nil, nil, false, &logger.IError{
+				return nil, nil, false, &u.ExtendedError{
 					Message:   err.Error(),
-					DebugInfo: fmt.Sprintf("CLI config:\n\n%v", y),
+					DebugInfo: fmt.Sprintf(CliConfigPrefix+"\n\n%v", y),
 				}
 			}
 		}
@@ -124,9 +123,9 @@ func FindAllStackConfigsInPaths(
 			if err != nil {
 				y, _ := u.ConvertToYAML(cliConfig)
 				// Return an error with the debug info
-				return nil, nil, &logger.IError{
+				return nil, nil, &u.ExtendedError{
 					Message:   err.Error(),
-					DebugInfo: fmt.Sprintf("CLI config:\n\n%v", y),
+					DebugInfo: fmt.Sprintf(CliConfigPrefix+"\n\n%v", y),
 				}
 			}
 		}

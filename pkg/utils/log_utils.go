@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime/debug"
+	"sync"
 
 	"github.com/fatih/color"
 
@@ -18,6 +19,41 @@ const (
 	LogLevelInfo    = "Info"
 	LogLevelWarning = "Warning"
 )
+
+var (
+	PrintDebugPart bool
+	mu             sync.Mutex
+)
+
+// set PrintDebugPart to true if log level is Debug or Trace
+func SetPrintDebugPart(val string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	if val == "" {
+		return fmt.Errorf("log level not set")
+	}
+	if val == string(LogLevelDebug) || val == string(LogLevelTrace) {
+		PrintDebugPart = true
+	} else {
+		PrintDebugPart = false
+	}
+	return nil
+}
+
+// ExtendedError is an error type that includes a message and debug info.
+type ExtendedError struct {
+	Message   string // Error message to be printed with log level Error , Warning or Info
+	DebugInfo string // Debug info to be printed with log level Debug or Trace
+}
+
+// Error returns the error message . If PrintDebugPart is true, it returns the error message and debug info
+func (e *ExtendedError) Error() string {
+	// Print debug info if PrintDebugPart is true
+	if PrintDebugPart {
+		return fmt.Sprintf("%s\n%s", e.Message, e.DebugInfo)
+	}
+	return e.Message
+}
 
 // PrintMessage prints the message to the console
 func PrintMessage(message string) {
@@ -48,6 +84,12 @@ func LogErrorAndExit(cliConfig schema.CliConfiguration, err error) {
 // LogError logs errors to std.Error
 func LogError(cliConfig schema.CliConfiguration, err error) {
 	if err != nil {
+		// set PrintDebugPart to true if log level is Debug or Trace
+		if cliConfig.Logs.Level == LogLevelDebug || cliConfig.Logs.Level == LogLevelTrace {
+			if setErr := SetPrintDebugPart(cliConfig.Logs.Level); setErr != nil {
+				color.Red("%s\n", setErr)
+			}
+		}
 		c := color.New(color.FgRed)
 		_, printErr := c.Fprintln(color.Error, err.Error()+"\n")
 		if printErr != nil {
