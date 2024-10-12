@@ -60,7 +60,7 @@ func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDi
 	m, err := tarball.LoadManifest(func() (io.ReadCloser, error) {
 		f, err := os.Open(tempTarFileName)
 		if err != nil {
-			u.LogError(err)
+			u.LogError(cliConfig, err)
 			return nil, err
 		}
 		return f, nil

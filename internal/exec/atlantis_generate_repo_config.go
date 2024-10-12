@@ -118,6 +118,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 			sshKeyPassword,
 			verbose,
 			cloneTargetRef,
+			"",
 		)
 	}
 
@@ -144,6 +145,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	sshKeyPassword string,
 	verbose bool,
 	cloneTargetRef bool,
+	stack string,
 ) error {
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
 		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
@@ -153,11 +155,36 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	var err error
 
 	if repoPath != "" {
-		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, false, false)
+		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+			cliConfig,
+			repoPath,
+			verbose,
+			false,
+			false,
+			stack,
+		)
 	} else if cloneTargetRef {
-		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, false, false)
+		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
+			cliConfig,
+			ref,
+			sha,
+			sshKeyPath,
+			sshKeyPassword,
+			verbose,
+			false,
+			false,
+			stack,
+		)
 	} else {
-		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, false, false)
+		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
+			cliConfig,
+			ref,
+			sha,
+			verbose,
+			false,
+			false,
+			stack,
+		)
 	}
 
 	if err != nil {

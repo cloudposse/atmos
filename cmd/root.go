@@ -33,12 +33,12 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		err = e.ExecuteAtmosCmd()
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	},
 }
@@ -61,7 +61,7 @@ func Execute() error {
 		fmt.Println()
 		err = tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	}
 
@@ -70,7 +70,7 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil && !errors.Is(err, cfg.NotFound) {
-		u.LogErrorAndExit(err)
+		u.LogErrorAndExit(schema.CliConfiguration{}, err)
 	}
 	// Set the log level for IError interface
 	logger.SetPrintDebugPart(cliConfig.Logs.Level)
@@ -78,12 +78,12 @@ func Execute() error {
 	if err == nil {
 		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		err = processCommandAliases(cliConfig, cliConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	}
 
@@ -111,7 +111,7 @@ func initConfig() {
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		b.HelpFunc(command, strings)

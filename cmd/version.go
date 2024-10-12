@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -23,7 +24,7 @@ var versionCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", Version, runtime.GOOS, runtime.GOARCH))
