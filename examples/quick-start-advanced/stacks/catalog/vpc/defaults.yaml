@@ -35,7 +35,7 @@ components:
             timeout: 10
       vars:
         enabled: true
-        name: "common2"
+        name: "common"
         max_subnet_count: 3
         map_public_ip_on_launch: true
         assign_generated_ipv6_cidr_block: false

@@ -535,7 +535,7 @@ func findAffected(
 	var err error
 
 	for stackName, stackSection := range currentStacks {
-		// If `--stack` is provided on the command line, proceses onlt components in that stack
+		// If `--stack` is provided on the command line, processes only components in that stack
 		if stackToFilter != "" && stackToFilter != stackName {
 			continue
 		}
