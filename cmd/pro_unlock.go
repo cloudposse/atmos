@@ -1,9 +1,11 @@
 package cmd
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // proUnlockCmd executes 'pro unlock' CLI command
@@ -18,7 +20,7 @@ var proUnlockCmd = &cobra.Command{
 
 		err := e.ExecuteProUnlockCommand(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	},
 }

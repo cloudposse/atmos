@@ -19,7 +19,7 @@ func removeTempDir(cliConfig schema.CliConfiguration, path string) {
 func closeFile(fileName string, file io.ReadCloser) {
 	err := file.Close()
 	if err != nil {
-		u.LogError(fmt.Errorf("error closing the file '%s': %v", fileName, err))
+		u.LogError(schema.CliConfiguration{}, fmt.Errorf("error closing the file '%s': %v", fileName, err))
 	}
 }
 

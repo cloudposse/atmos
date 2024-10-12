@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -25,7 +26,7 @@ var validateComponentCmd = &cobra.Command{
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", component, stack)
@@ -44,7 +45,7 @@ func init() {
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		u.LogErrorAndExit(schema.CliConfiguration{}, err)
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)

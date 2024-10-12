@@ -251,7 +251,7 @@ func ExecuteTerraformGenerateBackends(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(err)
+					u.LogErrorAndExit(cliConfig, err)
 				}
 
 				componentSection = componentSectionConverted

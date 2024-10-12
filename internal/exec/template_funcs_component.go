@@ -32,7 +32,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 				u.LogTrace(cliConfig, "'outputs' section:")
 				y, err2 := u.ConvertToYAML(outputsSection)
 				if err2 != nil {
-					u.LogError(err2)
+					u.LogError(cliConfig, err2)
 				} else {
 					u.LogTrace(cliConfig, y)
 				}
@@ -163,7 +163,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 	if cliConfig.Logs.Level == u.LogLevelTrace {
 		y, err2 := u.ConvertToYAML(outputMeta)
 		if err2 != nil {
-			u.LogError(err2)
+			u.LogError(cliConfig, err2)
 		} else {
 			u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
 		}
@@ -176,7 +176,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		d, err2 := u.ConvertFromJSON(s)
 
 		if err2 != nil {
-			u.LogError(err2)
+			u.LogError(cliConfig, err2)
 		} else {
 			u.LogTrace(cliConfig, fmt.Sprintf("Converted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", k, s, d))
 		}
@@ -197,7 +197,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		u.LogTrace(cliConfig, fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
 		y, err2 := u.ConvertToYAML(outputMetaProcessed)
 		if err2 != nil {
-			u.LogError(err2)
+			u.LogError(cliConfig, err2)
 		} else {
 			u.LogTrace(cliConfig, y)
 		}
