@@ -511,6 +511,7 @@ func executeDescribeAffected(
 		changedFiles,
 		includeSpaceliftAdminStacks,
 		includeSettings,
+		stack,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -527,12 +528,18 @@ func findAffected(
 	changedFiles []string,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stackToFilter string,
 ) ([]schema.Affected, error) {
 
 	res := []schema.Affected{}
 	var err error
 
 	for stackName, stackSection := range currentStacks {
+		// If `--stack` is provided on the command line, proceses onlt components in that stack
+		if stackToFilter != "" && stackToFilter != stackName {
+			continue
+		}
+
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
 
