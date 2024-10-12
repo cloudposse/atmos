@@ -40,6 +40,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
@@ -164,6 +165,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		verbose,
 		includeSpaceliftAdminStacks,
 		includeSettings,
+		stack,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -181,6 +183,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
@@ -314,6 +317,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		verbose,
 		includeSpaceliftAdminStacks,
 		includeSettings,
+		stack,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -330,6 +334,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	localRepo, err := g.GetLocalRepo()
@@ -365,6 +370,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		verbose,
 		includeSpaceliftAdminStacks,
 		includeSettings,
+		stack,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -382,6 +388,7 @@ func executeDescribeAffected(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 
 	if verbose {
