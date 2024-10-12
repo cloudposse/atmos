@@ -13,6 +13,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -71,7 +72,8 @@ func Execute() error {
 	if err != nil && !errors.Is(err, cfg.NotFound) {
 		u.LogErrorAndExit(err)
 	}
-
+	// Set the log level for IError interface
+	logger.SetPrintDebugPart(cliConfig.Logs.Level)
 	// If CLI configuration was found, process its custom commands and command aliases
 	if err == nil {
 		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
