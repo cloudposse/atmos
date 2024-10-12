@@ -9,6 +9,27 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var PrintDebugPart = false
+
+// set PrintDebugPart to true if log level is Debug or Trace
+func SetPrintDebugPart(val string) {
+	if val == string(LogLevelDebug) || val == string(LogLevelTrace) {
+		PrintDebugPart = true
+	}
+}
+
+type IError struct {
+	Message   string
+	DebugInfo string
+}
+
+func (e *IError) Error() string {
+	if PrintDebugPart {
+		return fmt.Sprintf("%s\n%s", e.Message, e.DebugInfo)
+	}
+	return e.Message
+}
+
 type LogLevel string
 
 const (
