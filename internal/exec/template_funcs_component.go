@@ -50,6 +50,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 
 	outputProcessed := map[string]any{}
 	componentAbstract := false
+	componentEnabled := true
 
 	metadataSection, ok := sections[cfg.MetadataSectionName]
 	if ok {
@@ -59,8 +60,16 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		}
 	}
 
-	// Don't process Terraform output for abstract and disabled components
-	if !componentAbstract {
+	varsSection, ok := sections[cfg.VarsSectionName]
+	if ok {
+		vars, ok2 := varsSection.(map[string]any)
+		if ok2 {
+			componentEnabled = IsComponentEnabled(vars)
+		}
+	}
+
+	// Don't process Terraform output for disabled and abstract components
+	if componentEnabled && !componentAbstract {
 		executable, ok := sections[cfg.CommandSectionName].(string)
 		if !ok {
 			return nil, fmt.Errorf("the component '%s' in the stack '%s' does not have 'command' (executable) defined", component, stack)
