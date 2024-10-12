@@ -72,7 +72,7 @@ func Execute() error {
 		u.LogErrorAndExit(schema.CliConfiguration{}, err)
 	}
 	// Set the log level for ExtendedError interface . must be set on root level to avoid missing log level
-	if cliConfig.Logs.Level == u.LogLevelDebug || cliConfig.Logs.Level == u.LogLevelTrace {
+	if cliConfig.Logs.Level != "" {
 		if err := u.SetPrintDebugPart(cliConfig.Logs.Level); err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}

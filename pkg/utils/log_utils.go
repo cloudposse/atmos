@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	PrintDebugPart bool
+	PrintDebugPart bool = false
 	mu             sync.Mutex
 )
 
@@ -30,9 +30,9 @@ func SetPrintDebugPart(val string) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if val == "" {
-		return fmt.Errorf("log level not set")
+		return errors.New("log level not set")
 	}
-	if val == string(LogLevelDebug) || val == string(LogLevelTrace) {
+	if val == LogLevelDebug || val == LogLevelTrace {
 		PrintDebugPart = true
 	} else {
 		PrintDebugPart = false
@@ -85,7 +85,7 @@ func LogErrorAndExit(cliConfig schema.CliConfiguration, err error) {
 func LogError(cliConfig schema.CliConfiguration, err error) {
 	if err != nil {
 		// set PrintDebugPart to true if log level is Debug or Trace
-		if cliConfig.Logs.Level == LogLevelDebug || cliConfig.Logs.Level == LogLevelTrace {
+		if cliConfig.Logs.Level != "" {
 			if setErr := SetPrintDebugPart(cliConfig.Logs.Level); setErr != nil {
 				color.Red("%s\n", setErr)
 			}
