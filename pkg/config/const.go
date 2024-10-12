@@ -55,6 +55,7 @@ const (
 	CommandSectionName     = "command"
 	TerraformSectionName   = "terraform"
 	HelmfileSectionName    = "helmfile"
+	WorkspaceSectionName   = "workspace"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"

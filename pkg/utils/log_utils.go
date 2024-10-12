@@ -30,9 +30,9 @@ func PrintMessageInColor(message string, messageColor *color.Color) {
 }
 
 // LogErrorAndExit logs errors to std.Error and exits with an error code
-func LogErrorAndExit(err error) {
+func LogErrorAndExit(cliConfig schema.CliConfiguration, err error) {
 	if err != nil {
-		LogError(err)
+		LogError(cliConfig, err)
 
 		// Find the executed command's exit code from the error
 		var exitError *exec.ExitError
@@ -46,7 +46,7 @@ func LogErrorAndExit(err error) {
 }
 
 // LogError logs errors to std.Error
-func LogError(err error) {
+func LogError(cliConfig schema.CliConfiguration, err error) {
 	if err != nil {
 		c := color.New(color.FgRed)
 		_, printErr := c.Fprintln(color.Error, err.Error()+"\n")
@@ -58,7 +58,9 @@ func LogError(err error) {
 		}
 
 		// Print stack trace
-		debug.PrintStack()
+		if cliConfig.Logs.Level == LogLevelTrace {
+			debug.PrintStack()
+		}
 	}
 }
 

@@ -31,6 +31,7 @@ type DescribeAffectedCmdArgs struct {
 	SSHKeyPassword              string
 	Verbose                     bool
 	Upload                      bool
+	Stack                       string
 }
 
 func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
@@ -129,6 +130,11 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		return DescribeAffectedCmdArgs{}, err
 	}
 
+	stack, err := flags.GetString("stack")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
 		return DescribeAffectedCmdArgs{}, errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
@@ -141,7 +147,10 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 	if verbose {
 		cliConfig.Logs.Level = u.LogLevelTrace
-		logger.SetLogLevel(l.LogLevelTrace)
+		err := logger.SetLogLevel(l.LogLevelTrace)
+		if err != nil {
+			return DescribeAffectedCmdArgs{}, err
+		}
 	}
 
 	result := DescribeAffectedCmdArgs{
@@ -160,6 +169,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		SSHKeyPassword:              sshKeyPassword,
 		Verbose:                     verbose,
 		Upload:                      upload,
+		Stack:                       stack,
 	}
 
 	return result, nil
@@ -177,11 +187,36 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	var repoUrl string
 
 	if a.RepoPath != "" {
-		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRepoPath(a.CLIConfig, a.RepoPath, a.Verbose, a.IncludeSpaceliftAdminStacks, a.IncludeSettings)
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRepoPath(
+			a.CLIConfig,
+			a.RepoPath,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+		)
 	} else if a.CloneTargetRef {
-		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(a.CLIConfig, a.Ref, a.SHA, a.SSHKeyPath, a.SSHKeyPassword, a.Verbose, a.IncludeSpaceliftAdminStacks, a.IncludeSettings)
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.SSHKeyPath,
+			a.SSHKeyPassword,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+		)
 	} else {
-		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(a.CLIConfig, a.Ref, a.SHA, a.Verbose, a.IncludeSpaceliftAdminStacks, a.IncludeSettings)
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+		)
 	}
 
 	if err != nil {
