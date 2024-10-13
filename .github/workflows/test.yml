@@ -157,6 +157,10 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.7"
+
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
@@ -261,6 +265,10 @@ jobs:
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.7"
 
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
