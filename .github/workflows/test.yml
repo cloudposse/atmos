@@ -17,6 +17,9 @@ on:
 
   workflow_dispatch:
 
+env:
+  TERRAFORM_VERSION: "1.9.7"
+
 jobs:
   # ensure the code builds...
   build:
@@ -157,6 +160,11 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
@@ -262,6 +270,11 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
@@ -301,7 +314,7 @@ jobs:
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ steps.config.outputs.terraform-version }}
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform

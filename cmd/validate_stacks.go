@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,7 +22,7 @@ var ValidateStacksCmd = &cobra.Command{
 
 		err := e.ExecuteValidateStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		u.PrintMessageInColor("all stacks validated successfully\n", color.New(color.FgGreen))

@@ -315,7 +315,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(err)
+									u.LogErrorAndExit(cliConfig, err)
 								}
 
 								componentSection = componentSectionConverted
@@ -494,7 +494,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(err)
+									u.LogErrorAndExit(cliConfig, err)
 								}
 
 								componentSection = componentSectionConverted

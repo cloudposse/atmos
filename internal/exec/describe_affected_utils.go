@@ -40,6 +40,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
@@ -164,6 +165,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		verbose,
 		includeSpaceliftAdminStacks,
 		includeSettings,
+		stack,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -181,6 +183,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
@@ -314,6 +317,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		verbose,
 		includeSpaceliftAdminStacks,
 		includeSettings,
+		stack,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -330,6 +334,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	localRepo, err := g.GetLocalRepo()
@@ -365,6 +370,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		verbose,
 		includeSpaceliftAdminStacks,
 		includeSettings,
+		stack,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -382,6 +388,7 @@ func executeDescribeAffected(
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 
 	if verbose {
@@ -401,7 +408,7 @@ func executeDescribeAffected(
 	u.LogTrace(cliConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
 	u.LogTrace(cliConfig, fmt.Sprintf("BASE: %s", remoteRepoHead))
 
-	currentStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, true)
+	currentStacks, err := ExecuteDescribeStacks(cliConfig, stack, nil, nil, nil, false, true)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -437,7 +444,7 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	remoteStacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, true, true)
+	remoteStacks, err := ExecuteDescribeStacks(cliConfig, stack, nil, nil, nil, true, true)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -504,6 +511,7 @@ func executeDescribeAffected(
 		changedFiles,
 		includeSpaceliftAdminStacks,
 		includeSettings,
+		stack,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -520,12 +528,18 @@ func findAffected(
 	changedFiles []string,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
+	stackToFilter string,
 ) ([]schema.Affected, error) {
 
 	res := []schema.Affected{}
 	var err error
 
 	for stackName, stackSection := range currentStacks {
+		// If `--stack` is provided on the command line, processes only components in that stack
+		if stackToFilter != "" && stackToFilter != stackName {
+			continue
+		}
+
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
 
