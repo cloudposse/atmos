@@ -66,8 +66,8 @@ spec:
     # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
     # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
     # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
-    # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
-    # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
+    # In 'source' and 'targets', Golang templates are supported  https://pkg.go.dev/text/template.
+    # Currently the fields '{{.Component}}' and '{{.Version}}' are supported.
     # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
     - component: "vpc"
       source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
@@ -93,7 +93,7 @@ spec:
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
       version: "1.323.0"
       targets:
-        - "components/terraform/infra/vpc-flow-logs-bucket/{{.Version}}"
+        - "components/terraform/infra/{{.Component}}/{{.Version}}"
       excluded_paths:
         - "**/*.yaml"
         - "**/*.yml"
@@ -198,7 +198,7 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
 
   <dt>`source` and `targets` templates</dt>
   <dd>
-  The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template) and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the artifact versions specified in the `version` attribute.
+  The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template) and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the component name specified in the `component` attribute and artifact versions specified in the `version` attribute.
 
     Here's an advanced example showcasing how templates and Sprig functions can be used together with `targets`:
 
