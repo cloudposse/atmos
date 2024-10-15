@@ -10,7 +10,7 @@
   padding: 0.5em;
   padding-left: 1em;
   padding-right: 1em;
-  background: #cccccc57;
+  background: rgba(204, 204, 204, 0.34);
   border-radius: 3px;
   border: none;
 }
