@@ -103,7 +103,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if err != nil {
 			u.LogWarning(cliConfig, err.Error())
 		}
-
+		// If the --everything flag is provided, delete the Terraform state folder for this component
 		if u.SliceContainsString(info.AdditionalArgsAndFlags, everything) {
 			tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d", tfStateFolder)
 			u.LogInfo(cliConfig, fmt.Sprintf("Deleting 'terraform.tfstate.d/%s' folder", tfStateFolder))
