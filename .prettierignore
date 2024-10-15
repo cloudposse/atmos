@@ -1,0 +1,3 @@
+# Ignore all MDX files as prettier doesn't support MDX3
+# https://docusaurus.io/docs/markdown-features/react
+**/*.mdx
