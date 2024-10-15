@@ -21,6 +21,7 @@ const (
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
+	everything                = "--everything"
 )
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
@@ -94,12 +95,22 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	varFile := constructTerraformComponentVarfileName(info)
 	planFile := constructTerraformComponentPlanfileName(info)
+	tfStateFolder := fmt.Sprintf("%s-%s", info.ContextPrefix, info.Component)
 
 	if info.SubCommand == "clean" {
 		u.LogInfo(cliConfig, "Deleting '.terraform' folder")
 		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
 		if err != nil {
 			u.LogWarning(cliConfig, err.Error())
+		}
+
+		if u.SliceContainsString(info.AdditionalArgsAndFlags, everything) {
+			tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d", tfStateFolder)
+			u.LogInfo(cliConfig, fmt.Sprintf("Deleting 'terraform.tfstate.d/%s' folder", tfStateFolder))
+			err = os.RemoveAll(tfStateFolderPath)
+			if err != nil {
+				u.LogWarning(cliConfig, err.Error())
+			}
 		}
 
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
