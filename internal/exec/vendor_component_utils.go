@@ -52,10 +52,14 @@ func ReadAndProcessComponentVendorConfigFile(
 
 	componentConfigFile := path.Join(componentPath, cfg.ComponentVendorConfigFileName)
 	if !u.FileExists(componentConfigFile) {
-		return componentConfig, "", fmt.Errorf("component vendoring config file '%s' does not exist in the '%s' folder",
-			cfg.ComponentVendorConfigFileName,
-			componentPath,
-		)
+		componentConfigFileYML := path.Join(componentPath, "component.yml")
+		if !u.FileExists(componentConfigFileYML) {
+			return componentConfig, "", fmt.Errorf("component vendoring config file '%s' or 'component.yml' does not exist in the '%s' folder",
+				cfg.ComponentVendorConfigFileName,
+				componentPath,
+			)
+		}
+		componentConfigFile = componentConfigFileYML
 	}
 
 	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
@@ -92,7 +96,6 @@ func ExecuteComponentVendorInternal(
 	componentPath string,
 	dryRun bool,
 ) error {
-
 	var tempDir string
 	var err error
 	var t *template.Template
@@ -180,7 +183,7 @@ func ExecuteComponentVendorInternal(
 				},
 			}
 
-			var tempDir2 = tempDir
+			tempDir2 := tempDir
 			if sourceIsLocalFile {
 				tempDir2 = path.Join(tempDir, filepath.Base(uri))
 			}
@@ -287,7 +290,7 @@ func ExecuteComponentVendorInternal(
 			},
 		}
 
-		var componentPath2 = componentPath
+		componentPath2 := componentPath
 		if sourceIsLocalFile {
 			if filepath.Ext(componentPath) == "" {
 				componentPath2 = path.Join(componentPath, filepath.Base(uri))
