@@ -449,10 +449,10 @@ metadata:
 spec:
   sources:
     - component: "vpc"
-      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/{{ .Component }}:{{ .Version }}"
       version: "latest"
       targets:
-        - "components/terraform/infra/vpc3"
+        - "components/terraform/{{ .Component }}"
       included_paths:
         - "**/*.tf"
         - "**/*.tfvars"
@@ -461,32 +461,6 @@ spec:
 ```
 </File>
 
-
-The schema of a `vendor.yaml` manifest is as follows:
-
-<File title="vendor.yaml">
-```yaml
-# This is an example of how to download a Terraform component from an OCI registry (https://opencontainers.org), e.g. AWS Public ECR
-
-apiVersion: atmos/v1
-kind: AtmosVendorConfig
-metadata:
-  name: example-vendor-config
-  description: Atmos vendoring manifest
-spec:
-  sources:
-    - component: "vpc"
-      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
-      version: "latest"
-      targets:
-        - "components/terraform/infra/vpc3"
-      included_paths:
-        - "**/*.tf"
-        - "**/*.tfvars"
-        - "**/*.md"
-      excluded_paths: []
-```
-</File>
 
 To vendor the `vpc` component, execute the following command:
 
