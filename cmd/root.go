@@ -22,7 +22,19 @@ var RootCmd = &cobra.Command{
 	Use:   "atmos",
 	Short: "Universal Tool for DevOps and Cloud Automation",
 	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
-	PreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Determine if the command is a help command or if the help flag is set
+		isHelpCommand := cmd.Name() == "help"
+		helpFlag, _ := cmd.Flags().GetBool("help")
+
+		if isHelpCommand || helpFlag {
+			// Do not silence usage or errors when help is invoked
+			cmd.SilenceUsage = false
+			cmd.SilenceErrors = false
+		} else {
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
