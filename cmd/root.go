@@ -27,7 +27,9 @@ var RootCmd = &cobra.Command{
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag, _ := cmd.Flags().GetBool("help")
 
-		if isHelpCommand || helpFlag {
+		isHelpRequested := isHelpCommand || helpFlag
+
+		if isHelpRequested {
 			// Do not silence usage or errors when help is invoked
 			cmd.SilenceUsage = false
 			cmd.SilenceErrors = false
