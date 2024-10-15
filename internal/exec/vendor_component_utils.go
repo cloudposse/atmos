@@ -22,6 +22,19 @@ import (
 	cp "github.com/otiai10/copy"
 )
 
+// findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
+func findComponentConfigFile(basePath, fileName string) (string, error) {
+	componentConfigExtensions := []string{"yaml", "yml"}
+
+	for _, ext := range componentConfigExtensions {
+		configFilePath := path.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
+		if u.FileExists(configFilePath) {
+			return configFilePath, nil
+		}
+	}
+	return "", fmt.Errorf("component vendoring config file does not exist in the '%s' folder", basePath)
+}
+
 // ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`
 func ReadAndProcessComponentVendorConfigFile(
 	cliConfig schema.CliConfiguration,
@@ -50,16 +63,9 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", fmt.Errorf("folder '%s' does not exist", componentPath)
 	}
 
-	componentConfigFile := path.Join(componentPath, cfg.ComponentVendorConfigFileName)
-	if !u.FileExists(componentConfigFile) {
-		componentConfigFileYML := path.Join(componentPath, "component.yml")
-		if !u.FileExists(componentConfigFileYML) {
-			return componentConfig, "", fmt.Errorf("component vendoring config file '%s' or 'component.yml' does not exist in the '%s' folder",
-				cfg.ComponentVendorConfigFileName,
-				componentPath,
-			)
-		}
-		componentConfigFile = componentConfigFileYML
+	componentConfigFile, err := findComponentConfigFile(componentPath, strings.TrimSuffix(cfg.ComponentVendorConfigFileName, ".yaml"))
+	if err != nil {
+		return componentConfig, "", err
 	}
 
 	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
