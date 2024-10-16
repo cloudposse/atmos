@@ -8,6 +8,7 @@ id: vendor-manifest
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import CollapsibleText from '@site/src/components/CollapsibleText'
 
 <Intro>
 The vendoring configuration is defined in the `vendor.yaml` manifest (vendor config file). The vendoring manifest is used to make copies of 3rd-party components, stacks, and other artifacts in your own repository.
@@ -49,104 +50,106 @@ Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more d
 
 To vendor remote artifacts, create a `vendor.yaml` file similar to the example below:
 
-<File title="vendor.yaml">
-```yaml
-apiVersion: atmos/v1
-kind: AtmosVendorConfig
-metadata:
-  name: example-vendor-config
-  description: Atmos vendoring manifest
-spec:
-  # `imports` or `sources` (or both) must be defined in a vendoring manifest
-  imports:
-    - "vendor/vendor2"
-    - "vendor/vendor3.yaml"
+<CollapsibleText type="tall">
+  <File title="vendor.yaml">
+  ```yaml
+  apiVersion: atmos/v1
+  kind: AtmosVendorConfig
+  metadata:
+    name: example-vendor-config
+    description: Atmos vendoring manifest
+  spec:
+    # `imports` or `sources` (or both) must be defined in a vendoring manifest
+    imports:
+      - "vendor/vendor2"
+      - "vendor/vendor3.yaml"
 
-  sources:
-    # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
-    # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
-    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
-    # In 'source' and 'targets', Golang templates are supported  https://pkg.go.dev/text/template.
-    # Currently the fields '{{.Component}}' and '{{.Version}}' are supported.
-    # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
-    - component: "vpc"
-      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
-      version: "latest"
-      targets:
-        - "components/terraform/infra/vpc3"
-      # Only include the files that match the 'included_paths' patterns.
-      # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
-      # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
-      # https://en.wikipedia.org/wiki/Glob_(programming)
-      # https://github.com/bmatcuk/doublestar#patterns
-      included_paths:
-        - "**/*.tf"
-        - "**/*.tfvars"
-        - "**/*.md"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags test`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - test
-        - networking
-    - component: "vpc-flow-logs-bucket"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-      version: "1.323.0"
-      targets:
-        - "components/terraform/infra/{{.Component}}/{{.Version}}"
-      excluded_paths:
-        - "**/*.yaml"
-        - "**/*.yml"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags networking,storage`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - test
-        - storage
-    - component: "vpc-mixin-1"
-      source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
-      targets:
-        - "components/terraform/infra/vpc3"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags test`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - test
-    - component: "vpc-mixin-2"
-      # Copy a local file into a local folder (keeping the same file name)
-      # This `source` is relative to the current folder
-      source: "components/terraform/mixins/context.tf"
-      targets:
-        - "components/terraform/infra/vpc3"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags test`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - test
-    - component: "vpc-mixin-3"
-      # Copy a local folder into a local folder
-      # This `source` is relative to the current folder
-      source: "components/terraform/mixins"
-      targets:
-        - "components/terraform/infra/vpc3"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags test`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - test
-    - component: "vpc-mixin-4"
-      # Copy a local file into a local file with a different file name
-      # This `source` is relative to the current folder
-      source: "components/terraform/mixins/context.tf"
-      targets:
-        - "components/terraform/infra/vpc3/context-copy.tf"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags test`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - test
-```
-</File>
+    sources:
+      # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
+      # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+      # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
+      # In 'source' and 'targets', Golang templates are supported  https://pkg.go.dev/text/template.
+      # Currently the fields '{{.Component}}' and '{{.Version}}' are supported.
+      # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
+      - component: "vpc"
+        source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+        version: "latest"
+        targets:
+          - "components/terraform/infra/vpc3"
+        # Only include the files that match the 'included_paths' patterns.
+        # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
+        # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
+        # https://en.wikipedia.org/wiki/Glob_(programming)
+        # https://github.com/bmatcuk/doublestar#patterns
+        included_paths:
+          - "**/*.tf"
+          - "**/*.tfvars"
+          - "**/*.md"
+        # Tags can be used to vendor component that have the specific tags
+        # `atmos vendor pull --tags test`
+        # Refer to https://atmos.tools/cli/commands/vendor/pull
+        tags:
+          - test
+          - networking
+      - component: "vpc-flow-logs-bucket"
+        source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+        version: "1.323.0"
+        targets:
+          - "components/terraform/infra/{{.Component}}/{{.Version}}"
+        excluded_paths:
+          - "**/*.yaml"
+          - "**/*.yml"
+        # Tags can be used to vendor component that have the specific tags
+        # `atmos vendor pull --tags networking,storage`
+        # Refer to https://atmos.tools/cli/commands/vendor/pull
+        tags:
+          - test
+          - storage
+      - component: "vpc-mixin-1"
+        source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
+        targets:
+          - "components/terraform/infra/vpc3"
+        # Tags can be used to vendor component that have the specific tags
+        # `atmos vendor pull --tags test`
+        # Refer to https://atmos.tools/cli/commands/vendor/pull
+        tags:
+          - test
+      - component: "vpc-mixin-2"
+        # Copy a local file into a local folder (keeping the same file name)
+        # This `source` is relative to the current folder
+        source: "components/terraform/mixins/context.tf"
+        targets:
+          - "components/terraform/infra/vpc3"
+        # Tags can be used to vendor component that have the specific tags
+        # `atmos vendor pull --tags test`
+        # Refer to https://atmos.tools/cli/commands/vendor/pull
+        tags:
+          - test
+      - component: "vpc-mixin-3"
+        # Copy a local folder into a local folder
+        # This `source` is relative to the current folder
+        source: "components/terraform/mixins"
+        targets:
+          - "components/terraform/infra/vpc3"
+        # Tags can be used to vendor component that have the specific tags
+        # `atmos vendor pull --tags test`
+        # Refer to https://atmos.tools/cli/commands/vendor/pull
+        tags:
+          - test
+      - component: "vpc-mixin-4"
+        # Copy a local file into a local file with a different file name
+        # This `source` is relative to the current folder
+        source: "components/terraform/mixins/context.tf"
+        targets:
+          - "components/terraform/infra/vpc3/context-copy.tf"
+        # Tags can be used to vendor component that have the specific tags
+        # `atmos vendor pull --tags test`
+        # Refer to https://atmos.tools/cli/commands/vendor/pull
+        tags:
+          - test
+  ```
+  </File>
+</CollapsibleText>
 
 With this configuration, it would be possible to run the following commands:
 <Terminal>
@@ -161,22 +164,47 @@ With this configuration, it would be possible to run the following commands:
 ```
 </Terminal>
 
+## Vendoring Manifest Schema
+
 The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
   and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo).
 
 <dl>
+  <dt>`version`</dt>
+  <dd>
+    The `version` attribute is used to specify the version of the artifact to download. The `version` attribute is used in the `source` and `targets` attributes as a template parameter using `{{ .Version }}`.
+  </dd>
 
   <dt>`source`</dt>
   <dd>
-    The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and
-    archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from [OCI registries](https://opencontainers.org).
+    The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from [OCI registries](https://opencontainers.org).
 
     **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
-    For example:
+
+    For example, for `http` and `https` sources, use the following format:
 
     ```yaml
     source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
     ```
+
+    For private Git repositories, prepend the URI with `git::` and use the following format to pass a environment variable with the GitHub token:
+
+    ```yaml
+    source: "git::https://{{env "GITHUB_TOKEN"}}@github.com/some-org/some-private-repo/terraform/vpc.git?ref={{.Version}}"
+    ```
+    Note, that `GITHUB_TOKEN` provided by GitHub Actions are only valid for the current repository, or repositories marked as `internal` within GitHub Enterprise organizations. For cross-repository access, make sure you provision a [fine grained token](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens?apiVersion=2022-11-28) with the necessary permissions.
+
+    <dl>
+      <dt>`ref`</dt>
+      <dd>
+        Pass the `ref` as a query string with either the tag, branch, or commit hash to download the correct version of the artifact. e.g. `?ref={{.Version}}` will pass the `version` attribute to the `ref` query string.
+      </dd>
+      <dt>`depth`</dt>
+      <dd>
+        Pass the `depth` as a query string to download only the specified number of commits from the repository. e.g. `?depth=1` will download only the latest commit.
+      </dd>
+    </dl>
+
   </dd>
 
   <dt>`targets`</dt>
@@ -246,6 +274,44 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   :::
   </dd>
 </dl>
+
+## Template Parameters
+
+The vendor manifest supports basic template parameters, which is useful for versioning and other dynamic values. The following template parameters are supported:
+
+<dl>
+  <dt>`{{ .Component }}`</dt>
+  <dd>
+    Refers to the `component` attribute in the current section. The `component` attribute is used to specify the component name. This is useful to vendor components into folders by the same name.
+    ```yaml
+    targets:
+      - "components/terraform/{{ .Component }}"
+    ```
+  </dd>
+  <dt>`{{ .Version }}`</dt>
+  <dd>
+    Refers to the `version` attribute the current section. The `version` attribute is used to specify the version of the artifact to download. This is useful to version components into different folders.
+    ```yaml
+    targets:
+      - "components/terraform/{{ .Component }}/{{ .Version }}"
+    ```
+     When stacks need to pin to different versions of the same component, the `{{ .Version }}` template parameter can be used to ensure the components are vendored into different folders.
+  </dd>
+</dl>
+
+You can also use any of the [hundreds of go-template functions](/core-concepts/stacks/templates/functions/). For example, to extract the major and minor version from the `{{ .Version }}` attribute, use the following template:
+
+```yaml
+targets:
+  - "components/terraform/{{ .Component }}/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
+```
+
+Or to access an environment variable in the `source` attribute, use the following template:
+
+```yaml
+source: "git::https://{{env "GITHUB_TOKEN"}}@github.com/some-org/some-private-repo/terraform/{{ .Component }}/{{ .Version }}.git?ref={{.Version}}"
+```
+This will enable vendoring to download the component into a versioned folder from a private repository, by reading the GitHub token from the `GITHUB_TOKEN` environment variable.
 
 
 ## Hierarchical Imports in Vendoring Manifests
@@ -370,11 +436,6 @@ and the files are written into the directories specified by the `targets` attrib
 For example, to vendor the `vpc` component from the `public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc`
 [AWS public ECR registry](https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html), use the following `source`:
 
-```yaml
-source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest"
-```
-
-The schema of a `vendor.yaml` manifest is as follows:
 
 <File title="vendor.yaml">
 ```yaml
@@ -388,10 +449,10 @@ metadata:
 spec:
   sources:
     - component: "vpc"
-      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/{{ .Component }}:{{ .Version }}"
       version: "latest"
       targets:
-        - "components/terraform/infra/vpc3"
+        - "components/terraform/{{ .Component }}"
       included_paths:
         - "**/*.tf"
         - "**/*.tfvars"
@@ -399,6 +460,7 @@ spec:
       excluded_paths: []
 ```
 </File>
+
 
 To vendor the `vpc` component, execute the following command:
 
