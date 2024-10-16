@@ -195,6 +195,29 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     __NOTE:__ Don't have `mise`? Install it first from [here](https://mise.jdx.dev/getting-started.html)
   </TabItem>
 
+  <TabItem value="aqua" label="aqua">
+    #### Install with aqua
+
+    [aqua](https://aquaproj.github.io/) is a CLI Version Manager.
+    aqua allows you to manage multiple versions of CLI tools, making it easy to switch between different versions of Atmos and other tools in your projects.
+
+    Create `aqua.yaml` by `aqua init`:
+
+    ```shell
+    aqua init
+    ```
+
+    Add atmos to aqua.yaml:
+
+    ```shell
+    aqua g -i cloudposse/atmos
+    ```
+
+    Then, run `aqua install` in the same directory.
+
+    __NOTE:__ Don't have `aqua`? Install it first from [here](https://aquaproj.github.io/docs/install)
+  </TabItem>
+
   <TabItem value="source" label="From Source">
     #### Build from Source
 
