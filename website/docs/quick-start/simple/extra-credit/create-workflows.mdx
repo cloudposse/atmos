@@ -65,13 +65,13 @@ workflows:
       - command: terraform plan station -s staging
       - command: terraform plan station -s prod
 
-  apply-all-components:
+  apply-all:
     description: |
       Run 'terraform apply' on all 'station' components in all stacks
     steps:
-      - command: terraform apply station -auto-apply -s dev
-      - command: terraform apply station -auto-apply -s staging
-      - command: terraform apply station -auto-apply -s prod
+      - command: terraform apply station -auto-approve -s dev
+      - command: terraform apply station -auto-approve -s staging
+      - command: terraform apply station -auto-approve -s prod
 ```
 </Step>
 
