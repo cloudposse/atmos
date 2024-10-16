@@ -41,7 +41,10 @@ func FindAllStackConfigsInPathsForStack(
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
 				y, _ := u.ConvertToYAML(cliConfig)
-				return nil, nil, false, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
+				return nil, nil, false, &u.ExtendedError{
+					Message:   err.Error(),
+					DebugInfo: fmt.Sprintf(CliConfigPrefix+"\n\n%v", y),
+				}
 			}
 		}
 
@@ -119,7 +122,11 @@ func FindAllStackConfigsInPaths(
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
 				y, _ := u.ConvertToYAML(cliConfig)
-				return nil, nil, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
+				// Return an error with the debug info
+				return nil, nil, &u.ExtendedError{
+					Message:   err.Error(),
+					DebugInfo: fmt.Sprintf(CliConfigPrefix+"\n\n%v", y),
+				}
 			}
 		}
 

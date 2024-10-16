@@ -68,4 +68,5 @@ const (
 	AtmosProTokenEnvVarName    = "ATMOS_PRO_TOKEN"
 	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
 	AtmosProDefaultEndpoint    = "api"
+	CliConfigPrefix            = "CLI config:"
 )

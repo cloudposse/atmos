@@ -71,7 +71,12 @@ func Execute() error {
 	if err != nil && !errors.Is(err, cfg.NotFound) {
 		u.LogErrorAndExit(schema.CliConfiguration{}, err)
 	}
-
+	// Set the log level for ExtendedError interface . must be set on root level to avoid missing log level
+	if cliConfig.Logs.Level != "" {
+		if err := u.SetPrintDebugPart(cliConfig.Logs.Level); err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+	}
 	// If CLI configuration was found, process its custom commands and command aliases
 	if err == nil {
 		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
