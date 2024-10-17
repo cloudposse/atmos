@@ -93,28 +93,41 @@ func constructHelmfileComponentVarfilePath(cliConfig schema.CliConfiguration, in
 // If prefix is empty, it returns all the folders in the root
 func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 	var folderNames []string
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		// Check if the current file is a directory and has the specified prefix
-		if info.IsDir() && prefix == "" {
-			folderNames = append(folderNames, info.Name()) // Collect all folder names
-		} else {
-			if info.IsDir() && strings.HasPrefix(info.Name(), prefix) {
-				folderNames = append(folderNames, info.Name()) // Collect folder names only
+
+	// First, read the directories at the root level (level 1)
+	level1Dirs, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, dir := range level1Dirs {
+		if dir.IsDir() {
+			// If the directory at level 1 matches the prefix, add it
+			if prefix == "" || strings.HasPrefix(dir.Name(), prefix) {
+				folderNames = append(folderNames, dir.Name())
+			}
+
+			// Now, explore one level deeper (level 2)
+			level2Path := filepath.Join(root, dir.Name())
+			level2Dirs, err := os.ReadDir(level2Path)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, subDir := range level2Dirs {
+				if subDir.IsDir() && (prefix == "" || strings.HasPrefix(subDir.Name(), prefix)) {
+					folderNames = append(folderNames, filepath.Join(dir.Name(), subDir.Name()))
+				}
 			}
 		}
+	}
 
-		return nil
-	})
-	return folderNames, err
+	return folderNames, nil
 }
 
 // deleteFilesAndFoldersRecursive deletes files and folders from the given list if they exist under the specified path,
 // including files and folders in the second-level subdirectories.
 func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
-
 	// First, delete files and folders directly under the base path
 	for _, item := range items {
 		fullPath := filepath.Join(basePath, item)
@@ -127,54 +140,42 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 				if os.IsNotExist(err) {
 					continue
 				}
-				return fmt.Errorf("failed to delete %s: %v", fullPath, err)
+				return fmt.Errorf("failed to delete %s: %w", fullPath, err)
 			}
 			lastFolderName := filepath.Base(basePath)
-
 			fmt.Printf("Deleted: %s/%s\n", lastFolderName, item)
 		}
 	}
 
-	// Now, check second-level directories and delete matching files and folders
-	err := filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		}
-		// Skip the base directory itself
-		if path == basePath {
-			return nil
-		}
+	// Now, delete matching files and folders from immediate subdirectories
+	entries, err := os.ReadDir(basePath)
+	if err != nil {
+		return fmt.Errorf("error reading the base path %s: %v", basePath, err)
+	}
 
-		// Check if it's a directory and proceed with deletion in second-level directories
-		if info.IsDir() {
+	for _, entry := range entries {
+		// Only proceed if the entry is a directory
+		if entry.IsDir() {
+			subDirPath := filepath.Join(basePath, entry.Name())
+
 			for _, item := range items {
-				fullPath := filepath.Join(path, item)
+				fullPath := filepath.Join(subDirPath, item)
 
 				// Check if the file or folder exists in the subdirectory
 				if _, err := os.Stat(fullPath); err == nil {
-
 					// File or folder exists, attempt to delete
 					err := os.RemoveAll(fullPath)
 					if err != nil {
 						if os.IsNotExist(err) {
 							continue
 						}
-						return fmt.Errorf("failed to delete %s: %v", item, err)
+						return fmt.Errorf("failed to delete %s: %v", fullPath, err)
 					}
-					lastFolderName := filepath.Base(basePath)
-
+					lastFolderName := filepath.Base(subDirPath)
 					fmt.Printf("Deleted: %s/%s\n", lastFolderName, item)
 				}
 			}
 		}
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("error walking the path %s: %v", basePath, err)
 	}
 
 	return nil
