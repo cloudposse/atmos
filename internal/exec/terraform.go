@@ -61,23 +61,23 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	NeedProcessStacks := true
-	CheckStack := true
+	needProcessStacks := true
+	checkStack := true
 	// If the user runs `atmos terraform clean --everything`, don't process stacks
 	if info.SubCommand == "clean" && u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) {
 		if info.ComponentFromArg == "" {
-			NeedProcessStacks = false
+			needProcessStacks = false
 		}
-		CheckStack = false
+		checkStack = false
 
 	}
 
-	if NeedProcessStacks {
-		info, err = ProcessStacks(cliConfig, info, CheckStack, true)
+	if needProcessStacks {
+		info, err = ProcessStacks(cliConfig, info, checkStack, true)
 		if err != nil {
 			return err
 		}
-		if len(info.Stack) < 1 && CheckStack {
+		if len(info.Stack) < 1 && checkStack {
 			return errors.New("stack must be specified")
 		}
 	}
