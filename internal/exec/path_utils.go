@@ -89,7 +89,7 @@ func constructHelmfileComponentVarfilePath(cliConfig schema.CliConfiguration, in
 }
 
 // findFoldersNamesWithPrefix finds the names of folders that match the given prefix under the specified root path.
-// The search is recursive, and the function returns the names of folders at the root level and one level deeper.
+// The search is performed at the root level (level 1) and one level deeper (level 2).
 func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 	var folderNames []string
 
