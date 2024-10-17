@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -12,7 +11,7 @@ import (
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack
 func constructTerraformComponentWorkingDir(cliConfig schema.CliConfiguration, info schema.ConfigAndStacksInfo) string {
-	return path.Join(
+	return filepath.Join(
 		cliConfig.BasePath,
 		cliConfig.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,
@@ -46,7 +45,7 @@ func constructTerraformComponentVarfileName(info schema.ConfigAndStacksInfo) str
 
 // constructTerraformComponentVarfilePath constructs the varfile path for a terraform component in a stack
 func constructTerraformComponentVarfilePath(Config schema.CliConfiguration, info schema.ConfigAndStacksInfo) string {
-	return path.Join(
+	return filepath.Join(
 		constructTerraformComponentWorkingDir(Config, info),
 		constructTerraformComponentVarfileName(info),
 	)
@@ -54,7 +53,7 @@ func constructTerraformComponentVarfilePath(Config schema.CliConfiguration, info
 
 // constructTerraformComponentPlanfilePath constructs the planfile path for a terraform component in a stack
 func constructTerraformComponentPlanfilePath(cliConfig schema.CliConfiguration, info schema.ConfigAndStacksInfo) string {
-	return path.Join(
+	return filepath.Join(
 		constructTerraformComponentWorkingDir(cliConfig, info),
 		constructTerraformComponentPlanfileName(info),
 	)
@@ -62,7 +61,7 @@ func constructTerraformComponentPlanfilePath(cliConfig schema.CliConfiguration, 
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack
 func constructHelmfileComponentWorkingDir(cliConfig schema.CliConfiguration, info schema.ConfigAndStacksInfo) string {
-	return path.Join(
+	return filepath.Join(
 		cliConfig.BasePath,
 		cliConfig.Components.Helmfile.BasePath,
 		info.ComponentFolderPrefix,
@@ -83,7 +82,7 @@ func constructHelmfileComponentVarfileName(info schema.ConfigAndStacksInfo) stri
 
 // constructHelmfileComponentVarfilePath constructs the varfile path for a helmfile component in a stack
 func constructHelmfileComponentVarfilePath(cliConfig schema.CliConfiguration, info schema.ConfigAndStacksInfo) string {
-	return path.Join(
+	return filepath.Join(
 		constructHelmfileComponentWorkingDir(cliConfig, info),
 		constructHelmfileComponentVarfileName(info),
 	)
