@@ -1000,11 +1000,15 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			}
 		} else {
 			info.SubCommand = additionalArgsAndFlags[0]
-			// check if additionalArgsAndFlags[1] is a option with --
-			if strings.HasPrefix(additionalArgsAndFlags[1], "--") {
-				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, additionalArgsAndFlags[1])
+			// Determine if the second argument is an option or a component
+			secondArg := additionalArgsAndFlags[1]
+
+			if strings.HasPrefix(secondArg, "--") {
+				// If it's an option, store it in AdditionalArgsAndFlags
+				info.AdditionalArgsAndFlags = []string{secondArg}
 			} else {
-				info.ComponentFromArg = additionalArgsAndFlags[1]
+				// Otherwise, assume it's a component
+				info.ComponentFromArg = secondArg
 			}
 
 			if len(additionalArgsAndFlags) > 2 {
