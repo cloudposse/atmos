@@ -30,8 +30,10 @@ func processHelp(componentType string, command string) error {
 			u.PrintMessage(" - 'atmos terraform apply' and 'atmos terraform deploy' commands commands support '--planfile' flag to specify the path " +
 				"to a planfile. The '--planfile' flag should be used instead of the planfile argument in the native 'terraform apply <planfile>' command")
 			u.PrintMessage(" - 'atmos terraform clean' command deletes the '.terraform' folder, '.terraform.lock.hcl' lock file, " +
-				"and the previously generated 'planfile', 'varfile' and 'backend.tf.json' file for the specified component and stack. " +
-				"Use --skip-lock-file flag to skip deleting the lock file.")
+				"and the previously generated 'planfile', 'varfile', and 'backend.tf.json' file for the specified component and stack. " +
+				"Use the --everything flag to also delete the state files ('terraform.tfstate.d') for the component. " +
+				"Use --skip-lock-file to skip deleting the lock file. " +
+				"If no component or stack is specified, the clean operation will apply globally to all components.")
 			u.PrintMessage(" - 'atmos terraform workspace' command first runs 'terraform init -reconfigure', then 'terraform workspace select', " +
 				"and if the workspace was not created before, it then runs 'terraform workspace new'")
 			u.PrintMessage(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, " +
@@ -72,10 +74,14 @@ func processHelp(componentType string, command string) error {
 			" - '.terraform.lock.hcl' file\n" +
 			" - generated varfile for the component in the stack\n" +
 			" - generated planfile for the component in the stack\n" +
-			" - generated 'backend.tf.json' file\n\n" +
+			" - generated 'backend.tf.json' file\n" +
+			" - 'terraform.tfstate.d' folder (if '--everything' flag is used)\n\n" +
 			"Usage: atmos terraform clean <component> -s <stack> <flags>\n\n" +
-			"Use '--skip-lock-file' flag to skip deleting the lock file.\n\n" +
+			"Use '--everything' flag to also delete the Terraform state files ('terraform.tfstate.d').\n" +
+			"Use '--skip-lock-file' flag to skip deleting the '.terraform.lock.hcl' file.\n\n" +
+			"If no component or stack is specified, the clean operation will apply globally to all components.\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/clean\n")
+
 	} else if componentType == "terraform" && command == "deploy" {
 		u.PrintMessage("\n'atmos terraform deploy' command executes 'terraform apply -auto-approve' on an Atmos component in an Atmos stack.\n\n" +
 			"Usage: atmos terraform deploy <component> -s <stack> <flags>\n\n" +
