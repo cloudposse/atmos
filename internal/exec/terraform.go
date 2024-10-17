@@ -68,7 +68,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if info.ComponentFromArg == "" {
 			NeedProcessStacks = false
 		}
-		fmt.Print("componentFromArg: ", info.ComponentFromArg, "\n")
 		CheckStack = false
 
 	}

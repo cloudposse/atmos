@@ -391,6 +391,7 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
+			// Allow proceeding without error if checkStack is false (e.g., for operations that don't require a stack)
 			if !checkStack {
 				return configAndStacksInfo, nil
 			}
@@ -1005,6 +1006,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			} else {
 				info.ComponentFromArg = additionalArgsAndFlags[1]
 			}
+
 			if len(additionalArgsAndFlags) > 2 {
 				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
 			}
