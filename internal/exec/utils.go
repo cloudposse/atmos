@@ -391,6 +391,9 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
+			if !checkStack {
+				return configAndStacksInfo, nil
+			}
 			cliConfigYaml := ""
 
 			if cliConfig.Logs.Level == u.LogLevelTrace {
@@ -960,7 +963,6 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 		// Handle terraform two-words commands
 		// https://developer.hashicorp.com/terraform/cli/commands
 		if componentType == "terraform" {
-
 			// Handle the custom legacy command `terraform write varfile` (NOTE: use `terraform generate varfile` instead)
 			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
 				info.SubCommand = "write"
@@ -997,7 +999,12 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			}
 		} else {
 			info.SubCommand = additionalArgsAndFlags[0]
-			info.ComponentFromArg = additionalArgsAndFlags[1]
+			// check if additionalArgsAndFlags[1] is a option with --
+			if strings.HasPrefix(additionalArgsAndFlags[1], "--") {
+				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, additionalArgsAndFlags[1])
+			} else {
+				info.ComponentFromArg = additionalArgsAndFlags[1]
+			}
 			if len(additionalArgsAndFlags) > 2 {
 				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
 			}
