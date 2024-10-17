@@ -391,6 +391,10 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
+			// Allow proceeding without error if checkStack is false (e.g., for operations that don't require a stack)
+			if !checkStack {
+				return configAndStacksInfo, nil
+			}
 			cliConfigYaml := ""
 
 			if cliConfig.Logs.Level == u.LogLevelTrace {
@@ -960,7 +964,6 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 		// Handle terraform two-words commands
 		// https://developer.hashicorp.com/terraform/cli/commands
 		if componentType == "terraform" {
-
 			// Handle the custom legacy command `terraform write varfile` (NOTE: use `terraform generate varfile` instead)
 			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
 				info.SubCommand = "write"
@@ -997,7 +1000,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			}
 		} else {
 			info.SubCommand = additionalArgsAndFlags[0]
-			info.ComponentFromArg = additionalArgsAndFlags[1]
+			if len(additionalArgsAndFlags) > 1 {
+				// Determine if the second argument is an option or a component
+				secondArg := additionalArgsAndFlags[1]
+
+				if strings.HasPrefix(secondArg, "--") {
+					// If it's an option, store it in AdditionalArgsAndFlags
+					info.AdditionalArgsAndFlags = []string{secondArg}
+				} else {
+					// Otherwise, assume it's a component
+					info.ComponentFromArg = secondArg
+				}
+			}
+
 			if len(additionalArgsAndFlags) > 2 {
 				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
 			}

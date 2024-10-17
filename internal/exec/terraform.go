@@ -21,6 +21,7 @@ const (
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
+	everythingFlag            = "--everything"
 )
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
@@ -29,7 +30,6 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 	if err != nil {
 		return err
 	}
-
 	return ExecuteTerraform(info)
 }
 
@@ -61,20 +61,31 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	info, err = ProcessStacks(cliConfig, info, true, true)
-	if err != nil {
-		return err
+	needProcessStacks := true
+	checkStack := true
+	// If the user runs `atmos terraform clean --everything`, don't process stacks
+	if info.SubCommand == "clean" && u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) {
+		if info.ComponentFromArg == "" {
+			needProcessStacks = false
+		}
+		checkStack = false
+
 	}
 
-	if len(info.Stack) < 1 {
-		return errors.New("stack must be specified")
+	if needProcessStacks {
+		info, err = ProcessStacks(cliConfig, info, checkStack, true)
+		if err != nil {
+			return err
+		}
+		if len(info.Stack) < 1 && checkStack {
+			return errors.New("stack must be specified")
+		}
 	}
 
 	err = checkTerraformConfig(cliConfig)
 	if err != nil {
 		return err
 	}
-
 	// Check if the component (or base component) exists as Terraform component
 	componentPath := path.Join(cliConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
@@ -94,14 +105,47 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	varFile := constructTerraformComponentVarfileName(info)
 	planFile := constructTerraformComponentPlanfileName(info)
-
 	if info.SubCommand == "clean" {
+		// If the --everything flag is provided, delete the Terraform state folder for this component
+		if u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) {
+			filesToClear := []string{"backend.tf.json", ".terraform", "terraform.tfstate.d", ".terraform.lock.hcl"}
+			// If the component is not specified, delete the Terraform state folder for all components
+			if info.ComponentFromArg == "" {
+				err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+				if err != nil {
+					u.LogWarning(cliConfig, err.Error())
+				}
+				return nil
+				// If the component is specified, delete the Terraform state folder for the specified component
+			} else if info.ComponentFromArg != "" && info.StackFromArg == "" {
+				componentPath = path.Join(componentPath, info.Component)
+				err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+				if err != nil {
+					u.LogWarning(cliConfig, err.Error())
+				}
+				return nil
+			} else {
+				// If the component and stack are specified, delete the Terraform state folder for the specified component and stack
+				tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d")
+				tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, info.StackFromArg)
+				if err != nil {
+					u.LogWarning(cliConfig, err.Error())
+				}
+				for _, folderName := range tfStateFolderNames {
+					tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d", folderName)
+					u.LogInfo(cliConfig, fmt.Sprintf("Deleting 'terraform.tfstate.d/%s' folder", folderName))
+					err = os.RemoveAll(tfStateFolderPath)
+					if err != nil {
+						u.LogWarning(cliConfig, err.Error())
+					}
+				}
+			}
+		}
 		u.LogInfo(cliConfig, "Deleting '.terraform' folder")
 		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
 		if err != nil {
 			u.LogWarning(cliConfig, err.Error())
 		}
-
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
 			u.LogInfo(cliConfig, "Deleting '.terraform.lock.hcl' file")
 			_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
