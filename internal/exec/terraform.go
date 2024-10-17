@@ -108,10 +108,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if info.SubCommand == "clean" {
 		// If the --everything flag is provided, delete the Terraform state folder for this component
 		if u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) {
-			listOfClear := []string{"backend.tf.json", ".terraform", "terraform.tfstate.d", ".terraform.lock.hcl"}
+			filesToClear := []string{"backend.tf.json", ".terraform", "terraform.tfstate.d", ".terraform.lock.hcl"}
 			// If the component is not specified, delete the Terraform state folder for all components
 			if info.ComponentFromArg == "" {
-				err := deleteFilesAndFoldersRecursive(componentPath, listOfClear)
+				err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
 				if err != nil {
 					u.LogWarning(cliConfig, err.Error())
 				}
@@ -119,7 +119,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				// If the component is specified, delete the Terraform state folder for the specified component
 			} else if info.ComponentFromArg != "" && info.StackFromArg == "" {
 				componentPath = path.Join(componentPath, info.Component)
-				err := deleteFilesAndFoldersRecursive(componentPath, listOfClear)
+				err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
 				if err != nil {
 					u.LogWarning(cliConfig, err.Error())
 				}
