@@ -255,6 +255,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
 	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
 
+	if strings.TrimSpace(cliConfig.Components.Terraform.AppendUserAgent) != "" {
+		info.ComponentEnvList = append(
+			info.ComponentEnvList,
+			fmt.Sprintf("TF_APPEND_USER_AGENT=%s", strings.TrimSpace(cliConfig.Components.Terraform.AppendUserAgent)),
+		)
+	}
+
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
 		u.LogDebug(cliConfig, "\nUsing ENV vars:")
