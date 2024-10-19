@@ -183,7 +183,7 @@ func ExecuteAtmosVendorInternal(
 
 	logMessage := fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName)
 	if len(tags) > 0 {
-		logMessage = fmt.Sprintf(" for tags {%s}", strings.Join(tags, ", "))
+		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
 	u.LogInfo(cliConfig, logMessage)
 	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
