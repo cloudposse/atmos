@@ -173,3 +173,18 @@ func IsSocket(path string) (bool, error) {
 	isSocket := fileInfo.Mode().Type() == fs.ModeSocket
 	return isSocket, nil
 }
+
+// search for a config file in the provided path with the provided extensions .yaml, .yml
+func SearchConfigFile(path string) (string, bool) {
+	// Define the possible config file extensions
+	configExtensions := []string{".yaml", ".yml"}
+	// remove extension from path
+	path = strings.TrimSuffix(path, filepath.Ext(path))
+	for _, ext := range configExtensions {
+		filePath := path + ext
+		if FileExists(filePath) {
+			return filePath, true
+		}
+	}
+	return "", false
+}
