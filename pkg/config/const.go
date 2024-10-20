@@ -39,7 +39,7 @@ const (
 	HelpFlag2 = "--help"
 
 	ComponentVendorConfigFileName = "component.yaml"
-	AtmosVendorConfigFileName     = "vendor.yaml"
+	AtmosVendorConfigFileName     = "vendor"
 
 	ImportSectionName      = "import"
 	OverridesSectionName   = "overrides"
