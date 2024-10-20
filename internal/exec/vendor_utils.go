@@ -125,14 +125,8 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfigFileExists := true
 
-	// If the vendoring manifest is specified without an extension, use the default extension
-	if filepath.Ext(vendorConfigFile) == "" {
-		vendorConfigFile = vendorConfigFile + cfg.DefaultVendoringManifestFileExtension
-	}
-
-	foundVendorConfigFile := vendorConfigFile
-	// Look for the vendoring manifest in the current directory
-	foundVendorConfigFile, fileExists := u.SearchConfigFile(foundVendorConfigFile)
+	// Check if the vendoring manifest file exists
+	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
 
 	if !fileExists {
 		// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`

@@ -3,7 +3,7 @@ package config
 const (
 	DefaultStackConfigFileExtension       = ".yaml"
 	DefaultVendoringManifestFileExtension = ".yaml"
-	CliConfigFileName                     = "atmos.yaml"
+	CliConfigFileName                     = "atmos"
 	SystemDirConfigFilePath               = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar                  = "LOCALAPPDATA"
 
