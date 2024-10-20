@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -172,4 +174,26 @@ func IsSocket(path string) (bool, error) {
 	}
 	isSocket := fileInfo.Mode().Type() == fs.ModeSocket
 	return isSocket, nil
+}
+
+// IsURL checks if a string is a URL
+func IsURL(s string) bool {
+	url, err := url.Parse(s)
+	return err == nil && url.Scheme != "" && url.Host != ""
+}
+
+// GetFileNameFromURL extracts the file name from a URL
+func GetFileNameFromURL(rawURL string) (string, error) {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	// Extract the path from the URL
+	urlPath := parsedURL.Path
+	fileName := path.Base(urlPath)
+	if fileName == "/" || fileName == "." {
+		return "", fmt.Errorf("unable to extract filename from URL: %s", rawURL)
+	}
+	// Get the base name of the path
+	return fileName, nil
 }
