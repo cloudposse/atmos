@@ -131,32 +131,23 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 
 	foundVendorConfigFile := vendorConfigFile
 
-	// Check if 'vendor_config_path' is specified in 'atmos.yaml'
-	if cliConfig.Vendor.VendorConfigPath != "" {
-		vendorConfigPath := cliConfig.Vendor.VendorConfigPath
+	// If the vendoring manifest is specified without an extension, use the default extension
+	vendorConfigPath := vendorConfigFile
+	if cliConfig.Vendor.VendorYamlPath != "" {
+		vendorConfigPath = cliConfig.Vendor.VendorYamlPath
 		if !filepath.IsAbs(vendorConfigPath) {
-			vendorConfigPath = path.Join(cliConfig.BasePath, vendorConfigPath)
+			vendorConfigPath = filepath.Join(cliConfig.BasePath, vendorConfigPath)
 		}
-
-		if !u.FileExists(vendorConfigPath) {
-			return vendorConfig, false, "", fmt.Errorf("vendor config file '%s' does not exist", vendorConfigPath)
-		}
-
-		foundVendorConfigFile = vendorConfigPath
 	} else {
-		// Look for the vendoring manifest in the current directory
-		if !u.FileExists(vendorConfigFile) {
-			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`
-			pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
-
-			if !u.FileExists(pathToVendorConfig) {
-				vendorConfigFileExists = false
-				return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", pathToVendorConfig)
-			}
-
-			foundVendorConfigFile = pathToVendorConfig
-		}
+		vendorConfigPath = filepath.Join(cliConfig.BasePath, vendorConfigFile)
 	}
+
+	if !u.FileExists(vendorConfigPath) {
+		vendorConfigFileExists = false
+		return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", vendorConfigPath)
+	}
+
+	foundVendorConfigFile = vendorConfigPath
 
 	vendorConfigFileContent, err := os.ReadFile(foundVendorConfigFile)
 	if err != nil {

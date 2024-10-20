@@ -547,5 +547,5 @@ type AtmosVendorConfig struct {
 }
 
 type Vendor struct {
-	VendorConfigPath string `yaml:"vendor_config_path" json:"vendor_config_path" mapstructure:"vendor_config_path"`
+	VendorYamlPath string `yaml:"vendor_yaml_path" json:"vendor_yaml_path" mapstructure:"vendor_yaml_path"`
 }
