@@ -225,7 +225,7 @@ func executeCustomCommand(
 			}
 			if component == "" || component == "<no value>" {
 				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName))
+					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
@@ -235,7 +235,7 @@ func executeCustomCommand(
 			}
 			if stack == "" || stack == "<no value>" {
 				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName))
+					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
 			}
 
 			// Get the config for the component in the stack
