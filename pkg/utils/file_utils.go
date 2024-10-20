@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"io/fs"
 	"net/url"
 	"os"
@@ -189,7 +190,10 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 	}
 	// Extract the path from the URL
 	urlPath := parsedURL.Path
-
+	fileName := path.Base(urlPath)
+	if fileName == "/" || fileName == "." {
+		return "", fmt.Errorf("unable to extract filename from URL: %s", rawURL)
+	}
 	// Get the base name of the path
-	return path.Base(urlPath), nil
+	return fileName, nil
 }
