@@ -7,6 +7,7 @@ import (
 	"path"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
@@ -96,8 +97,10 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 				return fmt.Errorf("failed to get the file name from the URL '%s': %w", cliConfig.Schemas.Atmos.Manifest, err)
 			}
 			atmosManifestJsonSchemaFilePath = path.Join(tempDir, fileName)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
 			client := &getter.Client{
-				Ctx:  context.Background(),
+				Ctx:  ctx,
 				Dst:  atmosManifestJsonSchemaFilePath,
 				Src:  cliConfig.Schemas.Atmos.Manifest,
 				Mode: getter.ClientModeFile,
