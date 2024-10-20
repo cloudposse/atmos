@@ -83,7 +83,11 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil && !errors.Is(err, cfg.NotFound) {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		if len(os.Args) > 1 && os.Args[1] == "version" {
+			u.LogError(schema.CliConfiguration{}, fmt.Errorf("CLI configuration yaml file not found or corrupted. %w", err))
+		} else {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
 	}
 
 	// If CLI configuration was found, process its custom commands and command aliases
