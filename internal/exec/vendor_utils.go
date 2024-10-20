@@ -181,8 +181,11 @@ func ExecuteAtmosVendorInternal(
 	var uri string
 	vendorConfigFilePath := path.Dir(vendorConfigFileName)
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName))
-
+	logMessage := fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName)
+	if len(tags) > 0 {
+		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
+	}
+	u.LogInfo(cliConfig, logMessage)
 	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
 	}
