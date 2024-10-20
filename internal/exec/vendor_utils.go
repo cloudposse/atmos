@@ -131,9 +131,10 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 	}
 
 	foundVendorConfigFile := vendorConfigFile
-
 	// Look for the vendoring manifest in the current directory
-	if !u.FileExists(vendorConfigFile) {
+	foundVendorConfigFile, fileExists := u.SearchConfigFile(foundVendorConfigFile)
+
+	if !fileExists {
 		// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`
 		pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
 
