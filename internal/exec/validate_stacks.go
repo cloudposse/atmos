@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"reflect"
@@ -91,6 +92,13 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
 			atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
 		} else if u.IsURL(cliConfig.Schemas.Atmos.Manifest) {
+			parsedURL, err := url.Parse(cliConfig.Schemas.Atmos.Manifest)
+			if err != nil {
+				return fmt.Errorf("invalid URL '%s': %w", cliConfig.Schemas.Atmos.Manifest, err)
+			}
+			if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+				return fmt.Errorf("unsupported URL scheme '%s' for schema manifest", parsedURL.Scheme)
+			}
 			tempDir := os.TempDir()
 			fileName, err := u.GetFileNameFromURL(cliConfig.Schemas.Atmos.Manifest)
 			if err != nil {
