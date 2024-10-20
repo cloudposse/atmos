@@ -255,12 +255,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
 	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
 
-	trimmedUserAgent := strings.TrimSpace(cliConfig.Components.Terraform.AppendUserAgent)
-	if len(trimmedUserAgent) > 0 {
-		info.ComponentEnvList = append(
-			info.ComponentEnvList,
-			fmt.Sprintf("TF_APPEND_USER_AGENT=%s", trimmedUserAgent),
-		)
+	// Set 'TF_APPEND_USER_AGENT' ENV var based on precedence
+	// Precedence: Environment Variable > atmos.yaml > Default
+	appendUserAgent := cliConfig.Components.Terraform.AppendUserAgent
+	if envUA, exists := os.LookupEnv("TF_APPEND_USER_AGENT"); exists && envUA != "" {
+		appendUserAgent = envUA
+	}
+	if appendUserAgent != "" {
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_APPEND_USER_AGENT=%s", appendUserAgent))
 	}
 
 	// Print ENV vars if they are found in the component's stack config

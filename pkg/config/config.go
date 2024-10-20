@@ -43,6 +43,7 @@ var (
 				DeployRunInit:           true,
 				InitRunReconfigure:      true,
 				AutoGenerateBackendFile: true,
+				AppendUserAgent:         "Cloud Posse Atmos v1.181 (https://atmos.tools)",
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
