@@ -1,11 +1,14 @@
 package exec
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"path"
 	"reflect"
 	"strings"
 
+	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -86,11 +89,29 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 			atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
 		} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
 			atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
+		} else if u.IsURL(cliConfig.Schemas.Atmos.Manifest) {
+			tempDir := os.TempDir()
+			fileName, err := u.GetFileNameFromURL(cliConfig.Schemas.Atmos.Manifest)
+			if err != nil {
+				return fmt.Errorf("failed to get the file name from the URL '%s': %w", cliConfig.Schemas.Atmos.Manifest, err)
+			}
+			atmosManifestJsonSchemaFilePath = path.Join(tempDir, fileName)
+			client := &getter.Client{
+				Ctx:  context.Background(),
+				Dst:  atmosManifestJsonSchemaFilePath,
+				Src:  cliConfig.Schemas.Atmos.Manifest,
+				Mode: getter.ClientModeFile,
+			}
+			if err = client.Get(); err != nil {
+				return fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, cliConfig.Schemas.Atmos.Manifest, err)
+			}
+
 		} else {
 			return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist.\n"+
 				"It can be configured in the 'schemas.atmos.manifest' section in 'atmos.yaml', or provided using the 'ATMOS_SCHEMAS_ATMOS_MANIFEST' "+
 				"ENV variable or '--schemas-atmos-manifest' command line argument.\n"+
-				"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'.",
+				"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'. \n"+
+				"Alternatively, the schema file can be downloaded from the provided URL",
 				cliConfig.Schemas.Atmos.Manifest)
 		}
 	}
