@@ -3,7 +3,7 @@ package config
 const (
 	DefaultStackConfigFileExtension       = ".yaml"
 	DefaultVendoringManifestFileExtension = ".yaml"
-	CliConfigFileName                     = "atmos.yaml"
+	CliConfigFileName                     = "atmos"
 	SystemDirConfigFilePath               = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar                  = "LOCALAPPDATA"
 
@@ -39,7 +39,7 @@ const (
 	HelpFlag2 = "--help"
 
 	ComponentVendorConfigFileName = "component.yaml"
-	AtmosVendorConfigFileName     = "vendor.yaml"
+	AtmosVendorConfigFileName     = "vendor"
 
 	ImportSectionName      = "import"
 	OverridesSectionName   = "overrides"
