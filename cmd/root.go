@@ -83,7 +83,7 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil && !errors.Is(err, cfg.NotFound) {
-		if len(os.Args) > 1 && os.Args[1] == "version" {
+		if isVersionCommand() {
 			u.LogError(schema.CliConfiguration{}, fmt.Errorf("CLI configuration yaml file not found or corrupted. %w", err))
 		} else {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
@@ -132,6 +132,9 @@ func initConfig() {
 
 		b.HelpFunc(command, strings)
 	})
+}
+func isVersionCommand() bool {
+	return len(os.Args) > 1 && os.Args[1] == "version"
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
