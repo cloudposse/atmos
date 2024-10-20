@@ -15,6 +15,7 @@ type CliConfiguration struct {
 	Schemas                       Schemas        `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates      `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Settings                      CliSettings    `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Vendor                        Vendor         `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool           `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	StacksBaseAbsolutePath        string         `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string       `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
@@ -543,4 +544,8 @@ type AtmosVendorConfig struct {
 	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
 	Metadata   AtmosVendorMetadata
 	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
+}
+
+type Vendor struct {
+	VendorConfigPath string `yaml:"vendor_config_path" json:"vendor_config_path" mapstructure:"vendor_config_path"`
 }
