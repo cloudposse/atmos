@@ -29,7 +29,8 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	// vendor pull not require stack configs so we pass false to InitCliConfig
+	cliConfig, err := cfg.InitCliConfig(info, false)
 	if err != nil {
 		return err
 	}
