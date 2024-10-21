@@ -84,7 +84,7 @@ func Execute() error {
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil && !errors.Is(err, cfg.NotFound) {
 		if isVersionCommand() {
-			u.LogError(schema.CliConfiguration{}, fmt.Errorf("warning: CLI configuration yaml file not found or corrupted. Proceeding with version command. error: %w", err))
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", err))
 		} else {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
@@ -132,11 +132,6 @@ func initConfig() {
 
 		b.HelpFunc(command, strings)
 	})
-}
-
-// Check Atmos is version command
-func isVersionCommand() bool {
-	return len(os.Args) > 1 && os.Args[1] == "version"
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
