@@ -1,0 +1,51 @@
+---
+title: JSON Schema Validation
+sidebar_position: 1
+sidebar_label: JSON Schema
+description: Use JSON Schema policies to validate Stacks and Component configurations.
+id: json-schema
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import EmbedFile from '@site/src/components/EmbedFile'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos supports [JSON Schema](https://json-schema.org/) validation, which can validate the schema of configurations such as stacks, workflows, and vendoring manifests. JSON Schema is an industry standard and provides a vocabulary to annotate and validate JSON documents for correctness.
+</Intro>
+
+## Example
+
+<Terminal>
+```shell
+# Validate 'vpc' component using JSON Schema in the 'plat-ue2-prod' stack
+atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.json --schema-type jsonschema
+```
+</Terminal>
+
+### Configure Component Validation
+
+In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
+section:
+
+<File title="atmos.yaml">
+```yaml
+# Validation schemas (for validating atmos stacks and components)
+schemas:
+  # https://json-schema.org
+  jsonschema:
+    # Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` ENV var, or `--schemas-jsonschema-dir` command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/jsonschema"
+```
+</File>
+
+In the component [manifest](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
+the `settings.validation` section:
+
+<EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml"/>
+
+Add the following JSON Schema in the
+file [`stacks/schemas/jsonschema/vpc/validate-vpc-component.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/jsonschema/vpc/validate-vpc-component.json):
+
+<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/jsonschema/vpc/validate-vpc-component.json"/>

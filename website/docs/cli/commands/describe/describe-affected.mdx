@@ -13,8 +13,6 @@ import Screengrab from '@site/src/components/Screengrab'
 Use this command to show a list of the affected Atmos components and stacks given two Git commits.
 :::
 
-<br/>
-
 <Screengrab title="atmos describe affected --help" slug="atmos-describe-affected--help" />
 
 ## Description
@@ -74,22 +72,16 @@ The command performs the following:
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
 knows that they are affected.
-
-<br/>
 :::tip Use our GitHub Action
 Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run
 `describe affected` and produce a GitHub matrix.
 :::
-
-<br/>
 
 ## Usage
 
 ```shell
 atmos describe affected [options]
 ```
-
-<br/>
 
 :::tip
 Run `atmos describe affected --help` to see all the available options
@@ -112,8 +104,10 @@ atmos describe affected --repo-path <path_to_already_cloned_repo>
 atmos describe affected --include-spacelift-admin-stacks=true
 atmos describe affected --clone-target-ref=true
 atmos describe affected --include-dependents=true
+atmos describe affected --include-settings=true
+atmos describe affected --stack=plat-ue2-prod
+atmos describe affected --upload=true
 ```
-
 
 # Example Output
 
@@ -130,10 +124,10 @@ Counting objects: 100% (1157/1157), done.
 Compressing objects: 100% (576/576), done.
 Total 4215 (delta 658), reused 911 (delta 511), pack-reused 3058
 
-Checked out Git ref 'refs/heads/master'
+Checked out Git ref 'refs/heads/main'
 
-Current working repo HEAD: 7d37c1e890514479fae404d13841a2754be70cbf refs/heads/describe-affected
-Remote repo HEAD: 40210e8d365d3d88ac13c0778c0867b679bbba69 refs/heads/master
+Current HEAD: 7d37c1e890514479fae404d13841a2754be70cbf refs/heads/describe-affected
+BASE: 40210e8d365d3d88ac13c0778c0867b679bbba69 refs/heads/main
 
 Changed files:
 
@@ -200,19 +194,22 @@ Affected components and stacks:
 
 ## Flags
 
-| Flag                               | Description                                                                                                                                                                                                                                                                                                                                             | Required |
-|:-----------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                           | no       |
-| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                         | no       |
-| `--file`                           | If specified, write the result to the file                                                                                                                                                                                                                                                                                                              | no       |
-| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                                                                                                                                                                                                         | no       |
-| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                        | no       |
-| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                              | no       |
-| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                        | no       |
-| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                        | no       |
-| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                   | no       |
-| `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory | no       |
-| `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                    | no       |
+| Flag                               | Description                                                                                                                                                                                                                                                                                                                                                                                                  | Required |
+|:-----------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
+| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                                                                                | no       |
+| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                                                                              | no       |
+| `--file`                           | If specified, write the result to the file                                                                                                                                                                                                                                                                                                                                                                   | no       |
+| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                                                                                                                                                                                                                                                              | no       |
+| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                                                                             | no       |
+| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                                                                                   | no       |
+| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                                                                             | no       |
+| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                                                                             | no       |
+| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                                                                        | no       |
+| `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory                                                      | no       |
+| `--stack`                          | Only show results for the specific stack.<br/>`atmos describe affected --stack=plat-ue2-prod`                                                                                                                                                                                                                                                                                                                | no       |
+| `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                                                                         | no       |
+| `--include-settings`               | Include the `settings` section for each affected component.<br/>`atmos describe affected --include-settings=true`                                                                                                                                                                                                                                                                                            | no       |
+| `--upload`                         | Upload the affected components and stacks to a specified HTTP endpoint.<br/><br/>`atmos describe affected --upload=true`<br/><br/>Atmos will perform an HTTP POST request<br/>to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,<br/>where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,<br/>and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable. | no       |
 
 ## Output
 
@@ -233,7 +230,8 @@ Each object has the following schema:
   "file": ".....",
   "folder": ".....",
   "dependents": [],
-  "included_in_dependents": "true | false"
+  "included_in_dependents": "true | false",
+  "settings": {}
 }
 ```
 
@@ -262,12 +260,16 @@ where:
 - `folder` - if the Atmos component depends on an external folder, and any file in the folder was changed (see `affected.folder` below),
   the `folder` attributes shows the modified folder
 
-- `dependents` - list of components that depend on the current affected component. It will be included only if the
+- `dependents` - list of components that depend on the current affected component. It will be populated only if the
   command-line flag `--include-dependents=true` is passed (to take dependencies into account) and there are other components
   that depend on the affected component in the stack.
   Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` property is
   hierarchical - each component in the list will also contain a `dependents` property if that component has dependent
   components as well
+
+- `settings` - the `settings` section of the component in the stack. It will be included only if the
+  command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
+  configuration information to [integrations](/integrations)
 
 - `included_in_dependents` - a boolean flag indicating if the affected component in the stack is also present in any of the `dependents`
   properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
@@ -353,7 +355,6 @@ where:
         }
       ]
     ```
-    <br/>
 
   - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack.
     This will be included only if all the following is true:
@@ -379,7 +380,7 @@ where:
             stage: prod
       ```
 
-    - The Spacelift admin stack is enabled by `settings.spacelift.workdpace_enabled` set to `true`. For example:
+    - The Spacelift admin stack is enabled by `settings.spacelift.workspace_enabled` set to `true`. For example:
 
       ```yaml title="stacks/catalog/terraform/spacelift/infrastructure-tenant1.yaml"
       components:
@@ -468,8 +469,6 @@ where:
       ]
     ```
 
-<br/>
-
 :::note
 
 Abstract Atmos components (where `metadata.type` is set to `abstract`) are not included in the output since they serve
@@ -555,8 +554,6 @@ as blueprints for other Atmos components and are not meant to be provisioned.
 ```
 </Terminal>
 
-<br/>
-
 ## Affected Components with Dependencies
 
 The output of the `atmos describe affected` command can include dependencies for the affected components.
@@ -598,20 +595,14 @@ For example, suppose that we have the following configuration for the Atmos comp
   ```
 </File>
 
-<br/>
-
 :::tip
 For more details on how to configure component dependencies, refer to [`atmos describe dependents`](/cli/commands/describe/dependents)
 :::
-
-<br/>
 
 In the above configuration, `component-3` depends on `component-2`, whereas `component-2` depends on `component-1`.
 
 If all the components are affected (modified) in the current working branch,
 the `atmos describe affected --include-dependents=true` command will produce the following result:
-
-<br/>
 
 <Terminal title="atmos describe affected --include-dependents=true">
  ```json
@@ -659,8 +650,6 @@ the `atmos describe affected --include-dependents=true` command will produce the
  ```
 </Terminal>
 
-<br/>
-
 The `component-1` component does not depend on any other component, and therefore it has the `included_in_dependents`
 attribute set to `false`. The `component-2` and `component-3` components depend on other components and are included in
 the `dependents` property of the other components, and hence the `included_in_dependents` attribute is set to `true`.
@@ -707,3 +696,92 @@ private repo which is not itself):
     ```shell
     atmos describe affected --repo-path $GITHUB_WORKSPACE
     ```
+
+## Upload the affected components and stacks to an HTTP endpoint
+
+If the `--upload=true` command-line flag is passed, Atmos will upload the affected components and stacks to a
+specified HTTP endpoint.
+
+The endpoint can process the affected components and their dependencies in a CI/CD pipeline (e.g. execute
+`terraform apply` on all the affected components in the stacks and all the dependencies).
+
+Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`, where the base URL
+is defined by the `ATMOS_PRO_BASE_URL` environment variable, and the URL path is defined by the `ATMOS_PRO_ENDPOINT`
+environment variable.
+
+An [Authorization](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization) header
+`Authorization: Bearer $ATMOS_PRO_TOKEN` will be added to the HTTP request (if the `ATMOS_PRO_TOKEN` environment
+variable is set) to provide credentials to authenticate with the server.
+
+:::note
+If the `--upload=true` command-line flag is passed, the `--include-dependencies` and `--include-settings` flags are
+automatically set to `true`, so the affected components will be uploaded with their dependencies and settings
+(if they are configured in Atmos stack manifests).
+:::
+
+The payload of the HTTP POST request will be a JSON object with the following schema:
+
+<Terminal title="Payload of 'atmos describe affected --upload=true' command">
+  ```json
+    {
+       "base_sha": "6746ba4df9e87690c33297fe740011e5ccefc1f9",
+       "head_sha": "5360d911d9bac669095eee1ca1888c3ef5291084",
+       "repo_url": "https://github.com/cloudposse/atmos",
+       "repo_host": "github.com",
+       "repo_name": "atmos",
+       "repo_owner": "cloudposse",
+       "stacks": [
+          {
+            "component": "vpc",
+            "component_type": "terraform",
+            "component_path": "examples/quick-start-advanced/components/terraform/vpc",
+            "stack": "plat-ue2-dev",
+            "stack_slug": "plat-ue2-dev-vpc",
+            "affected": "stack.vars",
+            "included_in_dependents": false,
+            "dependents": [],
+            "settings": {}
+          }
+      ]
+   }
+  ```
+</Terminal>
+
+where:
+
+<dl>
+    <dt>`base_sha`</dt>
+    <dd>
+        the Git commit SHA of the base branch against which the changes in the current commit are compared
+    </dd>
+
+    <dt>`head_sha`</dt>
+    <dd>
+        the SHA of the current Git commit
+    </dd>
+
+    <dt>`repo_url`</dt>
+    <dd>
+        the URL of the current repository
+    </dd>
+
+    <dt>`repo_name`</dt>
+    <dd>
+        the name of the current repository
+    </dd>
+
+    <dt>`repo_owner`</dt>
+    <dd>
+        the owner of the current repository
+    </dd>
+
+    <dt>`repo_host`</dt>
+    <dd>
+        the host of the current repository
+    </dd>
+
+    <dt>`stacks`</dt>
+    <dd>
+        a list of affected components and stacks with their dependencies and settings
+    </dd>
+</dl>

@@ -1,0 +1,123 @@
+---
+title: Start Your Project
+sidebar_position: 1
+sidebar_label: 1. Start Your Project
+---
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import SecondaryCTA from '@site/src/components/SecondaryCTA'
+
+<Intro>
+The folder structure for an Atmos project is designed to organize your infrastructure effectively on the file system. It separates configuration from code, ensuring your Terraform root modules are distinct and reusable.
+</Intro>
+
+While you can customize the structure using the `atmos.yaml` configuration, we will start with a simple layout to get you started.
+
+<KeyPoints>
+- Why Atmos works best with monorepos
+- How to structure your project repository on the filesystem
+- Where to put your Terraform "root modules" and Stack configurations
+</KeyPoints>
+
+
+Atmos works best with [monorepo](https://en.wikipedia.org/wiki/Monorepo) infrastructure repositories when managing the configurations for components
+and stacks. For example, multiple monorepos can also be used for different teams or products. Monorepos are recommended because they provide a single source of truth for all configurations and simplify infrastructure management.
+
+
+<details>
+<summary>What is a monorepo?</summary>
+
+A "monorepo" is a version-controlled repository that stores all the code, configurations and scripts for the entire infrastructure composed of individual components with independent lifecycles. Monorepos usually improve collaboration, CI/CD build speed, and overall productivity. A monorepo should not be confused with a [monolith](https://en.wikipedia.org/wiki/Monolithic_application), which is a single, often large, codebase for an application.
+
+Polyrepo architectures consist of several version-controlled repositories for code, configurations and scripts for different parts of the infrastructure. For example, depending on various requirements (including security, lifecycle management, access control, audit, etc.), separate repositories can be used to manage infrastructure per account (e.g. `dev`, `staging`, `prod`), per service, or per team.
+</details>
+
+
+## Filesystem Layout
+
+
+Here's what it will look like on the filesystem:
+
+```console
+   │   # Atmos CLI configuration
+   ├── atmos.yaml
+   │  
+   │   # Centralized stacks configuration
+   ├── stacks/
+   │   ├── <stack_1>.yaml
+   │   ├── <stack_2>.yaml
+   │   └── <stack_3>.yaml
+   │  
+   │   # Centralized components configuration. Components are broken down by tool
+   └── components/
+       └── terraform/   # Terraform root modules
+           └── myapp/
+```
+
+Ultimately, the paths are all configurable via the `atmos.yaml` CLI Configuration file, which we'll cover in the next chapter.
+
+## Common Directories and Files
+
+Atmos requires a few common directories and files, which need to be configured in the infrastructure repo:
+
+<dl>
+  <dt>`components/` directory (required)</dt>
+  <dd>contains centralized component configurations</dd>
+
+  <dt>`stacks/` directory (required)</dt>
+  <dd>contains centralized stack configurations</dd>
+
+  <dt>`atmos.yaml` (required)</dt>
+  <dd>Atmos CLI config file</dd>
+
+</dl>
+
+:::tip
+
+The source code for this Quick Start guide can be found in the [Atmos repo](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-simple) demo repository. (It's similar to the demo you see on the Atmos landing page)
+
+You can clone it and tweak it to your own needs. The example should be a good start for getting familiar with Atmos.
+
+:::
+
+Atmos separates code from configuration ([separation of concerns](https://en.wikipedia.org/wiki/Separation_of_concerns)). All the code is stored in the `components` directories, and the configurations for different environments are stored in the `stacks` directory. This allows the code (Terraform root modules and Helmfile components) to be environment-agnostic, meaning the components don't know and don't care how and where they will be provisioned. They can be provisioned into many accounts and regions - the configurations for different environments are defined in the `stacks` directory.
+
+:::note
+While it's recommended to use the directory names as shown above, the `stacks` and `components` directory names and filesystem locations are configurable in the `atmos.yaml` CLI config file. Refer to [Configure CLI](/quick-start/advanced/configure-cli) for more details.
+:::
+
+The following example provides the simplest filesystem layout that Atmos can work with:
+
+```console
+   │   # Centralized stacks configuration
+   ├── stacks/
+   │   ├── <stack_1>.yaml
+   │   ├── <stack_2>.yaml
+   │   └── <stack_3>.yaml
+   │  
+   │   # Centralized components configuration. Components are broken down by tool
+   ├── components/
+   │   └── terraform/   # Terraform root modules
+   │       ├── <terraform_root_module_1>/
+   │       ├── <terraform_root_module_2>/
+   │       └── <terraform_root_module_3>/
+   │
+   │   # Atmos CLI configuration
+   ├── atmos.yaml
+   │
+   │   # Atmos vendoring configuration
+   └── vendor.yaml
+```
+
+<ActionCard title="Ready to take the next step?">
+    Now you're ready to learn how to configure the Atmos CLI to work with your project.
+    <div>
+      <PrimaryCTA to="/quick-start/simple/configure-cli">Next Step</PrimaryCTA>
+      <SecondaryCTA to="/core-concepts/projects">Deep Dive</SecondaryCTA>
+    </div>
+</ActionCard>
+
+
+

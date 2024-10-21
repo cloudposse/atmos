@@ -1,0 +1,84 @@
+---
+id: stacks
+title:  Stacks Cheatsheet
+descriptions: Cheatsheet for configuring components in stacks with Atmos
+sidebar_label: Stack Configurations
+sidebar_position: 3
+---
+import Link from '@docusaurus/Link'
+import Card from '@site/src/components/Card'
+import CardGroup from '@site/src/components/CardGroup'
+
+<CardGroup title="Configuration" className="cheatsheet">
+  <Card title="Folder Structure">
+  ```
+  ├── atmos.yaml
+  ├── components
+  │   └── myapp
+  │       ├── main.tf
+  │       ├── outputs.tf
+  │       └── variables.tf
+  └── stacks
+      ├── catalog
+      │   └── myapp.yaml
+      └── deploy
+          ├── dev.yaml
+          ├── prod.yaml
+          └── staging.yaml
+  ```
+  </Card>
+  <Card title="Stack Schema">
+  ```yaml
+  import:
+  - catalog/something
+  vars:
+    key: value
+  components:
+    terraform:
+      $component:
+        vars:
+          foo: "bar"
+  ```
+  </Card>
+
+  <Card title="Stack Overrides">
+    ```yaml
+    terraform:
+      overrides:
+        env: {}
+        settings: {}
+        vars: {}
+        command: "opentofu"
+    ```
+  </Card>
+  <Card title="Spacelift Settings">
+    ```yaml
+    terraform:
+      components:
+        $component:
+          settings:
+            spacelift:
+              # The `autodeploy` setting was overridden with the value 
+              # from `terraform.overrides.settings.spacelift.autodeploy`
+              autodeploy: true
+              workspace_enabled: true
+    ```
+  </Card>
+</CardGroup>
+
+<CardGroup title="Commands" className="cheatsheet">
+    <Card title="List Components">
+    ```shell
+    atmos list components
+    ```
+    </Card>
+    <Card title="Validate Components">
+    ```shell
+    atmos validate component $component -s $stack
+    atmos validate component $component -s $stack --schema-type jsonschema --schema-path $component.json
+    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego 
+    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego  --module-paths catalog
+    atmos validate component $component -s $stack --timeout 15
+    ```
+    </Card>    
+</CardGroup>

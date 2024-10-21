@@ -81,10 +81,10 @@ func ExecuteValidateComponent(
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err := ProcessStacks(cliConfig, configAndStacksInfo, true)
+	configAndStacksInfo, err := ProcessStacks(cliConfig, configAndStacksInfo, true, true)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true)
+		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, true)
 		if err != nil {
 			return false, err
 		}
@@ -262,10 +262,10 @@ func validateComponentInternal(
 
 // FindValidationSection finds 'validation' section in the component config
 func FindValidationSection(componentSection map[string]any) (schema.Validation, error) {
-	validationSection := map[any]any{}
+	validationSection := map[string]any{}
 
-	if i, ok := componentSection["settings"].(map[any]any); ok {
-		if i2, ok2 := i["validation"].(map[any]any); ok2 {
+	if i, ok := componentSection["settings"].(map[string]any); ok {
+		if i2, ok2 := i["validation"].(map[string]any); ok2 {
 			validationSection = i2
 		}
 	}

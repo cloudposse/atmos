@@ -1,0 +1,39 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: demo-yaml-anchors
+  description: Example of using YAML anchors with an Atmos vendoring manifest
+spec:
+  # Import other vendor manifests, if necessary
+  imports: []
+  bases:
+  - &library
+    source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
+    version: "main"
+    targets:
+      - "components/terraform/{{ .Component }}/{{.Version}}"
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+    tags:
+      - demo
+
+  - &main
+    <<: *library
+    version: "main"
+
+  #- &v1
+  #  <<: *library
+  #  version: "v1.83.0"
+
+  sources:
+  # We need to wait for the first release of the library to use this
+  #- <<: *v1
+  #  component: "github/stargazers"
+
+  #- <<: *v1
+  #  component: "weather"
+
+  - <<: *main
+    component: "ipinfo"

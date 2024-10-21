@@ -13,8 +13,6 @@ Use this command to describe the complete configuration for an [Atmos component]
 an [Atmos stack](/core-concepts/stacks).
 :::
 
-<br/>
-
 <Screengrab title="atmos describe component --help" slug="atmos-describe-component--help" />
 
 ## Usage
@@ -24,8 +22,6 @@ Execute the `atmos describe component` command like this:
 ```shell
 atmos describe component <component> -s <stack>
 ```
-
-<br/>
 
 :::tip
 Run `atmos describe component --help` to see all the available options
@@ -45,6 +41,8 @@ atmos describe component infra/vpc -s tenant1-ue2-dev --file component.yaml
 atmos describe component echo-server -s tenant1-ue2-staging
 
 atmos describe component test/test-component-override -s tenant2-ue2-prod
+
+atmos describe component vpc -s tenant1-ue2-dev --process-templates=false
 ```
 
 ## Arguments
@@ -55,15 +53,16 @@ atmos describe component test/test-component-override -s tenant2-ue2-prod
 
 ## Flags
 
-| Flag       | Description                                         | Alias | Required |
-|:-----------|:----------------------------------------------------|:------|:---------|
-| `--stack`  | Atmos stack                                         | `-s`  | yes      |
-| `--format` | Output format: `yaml` or `json` (`yaml` is default) | `-f`  | no       |
-| `--file`   | If specified, write the result to the file          |       | no       |
+| Flag                  | Description                                                                                                                                                                                                                                                                    | Alias | Required |
+|:----------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--stack`             | Atmos stack                                                                                                                                                                                                                                                                    | `-s`  | yes      |
+| `--format`            | Output format: `yaml` or `json` (`yaml` is default)                                                                                                                                                                                                                            | `-f`  | no       |
+| `--file`              | If specified, write the result to the file                                                                                                                                                                                                                                     |       | no       |
+| `--process-templates` | Enable/disable processing of `Go` templates<br/>in Atmos stacks manifests<br/>when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default |       | no       |
 
 ## Output
 
-The command outputs the final deep-merged component configuration in YAML format.
+The command outputs the final deep-merged component configuration.
 
 The output contains the following sections:
 
@@ -75,19 +74,23 @@ The output contains the following sections:
 
 - `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
 
+- `stack` - same as `atmos_stack`
+
 - `atmos_stack_file` - the stack manifest where the Atmos stack is defined
 
-- `backend` - Terraform backend configuration
+- `atmos_manifest` - same as `atmos_stack_file`
 
-- `backend_type` - Terraform backend type
+- `backend` - Terraform/OpenTofu backend configuration
 
-- `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `helmfile`)
+- `backend_type` - Terraform/OpenTofu backend type
 
-- `component` - the Terraform component for which the Atmos component provides configuration
+- `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `tofu`, `helmfile`)
+
+- `component` - the Terraform/OpenTofu component for which the Atmos component provides configuration
 
 - `component_info` - a block describing the Terraform or Helmfile components that the Atmos component manages. The `component_info` block has the
   following sections:
-  - `component_path` - the filesystem path to the Terraform or Helmfile component
+  - `component_path` - the filesystem path to the Terraform/OpenTofu or Helmfile component
 
   - `component_type` - the type of the component (`terraform` or `helmfile`)
 
@@ -98,13 +101,13 @@ The output contains the following sections:
 
 - `env` - a map of ENV variables defined for the Atmos component
 
-- `inheritance` - component's [inheritance chain](/core-concepts/components/inheritance)
+- `inheritance` - component's [inheritance chain](/core-concepts/stacks/inheritance)
 
 - `metadata` - component's metadata config
 
-- `remote_state_backend` - Terraform backend config for remote state
+- `remote_state_backend` - Terraform/OpenTofu backend config for remote state
 
-- `remote_state_backend_type` - Terraform backend type for remote state
+- `remote_state_backend_type` - Terraform/OpenTofu backend type for remote state
 
 - `settings` - component settings (free-form map)
 
@@ -113,10 +116,10 @@ The output contains the following sections:
 - `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/integrations/spacelift) is configured for the component in the stack
   and `settings.spacelift.workspace_enabled` is set to `true`)
 
-- `vars` - the final deep-merged component variables that are provided to Terraform and Helmfile when executing `atmos terraform`
-  and `atmos helmfile` commands
+- `vars` - the final deep-merged component variables that are provided to Terraform/OpenTofu and Helmfile when executing
+  `atmos terraform` and `atmos helmfile` commands
 
-- `workspace` - Terraform workspace for the Atmos component
+- `workspace` - Terraform/OpenTofu workspace for the Atmos component
 
 - `imports` - a list of all imports in the Atmos stack (this shows all imports in the stack, related to the component and not)
 
@@ -125,7 +128,7 @@ The output contains the following sections:
 - `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
   (after the deep-merging and processing all the inheritance chains and all the base components)
 
-- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/components/overrides) for more details
+- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/stacks/overrides) for more details
 
 - `providers` - a map of provider configurations for the component
 
@@ -133,23 +136,23 @@ The output contains the following sections:
 
 The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
 
-- `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and 
-   in [OPA validation policies](/core-concepts/components/validation) to check whether an import is allowed in the stack or not
+- `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and
+   in [OPA validation policies](/core-concepts/validate/opa) to check whether an import is allowed in the stack or not
 
 - `deps_all` shows all component stack dependencies (imports and root-level stacks) where any configuration for the component is present.
-  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/components/validation) to check whether a user or a team 
+  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/validate/opa) to check whether a user or a team
   is allowed to import a particular config file for the component in the stack
 
 - `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined
   (after the deep-merging and processing all the inheritance chains and all the base components). This is useful in CI/CD systems (e.g. Spacelift)
-  to detect only the affected files that the component depends on. `deps` is usually a much smaller list than `deps_all` and can 
+  to detect only the affected files that the component depends on. `deps` is usually a much smaller list than `deps_all` and can
   differ from it in the following ways:
 
-  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/components/inheritance), and 
+  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/stacks/inheritance), and
     import those base component configurations
 
-  - The component can override all the default variables from the base components, and the final values are not dependent on the base component 
-    configs anymore. For example, `derived-component-3` import the base component `base-component-4`, inherits from it, and overrides all 
+  - The component can override all the default variables from the base components, and the final values are not dependent on the base component
+    configs anymore. For example, `derived-component-3` import the base component `base-component-4`, inherits from it, and overrides all
     the variables:
 
    ```yaml
@@ -161,7 +164,7 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
      terraform:
        derived-component-3:
          metadata:
-           component: "test/test-component"  # Point to the Terraform component
+           component: "test/test-component"  # Point to the Terraform/OpenTofu component
            inherits:
              # Inherit all the values from the base component
              - base-component-4
@@ -169,8 +172,8 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
            # Override all the variables from the base component
    ```
 
-  - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the `derived-component-3` 
-    does not directly depend on `base-component-4` (all values are coming from the `derived-component-3`). This will help, for example, 
+  - Atmos detects that and does not include the base component `base-component-4` config file into the `deps` output since the `derived-component-3`
+    does not directly depend on `base-component-4` (all values are coming from the `derived-component-3`). This will help, for example,
     prevent unrelated Spacelift stack triggering
 
   - In the above case, the `deps_all` output will include both `derived-component-3` and `base-component-4`, but the `deps` output will not include
@@ -490,8 +493,6 @@ Each variable descriptor has the following schema:
   - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
     in the stack manifest. `import` means the stack manifest where the variable is defined was imported into the parent Atmos stack
 
-<br/>
-
 For example:
 
 <Terminal title="atmos describe component test/test-component-override-3 -s tenant1-ue2-dev">
@@ -599,16 +600,12 @@ sources:
 ```
 </Terminal>
 
-<br/>
-
 :::info
 
 The `stack_dependencies` inheritance chain shows the variable sources in the reverse order the sources were processed.
 The first item in the list was processed the last and its `variable_value` overrode all the previous values of the variable.
 
 :::
-
-<br/>
 
 For example, the component's `enabled` variable has the following inheritance chain:
 
@@ -632,8 +629,6 @@ sources:
           stack_file_section: vars
           variable_value: true
 ```
-
-<br/>
 
 Which we can interpret as follows (reading from the last to the first item in the `stack_dependencies` list):
 
@@ -665,8 +660,6 @@ Each variable descriptor has the following schema:
   - `variable_value` - the variable's value
   - `dependency_type` - how the variable was defined (`inline` or `import`). `inline` means the variable was defined in one of the sections
     in the stack manifest. `import` means the stack manifest where the variable is defined was imported into the parent Atmos stack
-
-<br/>
 
 For example:
 
@@ -729,16 +722,12 @@ sources:
 ```
 </Terminal>
 
-<br/>
-
 :::info
 
 The `stack_dependencies` inheritance chain shows the ENV variable sources in the reverse order the sources were processed.
 The first item in the list was processed the last and its `variable_value` overrode all the previous values of the variable.
 
 :::
-
-<br/>
 
 For example, the component's `TEST_ENV_VAR1` ENV variable has the following inheritance chain:
 
@@ -766,8 +755,6 @@ sources:
           stack_file_section: components.terraform.env
           variable_value: val1
 ```
-
-<br/>
 
 Which we can interpret as follows (reading from the last to the first item in the `stack_dependencies` list):
 
@@ -801,8 +788,6 @@ Each setting descriptor has the following schema:
   - `variable_value` - the setting's value
   - `dependency_type` - how the setting was defined (`inline` or `import`). `inline` means the setting was defined in one of the sections
     in the stack manifest. `import` means the stack config file where the setting is defined was imported into the parent Atmos stack
-
-<br/>
 
 For example:
 
@@ -843,8 +828,6 @@ sources:
             workspace_enabled: true
 ```
 </Terminal>
-
-<br/>
 
 :::info
 

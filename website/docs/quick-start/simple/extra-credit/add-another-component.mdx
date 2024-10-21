@@ -1,0 +1,68 @@
+---
+title: 'Deploy Another App'
+sidebar_position: 1
+sidebar_label: 'Deploy Another App'
+description: Provision multiple components in the same stack
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Note from '@site/src/components/Note'
+
+<Intro>
+We can provision more than one instance of the same Terraform component (with the same or different settings)
+into the same environment by defining many Atmos components that provide configuration for the Terraform component.
+</Intro>
+
+For example, the following config shows how to define two Atmos components, `station/1` and `station/2`, which both point to the same Terraform component `components/terraform/weather`.
+
+<Note>The `station/1` and `station/2` naming convention doesn't have any inherent meaning. Atmos simply interprets them as two different strings. Feel free to use whatever format you prefer.</Note>
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+import:
+  # Import the baseline for all station components
+  - catalog/station
+
+components:
+  terraform:
+  # Atmos component `station/1`
+  station/1:
+    metadata:
+    # Point to the Terraform component in `components/terraform/weather`
+    component: weather
+    # Inherit the defaults for all station components
+    inherits:
+      - station
+    # Define/override variables specific to this `station/1` component
+    vars:
+      name: station-1
+
+  # Atmos component `station/2`
+  station/2:
+    metadata:
+    # Point to the Terraform component in `components/terraform/weather`
+    component: weather
+    # Inherit the defaults for all station components
+    inherits:
+      - station
+    # Define/override variables specific to this `station/2` component
+    vars:
+      name: station-2
+```
+</File>
+
+In this example, we've included more information than necessary to demonstrate the concept. For instance, we explicitly added `inherits` to show how you can use multiple inheritance to merge multiple baseline configurations. We also specified the component path in both instances, even though it's already defined in the baseline configuration. This redundancy is just to emphasize that both are pointing to the same component.
+
+Then we can execute the following `atmos` commands to provision the two stations into the `dev` environment:
+
+```shell
+# Provision the first weather station
+atmos terraform apply station/1 -s dev
+# Provision the second weather station
+atmos terraform apply station/2 --stack dev
+```
+<Note>You can use the shorthand `-s` flag to specify the stack name, or the long form `--stack`. They both do the same thing</Note>
+
+Sweet! You’ve just finished your first Atmos QuickStart tutorial. Now you're at a crossroads with two options: you can continue to the bonus materials for some extra credit, or dive deeper into the core concepts and learn the Atmos Fundamentals.

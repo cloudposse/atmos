@@ -1,0 +1,86 @@
+---
+title: Atmos Terraform Drift Remediation
+sidebar_position: 60
+sidebar_label: Terraform Drift Remediation
+description: Remediate Terraform drift using IssueOps
+---
+import Intro from '@site/src/components/Intro'
+import RemoteFile from '@site/src/components/RemoteFile'
+
+<Intro>
+The  "Atmos Terraform Drift Remediation" GitHub Action provides a way for easily remediating Terraform drift and works with GitHub Issues using IssueOps.
+</Intro>
+
+This action is used for drift remediation together with it's [companion action for drift detection](/integrations/github-actions/atmos-terraform-drift-detection).
+
+
+## Usage
+
+### Config
+
+The action expects the atmos configuration file `atmos.yaml` to be present in the repository.
+The config should have the following structure:
+
+```yaml
+integrations:
+  github:
+    gitops:
+      terraform-version: 1.5.2
+      infracost-enabled: false
+      artifact-storage:
+        region: us-east-2
+        bucket: cptest-core-ue2-auto-gitops
+        table: cptest-core-ue2-auto-gitops-plan-storage
+        role: arn:aws:iam::xxxxxxxxxxxx:role/cptest-core-ue2-auto-gitops-gha
+      role:
+        plan: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+        apply: arn:aws:iam::yyyyyyyyyyyy:role/cptest-core-gbl-identity-gitops
+      matrix:
+        sort-by: .stack_slug
+        group-by: .stack_slug | split("-") | [.[0], .[2]] | join("-")
+```
+
+> [!IMPORTANT]
+> **Please note!** This GitHub Action only works with `atmos >= 1.63.0`. If you are using `atmos < 1.63.0` please use `v1` version of this action.    
+
+### Workflow example
+
+In this example drift will be remediated when user sets label `apply` to an issue.
+
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-drift-remediation.yaml" />
+
+## Requirements
+
+This action has the requirements as [Github Actions](/integrations/github-actions/). Use the same S3 Bucket, DynamoDB table, IAM Roles and config described there.
+
+## Inputs
+
+<dl>
+    <dt>`action`, _required_, default: `remediate`</dt>
+    <dd>
+        Drift remediation action. One of ['remediate', 'discard']
+    </dd>
+
+  <dt>`atmos-config-path`, _required_</dt>
+  <dd>The path to the `atmos.yaml` file</dd>
+
+  <dt>`atmos-version`, _optional_, default: `>= 1.63.0`</dt>
+  <dd>The version of `atmos` to install</dd>
+
+  <dt>`debug`, _optional_, default: `false`</dt>
+  <dd>Enable action debug mode</dd>
+
+  <dt>`issue-number`, _required_</dt>
+  <dd>Issue Number</dd>
+
+  <dt>`token`, _optional_</dt>
+    <dd>
+    Used to pull node distributions for Atmos from Cloud Posse's GitHub repository. Since there's a default, this is typically not supplied by the user. When running this action on github.com, the default value is sufficient. When running on GHES, you can pass a personal access token for github.com if you are experiencing rate limiting. 
+    Default: 
+    ```
+    ${{ github.server\_url == 'https://github.com' && github.token \|\| '' }}
+    ```
+  </dd>
+</dl>
+
+

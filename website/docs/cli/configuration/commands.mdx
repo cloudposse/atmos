@@ -1,0 +1,211 @@
+---
+title: Customize Commands
+sidebar_position: 1
+id: commands
+description: Use the `atmos.yaml` to configure any custom commands you want to add to the Atmos CLI.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+You can extend the Atmos CLI and add as many custom commands as you want. This is a great way to increase improve the DX by exposing a consistent CLI interface to developers.
+</Intro>
+
+For example, one great way to use custom commands is to tie all the miscellaneous scripts into one consistent CLI interface.
+Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script.
+Then, developers can just run `atmos help` and discover all available commands.
+
+Here are some examples to play around with to get started.
+
+<File title="atmos.yaml">
+```yaml
+# Custom CLI commands
+commands:
+  - name: tf
+    description: Execute 'terraform' commands
+
+    # subcommands
+    commands:
+      - name: plan
+        description: This command plans terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        env:
+          - key: ENV_VAR_1
+            value: ENV_VAR_1_value
+          - key: ENV_VAR_2
+            # 'valueCommand' is an external command to execute to get the value for the ENV var
+            # Either 'value' or 'valueCommand' can be specified for the ENV var, but not both
+            valueCommand: echo ENV_VAR_2_value
+        # steps support Go templates
+        steps:
+          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+
+  - name: terraform
+    description: Execute 'terraform' commands
+
+    # subcommands
+    commands:
+      - name: provision
+        description: This command provisions terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+
+        # ENV var values support Go templates
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_STACK
+            value: "{{ .Flags.stack }}"
+        steps:
+          - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
+          - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+
+  - name: show
+    description: Execute 'show' commands
+
+    # subcommands
+    commands:
+      - name: component
+        description: Execute 'show component' command
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+
+        # ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_TENANT
+            value: "{{ .ComponentConfig.vars.tenant }}"
+          - key: ATMOS_STAGE
+            value: "{{ .ComponentConfig.vars.stage }}"
+          - key: ATMOS_ENVIRONMENT
+            value: "{{ .ComponentConfig.vars.environment }}"
+          - key: ATMOS_IS_PROD
+            value: "{{ .ComponentConfig.settings.config.is_prod }}"
+
+        # If a custom command defines 'component_config' section with 'component' and 'stack', 'atmos' generates the config for the component in the stack
+        # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
+        # exposing all the component sections (which are also shown by 'atmos describe component' command)
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        # Steps support using Go templates and can access all configuration settings (e.g. {{ .ComponentConfig.xxx.yyy.zzz }})
+        # Steps also have access to the ENV vars defined in the 'env' section of the 'command'
+        steps:
+          - 'echo Atmos component from argument: "{{ .Arguments.component }}"'
+          - 'echo ATMOS_COMPONENT: "$ATMOS_COMPONENT"'
+          - 'echo Atmos stack: "{{ .Flags.stack }}"'
+          - 'echo Terraform component: "{{ .ComponentConfig.component }}"'
+          - 'echo Backend S3 bucket: "{{ .ComponentConfig.backend.bucket }}"'
+          - 'echo Terraform workspace: "{{ .ComponentConfig.workspace }}"'
+          - 'echo Namespace: "{{ .ComponentConfig.vars.namespace }}"'
+          - 'echo Tenant: "{{ .ComponentConfig.vars.tenant }}"'
+          - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
+          - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
+          - 'echo settings.spacelift.workspace_enabled: "{{ .ComponentConfig.settings.spacelift.workspace_enabled }}"'
+          - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
+          - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
+          - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
+
+  - name: list
+    description: Execute 'atmos list' commands
+    # subcommands
+    commands:
+      - name: stacks
+        description: |
+          List all Atmos stacks.
+        steps:
+          - >
+            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
+      - name: components
+        description: |
+          List all Atmos components in all stacks or in a single stack.
+
+          Example usage:
+            atmos list components
+            atmos list components -s tenant1-ue1-dev
+            atmos list components --stack tenant2-uw2-prod
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: false
+        steps:
+          - >
+            {{ if .Flags.stack }}
+            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+            {{ else }}
+            atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+            {{ end }}
+
+  - name: set-eks-cluster
+    description: |
+      Download 'kubeconfig' and set EKS cluster.
+
+      Example usage:
+        atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
+        atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
+    verbose: false  # Set to `true` to see verbose outputs
+    arguments:
+      - name: component
+        description: Name of the component
+    flags:
+      - name: stack
+        shorthand: s
+        description: Name of the stack
+        required: true
+      - name: role
+        shorthand: r
+        description: IAM role to use
+        required: true
+    # If a custom command defines 'component_config' section with 'component' and 'stack',
+    # Atmos generates the config for the component in the stack
+    # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
+    # exposing all the component sections (which are also shown by 'atmos describe component' command)
+    component_config:
+      component: "{{ .Arguments.component }}"
+      stack: "{{ .Flags.stack }}"
+    env:
+      - key: KUBECONFIG
+        value: /dev/shm/kubecfg.{{ .Flags.stack }}-{{ .Flags.role }}
+    steps:
+      - >
+        aws
+        --profile {{ .ComponentConfig.vars.namespace }}-{{ .ComponentConfig.vars.tenant }}-gbl-{{ .ComponentConfig.vars.stage }}-{{ .Flags.role }}
+        --region {{ .ComponentConfig.vars.region }}
+        eks update-kubeconfig
+        --name={{ .ComponentConfig.vars.namespace }}-{{ .Flags.stack }}-eks-cluster
+        --kubeconfig="${KUBECONFIG}"
+        > /dev/null
+      - chmod 600 ${KUBECONFIG}
+      - echo ${KUBECONFIG}
+```
+</File>
+
+:::tip
+  For more information, refer to [Atmos Custom Commands](/core-concepts/custom-commands)
+:::

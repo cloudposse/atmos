@@ -4,28 +4,54 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-git/go-git/v5/plumbing"
+	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	l "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeAffectedCmd executes `describe affected` command
-func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
+type DescribeAffectedCmdArgs struct {
+	CLIConfig                   schema.CliConfiguration
+	CloneTargetRef              bool
+	Format                      string
+	IncludeDependents           bool
+	IncludeSettings             bool
+	IncludeSpaceliftAdminStacks bool
+	Logger                      *l.Logger
+	OutputFile                  string
+	Ref                         string
+	RepoPath                    string
+	SHA                         string
+	SSHKeyPath                  string
+	SSHKeyPassword              string
+	Verbose                     bool
+	Upload                      bool
+	Stack                       string
+}
+
+func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
 	info, err := processCommandLineArgs("", cmd, args, nil)
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
+	}
+	logger, err := l.NewLoggerFromCliConfig(cliConfig)
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	err = ValidateStacks(cliConfig)
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	// Process flags
@@ -33,26 +59,26 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	ref, err := flags.GetString("ref")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	sha, err := flags.GetString("sha")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	repoPath, err := flags.GetString("repo-path")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	format, err := flags.GetString("format")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", format)
+		return DescribeAffectedCmdArgs{}, fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", format)
 	}
 
 	if format == "" {
@@ -61,51 +87,136 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 
 	file, err := flags.GetString("file")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	verbose, err := flags.GetBool("verbose")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	sshKeyPath, err := flags.GetString("ssh-key")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	sshKeyPassword, err := flags.GetString("ssh-key-password")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	includeSpaceliftAdminStacks, err := flags.GetBool("include-spacelift-admin-stacks")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	includeDependents, err := flags.GetBool("include-dependents")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	includeSettings, err := flags.GetBool("include-settings")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	upload, err := flags.GetBool("upload")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	cloneTargetRef, err := flags.GetBool("clone-target-ref")
 	if err != nil {
-		return err
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	stack, err := flags.GetString("stack")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
-		return errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+		return DescribeAffectedCmdArgs{}, errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+	}
+
+	// When uploading, always include dependents and settings for all affected components
+	if upload {
+		includeDependents = true
+		includeSettings = true
+	}
+
+	if verbose {
+		cliConfig.Logs.Level = u.LogLevelTrace
+		err := logger.SetLogLevel(l.LogLevelTrace)
+		if err != nil {
+			return DescribeAffectedCmdArgs{}, err
+		}
+	}
+
+	result := DescribeAffectedCmdArgs{
+		CLIConfig:                   cliConfig,
+		CloneTargetRef:              cloneTargetRef,
+		Format:                      format,
+		IncludeDependents:           includeDependents,
+		IncludeSettings:             includeSettings,
+		IncludeSpaceliftAdminStacks: includeSpaceliftAdminStacks,
+		Logger:                      logger,
+		OutputFile:                  file,
+		Ref:                         ref,
+		RepoPath:                    repoPath,
+		SHA:                         sha,
+		SSHKeyPath:                  sshKeyPath,
+		SSHKeyPassword:              sshKeyPassword,
+		Verbose:                     verbose,
+		Upload:                      upload,
+		Stack:                       stack,
+	}
+
+	return result, nil
+}
+
+// ExecuteDescribeAffectedCmd executes `describe affected` command
+func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
+	a, err := parseDescribeAffectedCliArgs(cmd, args)
+	if err != nil {
+		return err
 	}
 
 	var affected []schema.Affected
+	var headHead, baseHead *plumbing.Reference
+	var repoUrl string
 
-	if repoPath != "" {
-		affected, err = ExecuteDescribeAffectedWithTargetRepoPath(cliConfig, repoPath, verbose, includeSpaceliftAdminStacks)
-	} else if cloneTargetRef {
-		affected, err = ExecuteDescribeAffectedWithTargetRefClone(cliConfig, ref, sha, sshKeyPath, sshKeyPassword, verbose, includeSpaceliftAdminStacks)
+	if a.RepoPath != "" {
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRepoPath(
+			a.CLIConfig,
+			a.RepoPath,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+		)
+	} else if a.CloneTargetRef {
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.SSHKeyPath,
+			a.SSHKeyPassword,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+		)
 	} else {
-		affected, err = ExecuteDescribeAffectedWithTargetRefCheckout(cliConfig, ref, sha, verbose, includeSpaceliftAdminStacks)
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+		)
 	}
 
 	if err != nil {
@@ -113,23 +224,46 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Add dependent components and stacks for each affected component
-	if len(affected) > 0 && includeDependents {
-		err = addDependentsToAffected(cliConfig, &affected)
+	if len(affected) > 0 && a.IncludeDependents {
+		err = addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
 		if err != nil {
 			return err
 		}
 	}
 
-	if verbose {
-		cliConfig.Logs.Level = u.LogLevelTrace
-	}
+	a.Logger.Trace("\nAffected components and stacks: \n")
 
-	u.LogTrace(cliConfig, fmt.Sprintf("\nAffected components and stacks: \n"))
-
-	err = printOrWriteToFile(format, file, affected)
+	err = printOrWriteToFile(a.Format, a.OutputFile, affected)
 	if err != nil {
 		return err
 	}
 
+	if a.Upload {
+		// Parse the repo URL
+		gitURL, err := giturl.NewGitURL(repoUrl)
+		if err != nil {
+			return err
+		}
+
+		apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
+		if err != nil {
+			return err
+		}
+
+		req := pro.AffectedStacksUploadRequest{
+			HeadSHA:   headHead.Hash().String(),
+			BaseSHA:   baseHead.Hash().String(),
+			RepoURL:   repoUrl,
+			RepoName:  gitURL.GetRepoName(),
+			RepoOwner: gitURL.GetOwnerName(),
+			RepoHost:  gitURL.GetHostName(),
+			Stacks:    affected,
+		}
+
+		err = apiClient.UploadAffectedStacks(req)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }

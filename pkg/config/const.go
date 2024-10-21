@@ -3,7 +3,7 @@ package config
 const (
 	DefaultStackConfigFileExtension       = ".yaml"
 	DefaultVendoringManifestFileExtension = ".yaml"
-	CliConfigFileName                     = "atmos.yaml"
+	CliConfigFileName                     = "atmos"
 	SystemDirConfigFilePath               = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar                  = "LOCALAPPDATA"
 
@@ -39,7 +39,7 @@ const (
 	HelpFlag2 = "--help"
 
 	ComponentVendorConfigFileName = "component.yaml"
-	AtmosVendorConfigFileName     = "vendor.yaml"
+	AtmosVendorConfigFileName     = "vendor"
 
 	ImportSectionName      = "import"
 	OverridesSectionName   = "overrides"
@@ -55,9 +55,17 @@ const (
 	CommandSectionName     = "command"
 	TerraformSectionName   = "terraform"
 	HelmfileSectionName    = "helmfile"
+	WorkspaceSectionName   = "workspace"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
 
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
+
+	// Atmos Pro
+	AtmosProBaseUrlEnvVarName  = "ATMOS_PRO_BASE_URL"
+	AtmosProEndpointEnvVarName = "ATMOS_PRO_ENDPOINT"
+	AtmosProTokenEnvVarName    = "ATMOS_PRO_TOKEN"
+	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
+	AtmosProDefaultEndpoint    = "api"
 )

@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v2"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestSpaceliftStackProcessor(t *testing.T) {
@@ -29,7 +30,7 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 
 	tenant1Ue2DevInfraVpcStack := spaceliftStacks["tenant1-ue2-dev-infra-vpc"].(map[string]any)
 	tenant1Ue2DevInfraVpcStackInfrastructureStackName := tenant1Ue2DevInfraVpcStack["stack"].(string)
-	tenant1Ue2DevInfraVpcStackBackend := tenant1Ue2DevInfraVpcStack["backend"].(map[any]any)
+	tenant1Ue2DevInfraVpcStackBackend := tenant1Ue2DevInfraVpcStack["backend"].(map[string]any)
 	tenant1Ue2DevInfraVpcStackBackendWorkspaceKeyPrefix := tenant1Ue2DevInfraVpcStackBackend["workspace_key_prefix"].(string)
 	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevInfraVpcStackInfrastructureStackName)
 	assert.Equal(t, "infra-vpc", tenant1Ue2DevInfraVpcStackBackendWorkspaceKeyPrefix)
@@ -37,14 +38,14 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	// Test having a dash `-` in tenant/environment/stage names
 	tenant1Ue2Test1InfraVpcStack := spaceliftStacks["tenant1-ue2-test-1-infra-vpc"].(map[string]any)
 	tenant1Ue2Test1InfraVpcStackInfrastructureStackName := tenant1Ue2Test1InfraVpcStack["stack"].(string)
-	tenant1Ue2Test1InfraVpcStackBackend := tenant1Ue2Test1InfraVpcStack["backend"].(map[any]any)
+	tenant1Ue2Test1InfraVpcStackBackend := tenant1Ue2Test1InfraVpcStack["backend"].(map[string]any)
 	tenant1Ue2Test1InfraVpcStackBackendWorkspaceKeyPrefix := tenant1Ue2Test1InfraVpcStackBackend["workspace_key_prefix"].(string)
 	assert.Equal(t, "tenant1-ue2-test-1", tenant1Ue2Test1InfraVpcStackInfrastructureStackName)
 	assert.Equal(t, "infra-vpc", tenant1Ue2Test1InfraVpcStackBackendWorkspaceKeyPrefix)
 
 	tenant1Ue2DevTestTestComponentOverrideComponent := spaceliftStacks["tenant1-ue2-dev-test-test-component-override"].(map[string]any)
 	tenant1Ue2DevTestTestComponentOverrideComponentInfrastructureStackName := tenant1Ue2DevTestTestComponentOverrideComponent["stack"].(string)
-	tenant1Ue2DevTestTestComponentOverrideComponentBackend := tenant1Ue2DevTestTestComponentOverrideComponent["backend"].(map[any]any)
+	tenant1Ue2DevTestTestComponentOverrideComponentBackend := tenant1Ue2DevTestTestComponentOverrideComponent["backend"].(map[string]any)
 	tenant1Ue2DevTestTestComponentOverrideComponentBaseComponent := tenant1Ue2DevTestTestComponentOverrideComponent["base_component"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentBackendWorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentDeps := tenant1Ue2DevTestTestComponentOverrideComponent["deps"].([]string)
@@ -97,9 +98,9 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	assert.Equal(t, "depends-on:tenant1-ue2-dev-test-test-component", tenant1Ue2ProdTopLevelComponent1Labels[35])
 	assert.Equal(t, "depends-on:tenant1-ue2-prod-test-test-component-override", tenant1Ue2ProdTopLevelComponent1Labels[36])
 
-	yamlSpaceliftStacks, err := yaml.Marshal(spaceliftStacks)
+	yamlSpaceliftStacks, err := u.ConvertToYAML(spaceliftStacks)
 	assert.Nil(t, err)
-	t.Log(string(yamlSpaceliftStacks))
+	t.Log(yamlSpaceliftStacks)
 }
 
 func TestLegacySpaceliftStackProcessor(t *testing.T) {
@@ -137,12 +138,12 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 	assert.Equal(t, 44, len(spaceliftStacks))
 
 	tenant1Ue2DevInfraVpcStack := spaceliftStacks["orgs-cp-tenant1-dev-us-east-2-infra-vpc"].(map[string]any)
-	tenant1Ue2DevInfraVpcStackBackend := tenant1Ue2DevInfraVpcStack["backend"].(map[any]any)
+	tenant1Ue2DevInfraVpcStackBackend := tenant1Ue2DevInfraVpcStack["backend"].(map[string]any)
 	tenant1Ue2DevInfraVpcStackBackendWorkspaceKeyPrefix := tenant1Ue2DevInfraVpcStackBackend["workspace_key_prefix"].(string)
 	assert.Equal(t, "infra-vpc", tenant1Ue2DevInfraVpcStackBackendWorkspaceKeyPrefix)
 
 	tenant1Ue2DevTestTestComponentOverrideComponent := spaceliftStacks["orgs-cp-tenant1-dev-us-east-2-test-test-component-override"].(map[string]any)
-	tenant1Ue2DevTestTestComponentOverrideComponentBackend := tenant1Ue2DevTestTestComponentOverrideComponent["backend"].(map[any]any)
+	tenant1Ue2DevTestTestComponentOverrideComponentBackend := tenant1Ue2DevTestTestComponentOverrideComponent["backend"].(map[string]any)
 	tenant1Ue2DevTestTestComponentOverrideComponentBaseComponent := tenant1Ue2DevTestTestComponentOverrideComponent["base_component"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentBackendWorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentOverrideComponentBackend["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentOverrideComponentDeps := tenant1Ue2DevTestTestComponentOverrideComponent["deps"].([]string)
@@ -178,7 +179,7 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/dev/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[35])
 	assert.Equal(t, "folder:component/test/test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentLabels[36])
 
-	yamlSpaceliftStacks, err := yaml.Marshal(spaceliftStacks)
+	yamlSpaceliftStacks, err := u.ConvertToYAML(spaceliftStacks)
 	assert.Nil(t, err)
-	t.Log(string(yamlSpaceliftStacks))
+	t.Log(yamlSpaceliftStacks)
 }

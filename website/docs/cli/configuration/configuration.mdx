@@ -1,0 +1,631 @@
+---
+title: CLI Configuration
+sidebar_position: 1
+sidebar_label: CLI Configuration
+id: configuration
+description: Use the `atmos.yaml` configuration file to control the behavior of the `atmos` CLI.
+---
+
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+# CLI Configuration
+
+<Intro>
+Use the `atmos.yaml` configuration file to control the behavior of the [`atmos` CLI](/cli)
+</Intro>
+
+Everything in the [`atmos` CLI](/cli) is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
+be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
+
+Think of this file as where you [bootstrap the settings or configuration of your project](/core-concepts/projects). If you'll be using
+[terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior)
+you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)),
+the base path location of the components, and so forth.
+
+## Configuration File (`atmos.yaml`)
+
+The CLI config is loaded from the following locations (from lowest to highest priority):
+
+- System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- Home directory (`~/.atmos/atmos.yaml`)
+- Current directory (`./atmos.yaml`)
+- Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name)
+
+Each configuration file discovered is deep-merged with the preceding configurations.
+
+:::tip Pro-Tip
+Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
+names/paths (double-star/globstar `**` is supported as well)
+:::
+
+## Default CLI Configuration
+
+If `atmos.yaml` is not found in any of the searched locations, Atmos will use the following default CLI configuration:
+
+<File title="atmos.yaml">
+```yaml
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+  helmfile:
+    base_path: components/helmfile
+    use_eks: true
+    kubeconfig_path: /dev/shm
+    helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
+    cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+stacks:
+  base_path: stacks
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # To define Atmos stack naming convention, use either `name_pattern` or `name_template`.
+  # `name_template` has higher priority (if `name_template` is specified, `name_pattern` will be ignored).
+  # `name_pattern` uses the predefined context tokens {namespace}, {tenant}, {environment}, {stage}.
+  # `name_pattern` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  name_pattern: "{tenant}-{environment}-{stage}"
+  # `name_template` is a Golang template.
+  # For the template tokens, and you can use any Atmos sections and attributes that the Atmos command
+  # `atmos describe component <component> -s <stack>` generates (refer to https://atmos.tools/cli/commands/describe/component).
+  # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
+  # name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+workflows:
+  base_path: stacks/workflows
+logs:
+  # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
+  # File or standard file descriptor to write logs to
+  # Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`
+  file: "/dev/stderr"
+  # Supported log levels: Trace, Debug, Info, Warning, Off
+  # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
+  level: Info
+schemas:
+  jsonschema:
+    base_path: stacks/schemas/jsonschema
+  opa:
+    base_path: stacks/schemas/opa
+# https://atmos.tools/core-concepts/stacks/templates
+# https://pkg.go.dev/text/template
+templates:
+  settings:
+    enabled: true
+    # https://masterminds.github.io/sprig
+    sprig:
+      enabled: true
+    # https://docs.gomplate.ca
+    gomplate:
+      enabled: true
+```
+</File>
+
+If Atmos does not find an `atmos.yaml` file and the default CLI config is used, and if you set the ENV variable `ATMOS_LOGS_LEVEL` to `Debug`
+(e.g. `export ATMOS_LOGS_LEVEL=Debug`) before executing Atmos commands, you'll see the following message:
+
+<Terminal>
+![`atmos` CLI command mode 1](/img/cli/atmos.yaml/atmos-default-cli-config-message.png)
+</Terminal>
+
+What follows are all the sections of the `atmos.yaml` configuration file.
+
+## Base Path
+
+The base path for components, stacks, workflows and validation configurations.
+It can also be set using `ATMOS_BASE_PATH` environment variable, or by passing the `--base-path` command-line argument.
+It supports both absolute and relative paths.
+
+If not provided or is an empty string, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path`
+are independent settings (supporting both absolute and relative paths).
+
+If `base_path` is provided, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, `workflows.base_path`,
+`schemas.jsonschema.base_path` and `schemas.opa.base_path` are considered paths relative to `base_path`.
+
+```yaml
+base_path: "."
+```
+
+## Settings
+
+The `settings` section configures Atmos global settings.
+
+<File title="atmos.yaml">
+    ```yaml
+    settings:
+      # `list_merge_strategy` specifies how lists are merged in Atmos stack manifests.
+      # Can also be set using 'ATMOS_SETTINGS_LIST_MERGE_STRATEGY' environment variable, or '--settings-list-merge-strategy' command-line argument
+      # The following strategies are supported:
+      # `replace`: Most recent list imported wins (the default behavior).
+      # `append`:  The sequence of lists is appended in the same order as imports.
+      # `merge`:   The items in the destination list are deep-merged with the items in the source list.
+      #            The items in the source list take precedence.
+      #            The items are processed starting from the first up to the length of the source list (the remaining items are not processed).
+      #            If the source and destination lists have the same length, all items in the destination lists are
+      #            deep-merged with all items in the source list.
+      list_merge_strategy: replace
+    ```
+</File>
+
+<dl>
+  <dt>`settings.list_merge_strategy`</dt>
+  <dd>
+    Specifies how lists are merged in Atmos stack manifests.
+
+    The following strategies are supported:
+    <dl>
+      <dt>`replace`</dt>
+      <dd>Most recent list imported wins (the default behavior).</dd>
+
+      <dt>`append`</dt>
+      <dd>The sequence of lists is appended in the same order as imports.</dd>
+
+      <dt>`merge`</dt>
+      <dd>The items in the destination list are deep-merged with the items in the source list. The items in the source list take precedence. The items are processed starting from the first up to the length of the source list (the remaining items are not processed). If the source and destination lists have the same length, all items in the destination lists are deep-merged with all items in the source list.</dd>
+    </dl>
+  </dd>
+</dl>
+
+
+
+## Workflows
+
+<File title="atmos.yaml">
+```yaml
+workflows:
+  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
+  # Supports both absolute and relative paths
+  base_path: "stacks/workflows"
+```
+</File>
+
+
+## Integrations
+
+Atmos supports many native Atmos integrations. They extend the core functionality of Atmos.
+
+<File title="atmos.yaml">
+```yaml
+# Integrations
+integrations:
+
+  # Atlantis integration
+  # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
+  atlantis:
+    # Path and name of the Atlantis config file 'atlantis.yaml'
+    # Supports absolute and relative paths
+    # All the intermediate folders will be created automatically (e.g. 'path: /config/atlantis/atlantis.yaml')
+    # Can be overridden on the command line by using '--output-path' command-line argument in 'atmos atlantis generate repo-config' command
+    # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to 'stdout'
+    # On Linux/macOS, you can also use '--output-path=/dev/stdout' to dump the content to 'stdout' without setting it to an empty string in 'atlantis.path'
+    path: "atlantis.yaml"
+
+    # Config templates
+    # Select a template by using the '--config-template <config_template>' command-line argument in 'atmos atlantis generate repo-config' command
+    config_templates:
+      config-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+
+    # Project templates
+    # Select a template by using the '--project-template <project_template>' command-line argument in 'atmos atlantis generate repo-config' command
+    project_templates:
+      project-1:
+        # generate a project entry for each component in every stack
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        dir: "{component-path}"
+        terraform_version: v1.2
+        delete_source_branch_on_merge: true
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/$PROJECT_NAME.tfvars.json"
+        apply_requirements:
+          - "approved"
+
+    # Workflow templates
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
+    workflow_templates:
+      workflow-1:
+        plan:
+          steps:
+            - run: terraform init -input=false
+            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            # You must output the plan using '-out $PLANFILE' because Atlantis expects plans to be in a specific location
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+```
+</File>
+
+:::tip
+For more information, refer to Atmos Integrations.
+- [GitHub Actions](/integrations/github-actions)
+- [Atlantis](/integrations/atlantis)
+- [Spacelift](/integrations/spacelift)
+:::
+
+## Schemas
+
+Configure the paths where to find OPA and JSON Schema files to validate Atmos stack manifests and components.
+
+<File title="atmos.yaml">
+```yaml
+# Validation schemas (for validating atmos stacks and components)
+schemas:
+  # https://json-schema.org
+  jsonschema:
+    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/jsonschema"
+  # https://www.openpolicyagent.org
+  opa:
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/opa"
+  # JSON Schema to validate Atmos manifests
+  # https://atmos.tools/cli/schemas/
+  # https://atmos.tools/cli/commands/validate/stacks/
+  # https://atmos.tools/quick-start/advanced/configure-validation/
+  # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+  # https://json-schema.org/draft/2020-12/release-notes
+  atmos:
+    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
+    # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
+    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+```
+</File>
+
+:::tip
+For more information, refer to:
+- [Atmos Manifests Validation](/cli/schemas)
+- [Atmos Component Validation](/core-concepts/validate)
+:::
+
+## Logs
+
+Logs are configured in the `logs` section:
+
+<File title="atmos.yaml">
+```yaml
+logs:
+  # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
+  # File or standard file descriptor to write logs to
+  # Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`
+  file: "/dev/stderr"
+  # Supported log levels: Trace, Debug, Info, Warning, Off
+  # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
+  level: Info
+```
+</File>
+
+- `logs.file` - the file to write Atmos logs to. Logs can be written to any file or any standard file descriptor,
+  including `/dev/stdout`, `/dev/stderr` and `/dev/null`. If omitted, `/dev/stdout` will be used.
+  The environment variable `ATMOS_LOGS_FILE` can also be used to specify the log file
+
+- `logs.level` - Log level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log
+  any messages (note that this does not prevent other tools like Terraform from logging).
+  The environment variable `ATMOS_LOGS_LEVEL` can also be used to specify the log level
+
+To prevent Atmos from logging any messages (except for the outputs of the executed commands), you can do one of the following:
+
+- Set `logs.file` or the ENV variable `ATMOS_LOGS_FILE` to `/dev/null`
+
+- Set `logs.level` or the ENV variable `ATMOS_LOGS_LEVEL` to `Off`
+
+Note that when you set the log level to `Debug` or `Trace`, Atmos will log additional messages before printing the output
+of an executed command. For example, let's consider the `atmos describe affected` command:
+
+<File title="atmos.yaml">
+```yaml
+logs:
+  file: "/dev/stdout"
+  level: Trace
+```
+</File>
+
+<Terminal title="atmos describe affected">
+```console
+Checking out Git ref 'refs/remotes/origin/HEAD' ...
+Checked out Git ref 'refs/remotes/origin/HEAD'
+
+Current HEAD: ffd2154e1daa32357b75460b9f45d268922b51e1 refs/heads/update-logs
+BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
+
+Changed files:
+
+examples/quick-start-advanced/Dockerfile
+examples/quick-start-advanced/atmos.yaml
+
+Affected components and stacks:
+
+[
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
+      "stack": "plat-uw2-prod",
+      "stack_slug": "plat-uw2-prod-vpc",
+      "affected": "stack.vars"
+   },
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
+      "stack": "plat-ue2-prod",
+      "stack_slug": "plat-ue2-prod-vpc",
+      "affected": "stack.vars"
+   }
+]
+````
+</Terminal>
+
+With `logs.level: Trace`, and `logs.file: "/dev/stdout"`, all the messages and the command's JSON output will be printed
+to the console to the `/dev/stdout` standard output.
+
+This behavior might be undesirable when you execute the command `atmos describe affected` in CI/CD (e.g. GitHub Actions).
+
+For example, you might want to log all the Atmos messages (by setting `logs.level: Trace`) for debugging purposes,
+and also want to parse the JSON output of the command (e.g. by using `jq`) for further processing. In this case, `jq`
+will not be able to parse the JSON output because all the other messages make the output an invalid JSON document.
+
+To deal with that, you can set `logs.file` to `/dev/stderr` in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+logs:
+  file: "/dev/stderr"
+  level: Trace
+```
+</File>
+
+Now when the `atmos describe affected` command is executed, the additional messages are printed to `/dev/stderr`,
+but the command's JSON output is printed to `/dev/stdout`, allowing `jq` to parse it without errors.
+
+<Terminal title="atmos describe affected">
+```console
+# NOTE: These messages are printed to `/dev/stderr`
+
+Checking out Git ref 'refs/remotes/origin/HEAD' ...
+Checked out Git ref 'refs/remotes/origin/HEAD'
+Current HEAD: ffd2154e1daa32357b75460b9f45d268922b51e1 refs/heads/update-logs
+BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
+
+
+# NOTE: This JSON output is printed to `/dev/stdout`
+
+[
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
+      "stack": "plat-uw2-prod",
+      "stack_slug": "plat-uw2-prod-vpc",
+      "affected": "stack.vars"
+   },
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
+      "stack": "plat-ue2-prod",
+      "stack_slug": "plat-ue2-prod-vpc",
+      "affected": "stack.vars"
+   }
+]
+````
+</Terminal>
+
+## Aliases
+
+CLI command aliases are configured in the `aliases` section.
+
+An alias lets you create a shortcut name for an existing CLI command. Any CLI command can be aliased, including the Atmos
+native commands like `terraform apply` or `describe stacks`, as well as [Atmos Custom Commands](/core-concepts/custom-commands).
+
+For example:
+
+<File title="atmos.yaml">
+```yaml
+# CLI command aliases
+aliases:
+  # Aliases for Atmos native commands
+  tf: terraform
+  tp: terraform plan
+  up: terraform apply
+  down: terraform destroy
+  ds: describe stacks
+  dc: describe component
+  # Aliases for Atmos custom commands
+  ls: list stacks
+  lc: list components
+```
+</File>
+
+Execute an alias as you would any Atmos native or custom command:
+
+<Terminal title="'atmos ls' command alias">
+```console
+> atmos ls
+
+plat-ue2-dev
+plat-ue2-prod
+plat-ue2-staging
+plat-uw2-dev
+plat-uw2-prod
+plat-uw2-staging
+```
+</Terminal>
+
+The aliases configured in the `aliases` section automatically appear in Atmos help, and are shown as
+`alias for '<command>'`.
+
+For example:
+
+<Terminal title="atmos --help">
+    ![`atmos --help`](/img/cli/help/atmos-help-command-3.png)
+</Terminal>
+
+An alias automatically supports all command line arguments and flags that the aliased command accepts.
+
+For example:
+
+- `atmos up <component> -s <stack>` supports all the parameters from the aliased command `atmos terraform apply <component> -s <stack>`
+- `atmos dc <component> -s <stack>` supports all the parameters from the aliased command `atmos describe component <component> -s <stack>`
+
+## Templates
+
+Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
+
+[Sprig Functions](https://masterminds.github.io/sprig/), [Gomplate Functions](https://docs.gomplate.ca/functions/)
+and [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
+are supported as well.
+
+:::tip
+For more details, refer to [Atmos Stack Manifest Templating](/core-concepts/stacks/templates)
+:::
+
+<File title="atmos.yaml">
+```yaml
+# https://pkg.go.dev/text/template
+templates:
+  settings:
+    enabled: true
+    # https://masterminds.github.io/sprig
+    sprig:
+      enabled: true
+    # https://docs.gomplate.ca
+    # https://docs.gomplate.ca/functions
+    gomplate:
+      enabled: true
+      # Timeout in seconds to execute the datasources
+      timeout: 5
+      # https://docs.gomplate.ca/datasources
+      datasources:
+        # 'http' datasource
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        ip:
+          url: "https://api.ipify.org?format=json"
+          # https://docs.gomplate.ca/datasources/#sending-http-headers
+          # https://docs.gomplate.ca/usage/#--datasource-header-h
+          headers:
+            accept:
+              - "application/json"
+        # 'file' datasources
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        config-1:
+          url: "./config1.json"
+        config-2:
+          url: "file:///config2.json"
+```
+</File>
+
+- `templates.settings.enabled` - a boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests.
+  If set to `false`, Atmos will not process `Go` templates in stack manifests
+
+- `templates.settings.sprig.enabled` - a boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/)
+   in Atmos stack manifests
+
+- `templates.settings.gomplate.enabled` - a boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/)
+   and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests
+
+- `templates.settings.gomplate.timeout` - timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources)
+
+- `templates.settings.gomplate.datasources` - a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions:
+
+   - The keys of the map are the datasource names, which are used in `Go` templates in Atmos stack manifests.
+     For example:
+
+     ```yaml
+      terraform:
+        vars:
+          tags:
+            provisioned_by_ip: '{{ (datasource "ip").ip }}'
+            config1_tag: '{{ (datasource "config-1").tag }}'
+            config2_service_name: '{{ (datasource "config-2").service.name }}'
+     ```
+
+   - The values of the map are the datasource definitions with the following schema:
+
+     - `url` - the [Datasource URL](https://docs.gomplate.ca/datasources/#url-format)
+
+     - `headers` - a map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for
+        the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers).
+        The keys of the map are the header names. The values of the map are lists of values for the header.
+
+        The following configuration will result in the
+        [`accept: application/json`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept) HTTP header
+        being sent with the HTTP request to the datasource:
+
+          ```yaml
+          headers:
+            accept:
+              - "application/json"
+         ```
+
+:::warning
+
+Some functions are present in both [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/).
+
+For example, the `env` function has the same name in [Sprig](https://masterminds.github.io/sprig/os.html) and
+[Gomplate](https://docs.gomplate.ca/functions/env/), but has different syntax and accept different number of arguments.
+
+If you use the `env` function from one templating engine and enable both [Sprig](https://masterminds.github.io/sprig/)
+and [Gomplate](https://docs.gomplate.ca/functions/), it will be invalid in the other templating engine, and an error will be thrown.
+
+For this reason, you can use the `templates.settings.sprig.enabled` and `templates.settings.gomplate.enabled` settings to selectively
+enable/disable the [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/)
+functions.
+
+:::
+
+
+## Environment Variables
+
+Most YAML settings can also be defined by environment variables. This is helpful while doing local development. For example,
+setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local development folder, will enable you to rapidly iterate.
+
+| Variable                                              | YAML Path                                       | Description                                                                                                                                                                                                                  |
+|:------------------------------------------------------|:------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                                                                                                  |
+| ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                                                                                                               |
+| ATMOS_COMPONENTS_TERRAFORM_COMMAND                    | components.terraform.command                    | The executable to be called by `atmos` when running Terraform commands                                                                                                                                                       |
+| ATMOS_COMPONENTS_TERRAFORM_BASE_PATH                  | components.terraform.base_path                  | Base path to Terraform components                                                                                                                                                                                            |
+| ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE         | components.terraform.apply_auto_approve         | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                     |
+| ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT            | components.terraform.deploy_run_init            | Run `terraform init` when executing `atmos terraform deploy` command                                                                                                                                                         |
+| ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE       | components.terraform.init_run_reconfigure       | Run `terraform init -reconfigure` when executing `atmos terraform` commands                                                                                                                                                  |
+| ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE | components.terraform.auto_generate_backend_file | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                     |
+| ATMOS_COMPONENTS_HELMFILE_COMMAND                     | components.helmfile.command                     | The executable to be called by `atmos` when running Helmfile commands                                                                                                                                                        |
+| ATMOS_COMPONENTS_HELMFILE_BASE_PATH                   | components.helmfile.base_path                   | Path to helmfile components                                                                                                                                                                                                  |
+| ATMOS_COMPONENTS_HELMFILE_USE_EKS                     | components.helmfile.use_eks                     | If set to `true`, download `kubeconfig` from EKS by running `aws eks update-kubeconfig` command before executing `atmos helmfile` commands                                                                                   |
+| ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH             | components.helmfile.kubeconfig_path             | Path to write the `kubeconfig` file when executing `aws eks update-kubeconfig` command                                                                                                                                       |
+| ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN    | components.helmfile.helm_aws_profile_pattern    | Pattern for AWS profile to use when executing `atmos helmfile` commands                                                                                                                                                      |
+| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_pattern        | Pattern for EKS cluster name to use when executing `atmos helmfile` commands                                                                                                                                                 |
+| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to Atmos stack manifests                                                                                                                                                                                           |
+| ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack manifests                                                                                                                                                                            |
+| ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           | List of paths to not consider as top-level stacks                                                                                                                                                                            |
+| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as Atmos stack names                                                                                                                                                                               |
+| ATMOS_STACKS_NAME_TEMPLATE                            | stacks.name_template                            | Stack name Golang template to use as Atmos stack names                                                                                                                                                                       |
+| ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                                                                                                                 |
+| ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                                                                                                           |
+| ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           | Base path to OPA policies for component validation                                                                                                                                                                           |
+| ATMOS_SCHEMAS_ATMOS_MANIFEST                          | schemas.atmos.manifest                          | Path to JSON Schema to validate Atmos stack manifests. For more details, refer to [Atmos Manifest JSON Schema](/cli/schemas)                                                                                           |
+| ATMOS_LOGS_FILE                                       | logs.file                                       | The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`). If omitted, `/dev/stdout` will be used                            |
+| ATMOS_LOGS_LEVEL                                      | logs.level                                      | Logs level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging) |
+| ATMOS_SETTINGS_LIST_MERGE_STRATEGY                    | settings.list_merge_strategy                    | Specifies how lists are merged in Atmos stack manifests. The following strategies are supported: `replace`, `append`, `merge`                                                                                                |

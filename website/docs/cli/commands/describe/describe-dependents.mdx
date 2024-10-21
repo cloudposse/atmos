@@ -12,13 +12,11 @@ import Screengrab from '@site/src/components/Screengrab'
 Use this command to show a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 :::
 
-<br/>
-
 <Screengrab title="atmos describe dependents --help" slug="atmos-describe-dependents--help" />
 
 ## Description
 
-In Atmos, you can define component dependencies by using the `settings.depends_on` section. The section used to define 
+In Atmos, you can define component dependencies by using the `settings.depends_on` section. The section used to define
 all the Atmos components (in the same or different stacks) that the current component depends on.
 
 The `settings.depends_on` section is a map of objects. The map keys are just the descriptions of dependencies and can be strings or numbers.
@@ -33,8 +31,6 @@ Each object in the `settings.depends_on` section has the following schema:
 - `tenant` (optional) - the `tenant` where the `component` is provisioned
 - `environment` (optional) - the `environment` where the `component` is provisioned
 - `stage` (optional) - the `stage` where the `component` is provisioned
-
-<br/>
 
 One of `component`, `file` or `folder` is required.
 
@@ -82,8 +78,6 @@ For example, you can specify:
 - `environment` if the `component` is from a different region
 - `stage` if the `component` is from a different account
 - `tenant`, `environment` and `stage` if the component is from a different Atmos stack (e.g. `tenant1-ue2-dev`)
-
-<br/>
 
 In the following example, we define that the `top-level-component1` component depends on the following:
 
@@ -142,8 +136,6 @@ components:
       vars:
         enabled: true
 ```
-
-<br/>
 
 Having the `top-level-component` and `top-level-component2` components configured as shown above, we can now execute the following Atmos command
 to show all the components that depend on the `test/test-component` component in the `tenant1-ue2-dev` stack:
@@ -204,8 +196,6 @@ the `tenant1-ue2-test-1` stack:
 ```
 </Terminal>
 
-<br/>
-
 After the `test/test-component` has been provisioned, you can use the outputs to perform the following actions:
 
 - Provision the dependent components by executing the Atmos commands `atmos terraform apply top-level-component1 -s tenant1-ue2-test-1` and
@@ -223,8 +213,6 @@ After the `test/test-component` has been provisioned, you can use the outputs to
 ```shell
 atmos describe dependents [options]
 ```
-
-<br/>
 
 :::tip
 Run `atmos describe dependents --help` to see all the available options
@@ -302,8 +290,6 @@ where:
 
 - `atlantis_project` - the dependent Atlantis project name. It will be included only if the Atlantis integration is configured in
   the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integration](/integrations/atlantis) for more details
-
-<br/>
 
 :::note
 

@@ -121,13 +121,13 @@ func processCommandAliases(
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
 					if err != nil {
-						u.LogErrorAndExit(err)
+						u.LogErrorAndExit(cliConfig, err)
 					}
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
 					err = e.ExecuteShell(cliConfig, commandToRun, commandToRun, ".", nil, false)
 					if err != nil {
-						u.LogErrorAndExit(err)
+						u.LogErrorAndExit(cliConfig, err)
 					}
 				},
 			}
@@ -153,7 +153,7 @@ func preCustomCommand(
 
 	if len(args) != len(commandConfig.Arguments) {
 		err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(commandConfig.Arguments))
-		u.LogErrorAndExit(err)
+		u.LogErrorAndExit(schema.CliConfiguration{}, err)
 	}
 
 	// no "steps" means a sub command should be specified
@@ -203,7 +203,7 @@ func executeCustomCommand(
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
 				if err != nil {
-					u.LogErrorAndExit(err)
+					u.LogErrorAndExit(cliConfig, err)
 				}
 				flagsData[fl.Name] = providedFlag
 			}
@@ -219,29 +219,29 @@ func executeCustomCommand(
 		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
-			component, err := u.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
+			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(cliConfig, err)
 			}
 			if component == "" || component == "<no value>" {
-				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName))
+				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
-			stack, err := u.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
+			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(cliConfig, err)
 			}
 			if stack == "" || stack == "<no value>" {
-				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName))
+				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
 			}
 
 			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack)
+			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(cliConfig, err)
 			}
 			data["ComponentConfig"] = componentConfig
 		}
@@ -258,7 +258,7 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(cliConfig, err)
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
@@ -266,21 +266,21 @@ func executeCustomCommand(
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := e.ExecuteShellAndReturnOutput(cliConfig, valCommand, valCommandName, ".", nil, false)
 				if err != nil {
-					u.LogErrorAndExit(err)
+					u.LogErrorAndExit(cliConfig, err)
 				}
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = u.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
+				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
 				if err != nil {
-					u.LogErrorAndExit(err)
+					u.LogErrorAndExit(cliConfig, err)
 				}
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
 			err = os.Setenv(key, value)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(cliConfig, err)
 			}
 		}
 
@@ -293,16 +293,16 @@ func executeCustomCommand(
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := u.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
+		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(cliConfig, err)
 		}
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 		err = e.ExecuteShell(cliConfig, commandToRun, commandName, ".", envVarsList, false)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(cliConfig, err)
 		}
 	}
 }
@@ -326,7 +326,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 func checkAtmosConfig() {
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		u.LogErrorAndExit(cliConfig, err)
 	}
 
 	atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
@@ -345,18 +345,25 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	fmt.Print("Atmos CLI config ")
-	u.PrintMessageInColor("stacks.base_path ", c1)
-	fmt.Print("points to the ")
-	u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
-	fmt.Println(" directory.")
+	if cliConfig.Default {
+		// If Atmos did not find an `atmos.yaml` config file and is using the default config
+		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Println(" CLI config file was not found.")
+		fmt.Print("\nThe default Atmos stacks directory is set to ")
+		u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		fmt.Println(",\nbut the directory does not exist in the current path.")
+	} else {
+		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
+		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
+		u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		fmt.Println(",\nbut the directory does not exist.")
+	}
 
-	u.PrintMessage("The directory does not exist or has no Atmos stack configurations.\n")
-
-	u.PrintMessage("To configure and start using Atmos, refer to the following documents:\n")
+	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
 
 	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
 	u.PrintMessage("https://atmos.tools/cli/configuration\n")
@@ -383,5 +390,5 @@ func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	u.PrintMessage("https://github.com/cloudposse/atmos/releases\n")
 
 	u.PrintMessageInColor("Install Atmos:\n", c2)
-	u.PrintMessage("https://atmos.tools/quick-start/install-atmos\n")
+	u.PrintMessage("https://atmos.tools/install\n")
 }

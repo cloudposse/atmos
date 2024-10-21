@@ -17,7 +17,7 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 	var tmpl string
 
 	if cliConfig.Stacks.NameTemplate != "" {
-		tmpl, err = u.ProcessTmpl("terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl("terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
@@ -36,7 +36,7 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 
 	// Terraform workspace can be overridden per component using `metadata.terraform_workspace_pattern` or `metadata.terraform_workspace_template` or `metadata.terraform_workspace`
 	if terraformWorkspaceTemplate, terraformWorkspaceTemplateExist := componentMetadata["terraform_workspace_template"].(string); terraformWorkspaceTemplateExist {
-		tmpl, err = u.ProcessTmpl("terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl("terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
@@ -58,10 +58,10 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
-) (map[any]any, string, bool) {
+) (map[string]any, string, bool) {
 	baseComponentName := ""
 	componentIsAbstract := false
-	var componentMetadata map[any]any
+	var componentMetadata map[string]any
 
 	// Find base component in the `component` attribute
 	if base, ok := componentSection[cfg.ComponentSectionName].(string); ok {
@@ -69,7 +69,7 @@ func ProcessComponentMetadata(
 	}
 
 	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
-		componentMetadata = componentMetadataSection.(map[any]any)
+		componentMetadata = componentMetadataSection.(map[string]any)
 		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
 			if componentMetadataType == "abstract" {
 				componentIsAbstract = true
@@ -172,11 +172,21 @@ func GetStackNamePattern(cliConfig schema.CliConfiguration) string {
 }
 
 // IsComponentAbstract returns 'true' if the component is abstract
-func IsComponentAbstract(metadataSection map[any]any) bool {
+func IsComponentAbstract(metadataSection map[string]any) bool {
 	if metadataType, ok := metadataSection["type"].(string); ok {
 		if metadataType == "abstract" {
 			return true
 		}
 	}
 	return false
+}
+
+// IsComponentEnabled returns 'true' if the component is enabled
+func IsComponentEnabled(varsSection map[string]any) bool {
+	if enabled, ok := varsSection["enabled"].(bool); ok {
+		if enabled == false {
+			return false
+		}
+	}
+	return true
 }

@@ -1,0 +1,113 @@
+---
+title: Automate Common Workflows
+sidebar_position: 3
+sidebar_label: Create Workflows
+description: Automate your repetitive tasks with workflows
+---
+import Terminal from '@site/src/components/Terminal'
+import Step from '@site/src/components/Step'
+import StepNumber from '@site/src/components/StepNumber'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+[Atmos Workflows](/core-concepts/workflows) combine multiple commands into executable units of work, ideal for automating common
+tasks and orchestrating “cold starts,” where you bring an environment up from scratch.
+</Intro>
+
+Workflows can call other workflows and be combined with [Custom Commands](/core-concepts/custom-commands). Usually, we use
+workflows to provision some combinations of [Terraform](/core-concepts/components/terraform) components.
+
+Defining workflows is entirely optional; use them if they are helpful for your project.
+
+<Step>
+## <StepNumber/> Configure Your Project to Support Workflows
+
+To define workflows, update your `atmos.yaml` to tell it where to find your workflows.
+
+Add the following `workflows` section and configure the base path to the workflows:
+
+```yaml
+workflows:
+  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
+  # Supports both absolute and relative paths
+  base_path: "stacks/workflows"
+```
+</Step>
+
+
+<Step>
+## <StepNumber/> Create an Atmos Workflow
+
+Now, let's create a workflow in the `stacks/workflows` directory.
+
+```console
+   │   # Centralized stacks configuration
+   └── stacks/
+       └── workflows/
+           └── weather.yaml
+```
+
+Add the following Atmos workflows to the `stacks/workflows/weather.yaml` file:
+
+```yaml
+name: Workflows for Weather Station
+description: Atmos workflows for managing Weather Station
+
+workflows:
+
+  plan-all:
+    description: |
+      Run 'terraform plan' on all 'station' components in all stacks
+    steps:
+      - command: terraform plan station -s dev
+      - command: terraform plan station -s staging
+      - command: terraform plan station -s prod
+
+  apply-all:
+    description: |
+      Run 'terraform apply' on all 'station' components in all stacks
+    steps:
+      - command: terraform apply station -auto-approve -s dev
+      - command: terraform apply station -auto-approve -s staging
+      - command: terraform apply station -auto-approve -s prod
+```
+</Step>
+
+<Step>
+
+## <StepNumber/> Run the Atmos Workflow
+
+Run the following Atmos commands to execute the workflows:
+
+```shell
+# Execute the workflow `plan-all-vpc-flow-logs` from the workflow manifest `weather.yaml`
+atmos workflow plan-all -f weather
+
+# Execute the workflow `apply-all-components` from the workflow manifest `weather.yaml`
+atmos workflow apply-all -f weather
+```
+
+The `atmos workflow` CLI command supports the `--dry-run` flag. If passed, the command will just print information about
+the executed workflow steps without executing them. For example:
+
+<Terminal title="atmos workflow plan-all -f weather --dry-run">
+```console
+Executing the workflow 'plan-all' from 'stacks/workflows/weather.yaml'
+
+Executing workflow step: terraform plan station -s dev
+Executing workflow step: terraform plan station -s staging
+Executing workflow step: terraform plan station -s prod
+```
+</Terminal>
+</Step>
+
+:::tip
+Refer to [atmos workflow](/cli/commands/workflow) for more information on the `atmos workflow` CLI command
+:::
+
+<ActionCard title="Want to go deeper on this topic?">
+    Workflows can do a lot more than we're showing here. Workflows support templates, and can call other workflows.
+    <PrimaryCTA to="/core-concepts/workflows">Learn More</PrimaryCTA>
+</ActionCard>

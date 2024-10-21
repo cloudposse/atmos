@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -19,7 +20,7 @@ var describeStacksCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	},
 }
@@ -41,6 +42,8 @@ func init() {
 	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types: atmos describe stacks --component-types=terraform|helmfile. Supported component types: terraform, helmfile")
 
 	describeStacksCmd.PersistentFlags().String("sections", "", "Output only the specified component sections: atmos describe stacks --sections=vars,settings. Available component sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
+
+	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos describe stacks --process-templates=false")
 
 	describeCmd.AddCommand(describeStacksCmd)
 }

@@ -14,15 +14,26 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hashicorp/go-getter"
-	cp "github.com/otiai10/copy"
-	"gopkg.in/yaml.v2"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/hairyhenderson/gomplate/v3"
+	"github.com/hashicorp/go-getter"
+	cp "github.com/otiai10/copy"
 )
+
+// findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
+func findComponentConfigFile(basePath, fileName string) (string, error) {
+	componentConfigExtensions := []string{"yaml", "yml"}
+
+	for _, ext := range componentConfigExtensions {
+		configFilePath := path.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
+		if u.FileExists(configFilePath) {
+			return configFilePath, nil
+		}
+	}
+	return "", fmt.Errorf("component vendoring config file does not exist in the '%s' folder", basePath)
+}
 
 // ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`
 func ReadAndProcessComponentVendorConfigFile(
@@ -52,12 +63,9 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", fmt.Errorf("folder '%s' does not exist", componentPath)
 	}
 
-	componentConfigFile := path.Join(componentPath, cfg.ComponentVendorConfigFileName)
-	if !u.FileExists(componentConfigFile) {
-		return componentConfig, "", fmt.Errorf("component vendoring config file '%s' does not exist in the '%s' folder",
-			cfg.ComponentVendorConfigFileName,
-			componentPath,
-		)
+	componentConfigFile, err := findComponentConfigFile(componentPath, strings.TrimSuffix(cfg.ComponentVendorConfigFileName, ".yaml"))
+	if err != nil {
+		return componentConfig, "", err
 	}
 
 	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
@@ -65,7 +73,8 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", err
 	}
 
-	if err = yaml.Unmarshal(componentConfigFileContent, &componentConfig); err != nil {
+	componentConfig, err = u.UnmarshalYAML[schema.VendorComponentConfig](string(componentConfigFileContent))
+	if err != nil {
 		return componentConfig, "", err
 	}
 
@@ -93,7 +102,6 @@ func ExecuteComponentVendorInternal(
 	componentPath string,
 	dryRun bool,
 ) error {
-
 	var tempDir string
 	var err error
 	var t *template.Template
@@ -181,7 +189,7 @@ func ExecuteComponentVendorInternal(
 				},
 			}
 
-			var tempDir2 = tempDir
+			tempDir2 := tempDir
 			if sourceIsLocalFile {
 				tempDir2 = path.Join(tempDir, filepath.Base(uri))
 			}
@@ -288,7 +296,7 @@ func ExecuteComponentVendorInternal(
 			},
 		}
 
-		var componentPath2 = componentPath
+		componentPath2 := componentPath
 		if sourceIsLocalFile {
 			if filepath.Ext(componentPath) == "" {
 				componentPath2 = path.Join(componentPath, filepath.Base(uri))

@@ -1,0 +1,69 @@
+---
+title: Folder Structure
+sidebar_position: 1
+sidebar_label: Folder Structure
+description: Recommended way to organize your Atmos stacks and components
+id: layout    
+---
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+At the root of your project, you’ll typically find an `atmos.yaml` configuration file. This file defines how Atmos should discover your stack files for configuration and your Terraform root modules as components.
+</Intro>
+
+<KeyPoints>
+- How to organize your project on the file system
+- How to separate configuration from components
+- Different ways to organize your project
+</KeyPoints>
+
+You can find some demos of how we organize projects in the Atmos GitHub repository under the [`examples/`](https://github.com/cloudposse/atmos/tree/main/examples) folder.
+
+To effectively organize an Atmos project, we want to ensure you have specific locations for Atmos to find your stack configurations and components. At a minimum, we recommend the following folder structure in your project:
+
+## Components Folder
+
+This folder will contain all your components. Organize the components by toolchain. For example, if you have components for Terraform, place them in a Terraform subfolder (e.g. `components/terraform/vpc`).
+
+## Stack Configurations Folder
+
+Next, you’ll have your stacks configurations, which are organized into multiple subfolders depending on their purpose:
+
+### Schema Validations
+
+### Catalogs
+This should be a separate top-level folder containing your stack configurations. Stack configurations are divided into several parts:
+- **Schemas Folder**: This folder contains the schemas used to validate the stack configurations.
+- **Catalog Folder**: This includes all reusable imports, which can be organized into subfolders based on logical groupings.
+- **Stacks Folder**: This contains the deployable stacks. Each stack is defined in a separate YAML file.
+
+We follow a few conventions in our reference architecture:
+
+### Deployable Stacks
+
+- **Orgs Folder**: Represents the AWS organizations to which you deploy. You might use a folder called deploy if you have a few simple stacks.
+- **Multi-Cloud Projects**: If your project involves multiple clouds, consider additional organizational strategies.
+
+
+## Recommended Filesystem Layout
+<dl>
+    <dt>`components/`</dt>
+    <dd>folder containing all your components, usually organized by your toolchain</dd>
+
+    <dt>`components/terraform`</dt>
+    <dd>folder for all Terraform "root modules"</dd>
+
+    <dt>`stacks/orgs/`</dt>
+    <dd>folder for deployable stacks</dd>
+
+    <dt>`stacks/catalog/`</dt>
+    <dd>folder for the service catalog</dd>
+
+    <dt>`stacks/workflows/`</dt>
+    <dd>folder for workflows that operate on top of stacks.</dd>
+</dl>
+
+We provide detailed guidance on organizing your folder structure, whether it’s for a simple project or enterprise-scale architecture. 
+
+Remember, you can’t optimize for everything at once, so choose the model that best fits the stage you plan to reach when you complete the project.

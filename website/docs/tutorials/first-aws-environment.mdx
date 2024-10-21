@@ -29,7 +29,8 @@ Prior to starting this tutorial, you should be sure that you understand [our var
 
 ### 1. Clone the Tutorials Repository + Run the `tutorials` Image
 
-As part of this tutorial (and others following in our tutorial series), we will utilize [our tutorials](https://github.com/cloudposse/tutorials) repository](https://github.com/cloudposse/tutorials). This repository includes code and relevant materials for you to use alongside this tutorial walkthrough.
+As part of this tutorial (and others following in our tutorial series), we will utilize [our tutorials](https://github.com/cloudposse/tutorials) repository.
+This repository includes code and relevant materials for you to use alongside this tutorial walkthrough.
 
 Let's clone it to your local machine and `cd` into it:
 
@@ -51,7 +52,7 @@ docker run -it \
           cloudposse/tutorials:latest;
 ```
 
-This will pull the `tutorials` image to your local machine, run a new container from that image, and mount the various tutorial folders so you can edit them on your host machine or in the container and the changes will propogate either direction.
+This will pull the `tutorials` image to your local machine, run a new container from that image, and mount the various tutorial folders so you can edit them on your host machine or in the container and the changes will propagate either direction.
 
 ![Tutorial Shell](/img/tutorials-3-tutorials-shell.png)
 
@@ -62,7 +63,7 @@ cd /tutorials/03-first-aws-environment
 ```
 
 > _**Troubleshooting tip**:_ If you are logged in with Leapp using profile "default", you should already
-be authenticated in Geodesic and see a green "√" at the begining of the command line prompt.
+be authenticated in Geodesic and see a green "√" at the beginning of the command line prompt.
 > If you are logged in with a different profile name, configure Geodesic to use it by
 > running `export AWS_PROFILE=profile-name` where "profile-name" is the Named Profile in your
 > Leapp session. If you have the profile names in sync but you see a red "✗" instead of the green "√",
@@ -108,7 +109,7 @@ This will provision our S3 bucket + Dynamo DB table for usage as our backend.
 atmos terraform generate backend tfstate-backend --stack ue2-root
 ```
 
-This will look at our stack, find the imported `terraform.backend.s3` configuration and build a valid `backend.tf.json` file and put it in our component directory. Then going forward, whenver we `plan` or `apply` against that component it will be properly configured to use that S3 backend.
+This will look at our stack, find the imported `terraform.backend.s3` configuration and build a valid `backend.tf.json` file and put it in our component directory. Then going forward, whenever we `plan` or `apply` against that component it will be properly configured to use that S3 backend.
 
 4. Now that we have our `backend.tf.json` file, we can change over our `tfstate-backend` component from using local state to its S3 backend:
 

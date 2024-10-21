@@ -1,0 +1,79 @@
+---
+title: Simple Atmos Tutorial
+sidebar_position: 3
+sidebar_label: Simple Tutorial
+description: Take 30 minutes to learn the most important Atmos concepts.
+id: simple
+---
+import PillBox from '@site/src/components/PillBox'
+import DocCardList from '@theme/DocCardList'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<PillBox>Easy</PillBox>
+
+<Intro>
+In this simple example, we will show you, how you can Terraform the weather. We won’t focus on more advanced concepts like configuring state backends or integrating with specific cloud providers,
+allowing us to concentrate on the core concepts of Atmos.
+</Intro>
+
+You're about to discover [a new way to think about terraform...](/quick-start/mindset)
+
+<KeyPoints>
+1. How to set up a project repository to organize your Terraform code and configurations
+2. How to configure the Atmos CLI to work with the project
+3. Write a simple Terraform root module
+4. How to create stacks and configure the root module as a component of a stack
+5. Finally, how to deploy everything using Atmos
+</KeyPoints>
+
+
+**Spoiler alert** You can’t actually change the weather with Terraform, but you can certainly ask for it.
+
+We’ll [use this example](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-simple) to avoid relying on complicated cloud credentials, which can vary based on your organizational context and cloud provider. Instead, we want to focus on Terraform and how to utilize it effectively as a component within Atmos. Once you understand this, you’ll see how to tailor your Terraform "root modules" to work seamlessly with Atmos.
+
+__NOTE:__ This tutorial is for those who prefer hands-on learning and want to create something tangible quickly.
+If you prefer to learn theory and concepts first, start with the [Core Concepts](/core-concepts).
+
+## Prerequisites
+
+Here's what you'll need to get started with this tutorial.
+
+- [Install Atmos](/install)
+- [Install Terraform](https://learn.hashicorp.com/tutorials/terraform/install-cli)
+
+:::tip Use GitHub Codespaces
+
+**You can try out `atmos` directly in your browser using GitHub Codespaces**
+
+We bundle all the examples and tools you need to get started with Atmos in a GitHub Codespace. Click the button below to start a new Codespace with the Atmos repository (it's FREE).
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=cloudposse/atmos&skip_quickstart=true)
+<div><sub><i>Already start one? Find it [here](https://github.com/codespaces).</i></sub></div>
+
+:::
+
+Then, when you're ready for a deeper understanding of using Atmos with Terraform, handling state management and working with
+AWS authentication, please refer to our [advanced quick start guide](/quick-start/advanced).
+
+## Extra Credit
+
+After you finish mastering the basics, maybe check out the "Extra Credit" exercises to learn how to...
+
+- [Deploy additional instances of your components](/quick-start/simple/extra-credit/add-another-component)
+- [Automate common operations with workflows](/quick-start/simple/extra-credit/create-workflows)
+- [Customize the Atmos CLI by adding your own commands](/quick-start/simple/extra-credit/add-custom-commands)
+- [Vendor your dependencies for proper Immutable Infrastructure](/quick-start/simple/extra-credit/vendor-components)
+
+## What's Included
+
+Start your first project in 5 easy steps. After this, you can configure and provision infrastructure with Terraform using Atmos.
+
+<DocCardList/>
+
+<ActionCard>
+    Start with the first step, which is configuring your project for Atmos.
+    <PrimaryCTA to="/quick-start/simple/configure-project">Configure Project</PrimaryCTA>
+</ActionCard>

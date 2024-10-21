@@ -28,7 +28,7 @@ description: "Learn how to migrate an Atmos component to a new name or to use th
     components:
       terraform:
         vpc:
-          # This is the AZ fragment importation thats imported across all stacks
+          # This is the AZ fragment importation that's imported across all stacks
           # even stacks without a vpc.
           availability_zones:
             - us-east-1a
@@ -39,7 +39,7 @@ description: "Learn how to migrate an Atmos component to a new name or to use th
     import:
       - gbl-ue2
       - catalog/vpc
-    
+
     components:
       terraform:
         vpc:
@@ -72,7 +72,7 @@ description: "Learn how to migrate an Atmos component to a new name or to use th
 1. Pull down the latest `vpc` component and repeat the previous step (optional)
 
     ```sh
-    ⨠ wget https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/components/terraform/vpc/component.yaml -O components/terraform/vpc/component.yaml
+    ⨠ wget https://raw.githubusercontent.com/cloudposse/atmos/main/examples/quick-start-advanced/components/terraform/vpc/component.yaml -O components/terraform/vpc/component.yaml
     ⨠ sed -i 's,infra/vpc-flow-logs-bucket,vpc,g' components/terraform/vpc/component.yaml
     ⨠ atmos vendor pull -c vpc
     ```

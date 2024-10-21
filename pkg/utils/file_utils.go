@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -161,4 +162,33 @@ func GetAllYamlFilesInDir(dir string) ([]string, error) {
 	}
 
 	return res, nil
+}
+
+// IsSocket checks if a file is a socket
+func IsSocket(path string) (bool, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	isSocket := fileInfo.Mode().Type() == fs.ModeSocket
+	return isSocket, nil
+}
+
+// SearchConfigFile searches for a config file in the provided path.
+// If the path has a file extension, it checks if the file exists.
+// If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions
+func SearchConfigFile(path string) (string, bool) {
+	// check if the provided has a file extension
+	if filepath.Ext(path) != "" {
+		return path, FileExists(path)
+	}
+	// Define the possible config file extensions
+	configExtensions := []string{".yaml", ".yml"}
+	for _, ext := range configExtensions {
+		filePath := path + ext
+		if FileExists(filePath) {
+			return filePath, true
+		}
+	}
+	return "", false
 }

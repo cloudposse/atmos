@@ -1,0 +1,190 @@
+---
+title: Terraform Providers
+sidebar_position: 6
+sidebar_label: Terraform Providers
+description: Configure and override Terraform Providers.
+id: providers
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Terraform utilizes plugins known as [providers](https://developer.hashicorp.com/terraform/language/providers) for
+communication with cloud providers, SaaS providers, and various APIs.
+</Intro>
+
+In order for Terraform to install these providers, the corresponding Terraform configurations need to
+explicitly state what providers are required. Furthermore, certain providers require additional configuration, such as
+specifying endpoint URLs or cloud regions, before they can be used.
+
+## Provider Configuration in Terraform
+
+When working with Terraform, you specify provider configurations in your Terraform code. This involves
+declaring which providers your infrastructure requires and providing any necessary configuration parameters.
+These parameters may include endpoint URLs, cloud regions, access credentials, or any other provider-specific
+configuration parameters.
+
+To declare a provider in Terraform, use a `provider` block within your Terraform configuration files,
+usually in a `providers.tf` file in the component (a.k.a. root module) directory.
+The `provider` block specifies the provider type and all the necessary configuration parameters.
+
+Here's an AWS provider configuration example for a `vpc` component. The provider config is defined in
+the `components/terraform/vpc/providers.tf` file:
+
+<File title="components/terraform/vpc/providers.tf">
+    ```hcl
+      provider "aws" {
+        region = "us-east-2"
+        assume_role {
+          role_arn: "IAM Role ARN"
+        }
+      }
+   ```
+</File>
+
+In this example, the `aws` provider block includes the region and IAM role required for Terraform to communicate
+with the AWS services.
+
+By correctly defining provider configurations in your Terraform code, you ensure that Terraform can seamlessly install,
+configure, and use the necessary plugins to manage your infrastructure across various cloud and services.
+
+## Provider Configuration and Overrides in Atmos Manifests
+
+Atmos allows you to define and override provider configurations using the `providers` section in Atmos stack manifests.
+The section can be defined globally for the entire organization, OU/tenant, account, region, or per component.
+
+For example, the `providers` section at the global scope can look like this:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+    ```yaml
+    terraform:
+      providers:
+        aws:
+          region: "us-east-2"
+          assume_role:
+            role_arn: "IAM Role ARN"
+    ```
+</File>
+
+Similarly, it can be defined (or overridden) at the OU/tenant, account and region scopes in the corresponding
+`_defaults.yaml` stack manifests.
+
+If you want to override a provider configuration for a specific component, use the `component.terraform.<component>.providers`
+section. For example, the following config can be used to override the `assume_role` parameter just for the `vpc` component:
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          providers:
+            aws:
+              assume_role:
+                role_arn: "IAM Role ARN for VPC"
+    ```
+</File>
+
+You can include the `providers` sections in any Atmos stack manifest at any level of inheritance. Atmos will process,
+deep-merge and override all the `providers` configurations for a component in the following order:
+
+- Global scopes (`terraform.providers` sections for the Org, OUs, accounts and regions)
+- Base component scope (`component.terraform.<base_component>.providers` section)
+- Current component scope (`component.terraform.<component>.providers` section)
+
+:::tip
+Refer to [Atmos Component Inheritance](/core-concepts/stacks/inheritance) for more information on all types of component inheritance
+supported by Atmos
+:::
+
+When you define the `providers` sections, Atmos processes the inheritance chain for a component and generates a
+file `providers_override.tf.json` in the component's folder with the final values for all the defined providers.
+
+For example:
+
+<Terminal title="atmos terraform plan vpc -s plat-ue2-prod --logs-level=Trace">
+    ```console
+    > atmos terraform plan vpc -s plat-ue2-prod --logs-level=Trace
+
+    Variables for the component 'vpc' in the stack 'plat-ue2-prod':
+      environment: ue2
+      max_subnet_count: 3
+      name: common
+      namespace: cp
+      region: us-east-2
+      stage: prod
+      tenant: plat
+
+    Writing the variables to file:
+    components/terraform/vpc/plat-ue2-prod.terraform.tfvars.json
+
+    Writing the provider overrides to file:
+    components/terraform/vpc/providers_override.tf.json
+    ```
+</Terminal>
+
+The generated `providers_override.tf.json` file would look like this:
+
+<File title="providers_override.tf.json">
+    ```json
+    {
+        "provider": {
+          "aws": {
+            "assume_role": {
+              "role_arn": "IAM Role ARN for VPC"
+            }
+          }
+        }
+    }
+    ```
+</File>
+
+Terraform then uses the values in the generated `providers_override.tf.json` to
+[override](https://developer.hashicorp.com/terraform/language/files/override) the parameters for all the providers in the file.
+
+## `alias`: Multiple Provider Configuration in Atmos Manifests
+
+Atmos allows you to define multiple configurations for the same provider using a list of provider blocks and the
+`alias` meta-argument.
+
+The generated `providers_override.tf.json` file will have a list of provider configurations, and Terraform/OpenTofu
+will use and override the providers as long as the aliased providers are defined in the Terraform component.
+
+For example:
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          providers:
+            aws:
+              - region: us-west-2
+                assume_role:
+                  role_arn: "role-1"
+              - region: us-west-2
+                alias: "account-2"
+                assume_role:
+                  role_arn: "role-2"
+    ```
+</File>
+
+:::warning
+
+The above example uses a list of configuration blocks for the `aws` provider.
+
+Since it's a list, by default it doesn't work with deep-merging of stacks in the
+[inheritance](/core-concepts/stacks/inheritance) chain since list are not deep-merged, they are replaced.
+
+If you want to use the above configuration in the inheritance chain and allow appending or merging of lists, consider
+configuring the `settings.list_merge_strategy` in the `atmos.yaml` CLI config file.
+
+For more details, refer to [Atmos CLI Settings](/cli/configuration/#settings).
+
+:::
+
+## References
+
+- [Terraform Providers](https://developer.hashicorp.com/terraform/language/providers)
+- [Terraform Override Files](https://developer.hashicorp.com/terraform/language/files/override)
+- [alias: Multiple Provider Configurations](https://developer.hashicorp.com/terraform/language/providers/configuration#alias-multiple-provider-configurations)

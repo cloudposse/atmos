@@ -1,20 +1,21 @@
 ---
-title: Layered Stack Configuration Atmos Design Pattern
+title: Layered Stack Configuration
 sidebar_position: 13
 sidebar_label: Layered Stack Configuration
 description: Layered Stack Configuration Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
 
-# Layered Stack Configuration
+<PillBox>Atmos Design Pattern</PillBox>
 
+<Intro>
 The **Layered Stack Configuration** Design Pattern describes the mechanism of grouping Atmos components by category or function,
 adding the groups of components to layers, and importing the layers into top-level Atmos stacks.
+</Intro>
 
-Each layer imports or configures a set of related Atmos components. Each Atmos component belongs to just one layer.
-Each layer can be managed separately, possibly by different teams.
-
-<br/>
+Each layer imports or configures a set of related Atmos components. Each Atmos component belongs to just one layer. Each layer can be managed separately, possibly by different teams.
 
 :::note
 
@@ -67,8 +68,6 @@ In the `stacks/layers` folder, we define layers (groups of components), and impo
 - `firewalls.yaml`
 - `networking.yaml`
 - `eks.yaml`
-
-<br/>
 
 ```console
    │   # Centralized stacks configuration (stack manifests)
@@ -263,7 +262,7 @@ Import the required layers into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` t
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-east-2.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
@@ -282,7 +281,7 @@ Import the required layers into the `stacks/orgs/acme/plat/dev/us-west-2.yaml` t
 
 ```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
 import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-west-2` manifests 
+  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-west-2` manifests
   # define the top-level Atmos stack `plat-uw2-dev`
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-west-2
@@ -301,7 +300,7 @@ Import the required layers into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` 
 
 ```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
 import:
-  # The `orgs/acme/plat/prod/_defaults` and `mixins/region/us-east-2` manifests 
+  # The `orgs/acme/plat/prod/_defaults` and `mixins/region/us-east-2` manifests
   # define the top-level Atmos stack `plat-ue2-prod`
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-east-2
@@ -316,8 +315,6 @@ import:
   - layers/eks
 ```
 
-<br/>
-
 Similarly, import the required layers into the other top-level stacks for the other organizations, OUs/tenants, accounts and regions.
 Make sure to import only the layers that define the component that need to be provisioned in the stacks.
 
@@ -330,4 +327,4 @@ Make sure to import only the layers that define the component that need to be pr
 ## References
 
 - [Catalogs](/core-concepts/stacks/catalogs)
-- [Mixins](/core-concepts/stacks/mixins)
+- [Mixins](/core-concepts/stacks/inheritance/mixins)

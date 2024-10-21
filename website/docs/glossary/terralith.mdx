@@ -1,0 +1,36 @@
+---
+id: terralith
+slug: /terms/terralith
+title: Terralith
+hoverText: "On overly large Terraform \"root module\" a large portion of the infrastructure."
+---
+
+A monolithic Terraform "root module" is also known as a Terralith. It's characterized by an expansive, all-encompassing Terraform configuration that attempts to manage every aspect of the infrastructure within a single module. 
+
+```mermaid
+---
+title: Anatomy of a Terralith
+---
+graph TD
+    subgraph TerraformRootModule[Terraform Root Module]
+        subgraph Network[Network VPC]
+            subgraph Cluster[Kubernetes Cluster]
+                App1(Application 1)
+                App2(Application 2)
+            end
+            LB[(Load Balancer Module)]
+            DB[(Database Module)]
+            Cache[(Cache Module)]
+            ObjectStorage[(Object Storage Module)]
+        end
+        LB --> App1
+        LB --> App2
+        App1 --> DB
+        App1 --> Cache
+        App2 --> ObjectStorage
+    end
+```
+
+In Atmos, this is considered an anti-pattern; instead, this should be broken down into [components](/core-concepts/components) and configured with [stacks](/core-concepts/stacks). 
+
+To learn more, see [Stage 2](/introduction/why-atmos/stage-2) of the typical Terraform maturity path.

@@ -1,0 +1,67 @@
+---
+title: Deploy Everything
+sidebar_position: 5
+sidebar_label: 5. Deploy Everything
+---
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import SecondaryCTA from '@site/src/components/SecondaryCTA'
+
+<Intro>
+After you've written your components and configured your stacks, now we're ready to deploy them!
+</Intro>
+
+<KeyPoints>
+- How Atmos identifies components using context variables and naming patterns
+- How to preview your configurations and changes before applying them
+- How to deploy your components, one at a time
+</KeyPoints>
+
+## Provision Atmos Components into all Stacks
+
+Provision the `station` Atmos component into the stacks:
+
+```shell
+atmos terraform apply station -s dev
+
+atmos terraform apply station -s staging
+
+atmos terraform apply station -s prod
+```
+
+Alternatively, you can execute the configured [Atmos workflow](/quick-start/advanced/create-workflows) to provision all the components in all the stacks:
+
+```shell
+# Execute the workflow `apply-all-components` from the workflow manifest `networking`
+atmos workflow apply-all-components -f networking
+```
+
+## Stack Search Algorithm
+
+Looking at the commands above, you might have a question "How does Atmos find the component in the stack and all the variables?"
+
+Let's consider what Atmos does when executing the command `atmos terraform apply station -s prod`:
+
+- Atmos uses the `stacks.name_pattern` defined in the [CLI config](/quick-start/advanced/configure-cli). In this example, we have defined a simple name based on `stacks.name_pattern: "{stage}"`. This means that the stack name is just the `stage` part of the stack name.
+
+- Atmos searches for the stack configuration file (in the `stacks` folder and all sub-folders) where `stage: prod` is defined (inline or via imports). During the search, Atmos processes all parent (top-level) config files and compares the context variables specified in the command (`-s` flag) with the context variables defined in the stack configurations, finally finding the matching stack
+
+- Atmos finds the component `station` in the stack, processing all the inline configs and all the imports
+
+- Atmos deep-merges all the catalog imports for the `station` component and then deep-merges all the variables for the component defined in all sections (global `vars`, terraform `vars`, base components `vars`, component `vars`), producing the final variables for the `station` component in the `prod` stack
+
+- And lastly, Atmos writes the final deep-merged variables into a `.tfvar.json` file in the component directory and then
+  executes `terraform apply -var-file ...` command
+
+<ActionCard title="Ready to take the next step?">
+     Now that you’ve seen Atmos in action, you can explore the extra credit!
+
+     Or take a moment to explore its core concepts. You have only just scratched the surface of Atmos. Atmos is a powerful enterprise-grade framework with so **much more to offer**!
+
+    <div>
+      <PrimaryCTA to="/quick-start/simple/extra-credit">Extra Credit</PrimaryCTA>
+      <SecondaryCTA to="/core-concepts">Deep Dive</SecondaryCTA>
+    </div>
+</ActionCard>

@@ -13,7 +13,6 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -22,9 +21,10 @@ import (
 var (
 	NotFound = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
 		"\nYou can download a sample config and adapt it to your requirements from " +
-		"https://raw.githubusercontent.com/cloudposse/atmos/master/examples/quick-start/atmos.yaml")
+		"https://raw.githubusercontent.com/cloudposse/atmos/main/examples/quick-start-advanced/atmos.yaml")
 
 	defaultCliConfig = schema.CliConfiguration{
+		Default:  true,
 		BasePath: ".",
 		Stacks: schema.Stacks{
 			BasePath:    "stacks",
@@ -301,7 +301,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 
 		if len(stackConfigFilesAbsolutePaths) < 1 {
-			j, err := yaml.Marshal(includeStackAbsPaths)
+			j, err := u.ConvertToYAML(includeStackAbsPaths)
 			if err != nil {
 				return cliConfig, err
 			}
@@ -338,11 +338,12 @@ func processConfigFile(
 	path string,
 	v *viper.Viper,
 ) (bool, error) {
-	if !u.FileExists(path) {
+	// Check if the config file exists
+	configPath, fileExists := u.SearchConfigFile(path)
+	if !fileExists {
 		return false, nil
 	}
-
-	reader, err := os.Open(path)
+	reader, err := os.Open(configPath)
 	if err != nil {
 		return false, err
 	}
@@ -350,7 +351,7 @@ func processConfigFile(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(cliConfig, fmt.Sprintf("error closing file '"+path+"'. "+err.Error()))
+			u.LogWarning(cliConfig, fmt.Sprintf("error closing file '"+configPath+"'. "+err.Error()))
 		}
 	}(reader)
 

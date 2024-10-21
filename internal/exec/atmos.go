@@ -40,7 +40,8 @@ func ExecuteAtmosCmd() error {
 	}
 
 	// Get a map of stacks and components in the stacks
-	stacksMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
+	// Don't process `Go` templates in Atmos stack manifests since we just need to display the stack and component names in the TUI
+	stacksMap, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false)
 	if err != nil {
 		return err
 	}
@@ -49,11 +50,11 @@ func ExecuteAtmosCmd() error {
 	stacksComponentsMap := lo.MapEntries(stacksMap, func(k string, v any) (string, []string) {
 		if v2, ok := v.(map[string]any); ok {
 			if v3, ok := v2["components"].(map[string]any); ok {
-				// TODO: process 'helmfile' components and stacks.
-				// This will require checking the list of commands and filtering the stacks and components depending on the selected command.
 				if v4, ok := v3["terraform"].(map[string]any); ok {
 					return k, lo.Keys(v4)
 				}
+				// TODO: process 'helmfile' components and stacks.
+				// This will require checking the list of commands and filtering the stacks and components depending on the selected command.
 			}
 		}
 		return k, nil
@@ -103,7 +104,7 @@ func ExecuteAtmosCmd() error {
 	fmt.Println()
 
 	if selectedCommand == "describe component" {
-		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack)
+		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true)
 		if err != nil {
 			return err
 		}
@@ -115,7 +116,7 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "describe dependents" {
-		data, err := ExecuteDescribeDependents(cliConfig, selectedComponent, selectedStack)
+		data, err := ExecuteDescribeDependents(cliConfig, selectedComponent, selectedStack, false)
 		if err != nil {
 			return err
 		}

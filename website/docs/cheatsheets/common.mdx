@@ -1,0 +1,131 @@
+---
+id: common
+slug: /cheatsheet
+title: Atmos Cheatsheet
+sidebar_label: Overview
+sidebar_position: 1
+---
+import Link from '@docusaurus/Link'
+import Card from '@site/src/components/Card'
+import CardGroup from '@site/src/components/CardGroup'
+
+<CardGroup title="Stacks" className="cheatsheet">
+    <Card title="List Stacks">
+    ```shell
+    atmos list stacks
+    ```
+    </Card>
+    <Card title="Folder Structure">
+    ```
+    ├── atmos.yaml
+    ├── components
+    │   └── myapp
+    │       ├── main.tf
+    │       ├── outputs.tf
+    │       └── variables.tf
+    └── stacks
+        ├── catalog
+        │   └── myapp.yaml
+        └── deploy
+            ├── dev.yaml
+            ├── prod.yaml
+            └── staging.yaml
+    ```
+    </Card>
+    <Card title="Stack Schema">
+    ```
+    import:
+    - catalog/something
+    vars:
+      key: value
+    components:
+      terraform:
+        $component:
+          vars:
+            foo: "bar"
+    ```
+    </Card>
+    <Card title="Stack Imports Schema">
+    ```
+    import:
+    - catalog/something
+    - path: "catalog/something/else"
+      context:
+        key: value
+      skip_templates_processing: false
+      ignore_missing_template_values: false
+      skip_if_missing: false
+    ```
+    </Card>
+    <Card title="Validate Stacks">
+    ```shell
+    atmos validate stacks
+    ```
+    </Card>
+</CardGroup>
+
+<CardGroup title="Components" className="cheatsheet">
+    <Card title="List Components">
+    ```shell
+    atmos list components
+    ```
+    </Card>
+    <Card title="Validate Components">
+    ```shell
+    atmos validate component $component -s $stack
+    atmos validate component $component -s $stack --schema-type jsonschema --schema-path $component.json
+    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego 
+    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego  --module-paths catalog
+    atmos validate component $component -s $stack --timeout 15
+    ```
+    </Card>    
+</CardGroup>
+
+<CardGroup title="Workflows" className="cheatsheet">
+    <Card title="List Workflows">
+    ```shell
+    atmos list workflows
+    ```
+    </Card>
+</CardGroup>
+
+<CardGroup title="Terraform" className="cheatsheet">
+    <Card title="Plan Root Modules">
+    ```shell
+    atmos terraform plan
+    ```
+    </Card> 
+    <Card title="Apply Root Modules">
+    ```shell
+    atmos terraform apply $component --stack $stack
+    atmos terraform apply $component --stack $stack -auto-approve
+    atmos terraform apply $component --stack $stack $planfile
+    ```
+    </Card>
+    <Card title="Deploy Root Modules">
+    ```shell
+    atmos terraform apply
+    atmos terraform apply $component --stack $stack -out $planfile
+    atmos terraform apply $component --stack $stack -var "key=value"
+    ```
+    </Card>
+</CardGroup>
+
+<CardGroup title="Describe" className="cheatsheet">
+    <Card title="Describe Affected">
+    ```shell
+    atmos describe affected
+    atmos describe affected --verbose=true
+    atmos describe affected --ref refs/heads/main
+    atmos describe affected --ref refs/heads/my-new-branch --verbose=true
+    atmos describe affected --ref refs/heads/main --format json
+    atmos describe affected --ref refs/tags/v1.16.0 --file affected.yaml --format yaml
+    atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
+    atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+    atmos describe affected --ssh-key <path_to_ssh_key>
+    atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>
+    atmos describe affected --repo-path <path_to_already_cloned_repo>
+    atmos describe affected --include-spacelift-admin-stacks=true
+    ```
+    </Card>
+</CardGroup>

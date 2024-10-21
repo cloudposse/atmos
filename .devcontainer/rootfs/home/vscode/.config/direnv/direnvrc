@@ -1,0 +1,11 @@
+show_readme() {
+  if [ -f "./README.md" ]; then
+    # Check if the README.md file has been touched in the last 60 seconds
+    last_modified=$(stat -c %Y "./README.md")
+    current_time=$(date +%s)
+    if [ $((current_time - last_modified)) -gt 60 ]; then
+      code "./README.md"
+      touch "./README.md"
+    fi
+  fi
+}

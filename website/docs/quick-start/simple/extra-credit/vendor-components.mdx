@@ -1,0 +1,157 @@
+---
+title: Vendor Dependencies
+sidebar_position: 2
+sidebar_label: Vendor Dependencies
+description: Learn how to vendor components from remote sources
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Note from '@site/src/components/Note'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Step from '@site/src/components/Step'
+import StepNumber from '@site/src/components/StepNumber'
+
+<Intro>
+In the previous steps, we wrote our own component from scratch. In practice, you'll often want to reuse components that are already available in the open-source community, or within your organization. To do that, you'll leverage vendoring.
+</Intro>
+
+Vendoring is driven by the `atmos vendor pull` command. It allows you to pull in components from remote sources, like Git repositories, and place them in your project's filesystem. This way, you can reuse components across multiple projects. The vendoring process is defined in the `vendor.yaml` file, which specifies the components to pull in, where to place them, and how to filter them.
+
+<Note>
+For more information about Atmos Vendoring and the `atmos vendor pull` CLI command, refer to:
+- [Atmos Vendoring](/core-concepts/vendor)
+- [atmos vendor pull](/cli/commands/vendor/pull)
+</Note>
+
+Let's kick the tires on this, by vendoring some more components from the [`demo-library`](https://github.com/cloudposse/atmos/tree/main/examples/demo-library).
+
+<Step>
+## <StepNumber/> Create Vendor Manifest
+
+Create a `vendor.yaml` Atmos vendor config file in the root of the repo with the following content:
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: my-vendor-config
+  description: Example Atmos vendoring manifest
+spec:
+  sources:
+    - component: "ipinfo"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "components/terraform/{{.Component}}"
+      included_paths:
+        - "**/*.tf"
+        # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+        - "**/modules/**"
+```
+</File>
+
+Let's unpack what's going on here. The `sources` section defines a list of components to pull in. Each component has the following attributes:
+<dl>
+  <dt>`component`</dt>
+  <dd>The name of the component to pull in.</dd>
+
+  <dt>`source`</dt>
+  <dd>The source of the component. It can be a Git repository URL with an optional reference to a specific version. The `{{.Version}}` token is a placeholder for the version of the component. In this example, we're pulling in the `ipinfo` component from the `atmos` repository from the `examples/demo-library` folder.</dd>
+
+  <dt>`version`</dt>
+  <dd>The version (git ref) of the component to pull in. In this example, we're pulling in the `main` branch, but in practice you will usually pin to a tag or major release.</dd>
+
+  <dt>`targets`</dt>
+  <dd>The target directories where the component will be placed. In this example, we're placing the `ipinfo` component in the `components/terraform/ipinfo` directory, because we reference the `{{ .Component }}`</dd>
+
+  <dt>`included_paths`</dt>
+  <dd>
+  A list of file paths to include in the vendored component. In this example, we're including all `.tf` files and any files in the `modules` sub-folder.
+    <Note>
+  The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+  If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+  </Note>
+  </dd>
+
+  <dt>`excluded_paths`</dt>
+  <dd>A list of file paths to exclude from the vendored component.</dd>
+
+</dl>
+
+
+If you have a lot of dependencies, it can be helpful to break them down into smaller, more manageable pieces. You can do this by importing other vendoring configurations. Just define the `imports` section in the `vendor.yaml` file.
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: my-vendor-config
+  description: Example Atmos vendoring manifest
+spec:
+  imports: vendor/**.yaml
+```
+</File>
+
+In this example, could add additional vendoring configurations in the `vendor/` directory, and they will be imported into the main vendoring configuration.
+
+
+</Step>
+
+<Step>
+  ## <StepNumber/> Pull the Components
+  Execute the command `atmos vendor pull` from the root of the repo
+
+  <Terminal command="atmos vendor pull">
+  ```shell
+  Processing vendor config file 'vendor.yaml'
+
+  Pulling sources for the component 'ipinfo'
+  from 'github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main'
+  into 'components/terraform/ipinfo'
+  ```
+  </Terminal>
+
+  After the command completes, the filesystem layout should look like this (in addition to any other files you already had):
+
+  ```console
+     │
+     ├── stacks/
+     │
+     └── components/
+         └── terraform/   # Terraform root modules
+             └── ipinfo/  # Vendored component
+                 ├── main.tf
+                 ├── outputs.tf
+                 ├── providers.tf
+                 ├── variables.tf
+                 └── versions.tf
+  ```
+</Step>
+
+
+<Step>
+  ## <StepNumber/> Configure Component in Stack
+
+  Now that the component is vendored, you can use it in your stack configurations. For example, you can include the `ipinfo` component in your stack configuration like this:
+
+  <File title="stacks/catalog/ipinfo.yaml">
+  ```yaml
+  terraform:
+    components:
+      ipinfo:
+        metadata:
+          component: ipinfo
+        vars: {}
+  ```
+  </File>
+</Step>
+
+
+<ActionCard title="Want to go deeper on this topic?">
+    Vendoring is a critical concept to master, if you want to reuse components across multiple projects.
+    <PrimaryCTA to="/core-concepts/vendor">Learn More</PrimaryCTA>
+</ActionCard>

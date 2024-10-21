@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
-	"github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -93,7 +92,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	cliConfig schema.CliConfiguration,
 	filePath string,
 	backendType string,
-	backendConfig map[any]any,
+	backendConfig map[string]any,
 ) error {
 	hclFile := hclwrite.NewEmptyFile()
 	rootBody := hclFile.Body()
@@ -102,7 +101,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	backendBlock := tfBlockBody.AppendNewBlock("backend", []string{backendType})
 	backendBlockBody := backendBlock.Body()
 
-	backendConfigSortedKeys := StringKeysFromMap(convert.MapsOfInterfacesToMapsOfStrings(backendConfig))
+	backendConfigSortedKeys := StringKeysFromMap(backendConfig)
 
 	for _, name := range backendConfigSortedKeys {
 		v := backendConfig[name]

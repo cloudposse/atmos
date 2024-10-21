@@ -15,5 +15,5 @@ func ExecuteDescribeStacks(
 	ignoreMissingFiles bool,
 ) (map[string]any, error) {
 
-	return e.ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles)
+	return e.ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, true)
 }

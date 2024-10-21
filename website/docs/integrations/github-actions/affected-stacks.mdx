@@ -1,0 +1,37 @@
+---
+title: Affected Stacks
+sidebar_position: 30
+sidebar_label: Affected Stacks
+description: Identify the affected stacks and components in a pull request
+---
+import Intro from '@site/src/components/Intro'
+import RemoteFile from '@site/src/components/RemoteFile'
+
+<Intro>
+The [Atmos Affected Stacks GitHub Action](https://github.com/cloudposse/github-action-atmos-affected-stacks) makes it easy identify the affected [atmos stacks](/core-concepts/stacks/) for a pull request. Use it to build a matrix so you can run other actions based on what was affected.
+</Intro>
+
+This GitHub Action installs Atmos, then runs [`atmos describe affected`](/cli/commands/describe/affected), and outputs a comprehensive list of affected stacks, both as raw output and as a matrix to be used in subsequent GitHub action jobs.
+
+Discover more details, including the full list of `inputs` and `outputs`, in the [GitHub Action repository](https://github.com/cloudposse/github-action-atmos-affected-stacks) on GitHub.
+
+## How it works
+
+The [`describe affected`](/cli/commands/describe/affected) command works by comparing two different Git commits to generate a list of affected Atmos components and stacks. It assumes that the current repo root is a Git checkout and accepts a parameter to specify the second commit.
+
+Overall Process:
+1.  Clone the target branch (`--ref`), check out the commit, or use the pre-cloned target repository
+2.  Deep merge all stack configurations for the current working and remote target branches.
+3.  Identify changes in the component directories.
+4.  Compare each section of the stack configuration to detect differences.
+5.  Output a matrix containing a list of affected components and stacks
+
+Atmos checks component folders for changes first, marking all related components and stacks as affected when changes are detected. It then skips evaluating those stacks for differences, streamlining the process.
+
+## Usage Example
+
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-plan.yaml" />
+
+## Requirements
+
+This action has the requirements as [Github Actions](/integrations/github-actions/). Use the same config described there.

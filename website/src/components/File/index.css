@@ -1,0 +1,102 @@
+.file {
+  margin-bottom: 3em;
+  margin-top: 3em;
+}
+
+.file pre>code>span.token-line::before {
+  content: '1';
+  display: inline-block;
+  padding: 0 .5em;
+  margin-right: .5em;
+  color: #888;
+}
+
+.file pre code span.token-line {
+  line-height: 1em;
+  counter-increment: line;
+}
+
+.file pre code span.token-line::before {
+  content: counter(line);
+  display: inline-block;
+  padding: 0 .5em;
+  margin-right: .5em;
+  color: #888;
+  text-align: right;
+  min-width: 20px;
+  border-right: 1px solid #cccccc47;
+}
+
+.file pre {
+  margin-bottom: inherit;
+}
+
+.file div.tab {
+	position: relative;
+    top: 2px;
+    z-index: 2;
+	display: inline-block;
+	padding: 0.5em;
+    transform: perspective(0.6em) rotateX(1deg);
+    transform-origin: bottom;
+}
+
+.file div.tab > h1 {
+    font-size: 0.98em;
+    line-height: 1.2em;
+    margin-top: 5px;
+    margin-bottom: 0;
+    margin-left: 0.5em;
+    margin-right: 0.5em;
+    font-weight: 500;
+    font-family: var(--ifm-font-family-monospace);
+    color: #ccc;
+    transform-style: preserve-3d;
+    transform: perspective(0.6em) rotateX(-1deg);
+}
+.file div.tab > h1 svg.svg-inline--fa {
+    margin-right: 0.5em;
+}
+
+html[data-theme='dark'] .file div.tab > h1 {
+    color: var(--ifm-heading-color);
+}
+
+.file div.tab::before {
+	content: ''; /* To generate the box */
+	position: absolute;
+	top: 0; right: 0; bottom: 0; left: 0;
+	z-index: -1;
+	background: rgb(16, 36, 69);
+    transform-origin: bottom;
+    border: 1px solid #cccccc38;
+    border-bottom: 1px solid rgb(16, 36, 69);
+	border-radius: 10px 10px 0 0;
+}
+
+.file div.viewport {
+    border: 1px solid #cccccc38;
+    border-radius: 6px;
+    border-top-left-radius: 4px;
+}
+
+.file .language-yaml.theme-code-block {
+   margin-bottom: 0;
+}
+
+.file .language-hcl.theme-code-block {
+   margin-bottom: 0;
+}
+
+.file .language-json.theme-code-block {
+   margin-bottom: 0;
+}
+
+.file .language-console.theme-code-block {
+   margin-bottom: 0;
+}
+
+.file div.viewport {
+    padding: 5px;
+    background: rgb(16, 36, 69);
+}

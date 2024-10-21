@@ -1,18 +1,26 @@
 ---
 title: Install Atmos
 sidebar_label: Install Atmos
-sidebar_position: 2
+sidebar_position: 3
+slug: /install
+id: install-atmos
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import Link from '@docusaurus/Link';
+import Intro from '@site/src/components/Intro'
+import LatestRelease from '@site/src/components/LatestRelease'
+import File from '@site/src/components/File'
 
-There are many ways to install Atmos.
+<Intro>
+There are many ways to install Atmos. Choose the method that works best for you!
+</Intro>
 
+To check what version of Atmos you have installed, just run `atmos version`. The latest version of Atmos is <LatestRelease />.
 
-To check what version of Atmos you have installed, just run `atmos version`.
+To find the latest available version of Atmos, visit the [Releases Page](https://github.com/cloudposse/atmos/releases). The latest version will always be available for download here.
 
-To find the latest available version of Atmos, visit the [Releases Page](https://github.com/cloudposse/atmos/releases). The latest version will
-always be available for download here.
+## Using OS Package Managers
 
 Atmos has native packages for macOS and every major Linux distribution. We also supply binary releases for Windows.
 
@@ -25,6 +33,16 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     ```shell
     brew install atmos
     ```
+
+    #### Pro tip! Use a `Brewfile`
+
+    Create a `Brewfile` in your [Atmos project](/core-concepts/projects), and add `brew "atmos"`. This way, you can ensure that everyone on your team is using the same version of Atmos.
+
+    <File title="Brewfile">
+    <pre><code>brew "atmos", "<LatestRelease />"</code></pre>
+    </File>
+
+    Then just run `brew install` in the same directory as the `Brewfile`.
   </TabItem>
 
   <TabItem value="deb" label="Debian/Ubuntu">
@@ -94,6 +112,20 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     ```
   </TabItem>
 
+  <TabItem value="scoop" label="Windows">
+
+    #### Windows via scoop.sh
+
+    On Windows, run the following command to install:
+
+    ```shell
+    scoop install atmos
+    ```
+
+    __NOTE:__ Don't have `scoop`? Install it first from https://scoop.sh/
+
+  </TabItem>
+
   <TabItem value="go" label="Go">
     #### Install with Go
 
@@ -115,8 +147,89 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     go install github.com/cloudposse/atmos@latest
     ```
 
-    __NOTE:__ Since the version is passed in via `-ldflags` during build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1`
+    __NOTE:__ Since the version is passed in via `-ldflags` during the build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1`
     when running `atmos version`.
+  </TabItem>
+
+  <TabItem value="asdf" label="asdf">
+    #### Install with asdf
+
+    Install plugin dependencies as listed in [asdf-atmos repository](https://github.com/cloudposse/asdf-atmos#dependencies):
+
+    ```shell
+    apt-get update && apt-get install -y bash curl tar
+    ```
+
+    Install the plugin:
+
+    ```shell
+    asdf plugin add atmos https://github.com/cloudposse/asdf-atmos.git
+    ```
+
+    Install a specified version:
+
+    ```shell
+    asdf install atmos <LatestRelease />
+    ```
+    Alternatively, create a `.tool-versions` file in your project to specify a consistent version for the users:
+    <File title=".tool-versions">
+      <pre>
+        <code>
+          atmos <LatestRelease />
+        </code>
+      </pre>
+    </File>
+
+    Then, run `asdf install` in the same directory.
+
+    __NOTE:__ Don't have `asdf`? Install it first from [here](https://asdf-vm.com/guide/getting-started.html)
+  </TabItem>
+
+  <TabItem value="mise" label="Mise">
+    #### Install with Mise
+
+    Install a specified version:
+
+    ```shell
+    mise use atmos@<LatestRelease />
+    ```
+
+    Alternatively, create a `.mise.toml` file in your repository to specify a consistent version for the users:
+    <File title=".mise.toml">
+      <pre>
+        <code>
+          [tools]
+          atmos = '<LatestRelease />'
+        </code>
+      </pre>
+    </File>
+
+    Then, run `mise install` in the same directory.
+
+    __NOTE:__ Don't have `mise`? Install it first from [here](https://mise.jdx.dev/getting-started.html)
+  </TabItem>
+
+  <TabItem value="aqua" label="aqua">
+    #### Install with aqua
+
+    [aqua](https://aquaproj.github.io/) is a CLI Version Manager.
+    aqua allows you to manage multiple versions of CLI tools, making it easy to switch between different versions of Atmos and other tools in your projects.
+
+    Create `aqua.yaml` by `aqua init`:
+
+    ```shell
+    aqua init
+    ```
+
+    Add atmos to aqua.yaml:
+
+    ```shell
+    aqua g -i cloudposse/atmos
+    ```
+
+    Then, run `aqua install` in the same directory.
+
+    __NOTE:__ Don't have `aqua`? Install it first from [here](https://aquaproj.github.io/docs/install)
   </TabItem>
 
   <TabItem value="source" label="From Source">
@@ -148,7 +261,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 </Tabs>
 
 :::note
-The latest version of Atmos might not be available with third party package managers.
+The latest version of Atmos (<LatestRelease />) might not be available with third-party package managers.
 :::
 
 
@@ -217,4 +330,11 @@ We recommend the "Fira Code" NerdFont version, which is what all our screenshots
     ```
   </TabItem>
 </Tabs>
+
+## Next Steps
+
+Now, try one of our Quick Start guides to get started with Atmos
+
+<Link to="/quick-start/simple" className="button button--lg button--primary"><p>Simple Tutorial</p></Link>
+<Link to="/quick-start/advanced" className="button button--lg button--outline button--primary ml20"><p>Advanced Tutorial</p></Link>
 

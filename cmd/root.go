@@ -22,7 +22,21 @@ var RootCmd = &cobra.Command{
 	Use:   "atmos",
 	Short: "Universal Tool for DevOps and Cloud Automation",
 	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
-	PreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Determine if the command is a help command or if the help flag is set
+		isHelpCommand := cmd.Name() == "help"
+		helpFlag := cmd.Flags().Changed("help")
+
+		isHelpRequested := isHelpCommand || helpFlag
+
+		if isHelpRequested {
+			// Do not silence usage or errors when help is invoked
+			cmd.SilenceUsage = false
+			cmd.SilenceErrors = false
+		} else {
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -32,12 +46,12 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		err = e.ExecuteAtmosCmd()
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	},
 }
@@ -60,7 +74,7 @@ func Execute() error {
 		fmt.Println()
 		err = tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	}
 
@@ -69,19 +83,19 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil && !errors.Is(err, cfg.NotFound) {
-		u.LogErrorAndExit(err)
+		u.LogErrorAndExit(schema.CliConfiguration{}, err)
 	}
 
 	// If CLI configuration was found, process its custom commands and command aliases
 	if err == nil {
 		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		err = processCommandAliases(cliConfig, cliConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	}
 
@@ -109,7 +123,7 @@ func initConfig() {
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
 		b.HelpFunc(command, strings)

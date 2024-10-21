@@ -14,7 +14,6 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -126,15 +125,10 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfigFileExists := true
 
-	// If the vendoring manifest is specified without an extension, use the default extension
-	if filepath.Ext(vendorConfigFile) == "" {
-		vendorConfigFile = vendorConfigFile + cfg.DefaultVendoringManifestFileExtension
-	}
+	// Check if the vendoring manifest file exists
+	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
 
-	foundVendorConfigFile := vendorConfigFile
-
-	// Look for the vendoring manifest in the current directory
-	if !u.FileExists(vendorConfigFile) {
+	if !fileExists {
 		// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`
 		pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
 
@@ -151,7 +145,8 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
-	if err = yaml.Unmarshal(vendorConfigFileContent, &vendorConfig); err != nil {
+	vendorConfig, err = u.UnmarshalYAML[schema.AtmosVendorConfig](string(vendorConfigFileContent))
+	if err != nil {
 		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
@@ -181,8 +176,11 @@ func ExecuteAtmosVendorInternal(
 	var uri string
 	vendorConfigFilePath := path.Dir(vendorConfigFileName)
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName))
-
+	logMessage := fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName)
+	if len(tags) > 0 {
+		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
+	}
+	u.LogInfo(cliConfig, logMessage)
 	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
 	}
@@ -282,14 +280,15 @@ func ExecuteAtmosVendorInternal(
 			)
 		}
 
+		tmplData := struct {
+			Component string
+			Version   string
+		}{s.Component, s.Version}
+
 		// Parse 'source' template
-		if s.Version != "" {
-			uri, err = u.ProcessTmpl(fmt.Sprintf("source-%d-%s", indexSource, s.Version), s.Source, s, false)
-			if err != nil {
-				return err
-			}
-		} else {
-			uri = s.Source
+		uri, err = ProcessTmpl(fmt.Sprintf("source-%d", indexSource), s.Source, tmplData, false)
+		if err != nil {
+			return err
 		}
 
 		useOciScheme := false
@@ -317,13 +316,9 @@ func ExecuteAtmosVendorInternal(
 		for indexTarget, tgt := range s.Targets {
 			var target string
 			// Parse 'target' template
-			if s.Version != "" {
-				target, err = u.ProcessTmpl(fmt.Sprintf("target-%d-%d-%s", indexSource, indexTarget, s.Version), tgt, s, false)
-				if err != nil {
-					return err
-				}
-			} else {
-				target = tgt
+			target, err = ProcessTmpl(fmt.Sprintf("target-%d-%d", indexSource, indexTarget), tgt, tmplData, false)
+			if err != nil {
+				return err
 			}
 
 			targetPath := path.Join(vendorConfigFilePath, target)

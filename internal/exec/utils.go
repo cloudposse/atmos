@@ -11,9 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	c "github.com/cloudposse/atmos/pkg/convert"
 	"github.com/cloudposse/atmos/pkg/schema"
-	s "github.com/cloudposse/atmos/pkg/stack"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -61,17 +59,17 @@ func ProcessComponentConfig(
 	component string,
 ) error {
 
-	var stackSection map[any]any
+	var stackSection map[string]any
 	var componentsSection map[string]any
 	var componentTypeSection map[string]any
 	var componentSection map[string]any
-	var componentVarsSection map[any]any
-	var componentSettingsSection map[any]any
-	var componentOverridesSection map[any]any
-	var componentProvidersSection map[any]any
+	var componentVarsSection map[string]any
+	var componentSettingsSection map[string]any
+	var componentOverridesSection map[string]any
+	var componentProvidersSection map[string]any
 	var componentImportsSection []string
-	var componentEnvSection map[any]any
-	var componentBackendSection map[any]any
+	var componentEnvSection map[string]any
+	var componentBackendSection map[string]any
 	var componentBackendType string
 	var command string
 	var componentInheritanceChain []string
@@ -86,7 +84,7 @@ func ProcessComponentConfig(
 	if len(componentType) == 0 {
 		return errors.New("component type must be provided and must not be empty")
 	}
-	if stackSection, ok = stacksMap[stack].(map[any]any); !ok {
+	if stackSection, ok = stacksMap[stack].(map[string]any); !ok {
 		return fmt.Errorf("could not find the stack '%s'", stack)
 	}
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
@@ -98,13 +96,13 @@ func ProcessComponentConfig(
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
 		return fmt.Errorf("no config found for the component '%s' in the stack manifest '%s'", component, stack)
 	}
-	if componentVarsSection, ok = componentSection["vars"].(map[any]any); !ok {
+	if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {
 		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack manifest '%s'", component, stack)
 	}
-	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[any]any); !ok {
-		componentProvidersSection = map[any]any{}
+	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
+		componentProvidersSection = map[string]any{}
 	}
-	if componentBackendSection, ok = componentSection[cfg.BackendSectionName].(map[any]any); !ok {
+	if componentBackendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
 		componentBackendSection = nil
 	}
 	if componentBackendType, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
@@ -116,14 +114,14 @@ func ProcessComponentConfig(
 	if command, ok = componentSection[cfg.CommandSectionName].(string); !ok {
 		command = ""
 	}
-	if componentEnvSection, ok = componentSection[cfg.EnvSectionName].(map[any]any); !ok {
-		componentEnvSection = map[any]any{}
+	if componentEnvSection, ok = componentSection[cfg.EnvSectionName].(map[string]any); !ok {
+		componentEnvSection = map[string]any{}
 	}
-	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[any]any); !ok {
-		componentSettingsSection = map[any]any{}
+	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
+		componentSettingsSection = map[string]any{}
 	}
-	if componentOverridesSection, ok = componentSection[cfg.OverridesSectionName].(map[any]any); !ok {
-		componentOverridesSection = map[any]any{}
+	if componentOverridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
+		componentOverridesSection = map[string]any{}
 	}
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
@@ -135,7 +133,7 @@ func ProcessComponentConfig(
 	// Remove the ENV vars that are set to `null` in the `env` section.
 	// Setting an ENV var to `null` in stack config has the effect of unsetting it
 	// because the exec.Command, which sets these ENV vars, is itself executed in a separate process started by the os.StartProcess function.
-	componentEnvSectionFiltered := map[any]any{}
+	componentEnvSectionFiltered := map[string]any{}
 
 	for k, v := range componentEnvSection {
 		if v != nil {
@@ -244,7 +242,7 @@ func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
 	error,
 ) {
 	// Process stack config file(s)
-	_, stacksMap, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
+	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		cliConfig,
 		cliConfig.StacksBaseAbsolutePath,
 		cliConfig.TerraformDirAbsolutePath,
@@ -267,6 +265,7 @@ func ProcessStacks(
 	cliConfig schema.CliConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
+	processTemplates bool,
 ) (schema.ConfigAndStacksInfo, error) {
 
 	// Check if stack was provided
@@ -350,7 +349,7 @@ func ProcessStacks(
 			}
 
 			if cliConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := u.ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				tmpl, err2 := ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
@@ -414,7 +413,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(cliConfig, err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -426,7 +425,9 @@ func ProcessStacks(
 	// Add Atmos component and stack
 	configAndStacksInfo.ComponentSection["atmos_component"] = configAndStacksInfo.ComponentFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack"] = configAndStacksInfo.StackFromArg
+	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
+	configAndStacksInfo.ComponentSection["atmos_manifest"] = configAndStacksInfo.StackFile
 
 	// Add Atmos CLI config
 	atmosCliConfig := map[string]any{}
@@ -440,21 +441,6 @@ func ProcessStacks(
 	if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 		configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = configAndStacksInfo.ComponentFromArg
 	}
-
-	// Add component info, including Terraform config
-	componentInfo := map[string]any{}
-	componentInfo["component_type"] = configAndStacksInfo.ComponentType
-
-	if configAndStacksInfo.ComponentType == "terraform" {
-		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
-		componentInfo["component_path"] = componentPath
-		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
-		componentInfo["terraform_config"] = terraformConfiguration
-	} else if configAndStacksInfo.ComponentType == "helmfile" {
-		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
-	}
-
-	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
 	// `sources` (stack config files where the variables and other settings are defined)
 	sources, err := ProcessConfigSources(configAndStacksInfo, rawStackConfigs)
@@ -482,73 +468,82 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
 	// Process `Go` templates in Atmos manifest sections
-	componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	var settingsSectionStruct schema.Settings
-
-	err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-
-	componentSectionProcessed, err := u.ProcessTmplWithDatasources(cliConfig, settingsSectionStruct, "all-atmos-sections", componentSectionStr, configAndStacksInfo.ComponentSection, true)
-	if err != nil {
-		// If any error returned from the templates processing, log it and exit
-		u.LogErrorAndExit(err)
-	}
-
-	componentSectionConverted, err := c.YAMLToMapOfInterfaces(componentSectionProcessed)
-	if err != nil {
-		if !cliConfig.Templates.Settings.Enabled {
-			if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
-				errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
-					"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
-				err = errors.Join(err, errors.New(errorMessage))
-			}
+	if processTemplates {
+		componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
+		if err != nil {
+			return configAndStacksInfo, err
 		}
-		u.LogErrorAndExit(err)
-	}
 
-	configAndStacksInfo.ComponentSection = c.MapsOfInterfacesToMapsOfStrings(componentSectionConverted)
+		var settingsSectionStruct schema.Settings
 
-	// Process Atmos manifest sections
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentProvidersSection = i
-	}
+		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentVarsSection = i
-	}
+		componentSectionProcessed, err := ProcessTmplWithDatasources(
+			cliConfig,
+			settingsSectionStruct,
+			"all-atmos-sections",
+			componentSectionStr,
+			configAndStacksInfo.ComponentSection,
+			true,
+		)
+		if err != nil {
+			// If any error returned from the templates processing, log it and exit
+			u.LogErrorAndExit(cliConfig, err)
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentSettingsSection = i
-	}
+		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
+		if err != nil {
+			if !cliConfig.Templates.Settings.Enabled {
+				if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+					errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+						"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
+					err = errors.Join(err, errors.New(errorMessage))
+				}
+			}
+			u.LogErrorAndExit(cliConfig, err)
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentEnvSection = i
-	}
+		configAndStacksInfo.ComponentSection = componentSectionConverted
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentOverridesSection = i
-	}
+		// Process Atmos manifest sections
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
+			configAndStacksInfo.ComponentProvidersSection = i
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentMetadataSection = i
-	}
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[string]any); ok {
+			configAndStacksInfo.ComponentVarsSection = i
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[any]any); ok {
-		configAndStacksInfo.ComponentBackendSection = i
-	}
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[string]any); ok {
+			configAndStacksInfo.ComponentSettingsSection = i
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
-		configAndStacksInfo.ComponentBackendType = i
-	}
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[string]any); ok {
+			configAndStacksInfo.ComponentEnvSection = i
+		}
 
-	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
-		configAndStacksInfo.Component = i
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[string]any); ok {
+			configAndStacksInfo.ComponentOverridesSection = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[string]any); ok {
+			configAndStacksInfo.ComponentMetadataSection = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[string]any); ok {
+			configAndStacksInfo.ComponentBackendSection = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
+			configAndStacksInfo.ComponentBackendType = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
+			configAndStacksInfo.Component = i
+		}
 	}
 
 	// Spacelift stack
@@ -568,11 +563,6 @@ func ProcessStacks(
 	if atlantisProjectName != "" {
 		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
-
-	// Process `command`
-	//if len(configAndStacksInfo.Command) == 0 {
-	//	configAndStacksInfo.Command = configAndStacksInfo.ComponentType
-	//}
 
 	// Process the ENV variables from the `env` section
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
@@ -615,6 +605,21 @@ func ProcessStacks(
 	} else {
 		configAndStacksInfo.FinalComponent = configAndStacksInfo.Component
 	}
+
+	// Add component info, including Terraform config
+	componentInfo := map[string]any{}
+	componentInfo["component_type"] = configAndStacksInfo.ComponentType
+
+	if configAndStacksInfo.ComponentType == "terraform" {
+		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
+		componentInfo["component_path"] = componentPath
+		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
+		componentInfo["terraform_config"] = terraformConfiguration
+	} else if configAndStacksInfo.ComponentType == "helmfile" {
+		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
+	}
+
+	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
 	return configAndStacksInfo, nil
 }
@@ -1003,7 +1008,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 }
 
 // generateComponentBackendConfig generates backend config for components
-func generateComponentBackendConfig(backendType string, backendConfig map[any]any, terraformWorkspace string) (map[string]any, error) {
+func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
 
 	// Generate backend config file for Terraform Cloud
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
@@ -1023,7 +1028,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 
 			backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
 
-			backendConfigFinal, err = c.YAMLToMapOfInterfaces(backendConfigStrReplaced)
+			backendConfigFinal, err = u.UnmarshalYAML[schema.AtmosSectionMapType](backendConfigStrReplaced)
 			if err != nil {
 				return nil, err
 			}
@@ -1047,13 +1052,13 @@ func generateComponentBackendConfig(backendType string, backendConfig map[any]an
 }
 
 // generateComponentProviderOverrides generates provider overrides for components
-func generateComponentProviderOverrides(providerOverrides map[any]any) map[string]any {
+func generateComponentProviderOverrides(providerOverrides map[string]any) map[string]any {
 	return map[string]any{
 		"provider": providerOverrides,
 	}
 }
 
-// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defind in
+// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defined in
 func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
 	var deps []string
 	var depsAll []string

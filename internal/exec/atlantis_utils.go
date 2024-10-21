@@ -19,9 +19,9 @@ func BuildAtlantisProjectNameFromComponentConfig(
 	var atlantisProjectTemplate schema.AtlantisProjectConfig
 	var atlantisProjectName string
 
-	if atlantisSettingsSection, ok := configAndStacksInfo.ComponentSettingsSection["atlantis"].(map[any]any); ok {
+	if atlantisSettingsSection, ok := configAndStacksInfo.ComponentSettingsSection["atlantis"].(map[string]any); ok {
 		// 'settings.atlantis.project_template' has higher priority than 'settings.atlantis.project_template_name'
-		if atlantisSettingsProjectTemplate, ok := atlantisSettingsSection["project_template"].(map[any]any); ok {
+		if atlantisSettingsProjectTemplate, ok := atlantisSettingsSection["project_template"].(map[string]any); ok {
 			err := mapstructure.Decode(atlantisSettingsProjectTemplate, &atlantisProjectTemplate)
 			if err != nil {
 				return "", err

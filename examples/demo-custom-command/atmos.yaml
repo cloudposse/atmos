@@ -1,0 +1,72 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Custom CLI commands
+
+# No arguments or flags are required
+commands:
+- name: hello
+  description: This command says Hello world
+  steps:
+    - "echo Hello world!"
+
+# No arguments or flags are required
+- name: ip
+  description: Return my current IP
+  steps:
+    - curl -s https://ifconfig.me
+    - echo
+
+# Use Nested Custom Commands
+- name: "github"
+  commands:
+  - name: "status"
+    description: This command returns the number of stargazers for a GitHub repository
+    steps:
+      - curl -s https://www.githubstatus.com/api/v2/status.json | jq -r .status.description
+
+  # Use positional arguments
+  - name: "stargazers"
+    description: This command returns the number of stargazers for a GitHub repository
+    arguments:
+      - name: repo
+        description: >-
+          The GitHub repository to fetch the stargazers count for.
+          e.g. cloudposse/atmos
+        required: true
+        default: cloudposse/atmos
+    steps:
+      - curl -s https://api.github.com/repos/{{ .Arguments.repo }} | jq -r .stargazers_count
+
+# Use flags
+- name: weather
+  description: This command fetches the weather
+  flags:
+    - name: location
+      shorthand: l
+      description: >-
+        Fetch the weather for a specific location. Works with airport codes. 
+        Make sure to properly URL encode the location, if not using an airport code.
+        --location "LAX"
+      required: true
+  steps:
+    - curl -s https://wttr.in/{{ .Flags.location }}

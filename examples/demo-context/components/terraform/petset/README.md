@@ -1,0 +1,1 @@
+This demo showcases our [Terraform context provider’s](https://github.com/cloudposse/terraform-provider-context) capability to assign unique names to resources based on their context, all without the need to pass any variables -- even between nested modules.

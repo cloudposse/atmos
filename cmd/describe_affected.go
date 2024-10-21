@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -19,7 +20,7 @@ var describeAffectedCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeAffectedCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	},
 }
@@ -37,6 +38,9 @@ func init() {
 	describeAffectedCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
 	describeAffectedCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "Include the Spacelift admin stack of any stack that is affected by config changes: atmos describe affected --include-spacelift-admin-stacks=true")
 	describeAffectedCmd.PersistentFlags().Bool("include-dependents", false, "Include the dependent components and stacks: atmos describe affected --include-dependents=true")
+	describeAffectedCmd.PersistentFlags().Bool("include-settings", false, "Include the 'settings' section for each affected component: atmos describe affected --include-settings=true")
+	describeAffectedCmd.PersistentFlags().Bool("upload", false, "Upload the affected components and stacks to a specified HTTP endpoint: atmos describe affected --upload=true")
+	describeAffectedCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe affected -s <stack>")
 	describeAffectedCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos describe affected --clone-target-ref=true\n"+
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")

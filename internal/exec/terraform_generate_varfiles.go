@@ -1,11 +1,14 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/mitchellh/mapstructure"
+	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -64,7 +67,13 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
-func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
+func ExecuteTerraformGenerateVarfiles(
+	cliConfig schema.CliConfiguration,
+	fileTemplate string,
+	format string,
+	stacks []string,
+	components []string,
+) error {
 	stacksMap, _, err := FindStacksMap(cliConfig, false)
 	if err != nil {
 		return err
@@ -74,14 +83,21 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 	var componentsSection map[string]any
 	var terraformSection map[string]any
 	var componentSection map[string]any
-	var varsSection map[any]any
+	var metadataSection map[string]any
+	var varsSection map[string]any
+	var settingsSection map[string]any
+	var envSection map[string]any
+	var providersSection map[string]any
+	var overridesSection map[string]any
+	var backendSection map[string]any
+	var backendTypeSection string
 
 	for stackFileName, stackSection := range stacksMap {
-		if componentsSection, ok = stackSection.(map[any]any)["components"].(map[string]any); !ok {
+		if componentsSection, ok = stackSection.(map[string]any)["components"].(map[string]any); !ok {
 			continue
 		}
 
-		if terraformSection, ok = componentsSection["terraform"].(map[string]any); !ok {
+		if terraformSection, ok = componentsSection[cfg.TerraformSectionName].(map[string]any); !ok {
 			continue
 		}
 
@@ -95,19 +111,44 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 				u.SliceContainsString(components, componentName) {
 
 				// Component vars
-				if varsSection, ok = componentSection["vars"].(map[any]any); !ok {
+				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					continue
 				}
 
 				// Component metadata
-				metadataSection := map[any]any{}
-				if metadataSection, ok = componentSection["metadata"].(map[any]any); ok {
+				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[string]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
 						// Don't include abstract components
 						if componentType == "abstract" {
 							continue
 						}
 					}
+				}
+
+				if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
+					settingsSection = map[string]any{}
+				}
+
+				if envSection, ok = componentSection[cfg.EnvSectionName].(map[string]any); !ok {
+					envSection = map[string]any{}
+				}
+
+				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
+					providersSection = map[string]any{}
+				}
+
+				if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
+					overridesSection = map[string]any{}
+				}
+
+				// Component backend
+				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
+					backendSection = map[string]any{}
+				}
+
+				// Backend type
+				if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
+					backendTypeSection = ""
 				}
 
 				// Find terraform component.
@@ -125,13 +166,114 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 					terraformComponent,
 				)
 
+				configAndStacksInfo := schema.ConfigAndStacksInfo{
+					ComponentFromArg:          componentName,
+					ComponentMetadataSection:  metadataSection,
+					ComponentVarsSection:      varsSection,
+					ComponentSettingsSection:  settingsSection,
+					ComponentEnvSection:       envSection,
+					ComponentProvidersSection: providersSection,
+					ComponentOverridesSection: overridesSection,
+					ComponentBackendSection:   backendSection,
+					ComponentBackendType:      backendTypeSection,
+					ComponentSection: map[string]any{
+						cfg.VarsSectionName:        varsSection,
+						cfg.MetadataSectionName:    metadataSection,
+						cfg.SettingsSectionName:    settingsSection,
+						cfg.EnvSectionName:         envSection,
+						cfg.ProvidersSectionName:   providersSection,
+						cfg.OverridesSectionName:   overridesSection,
+						cfg.BackendSectionName:     backendSection,
+						cfg.BackendTypeSectionName: backendTypeSection,
+					},
+				}
+
+				if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+					configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
+				}
+
 				// Context
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+
+				// Stack name
+				var stackName string
+				if cliConfig.Stacks.NameTemplate != "" {
+					stackName, err = ProcessTmpl("terraform-generate-varfiles-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					if err != nil {
+						return err
+					}
+				} else {
+					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+					if err != nil {
+						return err
+					}
+				}
+
+				configAndStacksInfo.Context = context
+				configAndStacksInfo.Stack = stackName
+				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+				configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+				configAndStacksInfo.ComponentSection["stack"] = stackName
+				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
+
+				// Terraform workspace
+				workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
 				if err != nil {
 					return err
+				}
+				componentSection["workspace"] = workspace
+				configAndStacksInfo.ComponentSection["workspace"] = workspace
+
+				// Atmos component, stack, and stack manifest file
+				componentSection["atmos_component"] = componentName
+				componentSection["atmos_stack"] = stackName
+				componentSection["stack"] = stackName
+				componentSection["atmos_stack_file"] = stackFileName
+				componentSection["atmos_manifest"] = stackFileName
+
+				// Process `Go` templates
+				componentSectionStr, err := u.ConvertToYAML(componentSection)
+				if err != nil {
+					return err
+				}
+
+				var settingsSectionStruct schema.Settings
+				err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+				if err != nil {
+					return err
+				}
+
+				componentSectionProcessed, err := ProcessTmplWithDatasources(
+					cliConfig,
+					settingsSectionStruct,
+					"terraform-generate-varfiles",
+					componentSectionStr,
+					configAndStacksInfo.ComponentSection,
+					true,
+				)
+				if err != nil {
+					return err
+				}
+
+				componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
+				if err != nil {
+					if !cliConfig.Templates.Settings.Enabled {
+						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+							errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+								"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+							err = errors.Join(err, errors.New(errorMessage))
+						}
+					}
+					u.LogErrorAndExit(cliConfig, err)
+				}
+
+				componentSection = componentSectionConverted
+
+				if i, ok := componentSection[cfg.VarsSectionName].(map[string]any); ok {
+					varsSection = i
 				}
 
 				// Check if `stacks` filter is provided
@@ -141,7 +283,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 					u.SliceContainsString(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, contextPrefix) {
+					u.SliceContainsString(stacks, stackName) {
 
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
@@ -180,7 +322,7 @@ func ExecuteTerraformGenerateVarfiles(cliConfig schema.CliConfiguration, fileTem
 					u.LogDebug(cliConfig, fmt.Sprintf("varfile: %s", fileName))
 					u.LogDebug(cliConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
 					u.LogDebug(cliConfig, fmt.Sprintf("atmos component: %s", componentName))
-					u.LogDebug(cliConfig, fmt.Sprintf("atmos stack: %s", contextPrefix))
+					u.LogDebug(cliConfig, fmt.Sprintf("atmos stack: %s", stackName))
 					u.LogDebug(cliConfig, fmt.Sprintf("stack config file: %s", stackFileName))
 				}
 			}

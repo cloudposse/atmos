@@ -1,0 +1,55 @@
+---
+title: Terraform Best Practices with Atmos
+sidebar_position: 1
+sidebar_label: Terraform
+description: Learn the opinionated "Best Practices" for using Terraform with Atmos
+id: terraform
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+These are some of the best practices we recommend when using Terraform with Atmos. They are opinionated and based on our experience working with Terraform and Atmos. When followed, they lead to more reusable and maintainable infrastructure as code.
+</Intro>
+
+> <q>Physics is the law, everything else is a recommendation.
+> Anyone can break laws created by people, but I have yet to see anyone break the laws of physics.
+> <p className="author">— **Elon Musk**</p></q>
+
+Also, since [Terraform "root modules" are components](/core-concepts/components/terraform), be sure to review the [Component Best Practices](/best-practices/components) for additional guidance on using components with Atmos.
+
+:::tip
+[Cloud Posse](https://github.com/cloudposse) publishes their general [Terraform Best Practices](https://docs.cloudposse.com/reference/best-practices/terraform-best-practices/), which are more general and not specific to Atmos.
+:::
+
+##  Never Include Components Inside of Other Components
+
+We do not recommend consuming one terraform component inside of another as that would defeat the purpose; each component is intended to be a loosely coupled unit of IaC with its own lifecycle.
+
+Furthermore, since components define a state backend and providers, it's not advisable to call one root module from another root module. As only the stack backend of the first root module will be used, leading to unpredictable results.
+
+
+## Use Terraform Overrides to Extend ("Monkey Patch") Vendored Components
+
+When you need to extend a component, we recommend using [Terraform Overrides](https://developer.hashicorp.com/terraform/language/files/override).
+It's essentially a Terraform-native way of [Monkey Patching](https://en.wikipedia.org/wiki/Monkey_patch).
+This way, you can maintain the original component as a dependency and only override the parts you need to change.
+
+:::warning Pitfall!
+Use this technique cautiously because your overrides may break if the upstream interfaces change. There’s no contract that an upstream component will remain the same.
+:::
+
+To gain a deeper understanding of how this works, you have to understand how [Terraform overrides work](https://developer.hashicorp.com/terraform/language/files/override), and then it will make sense how [vendoring with Atmos](/core-concepts/vendor) can be used to extend components.
+
+<details>
+<summary>Comparison to Other Languages or Frameworks</summary>
+
+#### Swizzling
+
+In [Objective-C](https://spin.atomicobject.com/method-swizzling-objective-c/) and [Swift-UI](https://medium.com/@pallavidipke07/method-swizzling-in-swift-5c9d9ab008e4), swizzling is the method of changing the implementation of an existing selector.
+
+In Docusaurus, [swizzling a component](https://docusaurus.io/docs/swizzling) means providing an alternative implementation that takes precedence over the component provided by the theme.
+
+#### Monkey Patching
+
+You can think of it also like [Monkey Patching](https://en.wikipedia.org/wiki/Monkey_patch) in [Ruby](http://blog.headius.com/2012/11/refining-ruby.html) or [React components](https://medium.com/@singhalaryan06/monkey-patching-mocking-hooks-and-methods-in-react-f6afef73e423), enabling you to override the default implementation. Gatsby has a similar concept called theme [shadowing](https://www.gatsbyjs.com/docs/how-to/plugins-and-themes/shadowing/).
+</details>

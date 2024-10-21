@@ -53,7 +53,7 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack)
+	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack, false)
 	if err != nil {
 		return err
 	}
@@ -71,25 +71,26 @@ func ExecuteDescribeDependents(
 	cliConfig schema.CliConfiguration,
 	component string,
 	stack string,
+	includeSettings bool,
 ) ([]schema.Dependent, error) {
 
 	dependents := []schema.Dependent{}
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false)
+	stacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, true)
 	if err != nil {
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(component, stack)
+	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get the provided component `vars`
-	var providedComponentVarsSection map[any]any
-	if providedComponentVarsSection, ok = providedComponentSection["vars"].(map[any]any); !ok {
+	var providedComponentVarsSection map[string]any
+	if providedComponentVarsSection, ok = providedComponentSection["vars"].(map[string]any); !ok {
 		return dependents, nil
 	}
 
@@ -131,7 +132,7 @@ func ExecuteDescribeDependents(
 				}
 
 				// Skip abstract components
-				if metadataSection, ok := stackComponentMap["metadata"].(map[any]any); ok {
+				if metadataSection, ok := stackComponentMap["metadata"].(map[string]any); ok {
 					if metadataType, ok := metadataSection["type"].(string); ok {
 						if metadataType == "abstract" {
 							continue
@@ -140,8 +141,8 @@ func ExecuteDescribeDependents(
 				}
 
 				// Get the stack component `vars`
-				var stackComponentVarsSection map[any]any
-				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[any]any); !ok {
+				var stackComponentVarsSection map[string]any
+				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[string]any); !ok {
 					return dependents, nil
 				}
 
@@ -153,8 +154,8 @@ func ExecuteDescribeDependents(
 				}
 
 				// Get the stack component `settings`
-				var stackComponentSettingsSection map[any]any
-				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[any]any); !ok {
+				var stackComponentSettingsSection map[string]any
+				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[string]any); !ok {
 					continue
 				}
 
@@ -235,7 +236,6 @@ func ExecuteDescribeDependents(
 
 					// Add Spacelift stack and Atlantis project if they are configured for the dependent stack component
 					if stackComponentType == "terraform" {
-
 						// Spacelift stack
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:         stackComponentName,
@@ -260,6 +260,10 @@ func ExecuteDescribeDependents(
 							return nil, err
 						}
 						dependent.AtlantisProject = atlantisProjectName
+					}
+
+					if includeSettings {
+						dependent.Settings = stackComponentSettingsSection
 					}
 
 					dependents = append(dependents, dependent)
