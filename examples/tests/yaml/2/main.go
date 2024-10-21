@@ -37,7 +37,8 @@ func (mf *MyFunc) UnmarshalYAML(value *yaml.Node) error {
 
 // LazyEval evaluates the function logic based on the stored arguments.
 func (mf *MyFunc) LazyEval() string {
-	return fmt.Sprintf("Executed my-func with args: %s, %s", mf.Arg1, mf.Arg2)
+	// return fmt.Sprintf("Executed my-func with args: %s, %s", mf.Arg1, mf.Arg2)
+	return fmt.Sprintf("!!my-func %s, %s", mf.Arg1, mf.Arg2)
 }
 
 // Recursive function to traverse the YAML tree.
@@ -89,12 +90,13 @@ func processYAML(node *yaml.Node) any {
 func main() {
 	// Example YAML with nested structure and custom !!my-func type.
 	yamlData := `
-vars:
-  var1: !!my-func 10 20
-  var2: "some value"
-list:
-  - !!my-func 30 40
-  - item2
+component:
+  vars:
+    var1: !!my-func 10 20
+    var2: "some value"
+  list:
+    - !!my-func 30 40
+    - item2
 `
 
 	// Parse the YAML into a generic yaml.Node structure.
