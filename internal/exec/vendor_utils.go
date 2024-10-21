@@ -26,16 +26,19 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// check stack flag is set
-	processStacks := cmd.Flags().Changed("stack")
+
+	flags := cmd.Flags()
+
+	// Check if the `stack` flag is set
+	// If it's set, process stacks
+	processStacks := flags.Changed("stack")
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	cliConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
 		return fmt.Errorf("failed to initialize CLI config: %w", err)
 	}
-
-	flags := cmd.Flags()
 
 	dryRun, err := flags.GetBool("dry-run")
 	if err != nil {
@@ -126,15 +129,10 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfigFileExists := true
 
-	// If the vendoring manifest is specified without an extension, use the default extension
-	if filepath.Ext(vendorConfigFile) == "" {
-		vendorConfigFile = vendorConfigFile + cfg.DefaultVendoringManifestFileExtension
-	}
+	// Check if the vendoring manifest file exists
+	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
 
-	foundVendorConfigFile := vendorConfigFile
-
-	// Look for the vendoring manifest in the current directory
-	if !u.FileExists(vendorConfigFile) {
+	if !fileExists {
 		// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`
 		pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
 
