@@ -83,7 +83,11 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil && !errors.Is(err, cfg.NotFound) {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		if isVersionCommand() {
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", err))
+		} else {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
 	}
 
 	// If CLI configuration was found, process its custom commands and command aliases
