@@ -26,16 +26,19 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// check stack flag is set
-	processStacks := cmd.Flags().Changed("stack")
+
+	flags := cmd.Flags()
+
+	// Check if the `stack` flag is set
+	// If it's set, process stacks
+	processStacks := flags.Changed("stack")
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	cliConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
 		return err
 	}
-
-	flags := cmd.Flags()
 
 	dryRun, err := flags.GetBool("dry-run")
 	if err != nil {
