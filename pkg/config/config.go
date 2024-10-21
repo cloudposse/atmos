@@ -103,9 +103,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
 
-	// Default configuration values
-	v.SetDefault("components.helmfile.use_eks", true)
-
 	// Process config in system folder
 	configFilePath1 := ""
 

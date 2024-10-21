@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"reflect"
 	"strings"
@@ -102,6 +103,15 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(cliConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
+	}
+
+	dir, err := os.ReadDir(cliConfig.StacksBaseAbsolutePath)
+	if err != nil {
+		return err
+	}
+	if len(dir) == 0 {
+		validationErrorMessages = append(validationErrorMessages, "The 'stacks' directory is empty. Please create stack manifest files in the 'stacks' directory before running the 'validate stacks' command.")
+		return errors.New(strings.Join(validationErrorMessages, "\n\n"))
 	}
 
 	stackConfigFilesAbsolutePaths, _, err := cfg.FindAllStackConfigsInPaths(cliConfig, includeStackAbsPaths, excludedPaths)

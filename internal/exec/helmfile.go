@@ -137,6 +137,9 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		clusterName := cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
 		u.LogDebug(cliConfig, fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
 
+		if context.Region == "" {
+			return errors.New("aws region must be specified")
+		}
 		err = ExecuteShellCommand(
 			cliConfig,
 			"aws",
@@ -277,8 +280,7 @@ func checkHelmfileConfig(cliConfig schema.CliConfiguration) error {
 		}
 
 		if len(cliConfig.Components.Helmfile.ClusterNamePattern) < 1 {
-			return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " +
-				"'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
+			return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " + "'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
 		}
 	}
 
