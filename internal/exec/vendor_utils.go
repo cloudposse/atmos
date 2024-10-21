@@ -26,11 +26,11 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
+	// check stack flag is set
+	processStacks := cmd.Flags().Changed("stack")
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	// vendor pull not require stack configs so we pass false to InitCliConfig
-	cliConfig, err := cfg.InitCliConfig(info, false)
+	cliConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
 		return err
 	}
